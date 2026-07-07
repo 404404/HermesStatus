@@ -1,4 +1,6 @@
-FROM python:3.12-slim-bookworm AS builder
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm
+ARG DEBIAN_IMAGE=debian:bookworm-slim
+FROM ${PYTHON_IMAGE} AS builder
 
 LABEL maintainer="cppla <https://cpp.la>"
 
@@ -11,9 +13,11 @@ COPY server/ /server/
 
 WORKDIR /server
 
-RUN make -j && strip /server/sergate
+ARG SERVERSTATUS_CFLAGS="-Wall -O0"
+ARG SERVERSTATUS_CXXFLAGS="-Wall -O0 -std=c++11"
+RUN make -j CFLAGS="$SERVERSTATUS_CFLAGS" CXXFLAGS="$SERVERSTATUS_CXXFLAGS" && strip /server/sergate
 
-FROM debian:bookworm-slim
+FROM ${DEBIAN_IMAGE}
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \

@@ -78,6 +78,9 @@ class CMain
 			int64_t m_IOWrite;
 			double m_CPU;
 			char m_aCustom[1024];
+			char m_aHardwareJSON[4096];
+			char m_aDockerJSON[32768];
+			char m_aHermesJSON[32768];
 			// OS name reported by client (e.g. linux/windows/darwin/freebsd)
 			char m_aOS[64];
 			// Options

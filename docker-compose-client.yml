@@ -3,18 +3,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.client
+      args:
+        ALPINE_IMAGE: "${CLIENT_ALPINE_IMAGE:-alpine:3.13}"
     image: cppla/serverstatus:client
     container_name: serverstatus-client
     restart: unless-stopped
     network_mode: host
     pid: host
+    privileged: true
     environment:
       SERVER: "${SERVER:-127.0.0.1}"
-      # 注意：USER 会被 docker compose 在宿主机环境中先插值。
-      # 如果运行时没有显式传递，或传递方式不正确，可能会被 Docker/系统环境中的 $USER
-      # 替换成本机用户名，而不是期望的默认 s01。
-      # 推荐优先级：运行程序时显式传递 USER > 用户修改这里的 USER 默认值 > Docker/系统环境。
-      USER: "${USER:-s01}"
+      # 避免使用 USER 做 Compose 插值变量；宿主机通常已有 USER=hermes/root。
+      SERVERSTATUS_USER: "${SERVERSTATUS_USER:-s01}"
+      USER: "${SERVERSTATUS_USER:-s01}"
       PORT: "${PORT:-35601}"
       PASSWORD: "${PASSWORD:-USER_DEFAULT_PASSWORD}"
       INTERVAL: "${INTERVAL:-1}"
@@ -25,3 +26,23 @@ services:
       CT: "${CT:-ct.tz.cloudcpp.com}"
       CM: "${CM:-cm.tz.cloudcpp.com}"
       CLIENT: "${CLIENT:-psutil}"
+      HERMES_EXPORT_CONFIG: "${HERMES_EXPORT_CONFIG:-/app/hermes-exporter.json}"
+      HERMES_ROOT: "${HERMES_ROOT:-/home/hermes}"
+      HERMES_STATUS_DIR: "${HERMES_STATUS_DIR:-/hermes/status}"
+      HARDWARE_STATUS_FILE: "${HARDWARE_STATUS_FILE:-/hermes/status/hardware.json}"
+      HERMES_EXPORT_ENABLED: "${HERMES_EXPORT_ENABLED:-true}"
+      HERMES_EXPORT_INTERVAL: "${HERMES_EXPORT_INTERVAL:-600}"
+      HOST_OS_RELEASE_FILE: "${HOST_OS_RELEASE_FILE:-/host/etc/os-release}"
+      SMART_DEVICE: "${SMART_DEVICE:-/dev/sda}"
+      DOCKER_SOCKET: "${DOCKER_SOCKET:-/var/run/docker.sock}"
+      DOCKER_CONTAINER_LIMIT: "${DOCKER_CONTAINER_LIMIT:-80}"
+      DOCKER_JSON_MAX_BYTES: "${DOCKER_JSON_MAX_BYTES:-12000}"
+      HERMES_JSON_MAX_BYTES: "${HERMES_JSON_MAX_BYTES:-26000}"
+    volumes:
+      - /sys/class/hwmon:/sys/class/hwmon:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /dev:/dev:ro
+      - ${HERMES_EXPORT_CONFIG_HOST:-./hermes-exporter.json}:/app/hermes-exporter.json:ro
+      - ${HERMES_ROOT_HOST:-/home/hermes}:/home/hermes:ro
+      - ${HERMES_STATUS_DIR_HOST:-./hermes-status}:/hermes/status
