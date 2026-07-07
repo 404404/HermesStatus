@@ -1,16 +1,21 @@
-FROM alpine:3.13
+ARG ALPINE_IMAGE=alpine:3.13
+FROM ${ALPINE_IMAGE}
 
 WORKDIR /app
 
 # Runtime deps for client-linux.py and client-psutil.py
-RUN apk add --no-cache python3 py3-psutil iproute2 procps
+RUN apk add --no-cache python3 py3-psutil py3-yaml iproute2 procps smartmontools
 
 COPY clients/client-linux.py /app/client-linux.py
 COPY clients/client-psutil.py /app/client-psutil.py
 COPY clients/entrypoint.sh /app/entrypoint.sh
+COPY scripts/export-hermes-status.py /app/export-hermes-status.py
+COPY scripts/hermes_config_summary.py /app/hermes_config_summary.py
+COPY hermes-exporter.json /app/hermes-exporter.json
 
 # Default client and defaults (can be overridden by docker env)
 ENV SERVER=127.0.0.1 \
+    SERVERSTATUS_USER=s01 \
     USER=s01 \
     PORT=35601 \
     PASSWORD=USER_DEFAULT_PASSWORD \
@@ -21,9 +26,21 @@ ENV SERVER=127.0.0.1 \
     CU=cu.tz.cloudcpp.com \
     CT=ct.tz.cloudcpp.com \
     CM=cm.tz.cloudcpp.com \
-    CLIENT=psutil
+    CLIENT=psutil \
+    HERMES_EXPORT_CONFIG=/app/hermes-exporter.json \
+    HERMES_ROOT=/home/hermes \
+    HERMES_STATUS_DIR=/hermes/status \
+    HARDWARE_STATUS_FILE=/hermes/status/hardware.json \
+    HERMES_EXPORT_ENABLED=true \
+    HERMES_EXPORT_INTERVAL=600 \
+    HOST_OS_RELEASE_FILE=/host/etc/os-release \
+    SMART_DEVICE=/dev/sda \
+    DOCKER_SOCKET=/var/run/docker.sock \
+    DOCKER_CONTAINER_LIMIT=80 \
+    DOCKER_JSON_MAX_BYTES=12000 \
+    HERMES_JSON_MAX_BYTES=26000
 
-RUN chmod +x /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh /app/export-hermes-status.py
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD []

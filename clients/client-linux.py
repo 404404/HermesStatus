@@ -49,7 +49,7 @@ def _env_int(name, default):
 
 # Allow docker env overrides. 优先级：运行程序传递参数 > 用户修改的USER > Docker/系统
 SERVER = _env_str("SERVER", SERVER) if SERVER == "" else SERVER
-USER = _env_str("USER", USER) if USER == "" else USER
+USER = _env_str("SERVERSTATUS_USER", _env_str("USER", USER)) if USER == "" else USER
 PASSWORD = _env_str("PASSWORD", PASSWORD)
 PORT = _env_int("PORT", PORT)
 INTERVAL = _env_int("INTERVAL", INTERVAL)
@@ -59,6 +59,9 @@ PING_PACKET_HISTORY_LEN = _env_int("PING_PACKET_HISTORY_LEN", PING_PACKET_HISTOR
 CU = _env_str("CU", CU)
 CT = _env_str("CT", CT)
 CM = _env_str("CM", CM)
+
+def _json_compact(value):
+    return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
 
 def get_uptime():
     with open('/proc/uptime', 'r') as f:
@@ -582,6 +585,9 @@ if __name__ == '__main__':
                 # 稳定顺序：按 key 排序
                 items.sort(key=lambda x: x[0])
                 array['custom'] = ';'.join(f"{k}={v}" for k,v in items)
+                array['hardware_json'] = _json_compact({})
+                array['docker_json'] = _json_compact({"running": 0, "total": 0, "containers": []})
+                array['hermes_json'] = _json_compact({"profiles": []})
                 s.send(byte_str("update " + json.dumps(array) + "\n"))
         except KeyboardInterrupt:
             raise

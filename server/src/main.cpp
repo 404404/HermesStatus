@@ -386,6 +386,27 @@ int CMain::HandleMessage(int ClientNetID, char *pMessage)
 			pClient->m_Stats.m_Online6 = rStart["online6"].u.boolean;
 		if(rStart["custom"].type == json_string)
 			str_copy(pClient->m_Stats.m_aCustom, rStart["custom"].u.string.ptr, sizeof(pClient->m_Stats.m_aCustom));
+		if(rStart["hardware_json"].type == json_string)
+		{
+			if(str_length(rStart["hardware_json"].u.string.ptr) < (int)sizeof(pClient->m_Stats.m_aHardwareJSON))
+				str_copy(pClient->m_Stats.m_aHardwareJSON, rStart["hardware_json"].u.string.ptr, sizeof(pClient->m_Stats.m_aHardwareJSON));
+			else
+				str_copy(pClient->m_Stats.m_aHardwareJSON, "{}", sizeof(pClient->m_Stats.m_aHardwareJSON));
+		}
+		if(rStart["docker_json"].type == json_string)
+		{
+			if(str_length(rStart["docker_json"].u.string.ptr) < (int)sizeof(pClient->m_Stats.m_aDockerJSON))
+				str_copy(pClient->m_Stats.m_aDockerJSON, rStart["docker_json"].u.string.ptr, sizeof(pClient->m_Stats.m_aDockerJSON));
+			else
+				str_copy(pClient->m_Stats.m_aDockerJSON, "{\"running\":0,\"total\":0,\"containers\":[]}", sizeof(pClient->m_Stats.m_aDockerJSON));
+		}
+		if(rStart["hermes_json"].type == json_string)
+		{
+			if(str_length(rStart["hermes_json"].u.string.ptr) < (int)sizeof(pClient->m_Stats.m_aHermesJSON))
+				str_copy(pClient->m_Stats.m_aHermesJSON, rStart["hermes_json"].u.string.ptr, sizeof(pClient->m_Stats.m_aHermesJSON));
+			else
+				str_copy(pClient->m_Stats.m_aHermesJSON, "{\"profiles\":[]}", sizeof(pClient->m_Stats.m_aHermesJSON));
+		}
 		// optional OS field from clients
 		if(rStart["os"].type == json_string)
 			str_copy(pClient->m_Stats.m_aOS, rStart["os"].u.string.ptr, sizeof(pClient->m_Stats.m_aOS));
@@ -600,16 +621,24 @@ void CMain::JSONUpdateThread(void *pUser)
 
 	while(gs_Running)
 	{
-		char aFileBuf[2048*NET_MAX_CLIENTS];
+		static char aFileBuf[1024*1024];
 		char *pBuf = aFileBuf;
 
 		str_format(pBuf, sizeof(aFileBuf), "{\n\"servers\": [\n");
 		pBuf += strlen(pBuf);
 
+		int ServerCount = 0;
 		for(int i = 0; i < NET_MAX_CLIENTS; i++)
 		{
 			if(!pClients[i].m_Active || pClients[i].m_Disabled)
 				continue;
+
+			if(ServerCount > 0)
+			{
+				str_format(pBuf, sizeof(aFileBuf) - (pBuf - aFileBuf), ",\n");
+				pBuf += strlen(pBuf);
+			}
+			ServerCount++;
 
 			if(pClients[i].m_Connected)
 			{
@@ -633,10 +662,13 @@ void CMain::JSONUpdateThread(void *pUser)
                 {
                     pClients[i].m_LastNetworkIN = pClients[i].m_Stats.m_NetworkIN;
                     pClients[i].m_LastNetworkOUT = pClients[i].m_Stats.m_NetworkOUT;
-                }
+				}
 
+				const char *pHardwareJSON = pClients[i].m_Stats.m_aHardwareJSON[0] ? pClients[i].m_Stats.m_aHardwareJSON : "{}";
+				const char *pDockerJSON = pClients[i].m_Stats.m_aDockerJSON[0] ? pClients[i].m_Stats.m_aDockerJSON : "{\"running\":0,\"total\":0,\"containers\":[]}";
+				const char *pHermesJSON = pClients[i].m_Stats.m_aHermesJSON[0] ? pClients[i].m_Stats.m_aHermesJSON : "{\"profiles\":[]}";
 				str_format(pBuf, sizeof(aFileBuf) - (pBuf - aFileBuf),
-                 "{ \"name\": \"%s\",\"type\": \"%s\",\"host\": \"%s\",\"location\": \"%s\",\"online4\": %s, \"online6\": %s, \"uptime\": \"%s\",\"load_1\": %.2f, \"load_5\": %.2f, \"load_15\": %.2f,\"ping_10010\": %.2f, \"ping_189\": %.2f, \"ping_10086\": %.2f,\"time_10010\": %" PRId64 ", \"time_189\": %" PRId64 ", \"time_10086\": %" PRId64 ", \"tcp_count\": %" PRId64 ", \"udp_count\": %" PRId64 ", \"process_count\": %" PRId64 ", \"thread_count\": %" PRId64 ", \"network_rx\": %" PRId64 ", \"network_tx\": %" PRId64 ", \"network_in\": %" PRId64 ", \"network_out\": %" PRId64 ", \"cpu\": %d, \"memory_total\": %" PRId64 ", \"memory_used\": %" PRId64 ", \"swap_total\": %" PRId64 ", \"swap_used\": %" PRId64 ", \"hdd_total\": %" PRId64 ", \"hdd_used\": %" PRId64 ", \"last_network_in\": %" PRId64 ", \"last_network_out\": %" PRId64 ",\"io_read\": %" PRId64 ", \"io_write\": %" PRId64 ",\"custom\": \"%s\", \"os\": \"%s\" },\n",
+                 "{ \"name\": \"%s\",\"type\": \"%s\",\"host\": \"%s\",\"location\": \"%s\",\"online4\": %s, \"online6\": %s, \"uptime\": \"%s\",\"load_1\": %.2f, \"load_5\": %.2f, \"load_15\": %.2f,\"ping_10010\": %.2f, \"ping_189\": %.2f, \"ping_10086\": %.2f,\"time_10010\": %" PRId64 ", \"time_189\": %" PRId64 ", \"time_10086\": %" PRId64 ", \"tcp_count\": %" PRId64 ", \"udp_count\": %" PRId64 ", \"process_count\": %" PRId64 ", \"thread_count\": %" PRId64 ", \"network_rx\": %" PRId64 ", \"network_tx\": %" PRId64 ", \"network_in\": %" PRId64 ", \"network_out\": %" PRId64 ", \"cpu\": %d, \"memory_total\": %" PRId64 ", \"memory_used\": %" PRId64 ", \"swap_total\": %" PRId64 ", \"swap_used\": %" PRId64 ", \"hdd_total\": %" PRId64 ", \"hdd_used\": %" PRId64 ", \"last_network_in\": %" PRId64 ", \"last_network_out\": %" PRId64 ",\"io_read\": %" PRId64 ", \"io_write\": %" PRId64 ",\"custom\": \"%s\", \"os\": \"%s\", \"hardware\": %s, \"docker\": %s, \"hermes\": %s }",
 					pClients[i].m_aName,pClients[i].m_aType,pClients[i].m_aHost,pClients[i].m_aLocation,
 					pClients[i].m_Stats.m_Online4 ? "true" : "false",pClients[i].m_Stats.m_Online6 ? "true" : "false",
 					aUptime, pClients[i].m_Stats.m_Load_1, pClients[i].m_Stats.m_Load_5, pClients[i].m_Stats.m_Load_15, pClients[i].m_Stats.m_ping_10010, pClients[i].m_Stats.m_ping_189, pClients[i].m_Stats.m_ping_10086,
@@ -647,35 +679,43 @@ void CMain::JSONUpdateThread(void *pUser)
 					pClients[i].m_Stats.m_NetworkOUT == 0 || pClients[i].m_LastNetworkOUT == 0 ? pClients[i].m_Stats.m_NetworkOUT : pClients[i].m_LastNetworkOUT,
 					pClients[i].m_Stats.m_IORead, pClients[i].m_Stats.m_IOWrite,
 					pClients[i].m_Stats.m_aCustom,
-					pClients[i].m_Stats.m_aOS[0] ? pClients[i].m_Stats.m_aOS : "");
+					pClients[i].m_Stats.m_aOS[0] ? pClients[i].m_Stats.m_aOS : "",
+					pHardwareJSON, pDockerJSON, pHermesJSON);
 				pBuf += strlen(pBuf);
 			}
 			else
 			{
 			    // sava network traffic record to json when close client
 			    // last_network_in == last network in record, last_network_out == last network out record
-				str_format(pBuf, sizeof(aFileBuf) - (pBuf - aFileBuf), "{ \"name\": \"%s\", \"type\": \"%s\", \"host\": \"%s\", \"location\": \"%s\", \"online4\": false, \"online6\": false, \"last_network_in\": %" PRId64 ", \"last_network_out\": %" PRId64 ", \"os\": \"%s\" },\n",
+				str_format(pBuf, sizeof(aFileBuf) - (pBuf - aFileBuf), "{ \"name\": \"%s\", \"type\": \"%s\", \"host\": \"%s\", \"location\": \"%s\", \"online4\": false, \"online6\": false, \"last_network_in\": %" PRId64 ", \"last_network_out\": %" PRId64 ", \"os\": \"%s\" }",
 					pClients[i].m_aName, pClients[i].m_aType, pClients[i].m_aHost, pClients[i].m_aLocation, pClients[i].m_LastNetworkIN, pClients[i].m_LastNetworkOUT,
 					pClients[i].m_Stats.m_aOS[0] ? pClients[i].m_Stats.m_aOS : "");
 				pBuf += strlen(pBuf);
 			}
 		}
 		// append ssl certs data
-		str_format(pBuf - 2, sizeof(aFileBuf) - (pBuf - aFileBuf), "\n],\n\"sslcerts\": [\n");
+		str_format(pBuf, sizeof(aFileBuf) - (pBuf - aFileBuf), "\n],\n\"sslcerts\": [\n");
 		pBuf += strlen(pBuf);
+		int SSLCertCount = 0;
 		for(int si = 0; si < NET_MAX_CLIENTS; si++)
 		{
 			if(!m_pJSONUpdateThreadData->pMain->SSLCert(si) || !strcmp(m_pJSONUpdateThreadData->pMain->SSLCert(si)->m_aName, "NULL")) break;
+			if(SSLCertCount > 0)
+			{
+				str_format(pBuf, sizeof(aFileBuf) - (pBuf - aFileBuf), ",\n");
+				pBuf += strlen(pBuf);
+			}
+			SSLCertCount++;
 			int64_t expire_ts = m_pJSONUpdateThreadData->pMain->SSLCert(si)->m_aExpireTS;
 			int expire_days = 0;
 			if(expire_ts>0){
 				int64_t nowts = (long long)time(/*ago*/0);
 				expire_days = (int)((expire_ts - nowts)/86400);
 			}
-			str_format(pBuf, sizeof(aFileBuf) - (pBuf - aFileBuf), "{ \"name\": \"%s\", \"domain\": \"%s\", \"port\": %d, \"expire_ts\": %lld, \"expire_days\": %d, \"mismatch\": %s },\n", m_pJSONUpdateThreadData->pMain->SSLCert(si)->m_aName, m_pJSONUpdateThreadData->pMain->SSLCert(si)->m_aDomain, m_pJSONUpdateThreadData->pMain->SSLCert(si)->m_aPort, (long long)expire_ts, expire_days, m_pJSONUpdateThreadData->pMain->SSLCert(si)->m_aHostnameMismatch?"true":"false");
+			str_format(pBuf, sizeof(aFileBuf) - (pBuf - aFileBuf), "{ \"name\": \"%s\", \"domain\": \"%s\", \"port\": %d, \"expire_ts\": %lld, \"expire_days\": %d, \"mismatch\": %s }", m_pJSONUpdateThreadData->pMain->SSLCert(si)->m_aName, m_pJSONUpdateThreadData->pMain->SSLCert(si)->m_aDomain, m_pJSONUpdateThreadData->pMain->SSLCert(si)->m_aPort, (long long)expire_ts, expire_days, m_pJSONUpdateThreadData->pMain->SSLCert(si)->m_aHostnameMismatch?"true":"false");
 			pBuf += strlen(pBuf);
 		}
-		if(pBuf - aFileBuf >= 2) str_format(pBuf - 2, sizeof(aFileBuf) - (pBuf - aFileBuf), "\n],\n\"updated\": \"%lld\"%s\n}", (long long)time(/*ago*/0), m_pJSONUpdateThreadData->m_ReloadRequired?",\n\"reload\": true":"");
+		str_format(pBuf, sizeof(aFileBuf) - (pBuf - aFileBuf), "\n],\n\"updated\": \"%lld\"%s\n}", (long long)time(/*ago*/0), m_pJSONUpdateThreadData->m_ReloadRequired?",\n\"reload\": true":"");
 		if(m_pJSONUpdateThreadData->m_ReloadRequired) m_pJSONUpdateThreadData->m_ReloadRequired--;
 		pBuf += strlen(pBuf);
 
@@ -1113,9 +1153,9 @@ int main(int argc, const char *argv[])
 	str_format(aTmp, sizeof(aTmp), "%s%s", Config.m_aWebDir, Config.m_aJSONFile);
 	str_copy(Config.m_aJSONFile, aTmp, sizeof(Config.m_aJSONFile));
 
-	CMain Main(Config);
-	RetVal = Main.Run();
+	CMain *pMain = new CMain(Config);
+	RetVal = pMain->Run();
+	delete pMain;
 
 	return RetVal;
 }
-
