@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/404404/HermesStatus/schemas/stats-extension.schema.json",
+  "title": "HermesStatus stats extension",
+  "description": "Only the HermesStatus extension emitted for one ServerStatus node. Native stats fields are intentionally omitted.",
+  "$comment": "This schema reuses the agent extension domain definitions. additionalProperties is false so stats cannot expose unknown collector fields or secrets.",
+  "type": "object",
+  "required": ["extension_version", "received_at", "hardware", "docker", "hermes"],
+  "properties": {
+    "extension_version": {
+      "const": "1.0-draft",
+      "maxLength": 32
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 40
+    },
+    "hardware": {
+      "$ref": "agent-update-extension.schema.json#/$defs/hardware"
+    },
+    "docker": {
+      "$ref": "agent-update-extension.schema.json#/$defs/docker"
+    },
+    "hermes": {
+      "$ref": "agent-update-extension.schema.json#/$defs/hermes"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {"cpu_model": "Example CPU", "cpu_temperature": {"value": 42, "unit": "C", "source": "hwmon-package"}, "disk_temperature": {"current": 33, "highest": 44, "lowest": 25, "unit": "C", "source": "smartctl-device-statistics"}, "disk_smart_status": "passed", "disk_power_on_hours": 12000, "disk_written_bytes": 3200000000000, "disk_read_bytes": 1900000000000, "disk_device": "/dev/example-disk", "disk_smart_source": "smartctl-json", "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null},
+      "docker": {"running": 1, "total": 1, "limit": 0, "truncated": false, "containers": [{"id": "abc123def456", "names": "status-client", "state": "running", "status": "Up 2 hours", "created": "2 hours ago", "image": "example/status-client:1.0", "command": "python3 /app/client.py", "ports": "-"}], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null},
+      "hermes": {"profiles": [], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null}
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {"cpu_model": null, "cpu_temperature": null, "disk_temperature": null, "disk_smart_status": "unknown", "disk_power_on_hours": null, "disk_written_bytes": null, "disk_read_bytes": null, "disk_device": null, "disk_smart_source": null, "updated_at": null, "stale": true, "error": null},
+      "docker": {"running": 0, "total": 0, "limit": 0, "truncated": false, "containers": [], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null},
+      "hermes": {"profiles": [], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null}
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {"cpu_model": "Example CPU", "cpu_temperature": null, "disk_temperature": null, "disk_smart_status": "unknown", "disk_power_on_hours": null, "disk_written_bytes": null, "disk_read_bytes": null, "disk_device": "/dev/example-disk", "disk_smart_source": null, "updated_at": null, "stale": true, "error": {"code": "smartctl_unavailable", "message": "SMART data is unavailable", "source": "smartctl", "retryable": true, "http_status": null}},
+      "docker": {"running": 0, "total": 0, "limit": 0, "truncated": false, "containers": [], "updated_at": null, "stale": true, "error": {"code": "docker_unavailable", "message": "Docker data is unavailable", "source": "docker-collector", "retryable": true, "http_status": null}},
+      "hermes": {"profiles": [], "updated_at": null, "stale": true, "error": {"code": "partial_failure", "message": "Hermes profiles are unavailable", "source": "hermes-exporter", "retryable": true, "http_status": null}}
+    }
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "extension_version": "1.0-draft",
+  "hardware": {
+    "cpu_model": "Example CPU 4-Core",
+    "cpu_temperature": {
+      "value": 42,
+      "unit": "C",
+      "source": "hwmon-package"
+    },
+    "disk_temperature": {
+      "current": 33,
+      "highest": 44,
+      "lowest": 25,
+      "unit": "C",
+      "source": "smartctl-device-statistics"
+    },
+    "disk_smart_status": "passed",
+    "disk_power_on_hours": 12000,
+    "disk_written_bytes": 3200000000000,
+    "disk_read_bytes": 1900000000000,
+    "disk_device": "/dev/example-disk",
+    "disk_smart_source": "smartctl-json",
+    "updated_at": "2026-07-13T12:00:00Z",
+    "stale": false,
+    "error": null
+  },
+  "docker": {
+    "running": 2,
+    "total": 3,
+    "limit": 0,
+    "truncated": false,
+    "containers": [
+      {
+        "id": "abc123def456",
+        "names": "status-server",
+        "state": "running",
+        "status": "Up 2 hours (healthy)",
+        "created": "2 hours ago",
+        "image": "example/status-server:2.0",
+        "command": "/usr/local/bin/status-server",
+        "ports": "0.0.0.0:8080->80/tcp"
+      },
+      {
+        "id": "def456abc123",
+        "names": "status-client",
+        "state": "running",
+        "status": "Up 2 hours",
+        "created": "2 hours ago",
+        "image": "example/status-client:2.0",
+        "command": "python3 /app/client.py",
+        "ports": "-"
+      },
+      {
+        "id": "789abc456def",
+        "names": "cache-helper",
+        "state": "exited",
+        "status": "Exited (0) 1 hour ago",
+        "created": "3 hours ago",
+        "image": "example/cache-helper:1.0",
+        "command": "/bin/sh -c cleanup",
+        "ports": "-"
+      }
+    ],
+    "updated_at": "2026-07-13T12:00:00Z",
+    "stale": false,
+    "error": null
+  },
+  "hermes": {
+    "profiles": [
+      {
+        "profile": "profile-a",
+        "agent_version": "0.18.2",
+        "api_status": "ok",
+        "service_status": "running",
+        "gateway_service": "running",
+        "manager_mode": "docker-foreground",
+        "usage_mode": "api",
+        "provider": "Example Provider",
+        "model": "example-model-small",
+        "auth_refreshed_at": "2026-07-13T11:30:00Z",
+        "scheduled_jobs_active": 2,
+        "scheduled_jobs_total": 2,
+        "sessions_active": 1,
+        "sessions_total": 3,
+        "usage": {
+          "input_tokens": 1200,
+          "output_tokens": 300,
+          "total_tokens": 1500,
+          "estimated": false,
+          "source": "hermes_api_payload",
+          "window_start": "2026-07-13T00:00:00Z",
+          "window_end": "2026-07-13T12:00:00Z"
+        },
+        "config_summary": {
+          "docker_volumes": [
+            "/srv/example/profile-a/workspace:/workspace:rw",
+            "/srv/example/profile-a/output:/output:rw"
+          ]
+        },
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      {
+        "profile": "profile-b",
+        "agent_version": "0.18.2",
+        "api_status": "healthy",
+        "service_status": "running",
+        "gateway_service": "running",
+        "manager_mode": "docker-foreground",
+        "usage_mode": "auth_provider",
+        "provider": "Example OAuth Provider",
+        "model": "example-model-large",
+        "auth_refreshed_at": "2026-07-13T10:45:00Z",
+        "scheduled_jobs_active": 1,
+        "scheduled_jobs_total": 1,
+        "sessions_active": 0,
+        "sessions_total": 2,
+        "usage": {
+          "input_tokens": 800,
+          "output_tokens": 200,
+          "total_tokens": 1000,
+          "estimated": true,
+          "source": "local_session_state",
+          "window_start": "2026-07-13T00:00:00Z",
+          "window_end": "2026-07-13T12:00:00Z"
+        },
+        "config_summary": {
+          "docker_volumes": [
+            "/srv/example/profile-b/workspace:/workspace:rw"
+          ]
+        },
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      }
+    ],
+    "updated_at": "2026-07-13T12:00:00Z",
+    "stale": false,
+    "error": null
+  }
+}

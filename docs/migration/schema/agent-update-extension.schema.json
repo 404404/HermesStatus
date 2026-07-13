@@ -1,0 +1,514 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/404404/HermesStatus/schemas/agent-update-extension.schema.json",
+  "title": "HermesStatus agent update extension",
+  "description": "Only the HermesStatus extension merged into a native ServerStatus agent update. Native AgentStats fields are intentionally omitted.",
+  "$comment": "additionalProperties is false at every contract object boundary so unknown upstream fields and secret-bearing configuration cannot be passed through by accident.",
+  "type": "object",
+  "required": ["extension_version", "hardware", "docker", "hermes"],
+  "properties": {
+    "extension_version": {
+      "const": "1.0-draft",
+      "maxLength": 32
+    },
+    "hardware": {
+      "$ref": "#/$defs/hardware"
+    },
+    "docker": {
+      "$ref": "#/$defs/docker"
+    },
+    "hermes": {
+      "$ref": "#/$defs/hermes"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "nullableDateTime": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "maxLength": 40
+    },
+    "nullableCounter": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "error": {
+      "type": ["object", "null"],
+      "required": ["code", "message", "source", "retryable", "http_status"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_.-]+$"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "http_status": {
+          "type": ["integer", "null"],
+          "minimum": 100,
+          "maximum": 599
+        }
+      },
+      "additionalProperties": false
+    },
+    "cpuTemperature": {
+      "type": ["object", "null"],
+      "required": ["value", "unit", "source"],
+      "properties": {
+        "value": {
+          "type": "number",
+          "minimum": -100,
+          "maximum": 250
+        },
+        "unit": {
+          "const": "C"
+        },
+        "source": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "diskTemperature": {
+      "type": ["object", "null"],
+      "required": ["current", "highest", "lowest", "unit", "source"],
+      "properties": {
+        "current": {
+          "type": ["number", "null"],
+          "minimum": -100,
+          "maximum": 250
+        },
+        "highest": {
+          "type": ["number", "null"],
+          "minimum": -100,
+          "maximum": 250
+        },
+        "lowest": {
+          "type": ["number", "null"],
+          "minimum": -100,
+          "maximum": 250
+        },
+        "unit": {
+          "const": "C"
+        },
+        "source": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "hardware": {
+      "type": "object",
+      "required": [
+        "cpu_model",
+        "cpu_temperature",
+        "disk_temperature",
+        "disk_smart_status",
+        "disk_power_on_hours",
+        "disk_written_bytes",
+        "disk_read_bytes",
+        "disk_device",
+        "disk_smart_source",
+        "updated_at",
+        "stale",
+        "error"
+      ],
+      "properties": {
+        "cpu_model": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "cpu_temperature": {
+          "$ref": "#/$defs/cpuTemperature"
+        },
+        "disk_temperature": {
+          "$ref": "#/$defs/diskTemperature"
+        },
+        "disk_smart_status": {
+          "type": "string",
+          "enum": ["passed", "failed", "unknown"]
+        },
+        "disk_power_on_hours": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "disk_written_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "disk_read_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "disk_device": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "disk_smart_source": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "updated_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "error": {
+          "$ref": "#/$defs/error"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dockerContainer": {
+      "type": "object",
+      "required": ["id", "names", "state", "status", "created", "image", "command", "ports"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "names": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "state": {
+          "type": "string",
+          "enum": ["created", "running", "paused", "restarting", "removing", "exited", "dead", "unknown"]
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "created": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "ports": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "additionalProperties": false
+    },
+    "docker": {
+      "type": "object",
+      "required": ["running", "total", "limit", "truncated", "containers", "updated_at", "stale", "error"],
+      "properties": {
+        "running": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 256
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "containers": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/dockerContainer"
+          }
+        },
+        "updated_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "error": {
+          "$ref": "#/$defs/error"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokenUsage": {
+      "type": "object",
+      "required": ["input_tokens", "output_tokens", "total_tokens", "estimated", "source", "window_start", "window_end"],
+      "properties": {
+        "input_tokens": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "output_tokens": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "total_tokens": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "estimated": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string",
+          "enum": ["hermes_api_payload", "local_session_state", "local_logs", "unavailable"]
+        },
+        "window_start": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "window_end": {
+          "$ref": "#/$defs/nullableDateTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "configSummary": {
+      "type": ["object", "null"],
+      "description": "Release A compatibility projection. Only docker_volumes is allowlisted; P1 config summary fields are intentionally absent.",
+      "required": ["docker_volumes"],
+      "properties": {
+        "docker_volumes": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "hermesProfile": {
+      "type": "object",
+      "required": [
+        "profile",
+        "agent_version",
+        "api_status",
+        "service_status",
+        "gateway_service",
+        "manager_mode",
+        "usage_mode",
+        "provider",
+        "model",
+        "auth_refreshed_at",
+        "scheduled_jobs_active",
+        "scheduled_jobs_total",
+        "sessions_active",
+        "sessions_total",
+        "usage",
+        "config_summary",
+        "updated_at",
+        "stale",
+        "error"
+      ],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_.-]+$"
+        },
+        "agent_version": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "api_status": {
+          "type": "string",
+          "enum": ["ok", "healthy", "unauthorized", "timeout", "unavailable", "error", "unknown"]
+        },
+        "service_status": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "gateway_service": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "manager_mode": {
+          "type": ["string", "null"],
+          "maxLength": 96
+        },
+        "usage_mode": {
+          "type": ["string", "null"],
+          "enum": ["api", "auth_provider", "unknown", null]
+        },
+        "provider": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "model": {
+          "type": ["string", "null"],
+          "maxLength": 256
+        },
+        "auth_refreshed_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "scheduled_jobs_active": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "scheduled_jobs_total": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "sessions_active": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "sessions_total": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "usage": {
+          "$ref": "#/$defs/tokenUsage"
+        },
+        "config_summary": {
+          "$ref": "#/$defs/configSummary"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "error": {
+          "$ref": "#/$defs/error"
+        }
+      },
+      "additionalProperties": false
+    },
+    "hermes": {
+      "type": "object",
+      "required": ["profiles", "updated_at", "stale", "error"],
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/hermesProfile"
+          }
+        },
+        "updated_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "error": {
+          "$ref": "#/$defs/error"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "extension_version": "1.0-draft",
+      "hardware": {
+        "cpu_model": "Example CPU 4-Core",
+        "cpu_temperature": {"value": 42, "unit": "C", "source": "hwmon-package"},
+        "disk_temperature": {"current": 33, "highest": 44, "lowest": 25, "unit": "C", "source": "smartctl-device-statistics"},
+        "disk_smart_status": "passed",
+        "disk_power_on_hours": 12000,
+        "disk_written_bytes": 3200000000000,
+        "disk_read_bytes": 1900000000000,
+        "disk_device": "/dev/example-disk",
+        "disk_smart_source": "smartctl-json",
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "docker": {
+        "running": 1,
+        "total": 1,
+        "limit": 0,
+        "truncated": false,
+        "containers": [
+          {"id": "abc123def456", "names": "status-client", "state": "running", "status": "Up 2 hours", "created": "2 hours ago", "image": "example/status-client:1.0", "command": "python3 /app/client.py", "ports": "-"}
+        ],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [
+          {
+            "profile": "profile-a",
+            "agent_version": "0.18.2",
+            "api_status": "ok",
+            "service_status": "running",
+            "gateway_service": "running",
+            "manager_mode": "docker-foreground",
+            "usage_mode": "api",
+            "provider": "Example Provider",
+            "model": "example-model",
+            "auth_refreshed_at": "2026-07-13T11:30:00Z",
+            "scheduled_jobs_active": 2,
+            "scheduled_jobs_total": 2,
+            "sessions_active": 1,
+            "sessions_total": 3,
+            "usage": {"input_tokens": 1200, "output_tokens": 300, "total_tokens": 1500, "estimated": false, "source": "hermes_api_payload", "window_start": "2026-07-13T00:00:00Z", "window_end": "2026-07-13T12:00:00Z"},
+            "config_summary": {"docker_volumes": ["/srv/example/profile-a:/workspace:rw"]},
+            "updated_at": "2026-07-13T12:00:00Z",
+            "stale": false,
+            "error": null
+          }
+        ],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      }
+    },
+    {
+      "extension_version": "1.0-draft",
+      "hardware": {"cpu_model": null, "cpu_temperature": null, "disk_temperature": null, "disk_smart_status": "unknown", "disk_power_on_hours": null, "disk_written_bytes": null, "disk_read_bytes": null, "disk_device": null, "disk_smart_source": null, "updated_at": null, "stale": true, "error": null},
+      "docker": {"running": 0, "total": 0, "limit": 0, "truncated": false, "containers": [], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null},
+      "hermes": {"profiles": [], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null}
+    },
+    {
+      "extension_version": "1.0-draft",
+      "hardware": {"cpu_model": "Example CPU", "cpu_temperature": null, "disk_temperature": null, "disk_smart_status": "unknown", "disk_power_on_hours": null, "disk_written_bytes": null, "disk_read_bytes": null, "disk_device": "/dev/example-disk", "disk_smart_source": null, "updated_at": null, "stale": true, "error": {"code": "smartctl_unavailable", "message": "SMART data is unavailable", "source": "smartctl", "retryable": true, "http_status": null}},
+      "docker": {"running": 0, "total": 0, "limit": 0, "truncated": false, "containers": [], "updated_at": null, "stale": true, "error": {"code": "docker_unavailable", "message": "Docker data is unavailable", "source": "docker-collector", "retryable": true, "http_status": null}},
+      "hermes": {
+        "profiles": [
+          {"profile": "profile-a", "agent_version": null, "api_status": "unauthorized", "service_status": null, "gateway_service": null, "manager_mode": null, "usage_mode": null, "provider": null, "model": null, "auth_refreshed_at": null, "scheduled_jobs_active": null, "scheduled_jobs_total": null, "sessions_active": null, "sessions_total": null, "usage": {"input_tokens": null, "output_tokens": null, "total_tokens": null, "estimated": true, "source": "unavailable", "window_start": null, "window_end": null}, "config_summary": null, "updated_at": null, "stale": true, "error": {"code": "api_unauthorized", "message": "Hermes API returned HTTP 401", "source": "hermes-api", "retryable": false, "http_status": 401}}
+        ],
+        "updated_at": null,
+        "stale": true,
+        "error": {"code": "partial_failure", "message": "One or more profiles are unavailable", "source": "hermes-exporter", "retryable": true, "http_status": null}
+      }
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "extension_version": "1.0-draft",
+  "received_at": "2026-07-13T12:00:01Z",
+  "hardware": {
+    "cpu_model": "Example Processor Family with Extended Descriptive Model Name for Contract Boundary Validation and Responsive Dashboard Render",
+    "cpu_temperature": {
+      "value": 47.5,
+      "unit": "C",
+      "source": "hwmon-example-chip-with-a-long-but-sanitized-sensor-label-used-to-exercise-boundary-layout-and-contract-validation"
+    },
+    "disk_temperature": {
+      "current": 34,
+      "highest": 55,
+      "lowest": 21,
+      "unit": "C",
+      "source": "smartctl-device-statistics-example-source-with-a-long-sanitized-description-for-boundary-testing"
+    },
+    "disk_smart_status": "passed",
+    "disk_power_on_hours": 987654,
+    "disk_written_bytes": 8000000000000000,
+    "disk_read_bytes": 7000000000000000,
+    "disk_device": "/dev/disk/by-id/example-vendor-example-product-example-serial-for-contract-boundary-validation",
+    "disk_smart_source": "smartctl-json-device-statistics-general-purpose-log",
+    "updated_at": "2026-07-13T12:00:00Z",
+    "stale": false,
+    "error": null
+  },
+  "docker": {
+    "running": 1,
+    "total": 1,
+    "limit": 0,
+    "truncated": false,
+    "containers": [
+      {
+        "id": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        "names": "example-container-with-a-very-long-name-segment-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho-sigma-tau-upsilon-phi-chi-psi-omega-contract-boundary",
+        "state": "running",
+        "status": "Up 123 days (healthy) with a deliberately long sanitized status description for table overflow and boundary validation",
+        "created": "123 days ago from a sanitized contract fixture",
+        "image": "registry.example.invalid/team/platform/component/subcomponent/example-service-with-a-long-image-name-and-multiple-descriptive-segments-for-contract-boundary-validation:release-2026.07.13-build-1234567890-abcdef",
+        "command": "/usr/local/bin/example-worker --profile contract-boundary --description this-command-is-deliberately-long-and-sanitized-to-validate-the-maximum-command-length-and-responsive-table-rendering-without-containing-credentials-or-private-values --feature alpha --feature beta --feature gamma --feature delta --feature epsilon --feature zeta --feature eta --feature theta --feature iota --feature kappa --feature lambda --output /srv/example/output/contract-boundary-result.json",
+        "ports": "127.0.0.1:18080->8080/tcp, 127.0.0.1:18443->8443/tcp, [::1]:19090->9090/tcp, 127.0.0.1:19191->9191/udp, 127.0.0.1:19292->9292/tcp"
+      }
+    ],
+    "updated_at": "2026-07-13T12:00:00Z",
+    "stale": false,
+    "error": null
+  },
+  "hermes": {
+    "profiles": [
+      {
+        "profile": "profile-contract-boundary-long-values",
+        "agent_version": "2026.07.13-contract-boundary-build-abcdef0123456789",
+        "api_status": "healthy",
+        "service_status": "running-with-a-long-sanitized-service-status-description",
+        "gateway_service": "running-with-a-long-sanitized-gateway-status-description",
+        "manager_mode": "docker-foreground-with-a-long-sanitized-manager-mode-description-for-layout-validation",
+        "usage_mode": "auth_provider",
+        "provider": "Example Provider with a Long Sanitized Display Name for Contract Boundary and Responsive Layout Validation",
+        "model": "example-model-family-contract-boundary-edition-with-an-intentionally-long-sanitized-model-identifier-and-multiple-capability-segments-reasoning-vision-tools-context-window-extended-release-2026-07-13-build-abcdef0123456789",
+        "auth_refreshed_at": "2026-07-13T11:59:59Z",
+        "scheduled_jobs_active": 999999999,
+        "scheduled_jobs_total": 1000000000,
+        "sessions_active": 999999999,
+        "sessions_total": 1000000000,
+        "usage": {
+          "input_tokens": 4000000000000000,
+          "output_tokens": 3000000000000000,
+          "total_tokens": 7000000000000000,
+          "estimated": true,
+          "source": "local_session_state",
+          "window_start": "2026-07-01T00:00:00Z",
+          "window_end": "2026-07-13T12:00:00Z"
+        },
+        "config_summary": {
+          "docker_volumes": [
+            "/srv/example/very-long-segment-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho-sigma-tau-upsilon-phi-chi-psi-omega/another-long-segment-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho-sigma-tau-upsilon-phi-chi-psi-omega/workspace:/workspace/very-long-target-segment-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho-sigma-tau-upsilon-phi-chi-psi-omega:ro"
+          ]
+        },
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      }
+    ],
+    "updated_at": "2026-07-13T12:00:00Z",
+    "stale": false,
+    "error": null
+  }
+}

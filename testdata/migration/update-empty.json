@@ -1,0 +1,33 @@
+{
+  "extension_version": "1.0-draft",
+  "hardware": {
+    "cpu_model": null,
+    "cpu_temperature": null,
+    "disk_temperature": null,
+    "disk_smart_status": "unknown",
+    "disk_power_on_hours": null,
+    "disk_written_bytes": null,
+    "disk_read_bytes": null,
+    "disk_device": null,
+    "disk_smart_source": null,
+    "updated_at": null,
+    "stale": true,
+    "error": null
+  },
+  "docker": {
+    "running": 0,
+    "total": 0,
+    "limit": 0,
+    "truncated": false,
+    "containers": [],
+    "updated_at": "2026-07-13T12:00:00Z",
+    "stale": false,
+    "error": null
+  },
+  "hermes": {
+    "profiles": [],
+    "updated_at": "2026-07-13T12:00:00Z",
+    "stale": false,
+    "error": null
+  }
+}
