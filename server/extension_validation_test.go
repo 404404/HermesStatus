@@ -279,6 +279,29 @@ func TestDecodeErrorDoesNotLeakInput(t *testing.T) {
 	}
 }
 
+func TestCollectorErrorMessagesAreSafeAndStable(t *testing.T) {
+	tests := map[string]string{
+		"smartctl_unavailable":      "SMART data is unavailable",
+		"sector_size_unknown":       "Logical sector size is unavailable",
+		"smart_value_invalid":       "One or more SMART values are invalid",
+		"hwmon_unavailable":         "CPU temperature is unavailable",
+		"host_os_unavailable":       "Host operating system data is unavailable",
+		"cpu_model_unavailable":     "Host CPU model is unavailable",
+		"docker_unavailable":        "Docker data is unavailable",
+		"docker_response_too_large": "Docker data exceeds the allowed size",
+	}
+	for code, expected := range tests {
+		t.Run(code, func(t *testing.T) {
+			if actual := safeErrorMessage(code); actual != expected {
+				t.Fatalf("safeErrorMessage(%q) = %q, want %q", code, actual, expected)
+			}
+			if ContainsSecretLikeText(expected) {
+				t.Fatalf("safe message for %q contains secret-like text", code)
+			}
+		})
+	}
+}
+
 func TestValidationDoesNotPanicOnZeroValues(t *testing.T) {
 	tests := []func() error{
 		func() error { return ValidateExtensionStats(nil) },

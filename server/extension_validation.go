@@ -96,6 +96,60 @@ func DecodeExtensionSnapshotJSON(data []byte) (*ExtensionSnapshot, error) {
 	return &snapshot, nil
 }
 
+func DecodeHardwareStatsJSON(data []byte) (*HardwareStats, error) {
+	if len(data) > MaxHardwarePayloadBytes {
+		return nil, validationError(validationCodePayloadTooLarge, "hardware", "object exceeds the allowed size")
+	}
+	if err := validateRequiredHardware(data); err != nil {
+		return nil, err
+	}
+	var stats HardwareStats
+	if err := decodeStrictJSON(data, &stats); err != nil {
+		return nil, err
+	}
+	sanitized := SanitizeExtensionStats(ExtensionStats{Hardware: &stats})
+	if err := ValidateHardwareStats(sanitized.Hardware); err != nil {
+		return nil, err
+	}
+	return sanitized.Hardware, nil
+}
+
+func DecodeDockerStatsJSON(data []byte) (*DockerStats, error) {
+	if len(data) > MaxDockerPayloadBytes {
+		return nil, validationError(validationCodePayloadTooLarge, "docker", "object exceeds the allowed size")
+	}
+	if err := validateRequiredDocker(data); err != nil {
+		return nil, err
+	}
+	var stats DockerStats
+	if err := decodeStrictJSON(data, &stats); err != nil {
+		return nil, err
+	}
+	sanitized := SanitizeExtensionStats(ExtensionStats{Docker: &stats})
+	if err := ValidateDockerStats(sanitized.Docker); err != nil {
+		return nil, err
+	}
+	return sanitized.Docker, nil
+}
+
+func DecodeHermesStatsJSON(data []byte) (*HermesStats, error) {
+	if len(data) > MaxHermesPayloadBytes {
+		return nil, validationError(validationCodePayloadTooLarge, "hermes", "object exceeds the allowed size")
+	}
+	if err := validateRequiredHermes(data); err != nil {
+		return nil, err
+	}
+	var stats HermesStats
+	if err := decodeStrictJSON(data, &stats); err != nil {
+		return nil, err
+	}
+	sanitized := SanitizeExtensionStats(ExtensionStats{Hermes: &stats})
+	if err := ValidateHermesStats(sanitized.Hermes); err != nil {
+		return nil, err
+	}
+	return sanitized.Hermes, nil
+}
+
 func decodeStrictJSON(data []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -584,14 +638,28 @@ func safeErrorMessage(code string) string {
 		return "Extension data was not reported"
 	case "smartctl_unavailable":
 		return "SMART data is unavailable"
+	case "sector_size_unknown":
+		return "Logical sector size is unavailable"
+	case "smart_value_invalid":
+		return "One or more SMART values are invalid"
+	case "hwmon_unavailable":
+		return "CPU temperature is unavailable"
+	case "host_os_unavailable":
+		return "Host operating system data is unavailable"
+	case "cpu_model_unavailable":
+		return "Host CPU model is unavailable"
 	case "docker_unavailable":
 		return "Docker data is unavailable"
+	case "docker_response_too_large":
+		return "Docker data exceeds the allowed size"
 	case "api_unauthorized":
 		return "Hermes API authorization failed"
 	case "api_timeout":
 		return "Hermes API request timed out"
 	case "partial_failure":
 		return "One or more extension sources are unavailable"
+	case "clock_skew":
+		return "Extension timestamp is too far in the future"
 	default:
 		return "Extension data is unavailable"
 	}

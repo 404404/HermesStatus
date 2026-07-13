@@ -32,6 +32,8 @@ import threading
 import platform
 from queue import Queue
 
+from host_collector import HostExtensionCollector, add_extension_payload
+
 def _env_str(name, default):
     value = os.getenv(name)
     if value is None or value == "":
@@ -49,7 +51,7 @@ def _env_int(name, default):
 
 # Allow docker env overrides. 优先级：运行程序传递参数 > 用户修改的USER > Docker/系统
 SERVER = _env_str("SERVER", SERVER) if SERVER == "" else SERVER
-USER = _env_str("USER", USER) if USER == "" else USER
+USER = _env_str("SERVERSTATUS_USER", _env_str("USER", USER)) if USER == "" else USER
 PASSWORD = _env_str("PASSWORD", PASSWORD)
 PORT = _env_int("PORT", PORT)
 INTERVAL = _env_int("INTERVAL", INTERVAL)
@@ -471,6 +473,8 @@ if __name__ == '__main__':
     PASSWORD = cli_args.get('PASSWORD', PASSWORD)
     INTERVAL = int(cli_args.get('INTERVAL', INTERVAL))
     socket.setdefaulttimeout(30)
+    extension_collector = HostExtensionCollector()
+    extension_collector.start()
     get_realtime_data()
     while 1:
         try:
@@ -522,7 +526,7 @@ if __name__ == '__main__':
                 raise socket.error
 
             CPUCores = get_cpu_cores()
-            CPUModel = get_cpu_model()
+            CPUModel = extension_collector.cpu_model or ""
             while 1:
                 CPU = get_cpu()
                 NET_IN, NET_OUT = liuliang()
@@ -564,31 +568,7 @@ if __name__ == '__main__':
                 array['tcp'], array['udp'], array['process'], array['thread'] = tupd()
                 array['io_read'] = diskIO.get("read")
                 array['io_write'] = diskIO.get("write")
-                # report OS (normalized)
-                try:
-                    sysname = platform.system().lower()
-                    if sysname.startswith('windows'):
-                        os_name = 'windows'
-                    elif sysname.startswith('darwin') or 'mac' in sysname:
-                        os_name = 'darwin'
-                    elif 'bsd' in sysname:
-                        os_name = 'bsd'
-                    elif sysname.startswith('linux'):
-                        # try distro from os-release
-                        try:
-                            with open('/etc/os-release') as f:
-                                for line in f:
-                                    if line.startswith('ID='):
-                                        val = line.strip().split('=',1)[1].strip().strip('"')
-                                        if val: os_name = val
-                                        break
-                        except Exception:
-                            os_name = 'linux'
-                    else:
-                        os_name = sysname or 'unknown'
-                except Exception:
-                    os_name = 'unknown'
-                array['os'] = os_name
+                array['os'] = extension_collector.host_os
                 items = []
                 for _n, st in monitorServer.items():
                     key = str(_n)
@@ -600,6 +580,7 @@ if __name__ == '__main__':
                 # 稳定顺序：按 key 排序
                 items.sort(key=lambda x: x[0])
                 array['custom'] = ';'.join(f"{k}={v}" for k,v in items)
+                add_extension_payload(array, extension_collector)
                 s.send(byte_str("update " + json.dumps(array) + "\n"))
         except KeyboardInterrupt:
             raise

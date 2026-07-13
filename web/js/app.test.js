@@ -56,6 +56,12 @@ async function run(){
   assert.equal(app.usageBand(80), 'medium');
   assert.equal(app.usageBand(80.01), 'high');
   assert.equal(app.usageBand(null), 'unknown');
+  assert.equal(
+    app.cleanCpuModel('Intel(R) Pentium(R) Silver N5030 CPU @ 1.10GHz'),
+    'Intel Pentium Silver N5030'
+  );
+  assert.equal(app.cleanCpuModel('Intel Celeron J4125'), 'Intel Celeron J4125');
+  assert.equal(app.cleanCpuModel('Example(TM) Processor'), 'Example Processor');
 
   let visibleDocument = { marker: 'old' };
   let errorCount = 0;
@@ -106,6 +112,11 @@ async function run(){
 
   assert.equal(app.fixtureNameFromLocation({ hostname: '127.0.0.1', search: '?fixture=normal' }), 'normal');
   assert.equal(app.fixtureNameFromLocation({ hostname: 'example.invalid', search: '?fixture=normal' }), null);
+  assert.equal(app.fittedFontSize(23, 11, 240, 200), 23);
+  assert.equal(app.fittedFontSize(23, 11, 240, 480), 11.5);
+  assert.equal(app.fittedFontSize(23, 11, 240, 2400), 11);
+  assert.equal(app.approximateDays(12000), 500);
+  assert.equal(app.approximateDays(null), null);
 
   const frontendSource = [
     fs.readFileSync(path.join(ROOT, 'web/index.html'), 'utf8'),

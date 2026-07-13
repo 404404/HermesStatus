@@ -36,6 +36,7 @@ type NodeState struct {
 	Online4        bool
 	Online6        bool
 	Stats          AgentStats
+	Extension      ExtensionSnapshot
 	HasUpdate      bool
 	LastNetworkIn  int64
 	LastNetworkOut int64
@@ -176,8 +177,13 @@ func (a *App) applyValidatedConfig(doc ConfigDocument, runtime RuntimeConfig, di
 	oldNodes := a.nodes
 	newNodes := make(map[string]*NodeState, len(runtime.Servers))
 	connections := make([]net.Conn, 0)
+	now := time.Now()
 	for _, server := range runtime.Servers {
-		node := &NodeState{Config: server, AlarmLast: make(map[string]time.Time)}
+		node := &NodeState{
+			Config:    server,
+			Extension: newNotReportedExtensionSnapshot(now),
+			AlarmLast: make(map[string]time.Time),
+		}
 		if old := oldNodes[server.Username]; old != nil && sameServerIdentity(old.Config, server) {
 			node.LastNetworkIn = old.LastNetworkIn
 			node.LastNetworkOut = old.LastNetworkOut
@@ -185,6 +191,7 @@ func (a *App) applyValidatedConfig(doc ConfigDocument, runtime RuntimeConfig, di
 			node.HasUpdate = old.HasUpdate
 			node.AlarmLast = old.AlarmLast
 			if !disconnect {
+				node.Extension = old.Extension
 				node.Connected = old.Connected
 				node.Connection = old.Connection
 				node.ConnectionID = old.ConnectionID
@@ -289,6 +296,12 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 			"name": server.Name, "type": server.Type, "host": server.Host, "location": server.Location,
 			"online4": false, "online6": false,
 		}
+		extension := snapshotExtension(node.Extension, now)
+		base["extension_version"] = extension.ExtensionVersion
+		base["received_at"] = extension.ReceivedAt
+		base["hardware"] = extension.Hardware
+		base["docker"] = extension.Docker
+		base["hermes"] = extension.Hermes
 		if node.Connected && node.HasUpdate {
 			s := node.Stats
 			updateTrafficBaselines(node, s.NetworkIn, s.NetworkOut, monthResetWindow(now, server.MonthStart))

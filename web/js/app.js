@@ -9,7 +9,9 @@ const dashboardState = {
   lastSuccessAt: null,
   selectedProfileIndex: null,
   modalTrigger: null,
-  pagehideHandler: null
+  pagehideHandler: null,
+  resizeHandler: null,
+  resizeFrame: null
 };
 
 const byId = id => document.getElementById(id);
@@ -32,6 +34,11 @@ function textOrDash(value){
 function formatInteger(value){
   const number = finiteNumber(value);
   return number === null ? '-' : Math.round(number).toLocaleString('zh-CN');
+}
+
+function approximateDays(hours){
+  const number = finiteNumber(hours);
+  return number === null || number < 0 ? null : Math.floor(number / 24);
 }
 
 function formatBytes(value){
@@ -71,7 +78,11 @@ function formatPercentage(value){
 function cleanCpuModel(value){
   const model = textOrDash(value);
   if(model === '-') return model;
-  return model.replace(/\((?:R|TM|C)\)/gi, '').replace(/\s+/g, ' ').trim() || '-';
+  return model
+    .replace(/\((?:R|TM|C)\)/gi, '')
+    .replace(/\s+CPU\s*@\s*[\d.]+\s*(?:[GMK]?Hz)?\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim() || '-';
 }
 
 function formatTemperature(value){
@@ -245,6 +256,26 @@ function resourceBar(value, label){
   </div>`;
 }
 
+function fittedFontSize(preferredSize, minimumSize, availableWidth, naturalWidth){
+  if(availableWidth <= 0 || naturalWidth <= availableWidth) return preferredSize;
+  return Math.max(minimumSize, Math.floor(preferredSize * availableWidth / naturalWidth * 10) / 10);
+}
+
+function fitCpuModelToSingleLine(){
+  const element = document.querySelector('[data-fit-single-line="cpu-model"]');
+  if(!element || element.clientWidth <= 0) return;
+  const preferredSize = 23;
+  const minimumSize = 11;
+  element.style.fontSize = `${preferredSize}px`;
+  if(element.scrollWidth <= element.clientWidth) return;
+  let size = fittedFontSize(preferredSize, minimumSize, element.clientWidth, element.scrollWidth);
+  element.style.fontSize = `${size}px`;
+  while(size > minimumSize && element.scrollWidth > element.clientWidth){
+    size = Math.max(minimumSize, size - 0.5);
+    element.style.fontSize = `${size}px`;
+  }
+}
+
 function renderOverview(view){
   const resources = view.resources;
   const dockerRunning = finiteNumber(view.docker.running);
@@ -252,18 +283,18 @@ function renderOverview(view){
   byId('overviewCards').innerHTML = `
     <article class="summary-card resource-card">
       <h2>CPU</h2>
+      <div class="card-detail resource-value" data-fit-single-line="cpu-model" title="${escapeHtml(resources.cpuModel)}">${escapeHtml(resources.cpuModel)}</div>
       ${resourceBar(resources.cpuPercent, 'CPU 使用率')}
-      <div class="card-detail" title="${escapeHtml(resources.cpuModel)}">${escapeHtml(resources.cpuModel)}</div>
     </article>
     <article class="summary-card resource-card">
       <h2>内存</h2>
+      <div class="card-detail resource-value">${escapeHtml(resources.memoryText)}</div>
       ${resourceBar(resources.memoryPercent, '内存使用率')}
-      <div class="card-detail">${escapeHtml(resources.memoryText)}</div>
     </article>
     <article class="summary-card resource-card">
       <h2>硬盘</h2>
+      <div class="card-detail resource-value">${escapeHtml(resources.diskText)}</div>
       ${resourceBar(resources.diskPercent, '硬盘使用率')}
-      <div class="card-detail">${escapeHtml(resources.diskText)}</div>
     </article>
     <article class="summary-card count-card">
       <h2>运行中/总容器数量</h2>
@@ -272,13 +303,16 @@ function renderOverview(view){
     <article class="summary-card uptime-card">
       <h2>已运行时间</h2>
       <div class="card-value">${escapeHtml(formatUptime(view.host.uptime))}</div>
-      <div class="card-detail" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div>
+      <div class="card-detail system-detail" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div>
     </article>`;
+  requestAnimationFrame(fitCpuModelToSingleLine);
 }
 
 function renderHardware(view){
   const hardware = view.hardware;
   const smartStatus = hardware.disk_smart_status ?? 'unknown';
+  const powerOnHours = finiteNumber(hardware.disk_power_on_hours);
+  const powerOnDays = approximateDays(powerOnHours);
   const readWrite = finiteNumber(hardware.disk_written_bytes) === null && finiteNumber(hardware.disk_read_bytes) === null
     ? '-'
     : `${formatBytes(hardware.disk_written_bytes)} / ${formatBytes(hardware.disk_read_bytes)}`;
@@ -286,7 +320,7 @@ function renderHardware(view){
     <article class="health-card"><h2>CPU 温度</h2><div class="health-value">${escapeHtml(formatTemperature(hardware.cpu_temperature?.value))}</div></article>
     <article class="health-card"><h2>硬盘当前/最高/最低温度</h2><div class="health-value">${escapeHtml(formatDiskTemperature(hardware.disk_temperature))}</div></article>
     <article class="health-card"><h2>硬盘 SMART 状态</h2><div class="health-value">${badge(smartStatus)}</div></article>
-    <article class="health-card"><h2>硬盘通电时间</h2><div class="health-value">${finiteNumber(hardware.disk_power_on_hours) === null ? '-' : `${formatInteger(hardware.disk_power_on_hours)} h`}</div></article>
+    <article class="health-card"><h2>硬盘通电时间</h2><div class="health-value power-on-value">${powerOnHours === null ? '-' : `${formatInteger(powerOnHours)} h <span class="power-on-days">(约${formatInteger(powerOnDays)}天)</span>`}</div></article>
     <article class="health-card"><h2>硬盘写入/读取量</h2><div class="health-value">${escapeHtml(readWrite)}</div></article>`;
 }
 
@@ -485,27 +519,12 @@ function applySuccessfulDocument(documentValue){
   dashboardState.lastSuccessAt = new Date();
   const view = buildViewModel(documentValue, Boolean(dashboardState.fixtureName));
   renderDashboard(view);
-  byId('lastUpdate').textContent = `上次刷新：${formatDateTime(dashboardState.lastSuccessAt)}`;
+  byId('lastUpdate').textContent = `上次刷新 ${formatDateTime(dashboardState.lastSuccessAt)}`;
 }
 
 function applyRefreshError(error){
   const suffix = dashboardState.lastDocument ? '，继续显示上一次成功数据' : '';
   showNotice(`数据刷新失败${suffix}：${textOrDash(error?.message)}`, 'err');
-}
-
-function bindTheme(){
-  const button = byId('themeToggle');
-  const apply = light => {
-    document.documentElement.classList.toggle('light', light);
-    document.body.classList.toggle('light', light);
-  };
-  const saved = localStorage.getItem('hermesStatusTheme');
-  apply(saved === 'light');
-  button.addEventListener('click', () => {
-    const light = !document.body.classList.contains('light');
-    apply(light);
-    localStorage.setItem('hermesStatusTheme', light ? 'light' : 'dark');
-  });
 }
 
 function bindInteractions(){
@@ -533,7 +552,6 @@ function bindInteractions(){
 function initDashboard(){
   dashboardState.controller?.stop();
   dashboardState.fixtureName = fixtureNameFromLocation(window.location);
-  bindTheme();
   bindInteractions();
   dashboardState.controller = createRefreshController({
     fetchStats: () => fetchStats(dashboardState.fixtureName),
@@ -543,18 +561,33 @@ function initDashboard(){
   });
   dashboardState.controller.refresh('initial');
   dashboardState.controller.start();
+  if(dashboardState.resizeHandler) window.removeEventListener('resize', dashboardState.resizeHandler);
+  dashboardState.resizeHandler = () => {
+    if(dashboardState.resizeFrame !== null) cancelAnimationFrame(dashboardState.resizeFrame);
+    dashboardState.resizeFrame = requestAnimationFrame(() => {
+      dashboardState.resizeFrame = null;
+      fitCpuModelToSingleLine();
+    });
+  };
+  window.addEventListener('resize', dashboardState.resizeHandler);
   if(dashboardState.pagehideHandler) window.removeEventListener('pagehide', dashboardState.pagehideHandler);
-  dashboardState.pagehideHandler = () => dashboardState.controller?.stop();
+  dashboardState.pagehideHandler = () => {
+    dashboardState.controller?.stop();
+    window.removeEventListener('resize', dashboardState.resizeHandler);
+    if(dashboardState.resizeFrame !== null) cancelAnimationFrame(dashboardState.resizeFrame);
+  };
   window.addEventListener('pagehide', dashboardState.pagehideHandler, { once: true });
 }
 
 const exported = {
   REFRESH_INTERVAL_MS,
+  approximateDays,
   buildViewModel,
   cleanCpuModel,
   collectWarnings,
   createRefreshController,
   fixtureNameFromLocation,
+  fittedFontSize,
   formatBytes,
   formatDiskTemperature,
   formatPair,

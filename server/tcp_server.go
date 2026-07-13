@@ -107,14 +107,20 @@ func (s *AgentServer) handleConnection(conn net.Conn) {
 		switch {
 		case strings.HasPrefix(line, "update"):
 			body := strings.TrimSpace(strings.TrimPrefix(line, "update"))
-			var update AgentStats
-			if err := json.Unmarshal([]byte(body), &update); err != nil {
+			update, extension, issues, err := decodeAgentUpdate([]byte(body))
+			if err != nil {
 				if s.app.agentPong(username, connectionID) {
 					_, _ = io.WriteString(conn, "1\n")
 				}
 				continue
 			}
-			if !s.app.updateAgent(username, connectionID, update) {
+			for _, issue := range issues {
+				s.app.logger.Printf(
+					"extension update username=%q domain=%s code=%s payload_length=%d",
+					username, issue.Domain, issue.Code, issue.PayloadLength,
+				)
+			}
+			if !s.app.updateAgent(username, connectionID, update, extension) {
 				return
 			}
 			if s.app.agentPong(username, connectionID) {
@@ -209,7 +215,8 @@ func (a *App) disconnectAgent(username string, conn net.Conn, connectionID uint6
 	})
 }
 
-func (a *App) updateAgent(username string, connectionID uint64, update AgentStats) bool {
+func (a *App) updateAgent(username string, connectionID uint64, update AgentStats, extension ExtensionStats) bool {
+	now := time.Now()
 	a.nodeMu.Lock()
 	node := a.nodes[username]
 	if node == nil || !node.Connected || node.ConnectionID != connectionID {
@@ -223,8 +230,9 @@ func (a *App) updateAgent(username string, connectionID uint64, update AgentStat
 		node.Online6 = *update.Online6
 	}
 	node.Stats = update
+	node.Extension = extensionSnapshotAt(extension, now)
 	node.HasUpdate = true
-	node.LastUpdate = time.Now()
+	node.LastUpdate = now
 	a.nodeMu.Unlock()
 	a.wakeStatsWriter()
 	a.evaluateWatchdogs(username, false)
