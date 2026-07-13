@@ -4,7 +4,7 @@ FROM ${ALPINE_IMAGE}
 WORKDIR /app
 
 # Runtime deps for client-linux.py and client-psutil.py
-RUN apk add --no-cache python3 py3-psutil py3-yaml iproute2 procps smartmontools
+RUN apk add --no-cache python3 py3-psutil py3-yaml iproute2 procps smartmontools util-linux
 
 COPY clients/client-linux.py /app/client-linux.py
 COPY clients/client-psutil.py /app/client-psutil.py
@@ -36,7 +36,7 @@ ENV SERVER=127.0.0.1 \
     HOST_OS_RELEASE_FILE=/host/etc/os-release \
     SMART_DEVICE=/dev/sda \
     DOCKER_SOCKET=/var/run/docker.sock \
-    DOCKER_CONTAINER_LIMIT=80 \
+    DOCKER_CONTAINER_LIMIT=0 \
     DOCKER_JSON_MAX_BYTES=12000 \
     HERMES_JSON_MAX_BYTES=26000
 

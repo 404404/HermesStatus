@@ -88,7 +88,7 @@ HARDWARE_STATUS_FILE = _config_str(HERMES_EXPORT_CONFIG_DATA, "hardware_status_f
 HOST_OS_RELEASE_FILE = _env_str("HOST_OS_RELEASE_FILE", "/host/etc/os-release")
 SMART_DEVICE = _env_str("SMART_DEVICE", "auto")
 DOCKER_SOCKET = _env_str("DOCKER_SOCKET", "/var/run/docker.sock")
-DOCKER_CONTAINER_LIMIT = _env_int("DOCKER_CONTAINER_LIMIT", 80)
+DOCKER_CONTAINER_LIMIT = _env_int("DOCKER_CONTAINER_LIMIT", 0)
 DOCKER_JSON_MAX_BYTES = _env_int("DOCKER_JSON_MAX_BYTES", 12000)
 HERMES_JSON_MAX_BYTES = _env_int("HERMES_JSON_MAX_BYTES", 12000)
 
@@ -126,6 +126,51 @@ def get_host_os_name():
         return " ".join([part for part in (sysname, release) if part]) or "unknown"
     except Exception:
         return "unknown"
+
+CPU_MODEL_CACHE = None
+
+def _cpu_model_from_lscpu(data):
+    if not isinstance(data, dict):
+        return ""
+    for item in data.get("lscpu") or []:
+        if not isinstance(item, dict):
+            continue
+        field = str(item.get("field") or "").strip().rstrip(":").lower()
+        if field == "model name":
+            return str(item.get("data") or "").strip()
+    return ""
+
+def get_cpu_model():
+    global CPU_MODEL_CACHE
+    if CPU_MODEL_CACHE is not None:
+        return CPU_MODEL_CACHE
+    model = ""
+    try:
+        env = dict(os.environ)
+        env["LC_ALL"] = "C"
+        proc = subprocess.run(
+            ["lscpu", "--json"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=3,
+            env=env,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            model = _cpu_model_from_lscpu(json.loads(proc.stdout))
+    except Exception:
+        pass
+    if not model:
+        try:
+            with open("/proc/cpuinfo", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    if line.lower().startswith("model name") and ":" in line:
+                        model = line.split(":", 1)[1].strip()
+                        break
+        except Exception:
+            pass
+    CPU_MODEL_CACHE = model or "unknown"
+    return CPU_MODEL_CACHE
 
 def get_uptime():
     return int(time.time() - psutil.boot_time())
@@ -621,6 +666,7 @@ def _merge_hardware(host_payload, fallback):
         "disk_read_bytes",
         "disk_device",
         "disk_smart_source",
+        "cpu_model",
         "updated_at",
     ):
         value = host_payload.get(key)
@@ -655,6 +701,7 @@ def get_hardware_health():
         }
     passed = _smart_passed(smart)
     fallback = {
+        "cpu_model": get_cpu_model(),
         "cpu_temperature": {
             "value": cpu_temp.get("value"),
             "unit": "C",
@@ -768,7 +815,8 @@ def get_docker_containers():
         rows = _docker_request("/containers/json?all=1")
         containers = []
         running = sum(1 for row in rows if (row.get("State") or "") == "running")
-        for row in rows[:DOCKER_CONTAINER_LIMIT]:
+        selected_rows = rows if DOCKER_CONTAINER_LIMIT <= 0 else rows[:DOCKER_CONTAINER_LIMIT]
+        for row in selected_rows:
             state = row.get("State") or ""
             containers.append({
                 "id": _truncate(row.get("Id", "")[:12], 16),
@@ -799,6 +847,7 @@ def get_hermes_profiles():
                 usage = item.get("usage") if isinstance(item.get("usage"), dict) else {}
                 profiles.append({
                     "profile": profile,
+                    "agent_version": str(item.get("agent_version") or ""),
                     "api_status": str(item.get("api_status") or "unknown"),
                     "api_base_url": str(item.get("api_base_url") or ""),
                     "service_status": str(item.get("service_status") or item.get("status") or "unknown"),
@@ -826,6 +875,7 @@ def get_hermes_profiles():
                     "yesterday_tokens": int(item.get("yesterday_tokens") or item.get("tokens") or 0),
                     "last_run_at": str(item.get("last_run_at") or ""),
                     "note": str(item.get("note") or ""),
+                    "mixture_of_agents": item.get("mixture_of_agents") if isinstance(item.get("mixture_of_agents"), dict) else {},
                     "config_summary": item.get("config_summary") if isinstance(item.get("config_summary"), dict) else {}
                 })
             except Exception:

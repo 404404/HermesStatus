@@ -44,6 +44,7 @@ def long_profiles(count):
         "profiles": [
             {
                 "profile": "hermes%d" % i,
+                "agent_version": "0.3.0",
                 "api_status": "healthy",
                 "service_status": "healthy",
                 "gateway_service": "running",
@@ -61,6 +62,16 @@ def long_profiles(count):
                     "total_tokens": 24846 + i * 2,
                 },
                 "note": "x" * 240,
+                "mixture_of_agents": {
+                    "source": "GET /v1/toolsets",
+                    "available": True,
+                    "name": "moa",
+                    "label": "Mixture of Agents",
+                    "description": "Multi-model consensus via Mixture of Agents",
+                    "enabled": True,
+                    "configured": True,
+                    "tools": ["mixture_of_agents"],
+                },
             }
             for i in range(count)
         ],
@@ -69,6 +80,12 @@ def long_profiles(count):
 
 def main():
     client = load_client()
+    assert client._cpu_model_from_lscpu({
+        "lscpu": [
+            {"field": "Architecture:", "data": "x86_64"},
+            {"field": "Model name:", "data": "Intel(R) Celeron(R) J4125 CPU @ 2.00GHz"},
+        ]
+    }) == "Intel(R) Celeron(R) J4125 CPU @ 2.00GHz"
     docker_json = client._json_compact_limited(
         long_containers(200),
         client.DOCKER_JSON_MAX_BYTES,

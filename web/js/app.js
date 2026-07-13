@@ -20,6 +20,22 @@ function humanBytes(bytes){
   return out.replace(/\.0+$/,'') + ' ' + units[index];
 }
 
+function humanBytesInteger(bytes){
+  if(!Number.isFinite(bytes)) return '-';
+  const units = ['B','KB','MB','GB','TB','PB'];
+  let value = Math.max(0, bytes);
+  let index = 0;
+  while(value >= 1000 && index < units.length - 1){ value /= 1000; index++; }
+  return `${Math.round(value)} ${units[index]}`;
+}
+
+function usageBand(percent){
+  const value = Math.max(0, Math.min(100, Number(percent) || 0));
+  if(value <= 60) return 'usage-low';
+  if(value <= 80) return 'usage-medium';
+  return 'usage-high';
+}
+
 function mbToBytes(mb){ return num(mb) * 1000 * 1000; }
 function kbToBytes(kb){ return num(kb) * 1000; }
 
@@ -94,13 +110,24 @@ function sessionsText(row){
   return '0';
 }
 
-function overviewCard(label, value, hint, barClass, percent){
-  const bar = Number.isFinite(percent) ? `<div class="bar"><i class="${barClass || ''}" style="width:${Math.max(0, Math.min(100, percent)).toFixed(1)}%"></i></div>` : '';
+function cpuModelText(value){
+  return String(value || '-')
+    .replace(/\(R\)/gi, '')
+    .replace(/\s+CPU(?:\s+@\s+[\d.]+\s*[KMGT]?Hz)?\s*$/i, '')
+    .replace(/\s+@\s+[\d.]+\s*[KMGT]?Hz\s*$/i, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function overviewCard(label, value, hint, barClass, percent, secondaryValue = '', barLabel = ''){
+  const bar = Number.isFinite(percent) ? `<div class="bar${barLabel ? ' bar-labeled' : ''}"><i class="${barClass || ''}" style="width:${Math.max(0, Math.min(100, percent)).toFixed(1)}%"></i>${barLabel ? `<span class="bar-label">${esc(barLabel)}</span>` : ''}</div>` : '';
+  const hints = (Array.isArray(hint) ? hint : [hint]).filter(Boolean);
   return `<article class="overview-card">
     <span class="label">${esc(label)}</span>
-    <div class="value">${esc(value)}</div>
+    ${value ? `<div class="value">${esc(value)}</div>` : ''}
+    ${secondaryValue ? `<div class="value value-secondary">${esc(secondaryValue)}</div>` : ''}
+    ${hints.length ? `<div class="hint">${hints.map(item => `<div class="hint-line">${esc(item)}</div>`).join('')}</div>` : ''}
     ${bar}
-    <div class="hint">${esc(hint || '')}</div>
   </article>`;
 }
 
@@ -117,12 +144,13 @@ function renderOverview(){
   const d = docker();
   const memPct = pct(num(host.memory_used), num(host.memory_total));
   const hddPct = pct(num(host.hdd_used), num(host.hdd_total));
+  const hw = hardware();
   $('overviewCards').innerHTML = [
-    overviewCard('CPU', `${num(host.cpu).toFixed(0)}%`, [host.name || 'J4125', host.os || ''].filter(Boolean).join(' / '), 'cpu', num(host.cpu)),
-    overviewCard('内存', `${humanBytes(kbToBytes(host.memory_used))} / ${humanBytes(kbToBytes(host.memory_total))}`, `${memPct.toFixed(0)}% used`, 'mem', memPct),
-    overviewCard('硬盘', `${humanBytes(mbToBytes(host.hdd_used))} / ${humanBytes(mbToBytes(host.hdd_total))}`, `${hddPct.toFixed(0)}% used`, 'hdd', hddPct),
+    overviewCard('CPU', '', cpuModelText(hw.cpu_model), usageBand(num(host.cpu)), num(host.cpu), '', `${num(host.cpu).toFixed(0)}%`),
+    overviewCard('内存', '', '', usageBand(memPct), memPct, `${humanBytes(kbToBytes(host.memory_used))} / ${humanBytesInteger(kbToBytes(host.memory_total))}`, `${memPct.toFixed(0)}%`),
+    overviewCard('硬盘', '', '', usageBand(hddPct), hddPct, `${humanBytes(mbToBytes(host.hdd_used))} / ${humanBytesInteger(mbToBytes(host.hdd_total))}`, `${hddPct.toFixed(0)}%`),
     overviewCard('运行中/总容器数量', `${num(d.running)} / ${num(d.total)}`, '', '', null),
-    overviewCard('已运行时间', host.uptime || '-', host.host || host.location || '', '', null)
+    overviewCard('已运行时间', host.uptime || '-', host.os || '-', '', null)
   ].join('');
 }
 
@@ -148,6 +176,8 @@ function renderHardware(){
 
 function renderHermes(){
   const rows = (hermes().profiles || []);
+  const versions = [...new Set(rows.map(row => String(row.agent_version || '').trim()).filter(Boolean))];
+  $('hermesAgentVersion').textContent = versions.length ? `Hermes Agent ${versions.join(' / ')}` : 'Hermes Agent -';
   $('hermesBody').innerHTML = rows.length ? rows.map(row => {
     const jobsActive = row.scheduled_jobs_active ?? row.yesterday_success ?? 0;
     const jobsTotal = row.scheduled_jobs_total ?? row.yesterday_total ?? 0;
@@ -183,9 +213,7 @@ function renderDocker(){
     <td class="mono muted" title="${esc(row.command || '')}">${esc(row.command || '-')}</td>
     <td class="mono muted" title="${esc(row.ports || '')}">${esc(row.ports || '-')}</td>
   </tr>`).join('');
-  const total = num(d.total);
-  const tail = total > rows.length ? `<tr><td colspan="7" class="muted">仅展示前 ${rows.length} / ${total} 个容器</td></tr>` : '';
-  $('dockerBody').innerHTML = html + tail;
+  $('dockerBody').innerHTML = html;
 }
 
 function profileRows(){
@@ -240,7 +268,7 @@ function volumeRows(volumes){
   if(!rows.length){
     return '<div class="muted">未配置 docker_volumes</div>';
   }
-  return `<table class="mini-table">
+  return `<div class="table-wrap"><table class="mini-table">
     <thead><tr><th>宿主机路径</th><th>容器路径</th><th>模式</th></tr></thead>
     <tbody>${rows.map(item => {
       const parts = String(item || '').split(':');
@@ -249,7 +277,33 @@ function volumeRows(volumes){
       const mode = parts.slice(2).join(':') || 'rw';
       return `<tr><td class="mono">${esc(host)}</td><td class="mono">${esc(target)}</td><td class="mono">${esc(mode)}</td></tr>`;
     }).join('')}</tbody>
-  </table>`;
+  </table></div>`;
+}
+
+function boolText(value){
+  if(value === true) return '<span class="badge ok">是</span>';
+  if(value === false) return '<span class="badge err">否</span>';
+  return '<span class="badge muted">未知</span>';
+}
+
+function mixtureOfAgentsTable(value){
+  const item = value && typeof value === 'object' ? value : {};
+  if(!item.available){
+    const detail = item.error ? ` 调用失败：${item.error}` : ' 未返回 Mixture of Agents 工具集';
+    return `<div class="muted">${esc(item.source || 'GET /v1/toolsets')}${esc(detail)}</div>`;
+  }
+  const tools = Array.isArray(item.tools) && item.tools.length ? item.tools.join(', ') : '-';
+  return `<div class="table-wrap"><table class="mini-table">
+    <thead><tr><th>API来源</th><th>工具集</th><th>启用</th><th>已配置</th><th>工具</th><th>说明</th></tr></thead>
+    <tbody><tr>
+      <td class="mono">${esc(item.source || 'GET /v1/toolsets')}</td>
+      <td class="mono">${esc(item.label || item.name || 'Mixture of Agents')}</td>
+      <td>${boolText(item.enabled)}</td>
+      <td>${boolText(item.configured)}</td>
+      <td class="mono wrap-cell">${esc(tools)}</td>
+      <td class="wrap-cell">${esc(item.description || '-')}</td>
+    </tr></tbody>
+  </table></div>`;
 }
 
 function openProfileModal(profile){
@@ -257,7 +311,7 @@ function openProfileModal(profile){
   if(!row) return;
   S.openProfile = String(profile || '');
   const summary = configSummary(row);
-  $('profileTitle').textContent = `${row.profile || 'Hermes'} 辅助模型配置`;
+  $('profileTitle').textContent = `${row.profile || 'Hermes'} 配置详情`;
   if(!summary){
     $('profileContent').innerHTML = '<section class="detail-section"><h4>配置摘要</h4><div class="muted">暂无 config_summary 数据</div></section>';
     $('profileModal').style.display = 'flex';
@@ -294,7 +348,7 @@ function openProfileModal(profile){
     <section class="detail-section"><h4>辅助模型</h4>${auxTable(summary.auxiliary_models)}</section>
     <section class="detail-section"><h4>容器挂载点</h4>${volumeRows(summary.docker_volumes)}</section>
     ${warnings.length ? `<section class="detail-section"><h4>Warnings</h4>${warnings.map(item => `<div><span class="badge warn">warn</span> ${esc(item)}</div>`).join('')}</section>` : ''}
-    <section class="detail-section"><h4>结构化 JSON 预览</h4><pre class="json-preview">${esc(JSON.stringify(summary, null, 2))}</pre></section>`;
+    <section class="detail-section"><h4>Mixture of Agents</h4>${mixtureOfAgentsTable(row.mixture_of_agents)}</section>`;
   $('profileModal').style.display = 'flex';
 }
 

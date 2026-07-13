@@ -90,6 +90,15 @@ def main():
                 }, ""
             if path == "/api/sessions":
                 return {"has_more": False, "data": []}, ""
+            if path == "/v1/toolsets":
+                return {"data": [{
+                    "name": "moa",
+                    "label": "Mixture of Agents",
+                    "description": "Multi-model consensus",
+                    "enabled": True,
+                    "configured": False,
+                    "tools": ["mixture_of_agents"],
+                }]}, ""
             if path.startswith("/v1/"):
                 return {}, ""
             return None, "unexpected"
@@ -102,8 +111,40 @@ def main():
             assert api["sessions_total_count"] == 3
             assert api["sessions_has_more"] is False
             assert api["sessions"][0]["usage"] == {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}
+            assert api["mixture_of_agents"] == {
+                "source": "GET /v1/toolsets",
+                "available": True,
+                "name": "moa",
+                "label": "Mixture of Agents",
+                "description": "Multi-model consensus",
+                "enabled": True,
+                "configured": False,
+                "tools": ["mixture_of_agents"],
+            }
         finally:
             module.http_json = old_http_json
+
+        by_tool = module.mixture_of_agents_from_toolsets([
+            {"name": "reasoning", "tools": ["mixture_of_agents"]}
+        ])
+        assert by_tool["available"] is True
+        assert by_tool["name"] == "reasoning"
+
+        missing = module.mixture_of_agents_from_toolsets({"data": []})
+        assert missing["available"] is False
+        assert missing["source"] == "GET /v1/toolsets"
+
+        old_run_text = module.run_text
+        old_run_host_text = module.run_host_text
+        try:
+            module.HERMES_VERSION_CACHE = None
+            module.run_text = lambda cmd: "\x1b[32mHermes Agent 0.3.0\x1b[0m\n" if cmd == ["hermes", "--version"] else ""
+            module.run_host_text = lambda command: ""
+            assert module.hermes_agent_version() == "0.3.0"
+        finally:
+            module.run_text = old_run_text
+            module.run_host_text = old_run_host_text
+            module.HERMES_VERSION_CACHE = None
 
     print("hermes api security checks passed")
 

@@ -9,7 +9,8 @@ The project keeps the original ServerStatus architecture: one server container a
 - Single-host dashboard with the original `云监控` title.
 - Top summary cards for CPU, memory, disk, running/total containers, and uptime.
 - Hardware row for CPU temperature, disk current/highest/lowest temperature, SMART status, disk power-on hours, and disk written/read total.
-- Hermes Agent profile table with service/API/gateway state, main model, token usage, job/session counts, auxiliary model config, and container mount summaries.
+- Hermes Agent profile table with service/API/gateway state, main model, token usage, job/session counts, and the detected Hermes Agent version.
+- Profile details for auxiliary models, container mounts, and Mixture of Agents availability returned by the Hermes API.
 - Docker container table modeled after `docker ps -a`.
 - Config page reduced to reload config and restart service.
 - 10-minute Hermes/Docker/SMART refresh loop with the last refresh time shown in the web UI.
@@ -110,7 +111,9 @@ Hardware and Docker data are collected by `clients/client-psutil.py` and `script
 
 | Panel data | Primary source |
 | --- | --- |
-| CPU, memory, disk, uptime | Host `psutil` metrics |
+| CPU usage, memory, disk, uptime | Host `psutil` metrics |
+| CPU model | Host `lscpu --json`, with `/proc/cpuinfo` fallback |
+| Host operating system | Read-only host `/etc/os-release` mount |
 | CPU temperature | Host `/sys/class/hwmon` sensors |
 | Disk SMART status | `sudo smartctl -x /dev/sda` |
 | Disk temperature and lifetime stats | SMART Device Statistics GP Log |
@@ -119,7 +122,11 @@ Hardware and Docker data are collected by `clients/client-psutil.py` and `script
 | Hermes service health | Profile API `GET /health` |
 | Hermes sessions/jobs/runs/token usage | Profile API endpoints when enabled |
 | Hermes gateway, main model, provider, auth refresh | `hermes -p <profile> status` |
+| Hermes Agent version | Host `hermes --version` |
+| Mixture of Agents | Profile API `GET /v1/toolsets` (`moa` / `mixture_of_agents`) |
 | Auxiliary model and docker volume config | `/home/hermes/.hermes/profiles/<profile>/config.yaml` |
+
+The CPU percentage is a live utilization metric from `psutil.cpu_percent()`. The static CPU model displayed below it is collected with `lscpu --json`, with `/proc/cpuinfo` as a fallback.
 
 The Hermes API must stay bound to loopback by default. Do not expose `API_SERVER_HOST=0.0.0.0` directly. If remote access is required, use an authenticated reverse proxy, SSH tunnel, Tailscale, or Cloudflare Access.
 

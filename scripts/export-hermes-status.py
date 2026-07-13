@@ -121,6 +121,7 @@ API_PAGE_LIMIT = int(os.environ.get("HERMES_API_PAGE_LIMIT", "100"))
 API_MAX_PAGES = int(os.environ.get("HERMES_API_MAX_PAGES", "100"))
 HOST_USER = os.environ.get("HERMES_HOST_USER", "hermes")
 PROFILE_ENV_CACHE = {}
+HERMES_VERSION_CACHE = None
 TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
@@ -324,6 +325,30 @@ def hermes_cli_status(profile):
         if text:
             return text
     return ""
+
+
+def hermes_agent_version():
+    global HERMES_VERSION_CACHE
+    if HERMES_VERSION_CACHE is not None:
+        return HERMES_VERSION_CACHE
+
+    outputs = []
+    for cmd in (["hermes", "--version"], ["hermes", "version"]):
+        value = run_text(cmd)
+        if value:
+            outputs.append(value)
+            break
+    if not outputs:
+        value = run_host_text("hermes --version")
+        if value:
+            outputs.append(value)
+
+    value = outputs[0] if outputs else ""
+    value = re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]", "", value)
+    value = " ".join(line.strip() for line in value.splitlines() if line.strip())
+    version = re.search(r"\bv?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?\b", value)
+    HERMES_VERSION_CACHE = (version.group(0).lstrip("v") if version else value)[:120]
+    return HERMES_VERSION_CACHE
 
 
 def parse_cli_status(text):
@@ -848,6 +873,39 @@ def list_items(value):
     return []
 
 
+def mixture_of_agents_from_toolsets(value):
+    items = list_items(value)
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        tools = [str(tool) for tool in _list(item.get("tools"))]
+        name = first_string(item, ("name", "id", "key"))
+        label = first_string(item, ("label", "title", "display_name"))
+        haystack = " ".join([name, label, first_string(item, ("description",))] + tools).lower()
+        if name.lower() != "moa" and "mixture_of_agents" not in tools and "mixture of agents" not in haystack:
+            continue
+        return {
+            "source": "GET /v1/toolsets",
+            "available": True,
+            "name": name or "moa",
+            "label": label or "Mixture of Agents",
+            "description": first_string(item, ("description",)),
+            "enabled": item.get("enabled") if isinstance(item.get("enabled"), bool) else None,
+            "configured": item.get("configured") if isinstance(item.get("configured"), bool) else None,
+            "tools": tools,
+        }
+    return {
+        "source": "GET /v1/toolsets",
+        "available": False,
+        "name": "moa",
+        "label": "Mixture of Agents",
+        "description": "",
+        "enabled": None,
+        "configured": None,
+        "tools": [],
+    }
+
+
 def first_string(value, keys):
     if not isinstance(value, dict):
         return ""
@@ -973,12 +1031,18 @@ def collect_api(profile):
         api["errors"].append("sessions: %s" % err)
 
     capabilities = {}
+    toolsets_payload = None
+    toolsets_error = ""
     for key, path in (("models", "/v1/models"), ("capabilities", "/v1/capabilities"), ("skills", "/v1/skills"), ("toolsets", "/v1/toolsets")):
         payload, err = http_json(profile, path)
         if payload is None:
             if err:
                 api["errors"].append("%s: %s" % (key, err))
+                if key == "toolsets":
+                    toolsets_error = err
             continue
+        if key == "toolsets":
+            toolsets_payload = payload
         capabilities[key] = list_items(payload)[:MAX_TABLE_ROWS] or payload
 
     api["jobs"] = jobs
@@ -987,6 +1051,9 @@ def collect_api(profile):
     api["sessions_has_more"] = sessions_has_more
     api["usage"] = api_usage
     api["capabilities"] = capabilities
+    api["mixture_of_agents"] = mixture_of_agents_from_toolsets(toolsets_payload)
+    if toolsets_error:
+        api["mixture_of_agents"]["error"] = toolsets_error
     return api
 
 
@@ -1068,6 +1135,7 @@ def profile_stats(profile, profile_dir):
     )
     payload = {
         "profile": profile,
+        "agent_version": hermes_agent_version(),
         "api_status": api.get("status", "unknown"),
         "api_base_url": api.get("base_url", ""),
         "service_status": api.get("status") or cli.get("service_status") or state,
@@ -1095,6 +1163,7 @@ def profile_stats(profile, profile_dir):
         "sessions": api.get("sessions", []),
         "runs": [],
         "capabilities": api.get("capabilities", {}),
+        "mixture_of_agents": api.get("mixture_of_agents", {}),
         "config_summary": config_summary,
     }
     return payload
@@ -1116,6 +1185,7 @@ def main():
         else:
             payload = {
                 "profile": profile,
+                "agent_version": hermes_agent_version(),
                 "service_status": "missing",
                 "gateway_service": "missing",
                 "manager_mode": "",
@@ -1135,6 +1205,16 @@ def main():
                 "sessions": [],
                 "runs": [],
                 "capabilities": {},
+                "mixture_of_agents": {
+                    "source": "GET /v1/toolsets",
+                    "available": False,
+                    "name": "moa",
+                    "label": "Mixture of Agents",
+                    "description": "",
+                    "enabled": None,
+                    "configured": None,
+                    "tools": [],
+                },
                 "config_summary": summarize_config(
                     profile=profile,
                     hermes_root=str(HERMES_ROOT),
