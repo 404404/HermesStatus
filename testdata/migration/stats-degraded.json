@@ -1,0 +1,123 @@
+{
+  "extension_version": "1.0-draft",
+  "received_at": "2026-07-13T12:00:01Z",
+  "hardware": {
+    "cpu_model": "Example CPU",
+    "cpu_temperature": null,
+    "disk_temperature": null,
+    "disk_smart_status": "unknown",
+    "disk_power_on_hours": null,
+    "disk_written_bytes": null,
+    "disk_read_bytes": null,
+    "disk_device": "/dev/example-disk",
+    "disk_smart_source": null,
+    "updated_at": null,
+    "stale": true,
+    "error": {
+      "code": "smartctl_unavailable",
+      "message": "SMART data is unavailable",
+      "source": "smartctl",
+      "retryable": true,
+      "http_status": null
+    }
+  },
+  "docker": {
+    "running": 0,
+    "total": 0,
+    "limit": 0,
+    "truncated": false,
+    "containers": [],
+    "updated_at": null,
+    "stale": true,
+    "error": {
+      "code": "docker_unavailable",
+      "message": "Docker data is unavailable",
+      "source": "docker-collector",
+      "retryable": true,
+      "http_status": null
+    }
+  },
+  "hermes": {
+    "profiles": [
+      {
+        "profile": "profile-a",
+        "agent_version": null,
+        "api_status": "unauthorized",
+        "service_status": null,
+        "gateway_service": null,
+        "manager_mode": null,
+        "usage_mode": null,
+        "provider": null,
+        "model": null,
+        "auth_refreshed_at": null,
+        "scheduled_jobs_active": null,
+        "scheduled_jobs_total": null,
+        "sessions_active": null,
+        "sessions_total": null,
+        "usage": {
+          "input_tokens": null,
+          "output_tokens": null,
+          "total_tokens": null,
+          "estimated": true,
+          "source": "unavailable",
+          "window_start": null,
+          "window_end": null
+        },
+        "config_summary": null,
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "api_unauthorized",
+          "message": "Hermes API returned HTTP 401",
+          "source": "hermes-api",
+          "retryable": false,
+          "http_status": 401
+        }
+      },
+      {
+        "profile": "profile-b",
+        "agent_version": null,
+        "api_status": "timeout",
+        "service_status": null,
+        "gateway_service": null,
+        "manager_mode": null,
+        "usage_mode": null,
+        "provider": null,
+        "model": null,
+        "auth_refreshed_at": null,
+        "scheduled_jobs_active": null,
+        "scheduled_jobs_total": null,
+        "sessions_active": null,
+        "sessions_total": null,
+        "usage": {
+          "input_tokens": null,
+          "output_tokens": null,
+          "total_tokens": null,
+          "estimated": true,
+          "source": "unavailable",
+          "window_start": null,
+          "window_end": null
+        },
+        "config_summary": null,
+        "updated_at": "2026-07-13T11:30:00Z",
+        "stale": true,
+        "error": {
+          "code": "api_timeout",
+          "message": "Hermes API request timed out",
+          "source": "hermes-api",
+          "retryable": true,
+          "http_status": null
+        }
+      }
+    ],
+    "updated_at": "2026-07-13T11:30:00Z",
+    "stale": true,
+    "error": {
+      "code": "partial_failure",
+      "message": "One or more profiles are unavailable",
+      "source": "hermes-exporter",
+      "retryable": true,
+      "http_status": null
+    }
+  }
+}
