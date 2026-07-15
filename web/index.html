@@ -3,10 +3,10 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="description" content="云监控,ServerStatus中文版,ServerStatus,ServerStatus cppla" />
+    <meta name="description" content="HermesStatus 单主机云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260710-1" />
+    <link rel="stylesheet" href="css/app.css?v=20260714-3" />
 </head>
 <body>
     <header class="topbar">
@@ -18,188 +18,88 @@
             </span>
             <span class="logo-text"><span class="logo-accent">云</span>监控</span>
         </div>
-        <nav class="nav" id="navTabs">
-            <button data-tab="servers" class="active">主机</button>
-            <button data-tab="monitors">服务</button>
-            <button data-tab="ssl">证书</button>
-            <button data-tab="config">配置</button>
+        <nav class="nav" aria-label="主导航">
+            <button type="button" class="active" aria-current="page">主机</button>
         </nav>
         <div class="actions">
-            <button id="themeToggle" title="切换主题 (当前: 自动或手动)" aria-label="切换主题">🌓</button>
-            <span id="lastUpdate" class="muted">更新中...</span>
+            <span id="lastUpdate" class="last-update">上次刷新 -</span>
+            <button id="refreshButton" type="button" class="tool-button refresh-button" title="刷新数据" aria-label="刷新数据">刷新</button>
         </div>
     </header>
 
     <main class="wrapper">
-        <div id="notice" class="notice info">初始化中...</div>
+        <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+        <div id="emptyState" class="empty-state page-empty" hidden>暂无主机数据</div>
 
-        <section class="ops-overview" id="overviewCards" aria-label="运行概览"></section>
+        <div id="dashboard" class="dashboard" hidden>
+            <section id="overviewCards" class="overview-grid" aria-label="运行概览"></section>
+            <section id="hardwareHealth" class="health-grid" aria-label="硬件健康"></section>
 
-        <section class="ops-toolbar" id="serversToolbar" aria-label="主机筛选" style="display:none;">
-            <label class="search-field">
-                <span>搜索</span>
-                <input id="serverSearch" type="search" autocomplete="off" placeholder="节点 / 地区 / 系统 / 主机名" />
-            </label>
-            <div class="segmented" id="statusFilter" role="group" aria-label="状态筛选">
-                <button data-filter="all" class="active">全部</button>
-                <button data-filter="online">在线</button>
-                <button data-filter="offline">离线</button>
-                <button data-filter="alert" title="只显示在线但资源、丢包或流量异常的节点">异常</button>
-            </div>
-            <label class="select-field">
-                <span>系统</span>
-                <select id="osFilter">
-                    <option value="all">全部系统</option>
-                </select>
-            </label>
-            <label class="select-field">
-                <span>排序</span>
-                <select id="sortSelect">
-                    <option value="name">节点</option>
-                    <option value="status">在线状态</option>
-                    <option value="load">负载</option>
-                    <option value="cpu">CPU</option>
-                    <option value="memory">内存</option>
-                    <option value="hdd">硬盘</option>
-                    <option value="traffic">月流量</option>
-                    <option value="loss">丢包</option>
-                </select>
-            </label>
-            <button id="sortDirection" class="icon-text" title="切换排序方向">降序</button>
-        </section>
+            <section class="data-section" aria-labelledby="profilesTitle">
+                <div class="section-head">
+                    <h2 id="profilesTitle">Hermes Agent Profiles</h2>
+                    <span id="profilesMeta" class="section-meta"></span>
+                </div>
+                <div class="table-wrap">
+                    <table class="data profiles-table">
+                        <thead>
+                        <tr>
+                            <th>配置/Profile</th>
+                            <th>服务状态</th>
+                            <th>网关状态</th>
+                            <th>API 状态</th>
+                            <th>运行模式</th>
+                            <th>模型/模式/提供商</th>
+                            <th>定时任务</th>
+                            <th>会话数</th>
+                            <th>输入/输出/总 Token</th>
+                        </tr>
+                        </thead>
+                        <tbody id="profilesBody"></tbody>
+                    </table>
+                </div>
+            </section>
 
-        <section id="panel-servers" class="panel active" aria-labelledby="主机">
-            <div class="table-wrap">
-                <table class="data" id="serversTable">
-                    <thead>
-                    <tr>
-                        <th data-sort="status">协议</th>
-                        <th data-sort="traffic">月流量 ↓|↑</th>
-                        <th data-sort="name">节点</th>
-                        <th data-sort="type">虚拟化</th>
-                        <th data-sort="location">位置</th>
-                        <th>在线</th>
-                        <th data-sort="load">负载</th>
-                        <th>当前网络 ↓|↑</th>
-                        <th>总流量 ↓|↑</th>
-                        <th data-sort="cpu">CPU</th>
-                        <th data-sort="memory">内存</th>
-                        <th data-sort="hdd">硬盘</th>
-                        <th data-sort="loss" style="text-align:center;">联通|电信|移动</th>
-                    </tr>
-                    </thead>
-                    <tbody id="serversBody"></tbody>
-                </table>
-            </div>
-            <!-- 移动端卡片布局 -->
-            <div id="serversCards" class="cards" style="display:none;"></div>
-        </section>
-
-        <section id="panel-monitors" class="panel" aria-labelledby="服务">
-            <div class="table-wrap">
-                <table class="data" id="monitorsTable">
-                    <thead>
-                    <tr>
-                        <th>协议</th>
-                        <th>监测节点</th>
-                        <th>监测位置</th>
-                        <th>监测内容</th>
-                    </tr>
-                    </thead>
-                    <tbody id="monitorsBody"></tbody>
-                </table>
-            </div>
-            <!-- 移动端卡片布局 (服务) -->
-            <div id="monitorsCards" class="cards" style="display:none;"></div>
-        </section>
-
-        <section id="panel-ssl" class="panel" aria-labelledby="证书">
-            <div class="table-wrap">
-                <table class="data" id="sslTable">
-                    <thead>
-                    <tr>
-                        <th>名称</th>
-                        <th>域名</th>
-                        <th>端口</th>
-                        <th>剩余(天)</th>
-                        <th>到期(UTC)</th>
-                        <th>状态</th>
-                    </tr>
-                    </thead>
-                    <tbody id="sslBody"></tbody>
-                </table>
-            </div>
-            <!-- 移动端卡片布局 (证书) -->
-            <div id="sslCards" class="cards" style="display:none;"></div>
-        </section>
-
-        <section id="panel-config" class="panel" aria-labelledby="配置">
-            <div class="config-grid">
-                <section class="admin-card">
-                    <div class="section-head">
-                        <div>
-                            <h2>配置管理</h2>
-                            <p class="muted">可编辑节点、服务监测、证书与告警规则，保存后自动重载。</p>
-                        </div>
-                        <div class="section-actions">
-                            <button id="adminReload" class="icon-text">重载配置</button>
-                            <button id="adminRestart" class="danger-btn">重启服务</button>
-                        </div>
-                    </div>
-                    <div id="adminStatus" class="admin-status">正在检测管理 API...</div>
-                    <form id="adminTokenForm" class="admin-login">
-                        <label class="search-field">
-                            <span>管理令牌</span>
-                            <input id="adminToken" type="password" autocomplete="current-password" placeholder="ADMIN_TOKEN" />
-                        </label>
-                        <button type="submit" class="primary-btn">连接</button>
-                    </form>
-                    <div class="segmented config-tabs" id="configTypeTabs" role="group" aria-label="配置类型">
-                        <button type="button" data-type="servers" class="active">节点</button>
-                        <button type="button" data-type="monitors">监测</button>
-                        <button type="button" data-type="sslcerts">证书</button>
-                        <button type="button" data-type="watchdog">告警</button>
-                    </div>
-                    <div class="config-actions">
-                        <button id="addConfigItemBtn" class="primary-btn">新增节点</button>
-                        <button id="refreshConfigBtn" class="icon-text">刷新配置</button>
-                    </div>
-                    <div id="configItemList" class="config-list"></div>
-                </section>
-                <section class="admin-card">
-                    <div class="section-head">
-                        <div>
-                            <h2 id="configEditorTitle">新增节点</h2>
-                            <p class="muted" id="configEditorHint">保存后会写入 config.json，并由 Go 服务热重载。</p>
-                        </div>
-                    </div>
-                    <form id="configForm" class="config-form">
-                        <div id="configFields" class="config-fields"></div>
-                        <div class="form-actions">
-                            <button type="submit" class="primary-btn">保存配置</button>
-                            <button type="button" id="resetTrafficBtn" class="warn-btn" style="display:none;">重置月流量</button>
-                            <button type="button" id="deleteConfigItemBtn" class="danger-btn">删除配置</button>
-                            <button type="button" id="resetConfigFormBtn" class="icon-text">清空</button>
-                        </div>
-                    </form>
-                </section>
-            </div>
-        </section>
+            <section class="data-section" aria-labelledby="containersTitle">
+                <div class="section-head">
+                    <h2 id="containersTitle">Docker Containers</h2>
+                    <span id="containersMeta" class="section-meta"></span>
+                </div>
+                <div class="table-wrap">
+                    <table class="data containers-table">
+                        <thead>
+                        <tr>
+                            <th>容器 ID</th>
+                            <th>名称</th>
+                            <th>状态</th>
+                            <th>创建时间</th>
+                            <th>镜像</th>
+                            <th>命令</th>
+                            <th>端口</th>
+                        </tr>
+                        </thead>
+                        <tbody id="containersBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
     </main>
 
-    <!-- 详情抽屉 -->
-    <div id="detailModal" class="modal-backdrop drawer-backdrop" style="display:none;">
-        <aside class="modal-box detail-drawer" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
-            <button class="modal-close" id="detailClose" aria-label="关闭">×</button>
-            <h3 id="detailTitle" class="modal-title">节点详情</h3>
-            <div id="detailContent" class="modal-content">加载中...</div>
-        </aside>
+    <div id="profileModal" class="modal-backdrop" hidden>
+        <section class="modal-box" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+            <button id="profileModalClose" type="button" class="modal-close" title="关闭" aria-label="关闭">×</button>
+            <div class="modal-heading">
+                <h2 id="profileModalTitle">Profile 详情</h2>
+                <span id="profileModalState" class="badge neutral"></span>
+            </div>
+            <div id="profileModalContent" class="modal-content"></div>
+        </section>
     </div>
 
     <footer class="footer">
-        <a href="https://github.com/cppla/ServerStatus" target="_blank" rel="noopener">ServerStatus中文版</a>
+        <a href="https://github.com/404404/HermesStatus" target="_blank" rel="noopener">HermesStatus</a>
     </footer>
 
-    <script src="js/app.js?v=20260710-1" defer></script>
+    <script src="js/app.js?v=20260715-1" defer></script>
 </body>
 </html>

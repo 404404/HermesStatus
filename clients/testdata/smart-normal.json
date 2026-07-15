@@ -1,0 +1,28 @@
+{
+  "smart_status": {
+    "passed": true
+  },
+  "logical_block_size": 4096,
+  "ata_device_statistics": {
+    "pages": [
+      {
+        "number": 1,
+        "name": "General Statistics",
+        "table": [
+          {"offset": 16, "name": "Power-on Hours", "value": 21399},
+          {"offset": 24, "name": "Logical Sectors Written", "value": 6302680682},
+          {"offset": 40, "name": "Logical Sectors Read", "value": 3720709960}
+        ]
+      },
+      {
+        "number": 5,
+        "name": "Temperature Statistics",
+        "table": [
+          {"offset": 8, "name": "Current Temperature", "value": 33},
+          {"offset": 32, "name": "Highest Temperature", "value": 48},
+          {"offset": 40, "name": "Lowest Temperature", "value": 22}
+        ]
+      }
+    ]
+  }
+}

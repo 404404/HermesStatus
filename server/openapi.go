@@ -14,7 +14,7 @@ func openAPISpec() map[string]any {
 			"get": publicOperation("openapi", "OpenAPI 3.1 文档", objectResponse("OpenAPI document")),
 		},
 		"/json/stats.json": map[string]any{
-			"get": publicOperation("stats", "实时状态快照", objectResponse("WebUI 状态数据")),
+			"get": publicOperation("stats", "实时状态快照", statsResponse()),
 		},
 		"/api/config": map[string]any{
 			"get": protectedOperation("getConfig", "读取完整配置", nil, configResponse("200", "配置文档")),
@@ -117,7 +117,7 @@ func openAPISchemas() map[string]any {
 			"interval": integerProperty("通知冷却秒数", 1, 0), "callback": stringProperty("告警回调 URL 前缀"),
 		},
 	}
-	return map[string]any{
+	schemas := map[string]any{
 		"Server": server, "Monitor": monitor, "SSLCert": sslcert, "Watchdog": watchdog,
 		"Config": map[string]any{
 			"type": "object", "required": []string{"servers", "monitors", "sslcerts", "watchdog"},
@@ -131,6 +131,10 @@ func openAPISchemas() map[string]any {
 			"properties": map[string]any{"ok": map[string]any{"type": "boolean", "const": false}, "error": map[string]any{"type": "string"}, "details": map[string]any{}},
 		},
 	}
+	for name, schema := range extensionOpenAPISchemas() {
+		schemas[name] = schema
+	}
+	return schemas
 }
 
 func titleWord(value string) string {

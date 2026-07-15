@@ -1,0 +1,15 @@
+smartctl 7.2 example build
+Sector Size:      512 bytes logical/physical
+
+=== START OF READ SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+
+Page  Offset Size        Value Flags Description
+0x01  =====  =               =  ===  == General Statistics (rev 1) ==
+0x01  0x010  4           21399  ---  Power-on Hours
+0x01  0x018  6      6302680682  ---  Logical Sectors Written
+0x01  0x028  6      3720709960  ---  Logical Sectors Read
+0x05  =====  =               =  ===  == Temperature Statistics (rev 1) ==
+0x05  0x008  1              33  ---  Current Temperature
+0x05  0x020  1              48  ---  Highest Temperature
+0x05  0x028  1              22  ---  Lowest Temperature
