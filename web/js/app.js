@@ -7,7 +7,9 @@ const dashboardState = {
   lastSuccessAt: null,
   selectedProfileIndex: null,
   modalTrigger: null,
+  activePage: 'home',
   pagehideHandler: null,
+  hashchangeHandler: null,
   resizeHandler: null,
   resizeFrame: null
 };
@@ -135,6 +137,15 @@ function tokenBreakdown(usage){
 
 function modelBreakdown(profile){
   return [profile?.model, profile?.usage_mode, profile?.provider].map(textOrDash).join(' / ');
+}
+
+function normalizePageName(value){
+  return value === 'docker' ? 'docker' : 'home';
+}
+
+function pageFromHash(hashValue){
+  const value = String(hashValue ?? '').replace(/^#/, '').toLowerCase();
+  return normalizePageName(value);
 }
 
 function selectSingleHost(servers){
@@ -351,6 +362,43 @@ function renderProfiles(view){
     </tr>`).join('') : '<tr><td colspan="9" class="table-empty">暂无 Hermes Profile 数据</td></tr>';
 }
 
+function dockerStateText(docker){
+  if(docker?.error) return '异常';
+  if(docker?.stale === true) return '陈旧';
+  if(docker?.updated_at) return '最新';
+  return '未知';
+}
+
+function renderDockerSummary(view){
+  const docker = view.docker;
+  const running = finiteNumber(docker.running);
+  const total = finiteNumber(docker.total);
+  const errorText = docker?.error ? textOrDash(docker.error.message || docker.error.code) : '-';
+  const stateText = dockerStateText(docker);
+  const stateTone = docker?.error ? 'err' : docker?.stale === true ? 'warn' : docker?.updated_at ? 'ok' : 'neutral';
+  byId('dockerSummary').innerHTML = `
+    <article class="docker-summary-card">
+      <h2>运行中</h2>
+      <div class="docker-summary-value">${escapeHtml(formatInteger(running))}</div>
+    </article>
+    <article class="docker-summary-card">
+      <h2>容器总数</h2>
+      <div class="docker-summary-value">${escapeHtml(formatInteger(total))}</div>
+    </article>
+    <article class="docker-summary-card docker-summary-time">
+      <h2>数据更新时间</h2>
+      <div class="docker-summary-detail">${escapeHtml(formatDateTime(docker.updated_at))}</div>
+    </article>
+    <article class="docker-summary-card">
+      <h2>数据状态</h2>
+      <div class="docker-summary-value">${`<span class="badge ${stateTone}">${escapeHtml(stateText)}</span>`}</div>
+    </article>
+    <article class="docker-summary-card docker-summary-error">
+      <h2>采集错误</h2>
+      <div class="docker-summary-detail" title="${escapeHtml(errorText)}">${escapeHtml(errorText)}</div>
+    </article>`;
+}
+
 function renderContainers(view){
   const running = finiteNumber(view.docker.running);
   const total = finiteNumber(view.docker.total);
@@ -376,12 +424,45 @@ function renderDashboard(view){
   renderOverview(view);
   renderHardware(view);
   renderProfiles(view);
+  renderDockerSummary(view);
   renderContainers(view);
+  applyPageVisibility();
   setPageState(dashboardCondition(view));
   if(dashboardState.selectedProfileIndex !== null){
     if(view.profiles[dashboardState.selectedProfileIndex]) renderProfileModal(view.profiles[dashboardState.selectedProfileIndex]);
     else closeProfileModal();
   }
+}
+
+function applyPageVisibility(){
+  const activePage = normalizePageName(dashboardState.activePage);
+  dashboardState.activePage = activePage;
+  for(const page of ['home', 'docker']){
+    const active = page === activePage;
+    const tab = byId(`${page}Tab`);
+    const panel = byId(`${page}Page`);
+    if(tab){
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+      tab.setAttribute('tabindex', active ? '0' : '-1');
+      if(active) tab.setAttribute('aria-current', 'page');
+      else tab.removeAttribute('aria-current');
+    }
+    if(panel) panel.hidden = !active;
+  }
+}
+
+function setActivePage(page, options = {}){
+  const nextPage = normalizePageName(page);
+  dashboardState.activePage = nextPage;
+  if(nextPage !== 'home') closeProfileModal();
+  applyPageVisibility();
+  if(options.updateHash !== false && typeof window !== 'undefined'){
+    const nextHash = nextPage === 'docker' ? '#docker' : '#home';
+    if(window.location.hash !== nextHash) window.history.replaceState(null, '', nextHash);
+  }
+  if(nextPage === 'home') requestAnimationFrame(fitCpuModelToSingleLine);
+  return nextPage;
 }
 
 function detailRow(label, value, extraClass = ''){
@@ -619,6 +700,16 @@ function applyRefreshError(error){
 
 function bindInteractions(){
   byId('refreshButton').addEventListener('click', () => dashboardState.controller?.refresh('manual'));
+  for(const tab of document.querySelectorAll('[data-page-target]')){
+    tab.addEventListener('click', () => setActivePage(tab.dataset.pageTarget));
+    tab.addEventListener('keydown', event => {
+      if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const nextPage = event.key === 'Home' || event.key === 'ArrowLeft' ? 'home' : 'docker';
+      setActivePage(nextPage);
+      byId(`${nextPage}Tab`).focus();
+    });
+  }
   byId('profilesBody').addEventListener('click', event => {
     const row = event.target.closest('.profile-row');
     if(row) openProfileModal(Number(row.dataset.profileIndex), row);
@@ -641,6 +732,12 @@ function bindInteractions(){
 
 function initDashboard(){
   dashboardState.controller?.stop();
+  const initialHash = window.location.hash;
+  dashboardState.activePage = pageFromHash(initialHash);
+  if(initialHash && !['#home', '#docker'].includes(initialHash.toLowerCase())){
+    window.history.replaceState(null, '', '#home');
+  }
+  applyPageVisibility();
   setPageState({kind: 'loading', title: '正在加载', message: '正在读取 stats.json'});
   bindInteractions();
   dashboardState.controller = createRefreshController({
@@ -660,10 +757,14 @@ function initDashboard(){
     });
   };
   window.addEventListener('resize', dashboardState.resizeHandler);
+  if(dashboardState.hashchangeHandler) window.removeEventListener('hashchange', dashboardState.hashchangeHandler);
+  dashboardState.hashchangeHandler = () => setActivePage(pageFromHash(window.location.hash), {updateHash: false});
+  window.addEventListener('hashchange', dashboardState.hashchangeHandler);
   if(dashboardState.pagehideHandler) window.removeEventListener('pagehide', dashboardState.pagehideHandler);
   dashboardState.pagehideHandler = () => {
     dashboardState.controller?.stop();
     window.removeEventListener('resize', dashboardState.resizeHandler);
+    window.removeEventListener('hashchange', dashboardState.hashchangeHandler);
     if(dashboardState.resizeFrame !== null) cancelAnimationFrame(dashboardState.resizeFrame);
   };
   window.addEventListener('pagehide', dashboardState.pagehideHandler, { once: true });
@@ -677,13 +778,17 @@ const exported = {
   collectWarnings,
   createRefreshController,
   dashboardCondition,
+  dockerStateText,
   fittedFontSize,
   formatBytes,
   formatDiskTemperature,
   formatPair,
+  modelBreakdown,
   normalizeStatsPayload,
   percentage,
+  pageFromHash,
   profileModalMarkup,
+  normalizePageName,
   selectSingleHost,
   statsUrl,
   statusTone,

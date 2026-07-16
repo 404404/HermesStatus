@@ -35,6 +35,18 @@ async function run(){
   assert.equal(app.usageBand(normal.resources.cpuPercent), 'low');
   assert.equal(app.usageBand(normal.resources.memoryPercent), 'medium');
   assert.equal(app.usageBand(normal.resources.diskPercent), 'high');
+  assert.equal(app.normalizePageName('home'), 'home');
+  assert.equal(app.normalizePageName('docker'), 'docker');
+  assert.equal(app.normalizePageName('unexpected'), 'home');
+  assert.equal(app.pageFromHash(''), 'home');
+  assert.equal(app.pageFromHash('#home'), 'home');
+  assert.equal(app.pageFromHash('#docker'), 'docker');
+  assert.equal(app.pageFromHash('#invalid'), 'home');
+  assert.equal(app.dockerStateText(normal.docker), '最新');
+  assert.equal(
+    app.modelBreakdown({model: 'example-model', usage_mode: 'api', provider: 'OpenCode Go'}),
+    'example-model / api / OpenCode Go'
+  );
 
   const empty = app.buildViewModel(statsDocument('empty'));
   assert.equal(empty.profiles.length, 0);
@@ -45,6 +57,9 @@ async function run(){
   assert.equal(app.collectWarnings(degraded).length, 5);
   assert.equal(degraded.hardware.disk_smart_status, 'unknown');
   assert.deepEqual(degraded.profiles.map(profile => profile.api_status), ['unauthorized', 'timeout']);
+  assert.equal(app.dockerStateText(degraded.docker), '异常');
+  assert.equal(app.dockerStateText({updated_at: null, stale: true, error: null}), '陈旧');
+  assert.equal(app.dockerStateText({updated_at: null, stale: false, error: null}), '未知');
 
   const longValues = app.buildViewModel(statsDocument('long-values'));
   assert.ok(longValues.profiles[0].model.length > 180);
@@ -208,6 +223,18 @@ async function run(){
   assert.match(css, /@media \(max-width:720px\)/);
 
   assert.match(indexMarkup, /id="refreshButton"/);
+  assert.match(indexMarkup, /id="homeTab"[^>]*>主页<\/button>/);
+  assert.match(indexMarkup, /id="dockerTab"[^>]*>Docker<\/button>/);
+  assert.doesNotMatch(indexMarkup, /data-page-target="[^"]+"[^>]*>主机<\/button>/);
+  assert.match(indexMarkup, /id="homePage"[^>]*data-page="home"/);
+  assert.match(indexMarkup, /id="dockerPage"[^>]*data-page="docker"[^>]*hidden/);
+  assert.match(indexMarkup, /id="dockerSummary"/);
+  const homeMarkup = indexMarkup.slice(indexMarkup.indexOf('id="homePage"'), indexMarkup.indexOf('id="dockerPage"'));
+  const dockerMarkup = indexMarkup.slice(indexMarkup.indexOf('id="dockerPage"'), indexMarkup.indexOf('id="profileModal"'));
+  assert.match(homeMarkup, /id="overviewCards"/);
+  assert.match(homeMarkup, /id="profilesBody"/);
+  assert.doesNotMatch(homeMarkup, /id="containersBody"/);
+  assert.match(dockerMarkup, /id="containersBody"/);
   assert.deepEqual(
     [...indexMarkup.matchAll(/<th>([^<]+)<\/th>/g)]
       .map(match => match[1])
@@ -215,9 +242,15 @@ async function run(){
     ['容器名称', '镜像', '状态', '端口']
   );
   assert.match(appSource, /refresh\('initial'\)/);
+  assert.match(appSource, /setActivePage\(tab\.dataset\.pageTarget\)/);
+  assert.match(appSource, /pageFromHash\(window\.location\.hash\)/);
+  assert.match(appSource, /renderDockerSummary\(view\)/);
+  const pageSwitchSource = appSource.slice(appSource.indexOf('function setActivePage'), appSource.indexOf('function detailRow'));
+  assert.doesNotMatch(pageSwitchSource, /fetchStats|controller\.refresh|setInterval/);
   assert.doesNotMatch(appSource, /WebSocket|EventSource|\/api\/|\/testdata\//);
   assert.equal((appSource.match(/\/json\/stats\.json/g) || []).length, 1);
   assert.equal((appSource.match(/setIntervalImplementation\(/g) || []).length, 1);
+  assert.equal((appSource.match(/fetchStats\(\)/g) || []).length, 1);
   assert.match(appSource, /event\.key === 'Escape'/);
   assert.match(appSource, /event\.target === byId\('profileModal'\)/);
 
