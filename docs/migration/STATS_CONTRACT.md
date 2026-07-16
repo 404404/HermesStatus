@@ -25,7 +25,7 @@
 - [agent-update-extension.schema.json](schema/agent-update-extension.schema.json)
 - [stats-extension.schema.json](schema/stats-extension.schema.json)
 
-Release A 实现范围是 HS-004 至 HS-011、HS-021、HS-022、HS-023。Profile 中的 P1 字段和 `config_summary.docker_volumes` 仅用于固定兼容外形和边界测试，不代表 Release A 实现 P1/P2 采集或 UI。
+Release A 实现 HS-004 至 HS-011、HS-021、HS-022、HS-023。Release B 在不改变扩展版本和 Go 管线的前提下启用 Profile health、jobs、sessions、diagnostic token、config summary、Volumes 和 MoA 白名单字段；Runs、聊天、停止和审批仍不在合同内。
 
 ## 通用约定
 
@@ -132,24 +132,27 @@ Stats 扩展在同样对象上增加服务端接收时间：
 | 字段 | JSON 类型 | 必填 | null | 默认值 | 最大字符串 | 最大数组 | 数据来源 | 日志 | stats | OpenAPI | 浏览器 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `profile` | string | 是 | 否 | 无 | 64 | 不适用 | `hermes-exporter.json` name | 是 | 是 | 是 | 是 |
-| `agent_version` | string/null | 是 | 是 | `null` | 64 | 不适用 | Hermes CLI；Release A 可为 null | 是 | 是 | 是 | 是 |
-| `api_status` | string enum | 是 | 否 | `unknown` | 12 | 不适用 | Hermes health；Release A 仅兼容 | 是 | 是 | 是 | 是 |
-| `service_status` | string/null | 是 | 是 | `null` | 64 | 不适用 | Hermes API/CLI；Release A 可为 null | 是 | 是 | 是 | 是 |
-| `gateway_service` | string/null | 是 | 是 | `null` | 64 | 不适用 | Hermes CLI；Release A 可为 null | 是 | 是 | 是 | 是 |
-| `manager_mode` | string/null | 是 | 是 | `null` | 96 | 不适用 | Hermes CLI；Release A 可为 null | 是 | 是 | 是 | 是 |
-| `usage_mode` | string enum/null | 是 | 是 | `null` | 13 | 不适用 | Hermes CLI；Release A 可为 null | 是 | 是 | 是 | 是 |
-| `provider` | string/null | 是 | 是 | `null` | 128 | 不适用 | Hermes CLI；Release A 可为 null | 否 | 是 | 是 | 是 |
-| `model` | string/null | 是 | 是 | `null` | 256 | 不适用 | Hermes CLI/config；Release A 可为 null | 否 | 是 | 是 | 是 |
+| `agent_version` | string/null | 是 | 是 | `null` | 64 | 不适用 | Hermes CLI version | 是 | 是 | 是 | 是 |
+| `api_status` | string enum | 是 | 否 | `unknown` | 12 | 不适用 | `/health` | 是 | 是 | 是 | 是 |
+| `service_status` | string/null | 是 | 是 | `null` | 64 | 不适用 | `/health`，CLI/system service fallback | 是 | 是 | 是 | 是 |
+| `gateway_service` | string/null | 是 | 是 | `null` | 64 | 不适用 | Hermes CLI Gateway Service | 是 | 是 | 是 | 是 |
+| `manager_mode` | string/null | 是 | 是 | `null` | 96 | 不适用 | Hermes CLI Gateway Manager | 是 | 是 | 是 | 是 |
+| `usage_mode` | string enum/null | 是 | 是 | `null` | 13 | 不适用 | Hermes CLI API Keys/Auth Providers | 是 | 是 | 是 | 是 |
+| `provider` | string/null | 是 | 是 | `null` | 128 | 不适用 | Hermes CLI Environment | 否 | 是 | 是 | 是 |
+| `model` | string/null | 是 | 是 | `null` | 256 | 不适用 | Hermes CLI Environment/config fallback | 否 | 是 | 是 | 是 |
 | `auth_refreshed_at` | string/null | 是 | 是 | `null` | 40 | 不适用 | 已登录 provider 的刷新时间 | 否 | 是 | 是 | 是 |
-| `scheduled_jobs_active`, `scheduled_jobs_total` | integer/null | 是 | 是 | `null` | 不适用 | 不适用 | P1 API/CLI，Release A 不采集 | 仅计数 | 是 | 是 | 是 |
-| `sessions_active`, `sessions_total` | integer/null | 是 | 是 | `null` | 不适用 | 不适用 | P1 API/CLI，Release A 不采集 | 仅计数 | 是 | 是 | 是 |
-| `usage` | object | 是 | 否 | unavailable 对象 | 见 Token usage | 不适用 | P1/诊断兼容字段 | 否 | 是 | 是 | 是 |
-| `config_summary` | object/null | 是 | 是 | `null` | volume 512 | volumes 64 | 仅允许 `docker_volumes` 投影；Release A 不展示 | 否 | 是 | 是 | 是 |
+| `scheduled_jobs_active`, `scheduled_jobs_total` | integer/null | 是 | 是 | `null` | 不适用 | 不适用 | `/api/jobs`，CLI fallback | 仅计数 | 是 | 是 | 是 |
+| `sessions_active`, `sessions_total` | integer/null | 是 | 是 | `null` | 不适用 | 不适用 | 分页 `/api/sessions`，CLI fallback | 仅计数 | 是 | 是 | 是 |
+| `sessions_has_more` | boolean | 否（legacy） | 否 | `false` | 不适用 | 不适用 | session 分页上限 | 仅布尔值 | 是 | 是 | 是 |
+| `usage` | object | 是 | 否 | unavailable 对象 | 见 Token usage | 不适用 | API 递归 usage；昨日 local logs；snapshot fallback | 否 | 是 | 是 | 是 |
+| `config_summary` | object/null | 是 | 是 | `null` | URL/model/volume 见子合同 | aux 32、volumes 64 | 脱敏 Profile config allowlist | 否 | 是 | 是 | 是 |
+| `mixture_of_agents` | object/null | 否（legacy） | 是 | `null` | 名称 128、描述 512 | tools 64 | `/v1/toolsets` allowlist | 否 | 是 | 是 | 是 |
 | `updated_at` | string/null | 是 | 是 | `null` | 40 | 不适用 | Profile 快照完成时间 | 是 | 是 | 是 | 是 |
+| `received_at` | string/null | 否（legacy） | 是 | `null` | 40 | 不适用 | 每 Profile 原子快照写入时间 | 是 | 是 | 是 | 是 |
 | `stale` | boolean | 是 | 否 | `true` | 不适用 | 不适用 | 服务端重新计算 | 是 | 是 | 是 | 是 |
 | `error` | object/null | 是 | 是 | `null` | 见错误合同 | 不适用 | exporter/server | 是，结构化 | 是 | 是 | 是 |
 
-`config_summary` 在本合同中是严格 allowlist，只允许 `docker_volumes: string[]`。主模型、辅助模型、Delegation 等 HS-018/HS-019 数据将在 Release B 合同中单独扩展，不能通过 `additionalProperties` 偷渡。
+`config_summary` 是严格 allowlist：`config_found`、`main_model`、最多 32 个 `auxiliary_models`、`delegation` 和最多 64 个 `docker_volumes`。模型/Provider/Base URL/并发/超时只投影显示值；Base URL 删除凭证、query 和 fragment。任何 `.env`、auth、secret、token、credential 或 password 文件挂载必须删除或拒绝。旧迁移 fixture 仅含 `docker_volumes` 时仍可解码，服务端输出会补齐稳定空结构。
 
 ## Token usage
 
@@ -163,7 +166,7 @@ Stats 扩展在同样对象上增加服务端接收时间：
 | `window_start` | string/null | 是 | 是 | `null` | 40 | 统计窗口 | 无稳定窗口必须 null |
 | `window_end` | string/null | 是 | 是 | `null` | 40 | 统计窗口 | 与 start 同时为 null 或同时有值 |
 
-Token usage 是 P1/诊断兼容字段，不是 Release A 的实现目标。合同约束：
+Token usage 在 Release B 启用，但仍是 diagnostic，不是计费账本。合同约束：
 
 1. `source == unavailable` 时三项 token 和两个窗口必须为 null，`estimated == true`。
 2. 无法证明稳定窗口时，`window_start/window_end` 为 null，数据只可标记为 diagnostic；不得称为全局、日度或月度账本。

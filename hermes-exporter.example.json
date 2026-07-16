@@ -1,0 +1,17 @@
+{
+  "hermes_root": "/home/hermes",
+  "status_dir": "/var/lib/serverstatus-client/hermes",
+  "profiles": [
+    {
+      "name": "example-profile",
+      "profile_dir": "/home/hermes/example-profile",
+      "config_path": "/home/hermes/.hermes/profiles/example-profile/config.yaml",
+      "env_path": "/home/hermes/example-profile/.env",
+      "api": {
+        "enabled": true,
+        "host": "127.0.0.1",
+        "port": 8642
+      }
+    }
+  ]
+}

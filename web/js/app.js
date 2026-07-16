@@ -351,9 +351,8 @@ function renderContainers(view){
       <td>${badge(container.state)}</td>
       <td>${escapeHtml(textOrDash(container.created))}</td>
       <td class="wide-cell mono" title="${escapeHtml(textOrDash(container.image))}">${escapeHtml(textOrDash(container.image))}</td>
-      <td class="command-cell mono" title="${escapeHtml(textOrDash(container.command))}">${escapeHtml(textOrDash(container.command))}</td>
       <td class="ports-cell mono" title="${escapeHtml(textOrDash(container.ports))}">${escapeHtml(textOrDash(container.ports))}</td>
-    </tr>`).join('') : '<tr><td colspan="7" class="table-empty">暂无 Docker 容器数据</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="6" class="table-empty">暂无 Docker 容器数据</td></tr>';
 }
 
 function showNotice(message, tone = 'warn'){
@@ -394,34 +393,137 @@ function detailRow(label, value, extraClass = ''){
   return `<div class="detail-row"><dt>${escapeHtml(label)}</dt><dd class="${extraClass}">${value}</dd></div>`;
 }
 
-function renderProfileModal(profile){
-  byId('profileModalTitle').textContent = `${textOrDash(profile.profile)} 详情`;
-  const stateBadge = byId('profileModalState');
-  stateBadge.className = `badge ${statusTone(profile.service_status)}`;
-  stateBadge.textContent = statusText(profile.service_status);
-  stateBadge.title = textOrDash(profile.service_status);
-  const errorText = profile.error ? textOrDash(profile.error.message || profile.error.code) : '-';
-  byId('profileModalContent').innerHTML = `
+function booleanText(value){
+  if(value === true) return '是';
+  if(value === false) return '否';
+  return '-';
+}
+
+function tokenSourceText(value){
+  const labels = {
+    hermes_api_payload: 'Hermes API',
+    local_session_state: '本地会话状态',
+    local_logs: '本地运行快照',
+    unavailable: '不可用'
+  };
+  return labels[value] || textOrDash(value);
+}
+
+function modalMetric(label, value, extraClass = ''){
+  return `<div><span>${escapeHtml(label)}</span><strong class="${extraClass}" title="${escapeHtml(textOrDash(value))}">${escapeHtml(textOrDash(value))}</strong></div>`;
+}
+
+function auxiliaryModelRows(config){
+  const rows = Array.isArray(config?.auxiliary_models) ? config.auxiliary_models : [];
+  if(!rows.length) return '<tr><td colspan="7" class="table-empty">暂无辅助模型配置</td></tr>';
+  return rows.map(item => `
+    <tr>
+      <td class="strong-cell">${escapeHtml(textOrDash(item.name))}</td>
+      <td class="bounded-cell" title="${escapeHtml(textOrDash(item.effective_model))}">${escapeHtml(textOrDash(item.effective_model))}</td>
+      <td class="bounded-cell" title="${escapeHtml(textOrDash(item.effective_provider))}">${escapeHtml(textOrDash(item.effective_provider))}</td>
+      <td>${escapeHtml(item.source === 'main_model' ? '继承主模型' : '独立配置')}</td>
+      <td>${escapeHtml(textOrDash(item.timeout_seconds))}</td>
+      <td>${escapeHtml(textOrDash(item.max_concurrency))}</td>
+      <td>${escapeHtml(textOrDash(item.base_url_display))}</td>
+    </tr>`).join('');
+}
+
+function volumeRows(config){
+  const rows = Array.isArray(config?.docker_volumes) ? config.docker_volumes : [];
+  if(!rows.length) return '<tr><td class="table-empty">暂无容器挂载配置</td></tr>';
+  return rows.map(value => `<tr><td class="mono wrap-value">${escapeHtml(textOrDash(value))}</td></tr>`).join('');
+}
+
+function profileModalMarkup(profile){
+  const config = safeObject(profile?.config_summary);
+  const main = safeObject(config.main_model);
+  const delegation = safeObject(config.delegation);
+  const moa = safeObject(profile?.mixture_of_agents);
+  const usage = safeObject(profile?.usage);
+  const errorText = profile?.error ? textOrDash(profile.error.message || profile.error.code) : '-';
+  const tokenWindow = usage.window_start || usage.window_end
+    ? `${formatDateTime(usage.window_start)} / ${formatDateTime(usage.window_end)}`
+    : '-';
+  const delegationText = [delegation.provider, delegation.model].map(textOrDash).join(' / ');
+  const moaStatus = moa.available ? (moa.enabled === false ? '可用 / 未启用' : '可用') : '不可用';
+  const moaTools = Array.isArray(moa.tools) && moa.tools.length ? moa.tools.join(', ') : '-';
+  return `
     <div class="profile-status-grid">
       <div><span>服务状态</span><span class="modal-status-value" title="${escapeHtml(textOrDash(profile.service_status))}">${badge(profile.service_status)}</span></div>
       <div><span>网关状态</span><span class="modal-status-value" title="${escapeHtml(textOrDash(profile.gateway_service))}">${badge(profile.gateway_service)}</span></div>
       <div><span>API 状态</span><span class="modal-status-value" title="${escapeHtml(textOrDash(profile.api_status))}">${badge(profile.api_status)}</span></div>
       <div><span>运行模式</span><strong title="${escapeHtml(textOrDash(profile.manager_mode))}">${escapeHtml(textOrDash(profile.manager_mode))}</strong></div>
     </div>
-    <dl class="detail-list">
-      ${detailRow('配置/Profile', escapeHtml(textOrDash(profile.profile)), 'mono')}
-      ${detailRow('Agent 版本', escapeHtml(textOrDash(profile.agent_version)), 'mono')}
-      ${detailRow('主模型', escapeHtml(textOrDash(profile.model)), 'wrap-value')}
-      ${detailRow('使用模式', escapeHtml(textOrDash(profile.usage_mode)))}
-      ${detailRow('模型提供商', escapeHtml(textOrDash(profile.provider)), 'wrap-value')}
-      ${detailRow('认证刷新时间', escapeHtml(formatDateTime(profile.auth_refreshed_at)))}
-      ${detailRow('定时任务', escapeHtml(formatPair(profile.scheduled_jobs_active, profile.scheduled_jobs_total)))}
-      ${detailRow('会话数', escapeHtml(formatPair(profile.sessions_active, profile.sessions_total)))}
-      ${detailRow('输入/输出/总 Token', escapeHtml(tokenBreakdown(profile.usage)) + (profile.usage?.estimated ? ' <span class="estimate-mark">估算</span>' : ''), 'mono')}
-      ${detailRow('数据更新时间', escapeHtml(formatDateTime(profile.updated_at)))}
-      ${detailRow('数据状态', profile.stale ? '<span class="badge neutral">陈旧</span>' : '<span class="badge ok">最新</span>')}
-      ${detailRow('采集错误', escapeHtml(errorText), 'wrap-value')}
-    </dl>`;
+    <section class="modal-section">
+      <h3>运行概览</h3>
+      <dl class="detail-list">
+        ${detailRow('配置/Profile', escapeHtml(textOrDash(profile.profile)), 'mono')}
+        ${detailRow('Agent 版本', escapeHtml(textOrDash(profile.agent_version)), 'mono')}
+        ${detailRow('主模型', escapeHtml(textOrDash(profile.model)), 'wrap-value')}
+        ${detailRow('模型提供商', escapeHtml(textOrDash(profile.provider)), 'wrap-value')}
+        ${detailRow('使用模式', escapeHtml(textOrDash(profile.usage_mode)))}
+        ${detailRow('认证刷新时间', escapeHtml(formatDateTime(profile.auth_refreshed_at)))}
+        ${detailRow('定时任务 活动/总数', escapeHtml(formatPair(profile.scheduled_jobs_active, profile.scheduled_jobs_total)))}
+        ${detailRow('会话 活动/总数', escapeHtml(formatPair(profile.sessions_active, profile.sessions_total)) + (profile.sessions_has_more ? ' <span class="estimate-mark">分页上限</span>' : ''))}
+        ${detailRow('输入/输出/总 Token', escapeHtml(tokenBreakdown(usage)) + (usage.estimated ? ' <span class="estimate-mark">估算</span>' : ''), 'mono')}
+        ${detailRow('Token 来源', escapeHtml(tokenSourceText(usage.source)))}
+        ${detailRow('Token 窗口 起/止', escapeHtml(tokenWindow), 'wrap-value')}
+      </dl>
+    </section>
+    <section class="modal-section">
+      <h3>配置摘要</h3>
+      <div class="modal-metric-grid">
+        ${modalMetric('主模型', main.model || profile.model)}
+        ${modalMetric('提供商', main.provider || profile.provider)}
+        ${modalMetric('Base URL', main.base_url, 'mono')}
+        ${modalMetric('并发 / 超时', `${textOrDash(main.concurrency)} / ${textOrDash(main.timeout_seconds)} s`)}
+      </div>
+      <dl class="detail-list compact-details">
+        ${detailRow('Delegation 模型', escapeHtml(delegationText), 'wrap-value')}
+        ${detailRow('Delegation 推理强度', escapeHtml(textOrDash(delegation.reasoning_effort)))}
+        ${detailRow('子任务并发 / 深度 / 超时', escapeHtml(`${textOrDash(delegation.max_concurrent_children)} / ${textOrDash(delegation.max_spawn_depth)} / ${textOrDash(delegation.child_timeout_seconds)} s`))}
+      </dl>
+      <div class="modal-table-wrap">
+        <table class="data modal-data-table auxiliary-table">
+          <thead><tr><th>辅助模型</th><th>模型</th><th>提供商</th><th>来源</th><th>超时(s)</th><th>并发</th><th>Base URL</th></tr></thead>
+          <tbody>${auxiliaryModelRows(config)}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="modal-section modal-two-column">
+      <div>
+        <h3>容器挂载点</h3>
+        <div class="modal-table-wrap"><table class="data modal-data-table volumes-table"><thead><tr><th>挂载路径</th></tr></thead><tbody>${volumeRows(config)}</tbody></table></div>
+      </div>
+      <div>
+        <h3>Mixture of Agents</h3>
+        <dl class="detail-list compact-details">
+          ${detailRow('状态', escapeHtml(moaStatus))}
+          ${detailRow('名称', escapeHtml(textOrDash(moa.label || moa.name)), 'wrap-value')}
+          ${detailRow('已配置', escapeHtml(booleanText(moa.configured)))}
+          ${detailRow('工具', escapeHtml(moaTools), 'wrap-value mono')}
+          ${detailRow('错误', escapeHtml(textOrDash(moa.error)), 'wrap-value')}
+        </dl>
+      </div>
+    </section>
+    <section class="modal-section">
+      <h3>采集状态</h3>
+      <dl class="detail-list compact-details">
+        ${detailRow('数据更新时间', escapeHtml(formatDateTime(profile.updated_at)))}
+        ${detailRow('快照接收时间', escapeHtml(formatDateTime(profile.received_at)))}
+        ${detailRow('数据状态', profile.stale ? '<span class="badge neutral">陈旧</span>' : '<span class="badge ok">最新</span>')}
+        ${detailRow('采集错误', escapeHtml(errorText), 'wrap-value')}
+      </dl>
+    </section>`;
+}
+
+function renderProfileModal(profile){
+  byId('profileModalTitle').textContent = `${textOrDash(profile.profile)} 详情`;
+  const stateBadge = byId('profileModalState');
+  stateBadge.className = `badge ${statusTone(profile.service_status)}`;
+  stateBadge.textContent = statusText(profile.service_status);
+  stateBadge.title = textOrDash(profile.service_status);
+  byId('profileModalContent').innerHTML = profileModalMarkup(profile);
 }
 
 function openProfileModal(index, trigger){
@@ -593,8 +695,10 @@ const exported = {
   formatPair,
   normalizeStatsPayload,
   percentage,
+  profileModalMarkup,
   selectSingleHost,
   statusTone,
+  tokenSourceText,
   tokenBreakdown,
   usageBand
 };

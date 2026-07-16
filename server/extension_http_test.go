@@ -62,7 +62,7 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 		t.Fatalf("stats response does not reference StatsDocument: %#v", responseSchema)
 	}
 	schemas := spec["components"].(map[string]any)["schemas"].(map[string]any)
-	for _, name := range []string{"HardwareStats", "DockerStats", "HermesStats", "StatsServer", "StatsDocument"} {
+	for _, name := range []string{"HardwareStats", "DockerStats", "HermesStats", "ConfigModelSummary", "AuxiliaryModelSummary", "DelegationSummary", "SanitizedConfigSummary", "MixtureOfAgentsStats", "StatsServer", "StatsDocument"} {
 		schema := schemas[name].(map[string]any)
 		if schema["additionalProperties"] != false {
 			t.Fatalf("%s is not allowlisted: %#v", name, schema)
