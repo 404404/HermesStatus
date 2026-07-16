@@ -6,7 +6,7 @@
     <meta name="description" content="HermesStatus 单主机云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260716-1" />
+    <link rel="stylesheet" href="css/app.css?v=20260716-2" />
 </head>
 <body>
     <header class="topbar">
@@ -18,8 +18,9 @@
             </span>
             <span class="logo-text"><span class="logo-accent">云</span>监控</span>
         </div>
-        <nav class="nav" aria-label="主导航">
-            <button type="button" class="active" aria-current="page">主机</button>
+        <nav class="nav" aria-label="主导航" role="tablist">
+            <button id="homeTab" type="button" class="active" role="tab" aria-selected="true" aria-controls="homePage" aria-current="page" data-page-target="home">主页</button>
+            <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
         </nav>
         <div class="actions">
             <span id="lastUpdate" class="last-update">上次刷新 -</span>
@@ -40,53 +41,59 @@
         </section>
 
         <div id="dashboard" class="dashboard" hidden>
-            <section id="overviewCards" class="overview-grid" aria-label="运行概览"></section>
-            <section id="hardwareHealth" class="health-grid" aria-label="硬件健康"></section>
+            <div id="homePage" class="page-panel" role="tabpanel" aria-labelledby="homeTab" data-page="home">
+                <section id="overviewCards" class="overview-grid" aria-label="运行概览"></section>
+                <section id="hardwareHealth" class="health-grid" aria-label="硬件健康"></section>
 
-            <section class="data-section" aria-labelledby="profilesTitle">
-                <div class="section-head">
-                    <h2 id="profilesTitle">Hermes Agent Profiles</h2>
-                    <span id="profilesMeta" class="section-meta"></span>
-                </div>
-                <div class="table-wrap">
-                    <table class="data profiles-table">
-                        <thead>
-                        <tr>
-                            <th>配置/Profile</th>
-                            <th>服务状态</th>
-                            <th>网关状态</th>
-                            <th>API 状态</th>
-                            <th>运行模式</th>
-                            <th>模型/模式/提供商</th>
-                            <th>定时任务</th>
-                            <th>会话数</th>
-                            <th>输入/输出/总 Token</th>
-                        </tr>
-                        </thead>
-                        <tbody id="profilesBody"></tbody>
-                    </table>
-                </div>
-            </section>
+                <section class="data-section" aria-labelledby="profilesTitle">
+                    <div class="section-head">
+                        <h2 id="profilesTitle">Hermes Agent Profiles</h2>
+                        <span id="profilesMeta" class="section-meta"></span>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data profiles-table">
+                            <thead>
+                            <tr>
+                                <th>配置/Profile</th>
+                                <th>服务状态</th>
+                                <th>网关状态</th>
+                                <th>API 状态</th>
+                                <th>运行模式</th>
+                                <th>模型/模式/提供商</th>
+                                <th>定时任务</th>
+                                <th>会话数</th>
+                                <th>输入/输出/总 Token</th>
+                            </tr>
+                            </thead>
+                            <tbody id="profilesBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
 
-            <section class="data-section" aria-labelledby="containersTitle">
-                <div class="section-head">
-                    <h2 id="containersTitle">Docker Containers</h2>
-                    <span id="containersMeta" class="section-meta"></span>
-                </div>
-                <div class="table-wrap">
-                    <table class="data containers-table">
-                        <thead>
-                        <tr>
-                            <th>容器名称</th>
-                            <th>镜像</th>
-                            <th>状态</th>
-                            <th>端口</th>
-                        </tr>
-                        </thead>
-                        <tbody id="containersBody"></tbody>
-                    </table>
-                </div>
-            </section>
+            <div id="dockerPage" class="page-panel" role="tabpanel" aria-labelledby="dockerTab" data-page="docker" hidden>
+                <section id="dockerSummary" class="docker-summary-grid" aria-label="Docker 状态摘要"></section>
+
+                <section class="data-section" aria-labelledby="containersTitle">
+                    <div class="section-head">
+                        <h2 id="containersTitle">Docker Containers</h2>
+                        <span id="containersMeta" class="section-meta"></span>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data containers-table">
+                            <thead>
+                            <tr>
+                                <th>容器名称</th>
+                                <th>镜像</th>
+                                <th>状态</th>
+                                <th>端口</th>
+                            </tr>
+                            </thead>
+                            <tbody id="containersBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
         </div>
     </main>
 
@@ -105,6 +112,6 @@
         <a href="https://github.com/404404/HermesStatus" target="_blank" rel="noopener">HermesStatus</a>
     </footer>
 
-    <script src="js/app.js?v=20260716-1" defer></script>
+    <script src="js/app.js?v=20260716-2" defer></script>
 </body>
 </html>
