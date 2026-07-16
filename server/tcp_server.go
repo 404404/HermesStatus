@@ -201,18 +201,6 @@ func (a *App) disconnectAgent(username string, conn net.Conn, connectionID uint6
 	node.Pong = false
 	a.nodeMu.Unlock()
 	a.wakeStatsWriter()
-	time.AfterFunc(25*time.Second, func() {
-		if a.ctx.Err() != nil {
-			return
-		}
-		a.nodeMu.RLock()
-		current := a.nodes[username]
-		stillOffline := current != nil && !current.Connected && current.ConnectionID == connectionID
-		a.nodeMu.RUnlock()
-		if stillOffline {
-			a.evaluateWatchdogs(username, true)
-		}
-	})
 }
 
 func (a *App) updateAgent(username string, connectionID uint64, update AgentStats, extension ExtensionStats) bool {
@@ -235,7 +223,6 @@ func (a *App) updateAgent(username string, connectionID uint64, update AgentStat
 	node.LastUpdate = now
 	a.nodeMu.Unlock()
 	a.wakeStatsWriter()
-	a.evaluateWatchdogs(username, false)
 	return true
 }
 

@@ -43,7 +43,7 @@
 | DSD-003 | 原生资源字段和单位继续沿用 ServerStatus 协议 | Proposed | B1/B3 |
 | DSD-004 | SMART 只有一个采集所有者，Hardware 统一 600 秒快照 | Proposed | B1 |
 | DSD-005 | SMART 文本优先且按设备扇区大小换算 | Proposed | B1 |
-| DSD-006 | Docker 只调用容器列表 API，command 默认不透传 | Proposed | B1/B3 |
+| DSD-006 | Docker 只调用容器列表 API，容器输出固定四字段 | Accepted | Release C |
 | DSD-007 | Profile 名称与路径只由独立注册表驱动 | Accepted | B1 |
 | DSD-008 | Hermes 每个字段采用固定 API/CLI/file 优先级 | Deferred | Release B |
 | DSD-009 | Token 是 nullable diagnostic，不是账本 | Accepted | Release B |
@@ -127,12 +127,12 @@ CPU model 在 Go 原生 `servers[].cpu_model` 输出，避免同时维护两个�
 
 ## DSD-006 Docker 来源与暴露
 
-**决策：Proposed。**
+**决策：Accepted。**
 
 - 数据源只允许 `GET /containers/json?all=1`；Release A 不调用 inspect、events 或写 API。
 - collector 周期建议 60 秒，满足 120 秒 stale 阈值，不再每秒请求 Socket。
 - running/total 从完整响应计算；数组限额只影响 `containers[]`，必须设置 `truncated`。
-- `command` 默认输出 `[hidden]`。若未来确需展示，单独设计可证明的参数脱敏器。
+- 容器输出严格限定为 `names`、`image`、`status`、`ports`；不采集、不隐藏、不保留 `command`。
 - error 只输出固定 code、source、retryable 和可选 HTTP status，不输出 Socket response 或 exception 原文。
 - Docker Socket 仍按高权限依赖记录，不能因 mount 标记 `ro` 而降级风险。
 
@@ -218,7 +218,7 @@ Runs、聊天、stop、approval 不属于来源优先级，因为 1.0 没有交�
 - API key、refresh/session secret、Authorization 值。
 - Profile env 原文、config 原始内容或密钥原值。
 - 真实 Profile/config/env 路径。
-- raw Docker command、raw exception、raw API response、raw smartctl output。
+- raw Docker response、raw exception、raw API response、raw smartctl output。
 - legacy JSON string。
 
 自由文本字段默认不允许；确需允许时必须有最大长度、字符策略和专用 sanitizer。日志使用 code/source/count/size，不记录 payload。
@@ -239,7 +239,7 @@ Runs、聊天、stop、approval 不属于来源优先级，因为 1.0 没有交�
 | DSD-003 原生磁盘口径 | 只统计物理机根文件系统 | host/container `df` 与 psutil partitions 对照 | B1 开始前 |
 | DSD-004 统一 hardware 600 秒 | 接受 | 目标 UI 对 CPU 温度实时性的确认 | B1 开始前 |
 | DSD-005 扇区大小 | 动态读取 | smartctl information/JSON 脱敏证据 | SMART 实现前 |
-| DSD-006 Docker command | 默认 `[hidden]` | 产品是否确需原命令 | Docker contract 实现前 |
+| DSD-006 Docker 字段 | 四字段 allowlist | 无 | 已在 Release C 固化 |
 | legacy 保留周期 | 一个完整发布周期 | 部署升级清单 | B2 合并前 |
 | Profile/path 诊断 | 只在 client 本地日志显示脱敏 basename | 运维排障需求 | Release B 前 |
 

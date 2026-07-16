@@ -32,7 +32,7 @@
       "extension_version": "1.0-draft",
       "received_at": "2026-07-13T12:00:01Z",
       "hardware": {"cpu_model": "Example CPU", "cpu_temperature": {"value": 42, "unit": "C", "source": "hwmon-package"}, "disk_temperature": {"current": 33, "highest": 44, "lowest": 25, "unit": "C", "source": "smartctl-device-statistics"}, "disk_smart_status": "passed", "disk_power_on_hours": 12000, "disk_written_bytes": 3200000000000, "disk_read_bytes": 1900000000000, "disk_device": "/dev/example-disk", "disk_smart_source": "smartctl-json", "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null},
-      "docker": {"running": 1, "total": 1, "limit": 0, "truncated": false, "containers": [{"id": "abc123def456", "names": "status-client", "state": "running", "status": "Up 2 hours", "created": "2 hours ago", "image": "example/status-client:1.0", "command": "python3 /app/client.py", "ports": "-"}], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null},
+      "docker": {"running": 1, "total": 1, "limit": 0, "truncated": false, "containers": [{"names": "status-client", "image": "example/status-client:1.0", "status": "Up 2 hours", "ports": "-"}], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null},
       "hermes": {"profiles": [], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null}
     },
     {

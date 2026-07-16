@@ -5,25 +5,28 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/expr-lang/expr"
 )
 
 func TestNormalizeConfigPreservesCompatibility(t *testing.T) {
 	doc := minimalTestConfig()
 	doc["future"] = map[string]any{"enabled": true}
-	doc["watchdog"] = []any{
-		map[string]any{"name": "legacy", "rule": "cpu>90&load_1>5&username!='s01'", "interval": "600", "callback": nil},
-		map[string]any{"name": "type", "rule": "tcp_count>600&type='Oracle'", "interval": 60},
-	}
+	doc["watchdog"] = []any{map[string]any{"name": "legacy", "rule": "cpu>90", "callback": "https://example.invalid"}}
+	doc["sslcerts"] = []any{map[string]any{"name": "example", "domain": "example.invalid", "callback": "https://example.invalid"}}
 	doc["servers"].([]any)[0].(map[string]any)["future_field"] = "kept"
 
 	normalized, runtime, apiErr := normalizeConfig(doc)
 	if apiErr != nil {
 		t.Fatal(apiErr)
 	}
-	if len(runtime.Watchdogs) != 2 || runtime.Watchdogs[0].Normalized != "cpu>90&&load_1>5&&username!='s01'" {
-		t.Fatalf("legacy rules were not normalized: %#v", runtime.Watchdogs)
+	if _, exists := normalized["watchdog"]; exists {
+		t.Fatalf("legacy alert rules survived normalization: %#v", normalized)
+	}
+	sslcert := normalized["sslcerts"].([]any)[0].(map[string]any)
+	if _, exists := sslcert["callback"]; exists {
+		t.Fatalf("legacy SSL callback survived normalization: %#v", sslcert)
+	}
+	if len(runtime.SSLCerts) != 1 {
+		t.Fatalf("SSL status checks were not preserved: %#v", runtime.SSLCerts)
 	}
 	server := normalized["servers"].([]any)[0].(map[string]any)
 	if server["future_field"] != "kept" || normalized["future"] == nil {
@@ -31,25 +34,6 @@ func TestNormalizeConfigPreservesCompatibility(t *testing.T) {
 	}
 	if server["monthstart"] != json.Number("1") && server["monthstart"] != 1 {
 		t.Fatalf("monthstart not normalized: %#v", server["monthstart"])
-	}
-}
-
-func TestWatchdogLegacyRulesEvaluate(t *testing.T) {
-	rules := []string{
-		"online4=0&online6=0",
-		"(memory_used/memory_total)*100>90&memory_total>1048576",
-		"tcp_count>600&type='Oracle'",
-		"(network_out-last_network_out)/1024/1024/1024>18&(username='aliyun1'|username='aliyun2')",
-	}
-	for index, rule := range rules {
-		compiled, err := compileWatchdog(WatchdogConfig{Name: "test", Rule: rule, Interval: 1}, index)
-		if err != nil {
-			t.Fatalf("rule %q: %v", rule, err)
-		}
-		environment := watchdogEnvironment(ServerConfig{Username: "aliyun1", Type: "Oracle"}, AgentStats{MemoryTotal: 2_000_000, MemoryUsed: 1_900_000, TCPCount: 700, NetworkOut: 30 << 30}, false, false, 0, 0)
-		if _, err := expr.Run(compiled.Program, environment); err != nil {
-			t.Fatalf("run %q: %v", rule, err)
-		}
 	}
 }
 

@@ -262,6 +262,17 @@ def profile_config_path_for(profile):
     return _string(profile_config(profile).get("config_path")).strip()
 
 
+def profile_config_refreshed_at(profile):
+    path = profile_config_path_for(profile)
+    if not path:
+        return None
+    try:
+        modified = Path(path).stat().st_mtime
+    except OSError:
+        return None
+    return utc_timestamp(dt.datetime.fromtimestamp(modified, tz=dt.timezone.utc))
+
+
 def run_text(cmd, timeout=8):
     try:
         proc = subprocess.run(
@@ -549,6 +560,14 @@ def parse_cli_status(text):
         if provider_name:
             api_key_providers.append(provider_name)
 
+    configured_api_key_providers = []
+    for line in sections.get("api-key providers", []):
+        if "✓" not in line or "not configured" in line.lower():
+            continue
+        provider_name = line.split("✓", 1)[0].strip()
+        if provider_name:
+            configured_api_key_providers.append(provider_name)
+
     auth_providers = []
     current_auth = None
     for line in sections.get("auth providers", []):
@@ -561,40 +580,73 @@ def parse_cli_status(text):
             current_auth["refreshed"] = line.split(":", 1)[1].strip()
 
     result["api_key_providers"] = api_key_providers
+    result["configured_api_key_providers"] = configured_api_key_providers
     result["auth_providers"] = auth_providers
-    provider_l = result.get("provider", "").lower()
-    api_aliases = {
-        "google ai studio": ("google", "gemini"),
-        "openai": ("openai",),
-        "openrouter": ("openrouter",),
-        "deepseek": ("deepseek",),
-        "xai": ("xai", "grok"),
-        "nvidia": ("nvidia", "nim"),
-        "kimi": ("kimi", "moonshot"),
-        "z.ai": ("z.ai", "glm"),
-        "minimax": ("minimax",),
-        "anthropic": ("anthropic",),
+
+    def provider_identity(value):
+        return re.sub(r"[^a-z0-9]+", "", _string(value).lower())
+
+    provider_aliases = {
+        "googleaistudio": {"googlegemini"},
+        "openai": {"openai"},
+        "openaicodex": {"openaicodex"},
+        "openrouter": {"openrouter"},
+        "deepseek": {"deepseek"},
+        "xai": {"xaigrok"},
+        "nvidianim": {"nvidianim"},
+        "kimi": {"kimimoonshot"},
+        "moonshotai": {"kimimoonshot"},
+        "zaiglm": {"zaiglm"},
+        "minimax": {"minimax"},
+        "minimaxchina": {"minimaxchina"},
+        "anthropic": {"anthropic"},
+        "stepfunstepplan": {"stepfunstepplan"},
     }
-    auth_names = [item.get("name", "").lower() for item in auth_providers]
-    api_names = [item.lower() for item in api_key_providers]
+    explicit_provider_modes = {
+        "nousportal": "auth_provider",
+        "openaicodex": "auth_provider",
+        "xaioauth": "auth_provider",
+        "supergrok": "auth_provider",
+        "githubcopilot": "auth_provider",
+        "qwenoauth": "auth_provider",
+        "opencodego": "api",
+        "openrouter": "api",
+        "googleaistudio": "api",
+        "deepseek": "api",
+        "zaiglm": "api",
+        "stepfunstepplan": "api",
+        "opencodezen": "api",
+    }
+
+    def provider_matches(current, candidate):
+        current_id = provider_identity(current)
+        candidate_id = provider_identity(candidate)
+        if not current_id or not candidate_id:
+            return False
+        if current_id == candidate_id:
+            return True
+        return candidate_id in provider_aliases.get(current_id, set())
+
+    provider = result.get("provider", "")
     matching_auth = next(
-        (item for item in auth_providers if provider_l and (
-            provider_l == item.get("name", "").lower()
-            or provider_l in item.get("name", "").lower()
-            or item.get("name", "").lower() in provider_l
-        )),
+        (item for item in auth_providers if provider_matches(provider, item.get("name"))),
+        None,
+    )
+    matching_api = next(
+        (
+            name
+            for name in api_key_providers + configured_api_key_providers
+            if provider_matches(provider, name)
+        ),
         None,
     )
     if matching_auth:
         result["usage_mode"] = "auth_provider"
         result["auth_refreshed_at"] = matching_auth.get("refreshed", "")
-    elif any(any(alias in name or alias in provider_l for alias in api_aliases.get(provider_l, (provider_l,)) if alias) for name in api_names):
+    elif matching_api:
         result["usage_mode"] = "api"
-    elif api_key_providers and not auth_providers:
-        result["usage_mode"] = "api"
-    elif auth_providers:
-        result["usage_mode"] = "auth_provider"
-        result["auth_refreshed_at"] = auth_providers[0].get("refreshed", "")
+    else:
+        result["usage_mode"] = explicit_provider_modes.get(provider_identity(provider), "unknown")
 
     if not result.get("gateway_service"):
         match = re.search(r"gateway\s+service\s*[:：]\s*([^\n]+)", text, re.I)
@@ -1070,9 +1122,21 @@ def profile_stats(profile, profile_dir, previous=None):
     gateway_value = cli.get("gateway_service")
     if not gateway_value and state and state != "unknown":
         gateway_value = state
-    usage_mode = fallback_value(cli.get("usage_mode"), previous, "usage_mode", "unknown")
+    if cli_available:
+        usage_mode = cli.get("usage_mode") or "unknown"
+    elif previous_used:
+        usage_mode = previous.get("usage_mode") or "unknown"
+    else:
+        usage_mode = "unknown"
     if usage_mode not in ("api", "auth_provider", "unknown"):
         usage_mode = "unknown"
+    config_refreshed_at = profile_config_refreshed_at(profile)
+    if cli_available:
+        model_refreshed_at = normalize_timestamp(cli.get("auth_refreshed_at")) or config_refreshed_at
+    elif previous_used:
+        model_refreshed_at = normalize_timestamp(previous.get("auth_refreshed_at"))
+    else:
+        model_refreshed_at = config_refreshed_at
 
     payload = {
         "profile": profile,
@@ -1084,7 +1148,7 @@ def profile_stats(profile, profile_dir, previous=None):
         "usage_mode": usage_mode,
         "provider": public_text(provider, MAX_PROVIDER) or None,
         "model": public_text(model, MAX_MODEL) or None,
-        "auth_refreshed_at": fallback_value(normalize_timestamp(cli.get("auth_refreshed_at")), previous, "auth_refreshed_at"),
+        "auth_refreshed_at": model_refreshed_at,
         "scheduled_jobs_active": active_jobs,
         "scheduled_jobs_total": total_jobs,
         "sessions_active": active_sessions,

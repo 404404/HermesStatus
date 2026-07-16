@@ -30,7 +30,7 @@ Release A 只覆盖以下既有功能：
 | 决策 | 结论 | 理由 | 后续影响 |
 | --- | --- | --- | --- |
 | 首页形态 | HermesStatus 2.0 首页继续采用单主机 Dashboard | 1.0 已运行场景固定为单台 J4125，核心工作流是本机硬件、Docker 和 Hermes 状态 | P0 Dashboard 在 2.0 组件体系内实现，不恢复 1.0 多节点首页 |
-| 上游 Go 能力 | 保留 Go 上游原生管理 API、OpenAPI、Watchdog、SSL 和配置能力 | 这些是 2.0 基线能力，不应因单主机首页被删除 | UI 可隐藏入口，但后端能力和 API 保持可用 |
+| 上游 Go 能力 | 保留 Go 上游原生管理 API、OpenAPI、SSL 状态检查和配置能力 | Release C 明确不包含告警引擎 | UI 继续只展示单主机状态，后端不提供告警 CRUD 或通知回调 |
 | Hermes summary API | Release A 不迁移 `/api/hermes/config-summary` | 当前 1.0 WebUI 不调用；属于 HS-024/P2 | 不在 `server/http_server.go` 增加该路由 |
 | 未交付能力 | Runs、聊天、流式聊天、停止、审批等不计入 1.0 等价迁移 | 1.0 exporter 的 `runs` 恒为空，页面没有这些交互 | 需要时作为独立产品需求和安全设计 |
 | 采集器策略 | 第一阶段继续复用 Python client/exporter | 先隔离 Go 数据管线风险，避免同时重写采集器 | Go 仅接收、验证、存储和输出结构化数据 |

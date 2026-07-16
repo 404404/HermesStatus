@@ -175,41 +175,22 @@
     },
     "dockerContainer": {
       "type": "object",
-      "required": ["id", "names", "state", "status", "created", "image", "command", "ports"],
+      "required": ["names", "image", "status", "ports"],
       "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 64
-        },
         "names": {
           "type": "string",
           "minLength": 1,
           "maxLength": 256
-        },
-        "state": {
-          "type": "string",
-          "enum": ["created", "running", "paused", "restarting", "removing", "exited", "dead", "unknown"]
-        },
-        "status": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128
-        },
-        "created": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 64
         },
         "image": {
           "type": "string",
           "minLength": 1,
           "maxLength": 256
         },
-        "command": {
+        "status": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 512
+          "maxLength": 128
         },
         "ports": {
           "type": "string",
@@ -535,7 +516,7 @@
         "limit": 0,
         "truncated": false,
         "containers": [
-          {"id": "abc123def456", "names": "status-client", "state": "running", "status": "Up 2 hours", "created": "2 hours ago", "image": "example/status-client:1.0", "command": "python3 /app/client.py", "ports": "-"}
+          {"names": "status-client", "image": "example/status-client:1.0", "status": "Up 2 hours", "ports": "-"}
         ],
         "updated_at": "2026-07-13T12:00:00Z",
         "stale": false,

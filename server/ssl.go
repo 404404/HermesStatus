@@ -11,16 +11,12 @@ import (
 )
 
 type CertState struct {
-	Config            SSLCertConfig
-	ExpireTS          int64
-	Mismatch          bool
-	LastError         string
-	LastCheck         time.Time
-	Checking          bool
-	LastAlarm7        time.Time
-	LastAlarm3        time.Time
-	LastAlarm1        time.Time
-	LastAlarmMismatch time.Time
+	Config    SSLCertConfig
+	ExpireTS  int64
+	Mismatch  bool
+	LastError string
+	LastCheck time.Time
+	Checking  bool
 }
 
 func certKey(config SSLCertConfig) string {
@@ -82,10 +78,6 @@ func (a *App) runDueSSLChecks() {
 func (a *App) executeSSLCheck(key string, config SSLCertConfig) {
 	expireTS, mismatch, err := checkCertificate(config)
 	now := time.Now()
-	type notification struct {
-		message string
-	}
-	alerts := make([]notification, 0, 2)
 
 	a.certMu.Lock()
 	state := a.certs[key]
@@ -104,35 +96,8 @@ func (a *App) executeSSLCheck(key string, config SSLCertConfig) {
 	state.ExpireTS = expireTS
 	state.Mismatch = mismatch
 	state.LastError = ""
-	if config.Callback != "" && mismatch && (state.LastAlarmMismatch.IsZero() || now.Sub(state.LastAlarmMismatch) >= 24*time.Hour) {
-		state.LastAlarmMismatch = now
-		alerts = append(alerts, notification{message: fmt.Sprintf("【SSL证书域名不匹配】%s(%s) 证书域名与配置不一致", config.Name, config.Domain)})
-	}
-	days := int((expireTS - now.Unix()) / 86400)
-	if config.Callback != "" {
-		var lastAlarm *time.Time
-		switch {
-		case days <= 7 && days > 3:
-			lastAlarm = &state.LastAlarm7
-		case days <= 3 && days > 1:
-			lastAlarm = &state.LastAlarm3
-		case days <= 1:
-			lastAlarm = &state.LastAlarm1
-		}
-		if lastAlarm != nil && (lastAlarm.IsZero() || now.Sub(*lastAlarm) >= 20*time.Hour) {
-			*lastAlarm = now
-			expire := time.Unix(expireTS, 0).UTC().Format("2006-01-02 15:04:05")
-			alerts = append(alerts, notification{message: fmt.Sprintf("【SSL证书提醒】%s(%s) 将在 %d 天后(%s UTC) 到期", config.Name, config.Domain, days, expire)})
-		}
-	}
 	a.certMu.Unlock()
 	a.wakeStatsWriter()
-
-	for _, alert := range alerts {
-		if err := a.sendCallback(config.Callback, alert.message, "ServerStatusSSL"); err != nil {
-			a.logger.Printf("SSL certificate %q callback: %v", config.Name, err)
-		}
-	}
 }
 
 func checkCertificate(config SSLCertConfig) (int64, bool, error) {

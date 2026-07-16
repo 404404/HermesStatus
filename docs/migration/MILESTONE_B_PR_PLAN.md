@@ -66,7 +66,7 @@ B4 只规划 1.0 已存在的数据行为。Runs、聊天、停止、审批不�
 1. normal/empty/degraded/long-values fixture 与 Go validator 结果一致。
 2. 字符串、数组、嵌套对象和域 payload 上限与 Schema 一致。
 3. 未知字段、secret-like 字段、invalid timestamp、`running > total`、无窗口 Token 均有确定行为。
-4. Docker command 使用已确认的 hidden/sanitized 规则；验证失败日志不含原值。
+4. Docker 容器使用 `names/image/status/ports` allowlist；验证失败日志不含原值。
 5. 不修改 `ServerConfig`、management API、TCP、stats 或 Web 行为。
 6. Go unit tests 与静态检查通过。
 
@@ -114,7 +114,7 @@ B4 只规划 1.0 已存在的数据行为。Runs、聊天、停止、审批不�
 2. hwmon normal/empty/multiple 与 smartctl text/JSON/passed/failed/missing fixture 均通过。
 3. SMART 只有一个 600 秒所有者；不再由每秒 update 重复调用。
 4. Logical Sectors 使用已验证 sector size；未知时返回 null/error，不猜测。
-5. Docker count 与 `docker ps -a` 一致，列表截断保留真实 total，command/error 不泄密。
+5. Docker count 与 `docker ps -a` 一致，列表截断保留真实 total，error 不泄密。
 6. normal/empty/degraded/long update 通过 Schema、字节上限和 secret scan。
 7. 无 Web 依赖即可从 Go stats 验证结构化值未丢失。
 

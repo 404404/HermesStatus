@@ -1,9 +1,7 @@
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
-const FIXTURE_NAMES = new Set(['normal', 'empty', 'degraded', 'long-values']);
 
 const dashboardState = {
   controller: null,
-  fixtureName: null,
   lastDocument: null,
   view: null,
   lastSuccessAt: null,
@@ -144,37 +142,9 @@ function selectSingleHost(servers){
   return servers.find(server => server && server.disabled !== true) || servers[0] || null;
 }
 
-function fixtureHost(extension){
-  const memoryTotal = 8 * 1024 * 1024;
-  const diskTotal = 128 * 1024;
-  return {
-    name: 'fixture-host',
-    disabled: false,
-    online4: true,
-    online6: false,
-    cpu: 10,
-    cpu_model: extension?.hardware?.cpu_model,
-    memory_used: memoryTotal * 0.7,
-    memory_total: memoryTotal,
-    hdd_used: diskTotal * 0.9,
-    hdd_total: diskTotal,
-    uptime: '12 天 3 小时',
-    os: 'Example Linux 2.0',
-    hardware: extension?.hardware,
-    docker: extension?.docker,
-    hermes: extension?.hermes
-  };
-}
-
-function normalizeStatsPayload(documentValue, fixtureMode = false){
+function normalizeStatsPayload(documentValue){
   const documentObject = documentValue && typeof documentValue === 'object' ? documentValue : {};
   if(Array.isArray(documentObject.servers)) return documentObject;
-  if(fixtureMode && (documentObject.hardware || documentObject.docker || documentObject.hermes)){
-    return {
-      updated: documentObject.received_at ? Math.floor(new Date(documentObject.received_at).getTime() / 1000) : 0,
-      servers: [fixtureHost(documentObject)]
-    };
-  }
   return { ...documentObject, servers: [] };
 }
 
@@ -182,8 +152,8 @@ function safeObject(value){
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
-function buildViewModel(documentValue, fixtureMode = false){
-  const documentObject = normalizeStatsPayload(documentValue, fixtureMode);
+function buildViewModel(documentValue){
+  const documentObject = normalizeStatsPayload(documentValue);
   const host = selectSingleHost(documentObject.servers);
   if(!host) return { host: null, document: documentObject, hardware: {}, docker: {}, hermes: {}, profiles: [], containers: [] };
 
@@ -219,7 +189,7 @@ function buildViewModel(documentValue, fixtureMode = false){
 
 function collectWarnings(view){
   if(!view.host) return [];
-  return [view.hardware, view.docker, view.hermes]
+  return [view.hardware, view.docker, view.hermes, ...view.profiles]
     .map(domain => domain?.error)
     .filter(error => error && typeof error === 'object')
     .map(error => textOrDash(error.message || error.code))
@@ -228,6 +198,9 @@ function collectWarnings(view){
 
 function statusTone(value){
   const status = String(value ?? '').toLowerCase();
+  if(status.startsWith('up ') || status.includes('(healthy)')) return 'ok';
+  if(status.startsWith('exited') || status.startsWith('dead')) return 'err';
+  if(status.startsWith('created') || status.startsWith('paused') || status.startsWith('restarting') || status.startsWith('removing')) return 'warn';
   if(['passed', 'running', 'ok', 'healthy', 'up', 'active'].includes(status)) return 'ok';
   if(['failed', 'down', 'stopped', 'unauthorized', 'timeout', 'dead', 'exited'].includes(status)) return 'err';
   return 'neutral';
@@ -246,6 +219,44 @@ function statusText(value){
 
 function badge(value){
   return `<span class="badge ${statusTone(value)}">${escapeHtml(statusText(value))}</span>`;
+}
+
+function domainIsUnknown(value){
+  return !value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length === 0;
+}
+
+function dashboardCondition(view, refreshError = null){
+  if(refreshError) return {kind: 'error', title: '刷新失败', message: textOrDash(refreshError.message || refreshError)};
+  if(!view.host) return {kind: 'empty', title: '暂无主机数据', message: 'stats.json 暂无可显示的主机。'};
+  if(view.host.online4 === false && view.host.online6 === false){
+    return {kind: 'offline', title: '主机离线', message: '当前显示最后一次可用的状态数据。'};
+  }
+  const warnings = collectWarnings(view);
+  if(warnings.length){
+    return {kind: 'error', title: '部分数据不可用', message: warnings.join('；')};
+  }
+  const staleDomains = [
+    ['硬件', view.hardware], ['Docker', view.docker], ['Hermes', view.hermes]
+  ].filter(([, domain]) => domain?.stale === true).map(([name]) => name);
+  if(view.profiles.some(profile => profile?.stale === true)) staleDomains.push('Profile');
+  if(staleDomains.length){
+    return {kind: 'stale', title: '数据已陈旧', message: `${[...new Set(staleDomains)].join('、')} 数据超过刷新时限。`};
+  }
+  if([view.hardware, view.docker, view.hermes].some(domainIsUnknown)){
+    return {kind: 'unknown', title: '状态未知', message: 'stats.json 未包含完整扩展状态。'};
+  }
+  return {kind: 'ready', title: '', message: ''};
+}
+
+function setPageState(condition){
+  const state = condition || {kind: 'ready', title: '', message: ''};
+  const element = byId('pageState');
+  element.hidden = state.kind === 'ready';
+  element.dataset.state = state.kind;
+  const icons = {loading: '↻', empty: '—', offline: '×', error: '!', stale: '◷', unknown: '?'};
+  byId('pageStateIcon').textContent = icons[state.kind] || '';
+  byId('pageStateTitle').textContent = state.title;
+  byId('pageStateMessage').textContent = state.message;
 }
 
 function resourceBar(value, label){
@@ -346,43 +357,27 @@ function renderContainers(view){
   byId('containersMeta').textContent = running === null || total === null ? '' : `${formatInteger(running)} / ${formatInteger(total)} 运行中`;
   byId('containersBody').innerHTML = view.containers.length ? view.containers.map(container => `
     <tr>
-      <td class="mono strong-cell">${escapeHtml(textOrDash(container.id))}</td>
-      <td class="bounded-cell" title="${escapeHtml(textOrDash(container.names))}">${escapeHtml(textOrDash(container.names))}</td>
-      <td>${badge(container.state)}</td>
-      <td>${escapeHtml(textOrDash(container.created))}</td>
+      <td class="strong-cell" title="${escapeHtml(textOrDash(container.names))}">${escapeHtml(textOrDash(container.names))}</td>
       <td class="wide-cell mono" title="${escapeHtml(textOrDash(container.image))}">${escapeHtml(textOrDash(container.image))}</td>
+      <td class="bounded-cell" title="${escapeHtml(textOrDash(container.status))}">${badge(container.status)}</td>
       <td class="ports-cell mono" title="${escapeHtml(textOrDash(container.ports))}">${escapeHtml(textOrDash(container.ports))}</td>
-    </tr>`).join('') : '<tr><td colspan="6" class="table-empty">暂无 Docker 容器数据</td></tr>';
-}
-
-function showNotice(message, tone = 'warn'){
-  const notice = byId('notice');
-  notice.textContent = message;
-  notice.className = `notice ${tone}`;
-  notice.hidden = false;
-}
-
-function hideNotice(){
-  byId('notice').hidden = true;
+    </tr>`).join('') : '<tr><td colspan="4" class="table-empty">暂无 Docker 容器数据</td></tr>';
 }
 
 function renderDashboard(view){
   dashboardState.view = view;
   const hasHost = Boolean(view.host);
   byId('dashboard').hidden = !hasHost;
-  byId('emptyState').hidden = hasHost;
   if(!hasHost){
     closeProfileModal();
-    hideNotice();
+    setPageState(dashboardCondition(view));
     return;
   }
   renderOverview(view);
   renderHardware(view);
   renderProfiles(view);
   renderContainers(view);
-  const warnings = collectWarnings(view);
-  if(warnings.length) showNotice(`部分采集数据不可用：${warnings.join('；')}`, 'warn');
-  else hideNotice();
+  setPageState(dashboardCondition(view));
   if(dashboardState.selectedProfileIndex !== null){
     if(view.profiles[dashboardState.selectedProfileIndex]) renderProfileModal(view.profiles[dashboardState.selectedProfileIndex]);
     else closeProfileModal();
@@ -462,7 +457,7 @@ function profileModalMarkup(profile){
         ${detailRow('主模型', escapeHtml(textOrDash(profile.model)), 'wrap-value')}
         ${detailRow('模型提供商', escapeHtml(textOrDash(profile.provider)), 'wrap-value')}
         ${detailRow('使用模式', escapeHtml(textOrDash(profile.usage_mode)))}
-        ${detailRow('认证刷新时间', escapeHtml(formatDateTime(profile.auth_refreshed_at)))}
+        ${detailRow('Provider/模型配置刷新时间', escapeHtml(formatDateTime(profile.auth_refreshed_at)))}
         ${detailRow('定时任务 活动/总数', escapeHtml(formatPair(profile.scheduled_jobs_active, profile.scheduled_jobs_total)))}
         ${detailRow('会话 活动/总数', escapeHtml(formatPair(profile.sessions_active, profile.sessions_total)) + (profile.sessions_has_more ? ' <span class="estimate-mark">分页上限</span>' : ''))}
         ${detailRow('输入/输出/总 Token', escapeHtml(tokenBreakdown(usage)) + (usage.estimated ? ' <span class="estimate-mark">估算</span>' : ''), 'mono')}
@@ -511,7 +506,7 @@ function profileModalMarkup(profile){
       <dl class="detail-list compact-details">
         ${detailRow('数据更新时间', escapeHtml(formatDateTime(profile.updated_at)))}
         ${detailRow('快照接收时间', escapeHtml(formatDateTime(profile.received_at)))}
-        ${detailRow('数据状态', profile.stale ? '<span class="badge neutral">陈旧</span>' : '<span class="badge ok">最新</span>')}
+        ${detailRow('数据状态', profile.stale ? '<span class="badge warn">陈旧</span>' : '<span class="badge ok">最新</span>')}
         ${detailRow('采集错误', escapeHtml(errorText), 'wrap-value')}
       </dl>
     </section>`;
@@ -547,21 +542,12 @@ function closeProfileModal(){
   dashboardState.modalTrigger = null;
 }
 
-function fixtureNameFromLocation(locationValue){
-  if(!locationValue) return null;
-  const localHosts = new Set(['localhost', '127.0.0.1', '::1']);
-  if(!localHosts.has(locationValue.hostname)) return null;
-  const name = new URLSearchParams(locationValue.search).get('fixture');
-  return FIXTURE_NAMES.has(name) ? name : null;
-}
-
-function statsUrl(fixtureName){
-  if(fixtureName) return `/testdata/migration/stats-${fixtureName}.json?_=${Date.now()}`;
+function statsUrl(){
   return `/json/stats.json?_=${Date.now()}`;
 }
 
-async function fetchStats(fixtureName, fetchImplementation = fetch){
-  const response = await fetchImplementation(statsUrl(fixtureName), { cache: 'no-store' });
+async function fetchStats(fetchImplementation = fetch){
+  const response = await fetchImplementation(statsUrl(), { cache: 'no-store' });
   if(!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
 }
@@ -613,20 +599,22 @@ function updateRefreshState(isBusy){
   const button = byId('refreshButton');
   button.disabled = isBusy;
   button.setAttribute('aria-busy', String(isBusy));
-  button.textContent = isBusy ? '刷新中' : '刷新';
+  button.classList.toggle('is-loading', isBusy);
+  button.title = isBusy ? '正在刷新' : '刷新数据';
+  button.setAttribute('aria-label', button.title);
 }
 
 function applySuccessfulDocument(documentValue){
   dashboardState.lastDocument = documentValue;
   dashboardState.lastSuccessAt = new Date();
-  const view = buildViewModel(documentValue, Boolean(dashboardState.fixtureName));
+  const view = buildViewModel(documentValue);
   renderDashboard(view);
   byId('lastUpdate').textContent = `上次刷新 ${formatDateTime(dashboardState.lastSuccessAt)}`;
 }
 
 function applyRefreshError(error){
-  const suffix = dashboardState.lastDocument ? '，继续显示上一次成功数据' : '';
-  showNotice(`数据刷新失败${suffix}：${textOrDash(error?.message)}`, 'err');
+  if(!dashboardState.lastDocument) byId('dashboard').hidden = true;
+  setPageState(dashboardCondition(dashboardState.view || {host: null}, error));
 }
 
 function bindInteractions(){
@@ -653,10 +641,10 @@ function bindInteractions(){
 
 function initDashboard(){
   dashboardState.controller?.stop();
-  dashboardState.fixtureName = fixtureNameFromLocation(window.location);
+  setPageState({kind: 'loading', title: '正在加载', message: '正在读取 stats.json'});
   bindInteractions();
   dashboardState.controller = createRefreshController({
-    fetchStats: () => fetchStats(dashboardState.fixtureName),
+    fetchStats: () => fetchStats(),
     onSuccess: applySuccessfulDocument,
     onError: applyRefreshError,
     onBusy: updateRefreshState
@@ -688,7 +676,7 @@ const exported = {
   cleanCpuModel,
   collectWarnings,
   createRefreshController,
-  fixtureNameFromLocation,
+  dashboardCondition,
   fittedFontSize,
   formatBytes,
   formatDiskTemperature,
@@ -697,6 +685,7 @@ const exported = {
   percentage,
   profileModalMarkup,
   selectSingleHost,
+  statsUrl,
   statusTone,
   tokenSourceText,
   tokenBreakdown,

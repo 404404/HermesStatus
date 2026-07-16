@@ -37,8 +37,9 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 		}
 	}
 	containers := server["docker"].(map[string]any)["containers"].([]any)
-	if containers[0].(map[string]any)["command"] != HiddenDockerCommand {
-		t.Fatalf("HTTP response exposed a Docker command: %#v", containers[0])
+	container := containers[0].(map[string]any)
+	if len(container) != 4 || container["names"] == nil || container["image"] == nil || container["status"] == nil || container["ports"] == nil {
+		t.Fatalf("HTTP response did not use the Release C Docker allowlist: %#v", container)
 	}
 
 	response = performRequest(router, http.MethodGet, "/api/openapi.json", "", "")

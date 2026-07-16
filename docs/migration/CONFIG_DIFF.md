@@ -22,7 +22,7 @@
 | --- | --- | --- | --- |
 | `hermes-exporter.json` | `hermes_root`, `status_dir`, `profiles[]` | HermesStatus 采集注册表 | 是，HS-010；可保持独立配置或并入专用 HermesStatus 配置段 |
 | `hermes-exporter.json.profiles[]` | `name`, `profile_dir`, `config_path`, `env_path`, `api` | 每个 Profile 独立路径和 API | 是；禁止重新硬编码 hermes1/2/3 |
-| `server/config.json` | 单个 J4125 server，空 monitors/sslcerts/watchdog | 单主机 ServerStatus 示例 | 保留部署实例值，不把 LAN IP/密码作为通用默认 |
+| `server/config.json` | 单个 J4125 server，空 monitors/sslcerts | 单主机 ServerStatus 示例 | 保留部署实例值，不把 LAN IP/密码作为通用默认；Release C 不含告警配置 |
 | `hermes-status/*.json` | Profile 快照与 `hardware.json` | exporter 与 client 之间的状态交换 | 首阶段保留；后续可由进程内共享/IPC 取代 |
 
 示例 Profile API 配置：
@@ -127,7 +127,7 @@ Token 不得写入 stats、日志、HTML、OpenAPI 示例或管理 API 响应。
 | `truncated` | boolean | 是 |
 | `error` | string 可选 | 是，但对外应限制长度 |
 | `containers[]` | object[] | 是 |
-| container `id/image/command/created/status/state/ports/names` | string | 是 |
+| container `names/image/status/ports` | string | 是；Release C 固定四字段 |
 
 ### `hermes.profiles[]`
 

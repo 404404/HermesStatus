@@ -23,7 +23,6 @@ func minimalTestConfig() ConfigDocument {
 			map[string]any{"name": "example", "host": "https://example.com", "interval": 60, "type": "https"},
 		},
 		"sslcerts": []any{},
-		"watchdog": []any{},
 	}
 }
 

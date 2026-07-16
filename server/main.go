@@ -53,7 +53,6 @@ func main() {
 	}
 	opts.AdminToken = os.Getenv("ADMIN_TOKEN")
 	opts.CORSOrigin = os.Getenv("ADMIN_CORS_ORIGIN")
-	opts.InsecureCallbackTLS = envBool("INSECURE_CALLBACK_TLS", false)
 
 	if err := os.MkdirAll(filepath.Dir(opts.StatsPath), 0o755); err != nil {
 		fatalf("create stats directory: %v", err)

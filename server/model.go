@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/expr-lang/expr/vm"
 )
 
 const maxRequestBody = 1 << 20
@@ -41,28 +39,12 @@ type SSLCertConfig struct {
 	Domain   string `json:"domain"`
 	Port     int    `json:"port"`
 	Interval int    `json:"interval"`
-	Callback string `json:"callback"`
-}
-
-type WatchdogConfig struct {
-	Name     string `json:"name"`
-	Rule     string `json:"rule"`
-	Interval int    `json:"interval"`
-	Callback string `json:"callback"`
-}
-
-type CompiledWatchdog struct {
-	WatchdogConfig
-	Key        string
-	Normalized string
-	Program    *vm.Program
 }
 
 type RuntimeConfig struct {
-	Servers   []ServerConfig
-	Monitors  []MonitorConfig
-	SSLCerts  []SSLCertConfig
-	Watchdogs []CompiledWatchdog
+	Servers  []ServerConfig
+	Monitors []MonitorConfig
+	SSLCerts []SSLCertConfig
 }
 
 type AgentStats struct {
@@ -163,14 +145,8 @@ var collectionSpecs = map[string]collectionSpec{
 	"sslcerts": {
 		itemName: "sslcert", idField: "name",
 		required: []string{"name", "domain"},
-		optional: []string{"port", "interval", "callback"},
+		optional: []string{"port", "interval"},
 		defaults: map[string]int{"port": 443, "interval": 7200},
-	},
-	"watchdog": {
-		itemName: "watchdog", idField: "name",
-		required: []string{"name", "rule"},
-		optional: []string{"interval", "callback"},
-		defaults: map[string]int{"interval": 600},
 	},
 }
 
@@ -179,8 +155,9 @@ func normalizeConfig(input ConfigDocument) (ConfigDocument, RuntimeConfig, *APIE
 	if err != nil {
 		return nil, RuntimeConfig{}, &APIError{Status: 400, Message: "config must be a JSON object", Details: map[string]any{"error": err.Error()}}
 	}
+	delete(doc, "watchdog")
 
-	for _, key := range []string{"servers", "monitors", "sslcerts", "watchdog"} {
+	for _, key := range []string{"servers", "monitors", "sslcerts"} {
 		spec := collectionSpecs[key]
 		raw, exists := doc[key]
 		if !exists || raw == nil {
@@ -246,13 +223,8 @@ func normalizeConfig(input ConfigDocument) (ConfigDocument, RuntimeConfig, *APIE
 				}
 				seen[username] = struct{}{}
 			}
-			if key == "sslcerts" || key == "watchdog" {
-				value := item["callback"]
-				if value == nil {
-					item["callback"] = ""
-				} else {
-					item["callback"] = strings.TrimSpace(fmt.Sprint(value))
-				}
+			if key == "sslcerts" {
+				delete(item, "callback")
 			}
 			normalized = append(normalized, item)
 		}
@@ -272,23 +244,14 @@ func buildRuntimeConfig(doc ConfigDocument) (RuntimeConfig, *APIError) {
 		return RuntimeConfig{}, &APIError{Status: 400, Message: "config could not be encoded", Details: map[string]any{"error": err.Error()}}
 	}
 	var raw struct {
-		Servers   []ServerConfig   `json:"servers"`
-		Monitors  []MonitorConfig  `json:"monitors"`
-		SSLCerts  []SSLCertConfig  `json:"sslcerts"`
-		Watchdogs []WatchdogConfig `json:"watchdog"`
+		Servers  []ServerConfig  `json:"servers"`
+		Monitors []MonitorConfig `json:"monitors"`
+		SSLCerts []SSLCertConfig `json:"sslcerts"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return RuntimeConfig{}, &APIError{Status: 400, Message: "config has invalid field types", Details: map[string]any{"error": err.Error()}}
 	}
-	runtime := RuntimeConfig{Servers: raw.Servers, Monitors: raw.Monitors, SSLCerts: raw.SSLCerts}
-	for index, rule := range raw.Watchdogs {
-		compiled, err := compileWatchdog(rule, index)
-		if err != nil {
-			return RuntimeConfig{}, &APIError{Status: 400, Message: "watchdog rule is invalid", Details: map[string]any{"index": index, "name": rule.Name, "error": err.Error()}}
-		}
-		runtime.Watchdogs = append(runtime.Watchdogs, compiled)
-	}
-	return runtime, nil
+	return RuntimeConfig{Servers: raw.Servers, Monitors: raw.Monitors, SSLCerts: raw.SSLCerts}, nil
 }
 
 func normalizeInteger(raw any, field string, index, fallback int) (int, *APIError) {

@@ -6,7 +6,7 @@
     <meta name="description" content="HermesStatus 单主机云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260714-3" />
+    <link rel="stylesheet" href="css/app.css?v=20260716-1" />
 </head>
 <body>
     <header class="topbar">
@@ -23,13 +23,21 @@
         </nav>
         <div class="actions">
             <span id="lastUpdate" class="last-update">上次刷新 -</span>
-            <button id="refreshButton" type="button" class="tool-button refresh-button" title="刷新数据" aria-label="刷新数据">刷新</button>
+            <button id="refreshButton" type="button" class="tool-button refresh-button" title="刷新数据" aria-label="刷新数据">
+                <span class="refresh-icon" aria-hidden="true">&#8635;</span>
+                <span class="sr-only">刷新数据</span>
+            </button>
         </div>
     </header>
 
     <main class="wrapper">
-        <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
-        <div id="emptyState" class="empty-state page-empty" hidden>暂无主机数据</div>
+        <section id="pageState" class="page-state" data-state="loading" role="status" aria-live="polite">
+            <span id="pageStateIcon" class="page-state-icon" aria-hidden="true">&#8635;</span>
+            <div class="page-state-copy">
+                <strong id="pageStateTitle">正在加载</strong>
+                <span id="pageStateMessage">正在读取 stats.json</span>
+            </div>
+        </section>
 
         <div id="dashboard" class="dashboard" hidden>
             <section id="overviewCards" class="overview-grid" aria-label="运行概览"></section>
@@ -69,11 +77,9 @@
                     <table class="data containers-table">
                         <thead>
                         <tr>
-                            <th>容器 ID</th>
-                            <th>名称</th>
-                            <th>状态</th>
-                            <th>创建时间</th>
+                            <th>容器名称</th>
                             <th>镜像</th>
+                            <th>状态</th>
                             <th>端口</th>
                         </tr>
                         </thead>
@@ -85,7 +91,7 @@
     </main>
 
     <div id="profileModal" class="modal-backdrop" hidden>
-        <section class="modal-box" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+        <section class="modal-box" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle" aria-describedby="profileModalContent">
             <button id="profileModalClose" type="button" class="modal-close" title="关闭" aria-label="关闭">×</button>
             <div class="modal-heading">
                 <h2 id="profileModalTitle">Profile 详情</h2>
@@ -99,6 +105,6 @@
         <a href="https://github.com/404404/HermesStatus" target="_blank" rel="noopener">HermesStatus</a>
     </footer>
 
-    <script src="js/app.js?v=20260715-1" defer></script>
+    <script src="js/app.js?v=20260716-1" defer></script>
 </body>
 </html>

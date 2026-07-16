@@ -32,13 +32,9 @@
     "truncated": false,
     "containers": [
       {
-        "id": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
         "names": "example-container-with-a-very-long-name-segment-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho-sigma-tau-upsilon-phi-chi-psi-omega-contract-boundary",
-        "state": "running",
-        "status": "Up 123 days (healthy) with a deliberately long sanitized status description for table overflow and boundary validation",
-        "created": "123 days ago from a sanitized contract fixture",
         "image": "registry.example.invalid/team/platform/component/subcomponent/example-service-with-a-long-image-name-and-multiple-descriptive-segments-for-contract-boundary-validation:release-2026.07.13-build-1234567890-abcdef",
-        "command": "/usr/local/bin/example-worker --profile contract-boundary --description this-command-is-deliberately-long-and-sanitized-to-validate-the-maximum-command-length-and-responsive-table-rendering-without-containing-credentials-or-private-values --feature alpha --feature beta --feature gamma --feature delta --feature epsilon --feature zeta --feature eta --feature theta --feature iota --feature kappa --feature lambda --output /srv/example/output/contract-boundary-result.json",
+        "status": "Up 123 days (healthy) with a deliberately long sanitized status description for table overflow and boundary validation",
         "ports": "127.0.0.1:18080->8080/tcp, 127.0.0.1:18443->8443/tcp, [::1]:19090->9090/tcp, 127.0.0.1:19191->9191/udp, 127.0.0.1:19292->9292/tcp"
       }
     ],

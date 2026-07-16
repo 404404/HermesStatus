@@ -13,8 +13,22 @@ function fixture(name){
   return JSON.parse(fs.readFileSync(path.join(ROOT, `testdata/migration/stats-${name}.json`), 'utf8'));
 }
 
+function statsDocument(name, overrides = {}){
+  const extension = fixture(name);
+  return {
+    updated: Math.floor(new Date(extension.received_at).getTime() / 1000),
+    servers: [{
+      name: 'fixture-host', disabled: false, online4: true, online6: false,
+      cpu: 10, memory_used: 7 * 1024 * 1024, memory_total: 10 * 1024 * 1024,
+      hdd_used: 90 * 1024, hdd_total: 100 * 1024, uptime: '12 天 3 小时',
+      os: 'Example Linux 2.0', hardware: extension.hardware, docker: extension.docker,
+      hermes: extension.hermes, ...overrides
+    }]
+  };
+}
+
 async function run(){
-  const normal = app.buildViewModel(fixture('normal'), true);
+  const normal = app.buildViewModel(statsDocument('normal'));
   assert.equal(normal.host.name, 'fixture-host');
   assert.equal(normal.profiles.length, 2);
   assert.equal(normal.containers.length, 3);
@@ -22,22 +36,23 @@ async function run(){
   assert.equal(app.usageBand(normal.resources.memoryPercent), 'medium');
   assert.equal(app.usageBand(normal.resources.diskPercent), 'high');
 
-  const empty = app.buildViewModel(fixture('empty'), true);
+  const empty = app.buildViewModel(statsDocument('empty'));
   assert.equal(empty.profiles.length, 0);
   assert.equal(empty.containers.length, 0);
   assert.equal(empty.hardware.cpu_temperature, null);
 
-  const degraded = app.buildViewModel(fixture('degraded'), true);
-  assert.equal(app.collectWarnings(degraded).length, 3);
+  const degraded = app.buildViewModel(statsDocument('degraded'));
+  assert.equal(app.collectWarnings(degraded).length, 5);
   assert.equal(degraded.hardware.disk_smart_status, 'unknown');
   assert.deepEqual(degraded.profiles.map(profile => profile.api_status), ['unauthorized', 'timeout']);
 
-  const longValues = app.buildViewModel(fixture('long-values'), true);
+  const longValues = app.buildViewModel(statsDocument('long-values'));
   assert.ok(longValues.profiles[0].model.length > 180);
-  assert.ok(longValues.containers[0].command.length > 350);
+  assert.ok(longValues.containers[0].status.length > 100);
   assert.ok(longValues.containers[0].image.length > 160);
   assert.doesNotMatch(indexMarkup, /<th>命令<\/th>/);
   assert.doesNotMatch(appSource, /container\.command/);
+  assert.deepEqual(Object.keys(longValues.containers[0]).sort(), ['image', 'names', 'ports', 'status']);
 
   const modalMarkup = app.profileModalMarkup({
     profile: 'profile-a',
@@ -69,13 +84,19 @@ async function run(){
     stale: false,
     error: null
   });
-  for(const label of ['Agent 版本', '模型提供商', '定时任务 活动/总数', '会话 活动/总数', '输入/输出/总 Token', 'Token 来源', '配置摘要', '辅助模型', '容器挂载点', 'Mixture of Agents', '采集错误']){
+  for(const label of [
+    '服务状态', '网关状态', 'API 状态', '运行模式', 'Agent 版本',
+    '主模型', '模型提供商', '使用模式', 'Provider/模型配置刷新时间', '定时任务 活动/总数',
+    '会话 活动/总数', '输入/输出/总 Token', 'Token 来源',
+    '配置摘要', '辅助模型', '容器挂载点', 'Mixture of Agents',
+    '数据更新时间', '采集错误'
+  ]){
     assert.match(modalMarkup, new RegExp(label));
   }
   assert.match(modalMarkup, /本地运行快照/);
   assert.match(modalMarkup, /继承主模型/);
   assert.match(modalMarkup, /\/srv\/example\/workspace:\/workspace/);
-  const escapedMarkup = app.profileModalMarkup({profile: '<script>alert(1)</script>', usage: {}, config_summary: {}, mixture_of_agents: {}, error: {message: '<img src=x>'}});
+  const escapedMarkup = app.profileModalMarkup({profile: '<script>throw 1</script>', usage: {}, config_summary: {}, mixture_of_agents: {}, error: {message: '<img src=x>'}});
   assert.doesNotMatch(escapedMarkup, /<script>|<img src=x>/);
   assert.match(escapedMarkup, /&lt;script&gt;/);
 
@@ -106,6 +127,17 @@ async function run(){
   );
   assert.equal(app.cleanCpuModel('Intel Celeron J4125'), 'Intel Celeron J4125');
   assert.equal(app.cleanCpuModel('Example(TM) Processor'), 'Example Processor');
+
+  assert.equal(app.dashboardCondition(normal).kind, 'ready');
+  assert.equal(app.dashboardCondition(app.buildViewModel({servers: []})).kind, 'empty');
+  assert.equal(app.dashboardCondition(app.buildViewModel(statsDocument('normal', {online4: false, online6: false}))).kind, 'offline');
+  assert.equal(app.dashboardCondition(degraded).kind, 'error');
+  assert.equal(app.dashboardCondition(empty).kind, 'stale');
+  const staleDocument = statsDocument('normal');
+  staleDocument.servers[0].hardware.stale = true;
+  assert.equal(app.dashboardCondition(app.buildViewModel(staleDocument)).kind, 'stale');
+  assert.equal(app.dashboardCondition(app.buildViewModel({servers: [{name: 'native-only', online4: true, online6: false}]})).kind, 'unknown');
+  assert.equal(app.dashboardCondition(normal, new Error('offline')).kind, 'error');
 
   let visibleDocument = { marker: 'old' };
   let errorCount = 0;
@@ -154,8 +186,7 @@ async function run(){
   releaseFetch({ ok: true });
   assert.equal(await firstRefresh, true);
 
-  assert.equal(app.fixtureNameFromLocation({ hostname: '127.0.0.1', search: '?fixture=normal' }), 'normal');
-  assert.equal(app.fixtureNameFromLocation({ hostname: 'example.invalid', search: '?fixture=normal' }), null);
+  assert.match(app.statsUrl(), /^\/json\/stats\.json\?_=/);
   assert.equal(app.fittedFontSize(23, 11, 240, 200), 23);
   assert.equal(app.fittedFontSize(23, 11, 240, 480), 11.5);
   assert.equal(app.fittedFontSize(23, 11, 240, 2400), 11);
@@ -172,6 +203,23 @@ async function run(){
   assert.match(css, /overflow-x:hidden/);
   assert.match(css, /overflow-x:auto/);
   assert.match(css, /max-height:calc\(100dvh - 2rem\)/);
+  assert.match(css, /\.resource-value\{[^}]*height:27px;min-height:27px/);
+  assert.match(css, /@media \(max-width:1180px\)/);
+  assert.match(css, /@media \(max-width:720px\)/);
+
+  assert.match(indexMarkup, /id="refreshButton"/);
+  assert.deepEqual(
+    [...indexMarkup.matchAll(/<th>([^<]+)<\/th>/g)]
+      .map(match => match[1])
+      .slice(-4),
+    ['容器名称', '镜像', '状态', '端口']
+  );
+  assert.match(appSource, /refresh\('initial'\)/);
+  assert.doesNotMatch(appSource, /WebSocket|EventSource|\/api\/|\/testdata\//);
+  assert.equal((appSource.match(/\/json\/stats\.json/g) || []).length, 1);
+  assert.equal((appSource.match(/setIntervalImplementation\(/g) || []).length, 1);
+  assert.match(appSource, /event\.key === 'Escape'/);
+  assert.match(appSource, /event\.target === byId\('profileModal'\)/);
 
   console.log('HermesStatus dashboard tests passed');
 }

@@ -107,16 +107,12 @@ Stats 扩展在同样对象上增加服务端接收时间：
 
 | 字段 | JSON 类型 | 必填 | null | 默认值 | 最大字符串 | 最大数组 | 数据来源 | 日志 | stats | OpenAPI | 浏览器 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `id` | string | 是 | 否 | `-` | 64 | 不适用 | Docker `Id`，建议 12 字符显示值 | 否 | 是 | 是 | 是 |
 | `names` | string | 是 | 否 | `-` | 256 | 不适用 | Docker `Names` 拼接 | 否 | 是 | 是 | 是 |
-| `state` | string enum | 是 | 否 | `unknown` | 10 | 不适用 | Docker `State` | 是 | 是 | 是 | 是 |
-| `status` | string | 是 | 否 | `unknown` | 128 | 不适用 | Docker `Status` | 否 | 是 | 是 | 是 |
-| `created` | string | 是 | 否 | `-` | 64 | 不适用 | Docker `Created` 格式化 | 否 | 是 | 是 | 是 |
 | `image` | string | 是 | 否 | `-` | 256 | 不适用 | Docker `Image` | 否 | 是 | 是 | 是 |
-| `command` | string | 是 | 否 | `-` | 512 | 不适用 | Docker `Command` 经 secret sanitizer | **否** | 是 | 是 | 是 |
+| `status` | string | 是 | 否 | `unknown` | 128 | 不适用 | Docker `Status` | 否 | 是 | 是 | 是 |
 | `ports` | string | 是 | 否 | `-` | 512 | 不适用 | Docker `Ports` 格式化 | 否 | 是 | 是 | 是 |
 
-`command` 必须先删除或替换疑似 secret 参数。若无法可靠脱敏，值必须改为 `[redacted]`，不能因为 1.0 曾显示原始命令而继续透传。
+Release C 的容器对象只允许上述四个字段。`id`、`state`、`created` 和 `command` 不得进入 wire、NodeState、stats、OpenAPI、日志或浏览器；其中 `State` 仅允许在采集器进程内用于计算 `running`。
 
 ## hermes
 
@@ -137,10 +133,10 @@ Stats 扩展在同样对象上增加服务端接收时间：
 | `service_status` | string/null | 是 | 是 | `null` | 64 | 不适用 | `/health`，CLI/system service fallback | 是 | 是 | 是 | 是 |
 | `gateway_service` | string/null | 是 | 是 | `null` | 64 | 不适用 | Hermes CLI Gateway Service | 是 | 是 | 是 | 是 |
 | `manager_mode` | string/null | 是 | 是 | `null` | 96 | 不适用 | Hermes CLI Gateway Manager | 是 | 是 | 是 | 是 |
-| `usage_mode` | string enum/null | 是 | 是 | `null` | 13 | 不适用 | Hermes CLI API Keys/Auth Providers | 是 | 是 | 是 | 是 |
+| `usage_mode` | string enum/null | 是 | 是 | `null` | 13 | 不适用 | Hermes CLI 当前 Provider 与 API Keys/Auth Providers/API-Key Providers 的保守匹配；明确 provider 变体按认证方式映射（如 OpenCode Go/Zen） | 是 | 是 | 是 | 是 |
 | `provider` | string/null | 是 | 是 | `null` | 128 | 不适用 | Hermes CLI Environment | 否 | 是 | 是 | 是 |
 | `model` | string/null | 是 | 是 | `null` | 256 | 不适用 | Hermes CLI Environment/config fallback | 否 | 是 | 是 | 是 |
-| `auth_refreshed_at` | string/null | 是 | 是 | `null` | 40 | 不适用 | 已登录 provider 的刷新时间 | 否 | 是 | 是 | 是 |
+| `auth_refreshed_at` | string/null | 是 | 是 | `null` | 40 | 不适用 | 匹配当前 Auth Provider 时取其 Refreshed；API 或未匹配 Provider 时取 Profile 模型配置文件 mtime | 否 | 是 | 是 | 是 |
 | `scheduled_jobs_active`, `scheduled_jobs_total` | integer/null | 是 | 是 | `null` | 不适用 | 不适用 | `/api/jobs`，CLI fallback | 仅计数 | 是 | 是 | 是 |
 | `sessions_active`, `sessions_total` | integer/null | 是 | 是 | `null` | 不适用 | 不适用 | 分页 `/api/sessions`，CLI fallback | 仅计数 | 是 | 是 | 是 |
 | `sessions_has_more` | boolean | 否（legacy） | 否 | `false` | 不适用 | 不适用 | session 分页上限 | 仅布尔值 | 是 | 是 | 是 |

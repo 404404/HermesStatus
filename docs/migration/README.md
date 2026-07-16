@@ -64,7 +64,7 @@
 ## 编号与术语
 
 - `HS-xxx`：HermesStatus 功能编号，只在 [FEATURE_MATRIX.md](FEATURE_MATRIX.md) 定义，其他文档引用同一含义。
-- `ServerStatus 原生`：上游提供的节点采集、TCP、stats、管理 API、Watchdog、SSL 和原生 WebUI。
+- `ServerStatus 原生`：上游提供的节点采集、TCP、stats、管理 API、SSL 和原生 WebUI；Release C 不保留告警引擎。
 - `HermesStatus 自定义`：针对 J4125、SMART、Docker 和 Hermes Agent Profile 新增或改写的能力。
 - `等价迁移`：2.0 用户可见行为和数据来源达到 1.0 稳定部署效果，不等同于技术栈全部重写。
 - `estimated`：Token 等值来自本地状态/日志兜底，不能当作稳定全局成本账本。

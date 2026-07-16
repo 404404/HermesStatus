@@ -52,9 +52,8 @@ HermesStatus 1.0 没有 pip requirements、npm package 或 git submodule。客�
 | 模块 | 版本 | 用途 | HermesStatus 迁移需要 |
 | --- | --- | --- | --- |
 | `github.com/gin-gonic/gin` | `v1.12.0` | HTTP 路由、中间件、静态服务/API | 保留 |
-| `github.com/expr-lang/expr` | `v1.17.8` | Watchdog 表达式 | ServerStatus 原生保留；Hermes 功能不直接依赖 |
 
-`server/go.sum` 中的 sonic、validator、quic-go、protobuf、`x/*` 等为上述模块的间接依赖。HermesStatus 首阶段不需要新增 Go Docker SDK、SMART 或 YAML 依赖，因为采集器仍由 Python 承担。若未来 Go 化，应单独进行依赖评审，不在等价迁移阶段顺带引入。
+`server/go.sum` 中的 sonic、validator、quic-go、protobuf、`x/*` 等为 Gin 的间接依赖。Release C 删除表达式告警依赖。HermesStatus 首阶段不需要新增 Go Docker SDK、SMART 或 YAML 依赖，因为采集器仍由 Python 承担。若未来 Go 化，应单独进行依赖评审，不在等价迁移阶段顺带引入。
 
 ## NPM 与前端
 

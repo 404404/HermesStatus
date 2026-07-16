@@ -73,7 +73,7 @@ func (a *App) router() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "reloaded": true, "pid": os.Getpid(), "generation": a.generation.Load(), "config": doc})
 	})
 
-	for _, collection := range []string{"servers", "monitors", "sslcerts", "watchdog"} {
+	for _, collection := range []string{"servers", "monitors", "sslcerts"} {
 		key := collection
 		api.GET("/"+key, func(c *gin.Context) { a.getCollectionHandler(c, key) })
 		api.POST("/"+key, func(c *gin.Context) { a.createCollectionHandler(c, key) })
@@ -174,7 +174,7 @@ func apiSchema(enabled bool) map[string]any {
 		map[string]any{"method": "GET", "path": "/api/config", "auth": true},
 		map[string]any{"method": "PUT", "path": "/api/config", "auth": true, "body": "full config JSON"},
 	}
-	for _, key := range []string{"servers", "monitors", "sslcerts", "watchdog"} {
+	for _, key := range []string{"servers", "monitors", "sslcerts"} {
 		spec := collectionSpecs[key]
 		endpoints = append(endpoints,
 			map[string]any{"method": "GET", "path": "/api/" + key, "auth": true},
