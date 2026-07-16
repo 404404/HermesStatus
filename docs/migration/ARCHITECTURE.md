@@ -102,7 +102,7 @@ Hermes 领域采集主要在客户端容器完成，而不是服务端完成。�
 | 层 | ServerStatus 原生职责 | HermesStatus 定制职责 |
 | --- | --- | --- |
 | Client | CPU/内存/磁盘/网络/延迟采样，TCP 上报 | 物理机身份、SMART、温度、Docker、Hermes Profile、限额和状态文件合并 |
-| Server | 客户端认证、连接状态、月流量、SSL/Watchdog、stats 输出 | 接收三组扩展 JSON、嵌入 stats、扩大缓冲区和修复空数组序列化 |
+| Server | 客户端认证、连接状态、月流量、SSL 状态检查、stats 输出 | 接收三组扩展 JSON、嵌入 stats、扩大缓冲区和修复空数组序列化 |
 | Web | 多节点、监测、SSL、配置管理 | 单主机概览、硬件行、Hermes 表/弹窗、Docker 表 |
 | Management API | 配置 CRUD、重载、重启 | 脱敏 Hermes 配置摘要查询 |
 
@@ -139,7 +139,7 @@ Go 2.0 的主要变化：
 2. `AgentStats` 使用强类型 JSON 反序列化，当前没有 `hardware`、`docker`、`hermes` 字段。
 3. TCP scanner 最大请求体为 1 MiB，容量足以承载 1.0 当前负载，但必须新增明确的数据类型、验证和快照映射。
 4. `/json/stats.json` 由内存快照直接返回并持久化到 `STATS_PATH`。
-5. 管理 API、OpenAPI、配置原子写入、Watchdog、SSL、静态站点均由 Go 原生实现。
+5. 管理 API、OpenAPI、配置原子写入、SSL 状态检查和静态站点均由 Go 实现；Release C 删除告警引擎和通知回调。
 
 ## 迁移架构建议
 

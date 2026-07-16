@@ -27,8 +27,8 @@ func TestDecodeAgentUpdateStructuredAndNativeFields(t *testing.T) {
 	if extension.Hardware.CPUModel == nil || *extension.Hardware.CPUModel != "Example CPU 4-Core" {
 		t.Fatalf("structured hardware was not decoded: %#v", extension.Hardware)
 	}
-	if len(extension.Docker.Containers) != 3 || extension.Docker.Containers[0].Command != HiddenDockerCommand {
-		t.Fatalf("Docker data was not sanitized: %#v", extension.Docker)
+	if len(extension.Docker.Containers) != 3 || extension.Docker.Containers[0].Names != "status-server" {
+		t.Fatalf("Docker data was not decoded: %#v", extension.Docker)
 	}
 	if len(extension.Hermes.Profiles) != 2 {
 		t.Fatalf("Hermes profiles were not decoded: %#v", extension.Hermes)

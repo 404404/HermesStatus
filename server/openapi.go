@@ -34,9 +34,9 @@ func openAPISpec() map[string]any {
 		},
 	}
 
-	for _, key := range []string{"servers", "monitors", "sslcerts", "watchdog"} {
+	for _, key := range []string{"servers", "monitors", "sslcerts"} {
 		spec := collectionSpecs[key]
-		schemaName := map[string]string{"servers": "Server", "monitors": "Monitor", "sslcerts": "SSLCert", "watchdog": "Watchdog"}[key]
+		schemaName := map[string]string{"servers": "Server", "monitors": "Monitor", "sslcerts": "SSLCert"}[key]
 		operationBase := strings.TrimSuffix(key, "s")
 		if key == "sslcerts" {
 			operationBase = "sslcert"
@@ -107,23 +107,15 @@ func openAPISchemas() map[string]any {
 		"properties": map[string]any{
 			"name": stringProperty("证书名称"), "domain": stringProperty("域名或 URL"),
 			"port": integerProperty("TLS 端口", 1, 65535), "interval": integerProperty("检查间隔秒数", 1, 0),
-			"callback": stringProperty("告警回调 URL 前缀"),
-		},
-	}
-	watchdog := map[string]any{
-		"type": "object", "required": collectionSpecs["watchdog"].required,
-		"properties": map[string]any{
-			"name": stringProperty("告警名称"), "rule": stringProperty("兼容 Exprtk 的状态表达式"),
-			"interval": integerProperty("通知冷却秒数", 1, 0), "callback": stringProperty("告警回调 URL 前缀"),
 		},
 	}
 	schemas := map[string]any{
-		"Server": server, "Monitor": monitor, "SSLCert": sslcert, "Watchdog": watchdog,
+		"Server": server, "Monitor": monitor, "SSLCert": sslcert,
 		"Config": map[string]any{
-			"type": "object", "required": []string{"servers", "monitors", "sslcerts", "watchdog"},
+			"type": "object", "required": []string{"servers", "monitors", "sslcerts"},
 			"properties": map[string]any{
 				"servers": arraySchema("Server"), "monitors": arraySchema("Monitor"),
-				"sslcerts": arraySchema("SSLCert"), "watchdog": arraySchema("Watchdog"),
+				"sslcerts": arraySchema("SSLCert"),
 			},
 		},
 		"Error": map[string]any{

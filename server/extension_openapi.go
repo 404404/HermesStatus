@@ -86,16 +86,12 @@ func extensionOpenAPISchemas() map[string]any {
 	}
 
 	dockerContainer := requiredObject(
-		[]string{"id", "names", "state", "status", "created", "image", "command", "ports"},
+		[]string{"names", "image", "status", "ports"},
 		map[string]any{
-			"id":      map[string]any{"type": "string", "maxLength": MaxDockerIDLength},
-			"names":   map[string]any{"type": "string", "maxLength": MaxDockerNameLength},
-			"state":   map[string]any{"type": "string", "enum": []string{"created", "running", "paused", "restarting", "removing", "exited", "dead", "unknown"}},
-			"status":  map[string]any{"type": "string", "maxLength": MaxDockerStatusLength},
-			"created": map[string]any{"type": "string", "maxLength": MaxDockerCreatedLength},
-			"image":   map[string]any{"type": "string", "maxLength": MaxDockerImageLength},
-			"command": map[string]any{"type": "string", "const": HiddenDockerCommand, "description": "Commands are always hidden by the server"},
-			"ports":   map[string]any{"type": "string", "maxLength": MaxDockerPortsLength},
+			"names":  map[string]any{"type": "string", "maxLength": MaxDockerNameLength},
+			"image":  map[string]any{"type": "string", "maxLength": MaxDockerImageLength},
+			"status": map[string]any{"type": "string", "maxLength": MaxDockerStatusLength},
+			"ports":  map[string]any{"type": "string", "maxLength": MaxDockerPortsLength},
 		},
 	)
 	dockerStats := requiredObject(
@@ -116,8 +112,8 @@ func extensionOpenAPISchemas() map[string]any {
 	dockerStats["example"] = map[string]any{
 		"running": 1, "total": 1, "limit": 0, "truncated": false,
 		"containers": []any{map[string]any{
-			"id": "example123", "names": "status-service", "state": "running", "status": "Up 2 hours",
-			"created": "2 hours ago", "image": "example/status-service:2.0", "command": HiddenDockerCommand, "ports": "-",
+			"names": "status-service", "image": "example/status-service:2.0",
+			"status": "Up 2 hours", "ports": "-",
 		}},
 		"updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": nil,
 	}

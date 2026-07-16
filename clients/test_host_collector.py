@@ -11,7 +11,6 @@ from pathlib import Path
 
 from host_collector import (
     EXTENSION_VERSION,
-    HIDDEN_DOCKER_COMMAND,
     HostExtensionCollector,
     _docker_request,
     add_extension_payload,
@@ -163,16 +162,14 @@ class HostCollectorTests(unittest.TestCase):
         self.assertFalse(payload["stale"])
         self.assertIsNone(payload["error"])
 
-    def test_docker_normal_list_hides_commands(self):
+    def test_docker_normal_list_uses_release_c_allowlist(self):
         rows = fixture_json("docker-containers.json")
-        payload = collect_docker(
-            request_func=lambda path: rows,
-            now=FIXED_NOW,
-            now_epoch=1784052000,
-        )
+        payload = collect_docker(request_func=lambda path: rows, now=FIXED_NOW)
         self.assertEqual((payload["running"], payload["total"]), (1, 2))
-        self.assertEqual(payload["containers"][0]["command"], HIDDEN_DOCKER_COMMAND)
-        self.assertNotIn("fixture-only-command", json.dumps(payload))
+        self.assertEqual(
+            set(payload["containers"][0]),
+            {"names", "image", "status", "ports"},
+        )
         self.assertEqual(payload["updated_at"], "2026-07-15T00:00:00Z")
 
     def test_docker_empty_list(self):
@@ -305,7 +302,6 @@ class HostCollectorTests(unittest.TestCase):
         docker_stats = collect_docker(
             request_func=lambda path: fixture_json("docker-containers.json"),
             now=FIXED_NOW,
-            now_epoch=1784052000,
         )
         payload = {
             "extension_version": EXTENSION_VERSION,
@@ -315,7 +311,7 @@ class HostCollectorTests(unittest.TestCase):
         }
         self.assertFalse(any(key.endswith("_json") for key in payload))
         serialized = json.dumps(payload)
-        self.assertNotIn("fixture-only-command", serialized)
+        self.assertNotIn('"command"', serialized)
 
         spec = importlib.util.spec_from_file_location(
             "contract_validator", ROOT / "scripts" / "validate_migration_contracts.py"

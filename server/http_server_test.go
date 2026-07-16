@@ -30,8 +30,11 @@ func TestHTTPAPIAndStaticUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	paths := openapi["paths"].(map[string]any)
-	if openapi["openapi"] != "3.1.0" || paths["/api/servers/{username}"] == nil || paths["/api/watchdog/{id}"] == nil {
+	if openapi["openapi"] != "3.1.0" || paths["/api/servers/{username}"] == nil || paths["/api/sslcerts/{id}"] == nil {
 		t.Fatalf("OpenAPI document is incomplete: %#v", openapi)
+	}
+	if paths["/api/watchdog/{id}"] != nil || strings.Contains(response.Body.String(), "Watchdog") {
+		t.Fatal("OpenAPI still exposes the removed alert engine")
 	}
 	monitorOperations := paths["/api/monitors"].(map[string]any)
 	createResponses := monitorOperations["post"].(map[string]any)["responses"].(map[string]any)
@@ -149,10 +152,11 @@ func TestHTTPRejectsInvalidAndOversizedBodies(t *testing.T) {
 	}
 
 	doc := app.ConfigSnapshot()
-	doc["watchdog"] = []any{map[string]any{"name": "broken", "rule": "cpu >", "interval": 10}}
+	doc["watchdog"] = []any{map[string]any{"name": "legacy", "rule": "cpu > 90", "callback": "https://example.invalid"}}
+	doc["sslcerts"] = []any{map[string]any{"name": "example", "domain": "example.invalid", "callback": "https://example.invalid"}}
 	data, _ := json.Marshal(doc)
 	response = performRequest(router, http.MethodPut, "/api/config", string(data), "test-token")
-	if response.Code != 400 {
-		t.Fatalf("invalid watchdog: status=%d body=%s", response.Code, response.Body.String())
+	if response.Code != 200 || strings.Contains(response.Body.String(), "watchdog") || strings.Contains(response.Body.String(), "callback") {
+		t.Fatalf("legacy alert config was not removed: status=%d body=%s", response.Code, response.Body.String())
 	}
 }

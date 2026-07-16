@@ -1,6 +1,6 @@
 # ServerStatus 中文版
 
-ServerStatus 是一个轻量的服务器探针和云监控面板，支持多节点在线状态、资源占用、三网延迟、服务监测、SSL 证书检查、Watchdog 告警、HTTP API 和 Web 配置管理。
+ServerStatus 是一个轻量的服务器探针和云监控面板，支持多节点在线状态、资源占用、三网延迟、服务监测、SSL 证书检查、HTTP API 和 Web 配置管理。
 
 在线演示：https://tz.cloudcpp.com
 
@@ -103,7 +103,6 @@ Docker 镜像中的默认路径为：
 | `AGENT_ADDR` | `:35601` | 客户端 TCP 上报监听地址 |
 | `ADMIN_TOKEN` | 空 | 管理 API Bearer Token；为空时禁用管理接口 |
 | `ADMIN_CORS_ORIGIN` | 空 | 可选的 API CORS Origin |
-| `INSECURE_CALLBACK_TLS` | `false` | 是否允许 Watchdog/证书回调使用不可信 TLS 证书 |
 | `VERBOSE` | `false` | 输出 Gin HTTP 请求日志 |
 | `TZ` | `Asia/Shanghai` | 容器时区 |
 
@@ -150,8 +149,6 @@ Authorization: Bearer <ADMIN_TOKEN>
 | `PUT/DELETE` | `/api/monitors/{index-or-name}` | 修改或删除服务监测 |
 | `GET/POST` | `/api/sslcerts` | 查询或新增证书监测 |
 | `PUT/DELETE` | `/api/sslcerts/{index-or-name}` | 修改或删除证书监测 |
-| `GET/POST` | `/api/watchdog` | 查询或新增 Watchdog |
-| `PUT/DELETE` | `/api/watchdog/{index-or-name}` | 修改或删除 Watchdog |
 | `POST` | `/api/reload` | 从磁盘重新读取配置 |
 | `POST` | `/api/restart` | 在进程内重启采集运行时 |
 
@@ -208,16 +205,7 @@ curl -X DELETE \
       "name": "example",
       "domain": "https://example.com",
       "port": 443,
-      "interval": 7200,
-      "callback": "https://example.net/push?message="
-    }
-  ],
-  "watchdog": [
-    {
-      "name": "offline warning",
-      "rule": "online4=0&online6=0",
-      "interval": 600,
-      "callback": "https://example.net/push?message="
+      "interval": 7200
     }
   ]
 }
@@ -228,36 +216,12 @@ curl -X DELETE \
 - `servers.username` 必须唯一。
 - `monthstart` 自动限制在 `1-28`。
 - `port` 自动限制在 `1-65535`。
-- `interval` 最小为 1 秒；Watchdog 中表示通知冷却时间，不是客户端采集间隔。
+- `interval` 最小为 1 秒。
 - 配置写入前会创建 `config.json.bak-*`，最多保留 10 份。
 - Docker 单文件 bind mount 无法被 `rename` 覆盖时，服务端会在完成备份后安全地写回原 inode。
 
 使用 Docker 单文件挂载时，配置备份位于容器 `/app/config` 的可写层；如需长期保留历史版本，建议同时在宿主机备份 `server/config.json`。
 
-### Watchdog 表达式
-
-`rule` 由 Go `expr` 引擎执行，并兼容旧版 Exprtk 的常用写法。Go 服务会把字符串外的单个操作符自动转换：
-
-```text
-&  -> &&
-|  -> ||
-=  -> ==
-```
-
-例如以下两种写法等价：
-
-```text
-cpu>90&load_1>5&username!='s01'
-cpu>90 && load_1>5 && username!='s01'
-```
-
-字符串值支持中文、Emoji 和其他 Unicode 字符，例如：
-
-```text
-username='节点一号'&name='上海节点'&location='中国 🇨🇳'&type='云主机'
-```
-
-字段名必须使用系统定义的英文名称。可用字段包括：`username`、`name`、`type`、`host`、`location`、`load_1`、`load_5`、`load_15`、`cpu`、`memory_total`、`memory_used`、`swap_total`、`swap_used`、`hdd_total`、`hdd_used`、`network_rx`、`network_tx`、`network_in`、`network_out`、`last_network_in`、`last_network_out`、`ping_10010`、`ping_189`、`ping_10086`、`time_10010`、`time_189`、`time_10086`、`tcp_count`、`udp_count`、`process_count`、`thread_count`、`io_read`、`io_write`、`online4`、`online6`。
 
 客户端断开 25 秒后仍未重连，服务端才计算离线规则，避免短暂网络波动触发告警。每个节点、每条规则分别记录冷却时间。
 

@@ -16,15 +16,14 @@ import (
 )
 
 type Options struct {
-	ConfigPath          string
-	StatsPath           string
-	WebDir              string
-	HTTPAddr            string
-	AgentAddr           string
-	AdminToken          string
-	CORSOrigin          string
-	InsecureCallbackTLS bool
-	Verbose             bool
+	ConfigPath string
+	StatsPath  string
+	WebDir     string
+	HTTPAddr   string
+	AgentAddr  string
+	AdminToken string
+	CORSOrigin string
+	Verbose    bool
 }
 
 type NodeState struct {
@@ -41,7 +40,6 @@ type NodeState struct {
 	LastNetworkIn  int64
 	LastNetworkOut int64
 	LastUpdate     time.Time
-	AlarmLast      map[string]time.Time
 	Pong           bool
 }
 
@@ -121,7 +119,6 @@ func (a *App) RuntimeSnapshot() RuntimeConfig {
 	result.Servers = append([]ServerConfig(nil), a.runtime.Servers...)
 	result.Monitors = append([]MonitorConfig(nil), a.runtime.Monitors...)
 	result.SSLCerts = append([]SSLCertConfig(nil), a.runtime.SSLCerts...)
-	result.Watchdogs = append([]CompiledWatchdog(nil), a.runtime.Watchdogs...)
 	return result
 }
 
@@ -182,14 +179,12 @@ func (a *App) applyValidatedConfig(doc ConfigDocument, runtime RuntimeConfig, di
 		node := &NodeState{
 			Config:    server,
 			Extension: newNotReportedExtensionSnapshot(now),
-			AlarmLast: make(map[string]time.Time),
 		}
 		if old := oldNodes[server.Username]; old != nil && sameServerIdentity(old.Config, server) {
 			node.LastNetworkIn = old.LastNetworkIn
 			node.LastNetworkOut = old.LastNetworkOut
 			node.Stats = old.Stats
 			node.HasUpdate = old.HasUpdate
-			node.AlarmLast = old.AlarmLast
 			if !disconnect {
 				node.Extension = old.Extension
 				node.Connected = old.Connected

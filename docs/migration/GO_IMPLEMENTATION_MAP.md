@@ -30,7 +30,7 @@
 | `TemperatureReading` | `Value`, `Unit`, `Source` | CPU 温度 |
 | `DiskTemperatureStats` | `Current`, `Highest`, `Lowest`, `Unit`, `Source` | SMART 温度三值 |
 | `DockerStats` | `Running`, `Total`, `Limit`, `Truncated`, `Containers`, freshness/error | HS-009 |
-| `DockerContainerStats` | `ID`, `Names`, `State`, `Status`, `Created`, `Image`, `Command`, `Ports` | Docker 表格行 |
+| `DockerContainerStats` | `Names`, `Image`, `Status`, `Ports` | Release C Docker 表格行 |
 | `HermesStats` | `Profiles`, freshness/error | HS-010/HS-011 的稳定容器 |
 | `HermesProfileStats` | Profile 身份、兼容状态字段、usage、allowlisted config summary、freshness/error | Profile 稳定外形；P1 字段 Release A 可为空 |
 | `TokenUsageStats` | input/output/total/estimated/source/window | 仅固定诊断合同，不在 Release A 采集 |
@@ -50,7 +50,7 @@
    - 必填/null/枚举检查。
    - 字符串长度、数组数量、数值范围检查。
    - `running <= total`、Token total/window 等跨字段约束。
-   - 自由文本 secret 检测和 command redaction。
+   - 自由文本 secret 检测；Docker 容器对象采用四字段 allowlist，不接收 command。
    - RFC 3339 时间解析。
 4. 不修改 `ServerConfig`、`RuntimeConfig` 或 collectionSpecs；扩展字段不进入 `server/config.json`。
 
@@ -152,7 +152,7 @@ Release A 不新增 Hermes API 路由。
 
 1. P0 Dashboard 是否只显示第一个启用节点，还是在多节点配置时提供明确选择器？
 2. hardware 单一 `updated_at` 是否足够表达秒级 CPU 温度与 600 秒 SMART 的不同 freshness？若不足，应在实现前拆分子时间戳并升级 Schema。
-3. Docker `command` 是否应默认完全隐藏而不是做 sanitizer 后展示？安全上完全隐藏更稳妥。
+3. Docker 容器对象已在 Release C 固化为 `names/image/status/ports` 四字段，旧 command 不再是待决项。
 4. `config_summary.docker_volumes` 是按 fixture 要求保留的兼容字段；Release A 是否只传输但不显示，需实现 PR 再确认。
 5. legacy parser 保留几个版本或多少天后删除，需要部署升级计划。
 

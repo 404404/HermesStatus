@@ -323,7 +323,7 @@ def validate_fixture_coverage(fixtures: dict[str, dict[str, Any]]) -> None:
         container = long_data["docker"]["containers"][0]
         profile = long_data["hermes"]["profiles"][0]
         volume = profile["config_summary"]["docker_volumes"][0]
-        if len(container["image"]) < 160 or len(container["command"]) < 350 or len(profile["model"]) < 180 or len(volume) < 350:
+        if len(container["image"]) < 160 or len(container["status"]) < 100 or len(profile["model"]) < 180 or len(volume) < 350:
             raise ContractError(f"{prefix}-long-values.json does not exercise all long-value boundaries")
 
 

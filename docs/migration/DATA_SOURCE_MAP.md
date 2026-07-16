@@ -85,13 +85,9 @@
 | HS-009 | `limit` | `DOCKER_CONTAINER_LIMIT` | 进程启动读取 | `0` 表示全部 | 失败对象当前缺该字段 | 同上 | 类型化配置与上限 | 已验证-代码 |
 | HS-009 | `truncated` | `len(rows) > len(containers)` 或 JSON 字节裁剪 | 每轮 | `DOCKER_JSON_MAX_BYTES` 默认 12000；从尾部删行 | 极端情况下退回空对象 | 同上 | 数量上限 + payload 上限 | 已验证-测试 |
 | HS-009 | `error` | Python 异常 `str(e)` | 失败时 | 无脱敏 | 自由文本进入 stats | 同上 | 结构化 code/source/retryable | 已验证-代码；需修安全边界 |
-| HS-009 | `containers[].id` | Docker `Id` 前 12 字符 | 每轮 | 最长 16 | 行被裁掉 | 同上 | 最长 64，UI 可显示短值 | 已验证-代码 |
 | HS-009 | `containers[].names` | `Names` 去前导 `/` 后拼接 | 每轮 | 1.0 截断 120 字符 | `""` | 同上 | 最长 256 | 已验证-代码 |
-| HS-009 | `containers[].state` | Docker `State` | 每轮 | 无 | `""` | 同上 | 枚举 + `unknown` | 已验证-代码 |
-| HS-009 | `containers[].status` | Docker `Status` | 每轮 | 80 字符 | `""` | 同上 | 128 字符 | 已验证-代码 |
-| HS-009 | `containers[].created` | Docker epoch 转相对英文时间 | 每轮 | 解析失败 `-` | `-` | 同上 | 建议传 epoch/RFC3339，由 UI 格式化 | 已验证-代码；目标格式待决策 |
 | HS-009 | `containers[].image` | Docker `Image` | 每轮 | 80 字符 | `""` | 同上 | 256 字符 | 已验证-代码 |
-| HS-009 | `containers[].command` | Docker `Command` | 每轮 | 仅截断 96 字符 | 可能含敏感参数 | 同上 | 默认隐藏或先脱敏；日志禁止 | 已验证-代码；安全阻断 |
+| HS-009 | `containers[].status` | Docker `Status` | 每轮 | 80 字符 | `""` | 同上 | 128 字符 | 已验证-代码 |
 | HS-009 | `containers[].ports` | Docker `Ports` 格式化 | 每轮 | 120 字符 | `-` | 同上 | 512 字符 | 已验证-代码 |
 | HS-011 | `docker.updated_at/stale` | 1.0 不存在 | 不适用 | 不适用 | 不适用 | 不存在 | collector 时间 + 服务端 stale | 合同草案 |
 
@@ -122,7 +118,7 @@ Docker Socket 的 `:ro` bind mount 只限制挂载点文件系统语义，不把
 | `service_status`, `api_status` | P1 | `GET /health` 的 status/state/health | CLI/service manager | client 选择后输出 |
 | `gateway_service`, `manager_mode` | P1 | `hermes -p <profile> status` 的 Gateway Service | user service 状态 | 输出 |
 | `model`, `provider` | P1 | CLI Environment | 本地文件/health provider | 输出 |
-| `usage_mode`, `auth_refreshed_at` | P1 | CLI API Keys/Auth Providers | 无 | 输出 |
+| `usage_mode`, `auth_refreshed_at` | P1 | CLI 当前 Provider 与 API Keys/Auth Providers/API-Key Providers 匹配；明确 provider 变体按认证方式映射（OpenCode Go/Zen 均为 api）；Auth 命中取 Refreshed | Profile `config.yaml` mtime 作为模型配置刷新时间 | 输出 |
 | `scheduled_jobs_active/total` | P1 | `GET /api/jobs` 返回的有限列表 | CLI Scheduled Jobs | 输出；API 列表被 `MAX_TABLE_ROWS` 截断时总数可能偏小 |
 | `sessions_active/total/has_more` | P1 | 分页 `GET /api/sessions` | CLI Sessions | 输出 |
 | `usage` | P1/diagnostic | jobs + 全分页 sessions payload 的递归 usage | detailed health、health、本地昨日日志 | 输出；无稳定窗口；无值时伪装为 0 是已知缺口 |
@@ -194,7 +190,7 @@ Docker Socket 的 `:ro` bind mount 只限制挂载点文件系统语义，不把
 1. 目标主机当前 `lscpu`、hwmon chip/label、SMART Device Statistics 是否与 1.0 正则完全匹配。
 2. 目标磁盘逻辑扇区大小是否始终为 512 字节；2.0 不应以设备样例替代通用规则。
 3. client 容器的内存、根盘容量和 uptime 是否与物理机命令在允许误差内一致。
-4. Docker Engine API 版本和长 command/image/ports 的实机最大值。
+4. Docker Engine API 版本和长 image/status/ports 的实机最大值。
 5. Profile 注册表、状态目录与 API 开关在新环境中的最终脱敏配置。
 6. Hermes API 各 endpoint 的当前分页、usage 和 error JSON 形状。
 

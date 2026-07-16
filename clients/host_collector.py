@@ -16,7 +16,6 @@ import time
 
 
 EXTENSION_VERSION = "1.0-draft"
-HIDDEN_DOCKER_COMMAND = "[hidden]"
 REDACTED_VALUE = "[redacted]"
 
 MAX_CPU_MODEL_LENGTH = 128
@@ -26,10 +25,8 @@ MAX_DISK_SMART_SOURCE_LENGTH = 64
 MAX_DOCKER_CONTAINERS = 256
 MAX_DOCKER_COUNT = 100000
 MAX_SAFE_INTEGER = 9007199254740991
-MAX_DOCKER_ID_LENGTH = 64
 MAX_DOCKER_NAME_LENGTH = 256
 MAX_DOCKER_STATUS_LENGTH = 128
-MAX_DOCKER_CREATED_LENGTH = 64
 MAX_DOCKER_IMAGE_LENGTH = 256
 MAX_DOCKER_PORTS_LENGTH = 512
 MAX_HERMES_PROFILES = 64
@@ -700,29 +697,6 @@ def _format_ports(ports):
     return ", ".join(values) or "-"
 
 
-def _human_created(epoch, now_epoch=None):
-    now_epoch = time.time() if now_epoch is None else now_epoch
-    try:
-        seconds = max(0, int(now_epoch - int(epoch)))
-    except (TypeError, ValueError):
-        return "-"
-    if seconds < 120:
-        return "%d seconds ago" % seconds
-    minutes = seconds // 60
-    if minutes < 120:
-        return "%d minutes ago" % minutes
-    hours = minutes // 60
-    if hours < 48:
-        return "%d hours ago" % hours
-    days = hours // 24
-    if days < 14:
-        return "%d days ago" % days
-    weeks = days // 7
-    if weeks < 9:
-        return "%d weeks ago" % weeks
-    return "%d months ago" % max(1, days // 30)
-
-
 def _docker_request(socket_path, path, timeout=DOCKER_TIMEOUT_SECONDS):
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
@@ -776,7 +750,6 @@ def collect_docker(
     container_limit=0,
     request_func=None,
     now=None,
-    now_epoch=None,
 ):
     request = request_func or (lambda path: _docker_request(socket_path, path))
     try:
@@ -825,22 +798,12 @@ def collect_docker(
     for row in selected:
         if not isinstance(row, dict):
             continue
-        state = str(row.get("State") or "unknown").lower()
-        if state not in ("created", "running", "paused", "restarting", "removing", "exited", "dead"):
-            state = "unknown"
         names = ", ".join(str(name).lstrip("/") for name in (row.get("Names") or []))
         containers.append(
             {
-                "id": _truncate(str(row.get("Id") or "")[:12], MAX_DOCKER_ID_LENGTH),
                 "names": _truncate(names, MAX_DOCKER_NAME_LENGTH),
-                "state": state,
-                "status": _truncate(row.get("Status"), MAX_DOCKER_STATUS_LENGTH),
-                "created": _truncate(
-                    _human_created(row.get("Created"), now_epoch),
-                    MAX_DOCKER_CREATED_LENGTH,
-                ),
                 "image": _truncate(row.get("Image"), MAX_DOCKER_IMAGE_LENGTH),
-                "command": HIDDEN_DOCKER_COMMAND,
+                "status": _truncate(row.get("Status"), MAX_DOCKER_STATUS_LENGTH),
                 "ports": _truncate(_format_ports(row.get("Ports")), MAX_DOCKER_PORTS_LENGTH),
             }
         )

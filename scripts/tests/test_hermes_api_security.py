@@ -186,6 +186,48 @@ class HermesAPITests(unittest.TestCase):
         self.assertEqual(parsed["sessions_total"], 10)
         self.assertIsNotNone(self.module.normalize_timestamp(parsed["auth_refreshed_at"]))
 
+    def test_cli_status_uses_explicit_opencode_api_mode_without_borrowing_refresh(self):
+        parsed = self.module.parse_cli_status("""
+◆ Environment
+  Model:        deepseek-v4-pro
+  Provider:     OpenCode Go
+◆ API Keys
+  Google / Gemini  ✓ masked
+◆ Auth Providers
+  OpenAI Codex  ✓ logged in
+    Refreshed:  2026-07-01 21:48:10 CST
+◆ API-Key Providers
+  Kimi / Moonshot  ✓ configured
+""")
+        self.assertEqual(parsed["usage_mode"], "api")
+        self.assertNotIn("auth_refreshed_at", parsed)
+
+    def test_cli_status_matches_api_and_api_key_provider_names(self):
+        google = self.module.parse_cli_status("""
+◆ Environment
+  Model:        gemini-2.5-flash
+  Provider:     Google AI Studio
+◆ API Keys
+  Google / Gemini  ✓ masked
+""")
+        self.assertEqual(google["usage_mode"], "api")
+
+        kimi = self.module.parse_cli_status("""
+◆ Environment
+  Model:        kimi-k2
+  Provider:     Kimi
+◆ API-Key Providers
+  Kimi / Moonshot  ✓ configured
+        """)
+        self.assertEqual(kimi["usage_mode"], "api")
+
+        opencode_zen = self.module.parse_cli_status("""
+◆ Environment
+  Model:        deepseek-v4-pro
+  Provider:     OpenCode Zen
+        """)
+        self.assertEqual(opencode_zen["usage_mode"], "api")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,24 +1,18 @@
 [
   {
-    "Id": "abcdef0123456789abcdef0123456789",
     "Names": ["/status-server"],
     "State": "running",
     "Status": "Up 2 hours (healthy)",
-    "Created": 1784044800,
     "Image": "example/status-server:2.0",
-    "Command": "/app/server --internal-debug-value fixture-only-command",
     "Ports": [
       {"IP": "127.0.0.1", "PrivatePort": 80, "PublicPort": 18080, "Type": "tcp"}
     ]
   },
   {
-    "Id": "1234567890abcdef1234567890abcdef",
     "Names": ["/stopped-helper"],
     "State": "exited",
     "Status": "Exited (0) 1 hour ago",
-    "Created": 1784041200,
     "Image": "example/helper:1.0",
-    "Command": "/bin/true",
     "Ports": []
   }
 ]

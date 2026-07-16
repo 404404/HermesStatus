@@ -45,7 +45,7 @@ HermesStatus 2.0 的原生 Go 链路已经能传输 CPU、内存、硬盘、upti
 | HS-009 | Docker 清单 | Engine list API 明确 | 2.0 缺失 | 缺失 | 缺失 | 已消费 | `COLLECTOR_MISSING` + `UI_ONLY` |
 | HS-010 | Profile 注册 | 1.0 注册表明确 | 2.0 exporter 缺失 | 缺失 | 缺失 | 已消费 | `COLLECTOR_MISSING` + `UI_ONLY` |
 | HS-011 | 周期快照/freshness | 1.0 有文件快照，无完整领域时间 | 2.0 缺失 | 合同已有草案 | 缺失 | 顶栏时间语义不正确 | `CONTRACT_ONLY` |
-| HS-021 | 凭证安全 | 1.0 API key 边界基本正确 | 部分字段仍可能泄露路径/命令/error | Go allowlist 未实现 | 缺失 | UI 会显示 command/error | `CONTRACT_ONLY`，有安全阻断 |
+| HS-021 | 凭证安全 | 1.0 API key 边界基本正确 | 部分字段仍可能泄露路径/error | Go allowlist 已实现 | 结构化安全错误 | Docker command 已删除 | Release C 收敛完成 |
 | HS-022 | 扩展协议 | 1.0 JSON-in-string | 1.0 有；2.0 无 | Go 静默丢弃 | 缺失 | 期望对象 | `WIRE_DROPPED` + `SNAPSHOT_MISSING` |
 | HS-023 | 容器化宿主机访问 | 1.0 Compose 有挂载/权限 | 2.0 Compose 未移植 | 不适用 | 不适用 | 间接依赖 | `COLLECTOR_MISSING` + `UNVERIFIED_HOST` |
 
@@ -112,7 +112,7 @@ HermesStatus 2.0 的原生 Go 链路已经能传输 CPU、内存、硬盘、upti
 
 | 编号 | 1.0 行为 | 风险 | Release A 要求 |
 | --- | --- | --- | --- |
-| S-01 | Docker `command` 仅截断 | 命令参数可能带密钥或凭证 | 默认隐藏或可靠脱敏；日志永不记录 |
+| S-01 | Docker `command` 仅截断 | 命令参数可能带密钥或凭证 | Release C 已从采集、合同、stats 和 UI 完全删除 |
 | S-02 | Docker error 使用 `str(e)` | Socket 路径、系统错误细节进入 stats/browser | 固定 code/source/retryable，message 限长脱敏 |
 | S-03 | Hermes `note` 混合 API 错误和 Profile 目录 | 真实路径或连接细节进入浏览器 | 删除 note 作为业务字段，改结构化 error |
 | S-04 | config summary 输出 `config_path/checked_paths/docker_volumes` | 暴露宿主机目录结构 | Release A 不输出；Release B 单独定义路径显示策略 |
@@ -182,7 +182,7 @@ HermesStatus 2.0 的原生 Go 链路已经能传输 CPU、内存、硬盘、upti
 ## 非缺口项
 
 - Go TCP scanner 的 1 MiB 总上限大于 1.0 的 64 KiB wire 上限；问题是类型和验证，不是总 buffer 太小。
-- 2.0 原生管理 API、OpenAPI、Watchdog、SSL 和配置能力存在，应保留。
+- 2.0 原生管理 API、OpenAPI、SSL 状态检查和配置能力保留；Release C 删除告警引擎与通知回调。
 - Runs、聊天、停止、审批不是 1.0 已交付能力，不属于迁移缺口。
 - `/api/hermes/config-summary` 不在 Release A，缺少该路由不是 P0 缺口。
 - 当前 Dashboard 的布局、CPU 单行适配和硬盘通电时间天数样式已经由用户确认；本报告不要求重做样式。

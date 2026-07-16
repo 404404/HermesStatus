@@ -149,6 +149,60 @@ class RegistryTests(unittest.TestCase):
         finally:
             (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
 
+    def test_unmatched_provider_uses_profile_config_mtime(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        config_path = self.root / "daily-config.yaml"
+        config_path.write_text("model: deepseek-v4-pro\nprovider: OpenCode Go\n", encoding="utf-8")
+        modified = dt.datetime(2026, 7, 15, 9, 30, tzinfo=dt.timezone.utc).timestamp()
+        os.utime(config_path, (modified, modified))
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root),
+            "status_dir": str(self.status),
+            "profiles": [{
+                "name": "daily",
+                "profile_dir": str(profile_dir),
+                "config_path": str(config_path),
+                "api": {"enabled": True, "port": 18000},
+            }],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.3.0"
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True,
+                "main_model": {"provider": "OpenCode Go", "model": "deepseek-v4-pro"},
+                "docker_volumes": [],
+            })
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {
+                "status": "ok",
+                "health": {"status": "ok"},
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({}),
+            }
+            module.hermes_cli_status = lambda _profile: """
+◆ Environment
+  Model:        deepseek-v4-pro
+  Provider:     OpenCode Go
+◆ API Keys
+  Google / Gemini  ✓ masked
+◆ Auth Providers
+  OpenAI Codex  ✓ logged in
+    Refreshed:  2026-07-01 21:48:10 CST
+◆ Gateway Service
+  Status:       ✓ running
+"""
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["usage_mode"], "api")
+        self.assertEqual(payload["auth_refreshed_at"], "2026-07-15T09:30:00Z")
+
     def test_local_usage_preserves_recursive_1_0_window(self):
         self.write_registry(["daily"])
         module = load_exporter(self.config)

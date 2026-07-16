@@ -199,10 +199,12 @@ flowchart TD
   URL --> API["collect_api"]
   CLI["hermes -p profile status"] --> PARSE["parse_cli_status"]
   YAML["Profile config.yaml"] --> SUMMARY["summarize_config"]
+  YAML --> MTIME["模型配置刷新时间 mtime"]
   LOGS["Profile logs/run JSON"] --> LOCAL["昨日任务和 usage 兜底"]
   API --> PROFILE["profile_stats"]
   PARSE --> PROFILE
   SUMMARY --> PROFILE
+  MTIME --> PROFILE
   LOCAL --> PROFILE
   PROFILE --> FILE["profile JSON 原子快照"]
   FILE --> CLIENT["get_hermes_profiles 选择字段"]
@@ -242,7 +244,7 @@ flowchart TD
 | Profile `.env` 原文 | exporter `load_profile_env` | 不直接进入 | 仅采集进程内存 |
 | config secret | YAML parser | `sensitive_flags` 只输出 configured/source | 继续 allowlist，不输出值 |
 | config path/checked paths | config summary | 会进入 stats/browser | Release A 不输出真实路径 |
-| Docker command | Docker API | 会进入 stats/browser | 默认隐藏或可靠脱敏 |
+| Docker command | Docker API 原始响应可能包含 | 否 | Release C 采集器不读取，Go 合同不接收，stats/browser 不输出 |
 | Docker error | Python exception text | 会进入 stats/browser | 结构化 error，不带 raw text |
 | Hermes note/API error | exception/API status/Profile dir | 会进入 stats/browser | 结构化 code/status；不带路径/响应体 |
 | legacy raw JSON | client wire | C++ 原样保存并嵌入 | Go 解析后立即丢弃 raw string |

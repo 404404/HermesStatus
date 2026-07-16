@@ -41,7 +41,7 @@ func TestExtensionModelJSONTags(t *testing.T) {
 		{reflect.TypeOf(ExtensionSnapshot{}), "ReceivedAt", "received_at"},
 		{reflect.TypeOf(HardwareStats{}), "DiskPowerOnHours", "disk_power_on_hours"},
 		{reflect.TypeOf(DockerStats{}), "Containers", "containers"},
-		{reflect.TypeOf(DockerContainerStats{}), "Command", "command"},
+		{reflect.TypeOf(DockerContainerStats{}), "Names", "names"},
 		{reflect.TypeOf(HermesProfileStats{}), "AuthRefreshedAt", "auth_refreshed_at"},
 		{reflect.TypeOf(TokenUsageStats{}), "InputTokens", "input_tokens"},
 		{reflect.TypeOf(ExtensionError{}), "HTTPStatus", "http_status"},

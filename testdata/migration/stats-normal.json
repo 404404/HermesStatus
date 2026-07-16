@@ -32,33 +32,21 @@
     "truncated": false,
     "containers": [
       {
-        "id": "abc123def456",
         "names": "status-server",
-        "state": "running",
-        "status": "Up 2 hours (healthy)",
-        "created": "2 hours ago",
         "image": "example/status-server:2.0",
-        "command": "/usr/local/bin/status-server",
+        "status": "Up 2 hours (healthy)",
         "ports": "0.0.0.0:8080->80/tcp"
       },
       {
-        "id": "def456abc123",
         "names": "status-client",
-        "state": "running",
-        "status": "Up 2 hours",
-        "created": "2 hours ago",
         "image": "example/status-client:2.0",
-        "command": "python3 /app/client.py",
+        "status": "Up 2 hours",
         "ports": "-"
       },
       {
-        "id": "789abc456def",
         "names": "cache-helper",
-        "state": "exited",
-        "status": "Exited (0) 1 hour ago",
-        "created": "3 hours ago",
         "image": "example/cache-helper:1.0",
-        "command": "/bin/sh -c cleanup",
+        "status": "Exited (0) 1 hour ago",
         "ports": "-"
       }
     ],

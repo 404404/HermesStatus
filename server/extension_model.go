@@ -2,7 +2,6 @@ package main
 
 const (
 	ExtensionSchemaVersion = "1.0-draft"
-	HiddenDockerCommand    = "[hidden]"
 	RedactedValue          = "[redacted]"
 
 	MaxExtensionVersionLength = 32
@@ -22,15 +21,12 @@ const (
 	MaxDiskDeviceLength        = 128
 	MaxDiskSmartSourceLength   = 64
 
-	MaxDockerContainers    = 256
-	MaxDockerCount         = 100000
-	MaxDockerIDLength      = 64
-	MaxDockerNameLength    = 256
-	MaxDockerStatusLength  = 128
-	MaxDockerCreatedLength = 64
-	MaxDockerImageLength   = 256
-	MaxDockerCommandLength = 512
-	MaxDockerPortsLength   = 512
+	MaxDockerContainers   = 256
+	MaxDockerCount        = 100000
+	MaxDockerNameLength   = 256
+	MaxDockerStatusLength = 128
+	MaxDockerImageLength  = 256
+	MaxDockerPortsLength  = 512
 
 	MaxHermesProfiles        = 64
 	MaxProfileNameLength     = 64
@@ -67,19 +63,6 @@ const (
 	DiskSMARTPassed  DiskSMARTStatus = "passed"
 	DiskSMARTFailed  DiskSMARTStatus = "failed"
 	DiskSMARTUnknown DiskSMARTStatus = "unknown"
-)
-
-type DockerContainerState string
-
-const (
-	DockerStateCreated    DockerContainerState = "created"
-	DockerStateRunning    DockerContainerState = "running"
-	DockerStatePaused     DockerContainerState = "paused"
-	DockerStateRestarting DockerContainerState = "restarting"
-	DockerStateRemoving   DockerContainerState = "removing"
-	DockerStateExited     DockerContainerState = "exited"
-	DockerStateDead       DockerContainerState = "dead"
-	DockerStateUnknown    DockerContainerState = "unknown"
 )
 
 type HermesAPIStatus string
@@ -167,14 +150,10 @@ type DockerStats struct {
 }
 
 type DockerContainerStats struct {
-	ID      string               `json:"id"`
-	Names   string               `json:"names"`
-	State   DockerContainerState `json:"state"`
-	Status  string               `json:"status"`
-	Created string               `json:"created"`
-	Image   string               `json:"image"`
-	Command string               `json:"command"`
-	Ports   string               `json:"ports"`
+	Names  string `json:"names"`
+	Image  string `json:"image"`
+	Status string `json:"status"`
+	Ports  string `json:"ports"`
 }
 
 type HermesStats struct {

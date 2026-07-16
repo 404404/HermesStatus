@@ -319,20 +319,14 @@ func validateDockerContainer(index int, container *DockerContainerStats) error {
 		value string
 		limit int
 	}{
-		"id": {container.ID, MaxDockerIDLength}, "names": {container.Names, MaxDockerNameLength},
-		"status": {container.Status, MaxDockerStatusLength}, "created": {container.Created, MaxDockerCreatedLength},
-		"image": {container.Image, MaxDockerImageLength}, "command": {container.Command, MaxDockerCommandLength},
-		"ports": {container.Ports, MaxDockerPortsLength},
+		"names":  {container.Names, MaxDockerNameLength},
+		"image":  {container.Image, MaxDockerImageLength},
+		"status": {container.Status, MaxDockerStatusLength},
+		"ports":  {container.Ports, MaxDockerPortsLength},
 	} {
 		if err := validateRequiredString(prefix+"."+field, item.value, item.limit); err != nil {
 			return err
 		}
-	}
-	if !validDockerState(container.State) {
-		return validationError(validationCodeInvalidValue, prefix+".state", "state is not supported")
-	}
-	if container.Command != HiddenDockerCommand {
-		return validationError(validationCodeInvalidValue, prefix+".command", "command must be hidden")
 	}
 	return nil
 }
@@ -693,12 +687,9 @@ func SanitizeExtensionStats(input ExtensionStats) ExtensionStats {
 		}
 		for index := range dockerStats.Containers {
 			container := &dockerStats.Containers[index]
-			container.ID = SanitizeText(container.ID)
 			container.Names = SanitizeText(container.Names)
-			container.Status = SanitizeText(container.Status)
-			container.Created = SanitizeText(container.Created)
 			container.Image = SanitizeText(container.Image)
-			container.Command = HiddenDockerCommand
+			container.Status = SanitizeText(container.Status)
 			container.Ports = SanitizeText(container.Ports)
 		}
 		dockerStats.UpdatedAt = sanitizeStringPointer(dockerStats.UpdatedAt)
@@ -917,7 +908,7 @@ func validateRequiredDocker(raw json.RawMessage) error {
 		if err != nil {
 			return err
 		}
-		if err := requireFields(container, field, "id", "names", "state", "status", "created", "image", "command", "ports"); err != nil {
+		if err := requireFields(container, field, "names", "image", "status", "ports"); err != nil {
 			return err
 		}
 	}
@@ -1087,15 +1078,6 @@ func validatePayloadSize(field string, value any, limit int) error {
 
 func validDiskSMARTStatus(value DiskSMARTStatus) bool {
 	return value == DiskSMARTPassed || value == DiskSMARTFailed || value == DiskSMARTUnknown
-}
-
-func validDockerState(value DockerContainerState) bool {
-	switch value {
-	case DockerStateCreated, DockerStateRunning, DockerStatePaused, DockerStateRestarting, DockerStateRemoving, DockerStateExited, DockerStateDead, DockerStateUnknown:
-		return true
-	default:
-		return false
-	}
 }
 
 func validHermesAPIStatus(value HermesAPIStatus) bool {

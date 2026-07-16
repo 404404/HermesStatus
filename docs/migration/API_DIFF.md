@@ -31,7 +31,7 @@
 | 删除于 1.0 定制 | `/api/servers/{username}/reset-traffic` | POST | Bearer | 当前 1.0 路由已移除 | Go 2.0 恢复并原生实现 | 旧版配置 UI；当前 1.0 UI 不可达 | Compatible for 2.0，但不是 Hermes 定制迁移项 |
 | 2.0 新增 | `/api/openapi.json` | GET | 无 | 1.0 不存在 | OpenAPI 3.1 | API Agent/开发工具 | Compatible（新增） |
 
-其余 `/api/config`、`/api/servers`、`/api/monitors`、`/api/sslcerts`、`/api/watchdog` CRUD 在两个版本均存在，但 Go 2.0 的字段校验、错误 details 和配置重载实现不同。HermesStatus 当前页面只展示“主机”，没有调用这些 CRUD。
+其余 `/api/config`、`/api/servers`、`/api/monitors`、`/api/sslcerts` CRUD 在两个版本均存在，但 Go 2.0 的字段校验、错误 details 和配置重载实现不同。Release C 删除告警管理 API；HermesStatus 当前页面只请求 `/json/stats.json`。
 
 ## stats JSON 差异
 

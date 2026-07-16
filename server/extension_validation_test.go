@@ -11,12 +11,7 @@ import (
 func TestMigrationUpdateFixturesDecode(t *testing.T) {
 	for _, name := range []string{"update-normal.json", "update-empty.json", "update-degraded.json", "update-long-values.json"} {
 		t.Run(name, func(t *testing.T) {
-			stats := mustDecodeUpdate(t, name)
-			for _, container := range stats.Docker.Containers {
-				if container.Command != HiddenDockerCommand {
-					t.Fatalf("command was not hidden: %q", container.Command)
-				}
-			}
+			mustDecodeUpdate(t, name)
 		})
 	}
 }
@@ -30,11 +25,6 @@ func TestMigrationStatsFixturesDecode(t *testing.T) {
 			}
 			if snapshot.ReceivedAt == "" {
 				t.Fatal("received_at was empty")
-			}
-			for _, container := range snapshot.Docker.Containers {
-				if container.Command != HiddenDockerCommand {
-					t.Fatalf("command was not hidden: %q", container.Command)
-				}
 			}
 		})
 	}
@@ -79,7 +69,6 @@ func TestValidationRejectsUnsupportedEnums(t *testing.T) {
 		mutate func(*ExtensionStats)
 	}{
 		{"smart", func(stats *ExtensionStats) { stats.Hardware.DiskSMARTStatus = "maybe" }},
-		{"container", func(stats *ExtensionStats) { stats.Docker.Containers[0].State = "sleeping" }},
 		{"api", func(stats *ExtensionStats) { stats.Hermes.Profiles[0].APIStatus = "ready" }},
 		{"usage-mode", func(stats *ExtensionStats) {
 			value := HermesUsageMode("oauth")
@@ -211,14 +200,6 @@ func TestDockerCountInvariants(t *testing.T) {
 				t.Fatal("expected validation error")
 			}
 		})
-	}
-}
-
-func TestDockerCommandMustBeHidden(t *testing.T) {
-	stats := mustDecodeUpdate(t, "update-normal.json")
-	stats.Docker.Containers[0].Command = "echo safe"
-	if err := ValidateDockerStats(stats.Docker); err == nil {
-		t.Fatal("visible command accepted")
 	}
 }
 
