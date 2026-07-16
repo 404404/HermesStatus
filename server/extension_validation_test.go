@@ -133,6 +133,66 @@ func TestValidationRejectsOversizedCollections(t *testing.T) {
 	}
 }
 
+func TestReleaseBHermesProfileFieldsValidate(t *testing.T) {
+	stats := mustDecodeUpdate(t, "update-normal.json")
+	profile := &stats.Hermes.Profiles[0]
+	receivedAt := "2026-07-15T00:00:01Z"
+	concurrency := int64(4)
+	timeout := 120.0
+	configured := true
+	profile.ReceivedAt = &receivedAt
+	profile.SessionsHasMore = true
+	profile.ConfigSummary = &SanitizedConfigSummary{
+		ConfigFound: true,
+		MainModel: ConfigModelSummary{
+			Provider: "Example Provider", Model: "example-model", BaseURL: "provider default",
+			Concurrency: &concurrency, TimeoutSeconds: &timeout,
+		},
+		AuxiliaryModels: []AuxiliaryModelSummary{{
+			Name: "vision", Provider: "auto", EffectiveProvider: "Example Provider",
+			EffectiveModel: "example-model", Source: "main_model", BaseURLDisplay: "provider default",
+		}},
+		Delegation:    DelegationSummary{Provider: "Example Provider", Model: "delegate-model", BaseURL: "provider default"},
+		DockerVolumes: []string{"/srv/example/workspace:/workspace"},
+	}
+	profile.MixtureOfAgents = &MixtureOfAgentsStats{
+		Source: "GET /v1/toolsets", Available: true, Name: "moa", Label: "Mixture of Agents",
+		Configured: &configured, Tools: []string{"mixture_of_agents"},
+	}
+	if err := ValidateExtensionStats(stats); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(SanitizeExtensionStats(*stats))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"auxiliary_models", "mixture_of_agents", "received_at", "docker_volumes"} {
+		if !strings.Contains(string(data), expected) {
+			t.Fatalf("Release B field %q is missing: %s", expected, data)
+		}
+	}
+}
+
+func TestHermesProfileNamesMustBeUnique(t *testing.T) {
+	stats := mustDecodeUpdate(t, "update-normal.json")
+	stats.Hermes.Profiles = append(stats.Hermes.Profiles, stats.Hermes.Profiles[0])
+	if err := ValidateHermesStats(stats.Hermes); err == nil {
+		t.Fatal("duplicate profile name was accepted")
+	}
+}
+
+func TestSecretVolumePathIsRejectedOrRedacted(t *testing.T) {
+	stats := mustDecodeUpdate(t, "update-normal.json")
+	stats.Hermes.Profiles[0].ConfigSummary.DockerVolumes = []string{"/srv/example/.env:/workspace/.env:ro"}
+	if err := ValidateExtensionStats(stats); err == nil {
+		t.Fatal("secret file mount was accepted")
+	}
+	sanitized := SanitizeExtensionStats(*stats)
+	if sanitized.Hermes.Profiles[0].ConfigSummary.DockerVolumes[0] != RedactedValue {
+		t.Fatal("secret file mount was not redacted")
+	}
+}
+
 func TestDockerCountInvariants(t *testing.T) {
 	tests := []struct {
 		name   string

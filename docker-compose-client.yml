@@ -42,6 +42,17 @@ services:
       DOCKER_INTERVAL: "${DOCKER_INTERVAL:-60}"
       DOCKER_CONTAINER_LIMIT: "${DOCKER_CONTAINER_LIMIT:-0}"
       CLIENT_STATUS_DIR: "${CLIENT_STATUS_DIR:-/var/lib/serverstatus-client}"
+      HERMES_EXPORT_CONFIG: "${HERMES_EXPORT_CONFIG:-/app/hermes-exporter.json}"
+      HERMES_ROOT: "${HERMES_ROOT:-/home/hermes}"
+      HERMES_STATUS_DIR: "${HERMES_STATUS_DIR:-/var/lib/serverstatus-client/hermes}"
+      HERMES_STATUS_FILE: "${HERMES_STATUS_FILE:-/var/lib/serverstatus-client/hermes/hermes.json}"
+      HERMES_EXPORT_ENABLED: "${HERMES_EXPORT_ENABLED:-true}"
+      HERMES_EXPORT_INTERVAL: "${HERMES_EXPORT_INTERVAL:-600}"
+      HERMES_SNAPSHOT_INTERVAL: "${HERMES_SNAPSHOT_INTERVAL:-10}"
+      HERMES_API_TIMEOUT: "${HERMES_API_TIMEOUT:-2.5}"
+      HERMES_API_PAGE_LIMIT: "${HERMES_API_PAGE_LIMIT:-100}"
+      HERMES_API_MAX_PAGES: "${HERMES_API_MAX_PAGES:-100}"
+      HERMES_HOST_USER: "${HERMES_HOST_USER:-hermes}"
     volumes:
       - /etc/os-release:/host/etc/os-release:ro
       - /sys/class/hwmon:/sys/class/hwmon:ro
@@ -49,4 +60,6 @@ services:
       # is constrained in code to GET /containers/json?all=1 only.
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /dev:/dev:ro
-      - ${CLIENT_STATUS_DIR_HOST:-./client-status}:/var/lib/serverstatus-client
+      - ${HERMES_EXPORT_CONFIG_HOST:-./hermes-exporter.json}:${HERMES_EXPORT_CONFIG:-/app/hermes-exporter.json}:ro
+      - ${HERMES_ROOT_HOST:-/home/hermes}:${HERMES_ROOT:-/home/hermes}:ro
+      - ${CLIENT_STATUS_DIR_HOST:-./client-status}:${CLIENT_STATUS_DIR:-/var/lib/serverstatus-client}

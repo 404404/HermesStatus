@@ -31,7 +31,9 @@ var (
 		regexp.MustCompile(`(?i)(api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential|token)\s*[:=]`),
 		regexp.MustCompile(`(?i)--(token|password)(=|\s+)`),
 		regexp.MustCompile(`(?i)[?&](api[_-]?key|key|token|password)=`),
+		regexp.MustCompile(`(?i)(^|/)\.env($|[./])`),
 	}
+	secretPathPattern = regexp.MustCompile(`(?i)(^|/)(\.env($|[.:/])|[^/:]*(secret|credential|password|token|auth)[^/:]*)($|[/:])`)
 )
 
 type ExtensionValidationError struct {
@@ -345,10 +347,16 @@ func ValidateHermesStats(stats *HermesStats) error {
 	if len(stats.Profiles) > MaxHermesProfiles {
 		return validationError(validationCodeInvalidValue, "hermes.profiles", "array exceeds the allowed size")
 	}
+	seenProfiles := make(map[string]struct{}, len(stats.Profiles))
 	for index := range stats.Profiles {
 		if err := ValidateHermesProfileStats(index, &stats.Profiles[index]); err != nil {
 			return err
 		}
+		name := stats.Profiles[index].Profile
+		if _, exists := seenProfiles[name]; exists {
+			return validationError(validationCodeInvalidValue, "hermes.profiles", "profile names must be unique")
+		}
+		seenProfiles[name] = struct{}{}
 	}
 	if err := validateUpdatedAt("hermes", stats.UpdatedAt, stats.Stale); err != nil {
 		return err
@@ -414,22 +422,151 @@ func ValidateHermesProfileStats(index int, profile *HermesProfileStats) error {
 		return err
 	}
 	if profile.ConfigSummary != nil {
-		if profile.ConfigSummary.DockerVolumes == nil {
-			return validationError(validationCodeInvalidValue, prefix+".config_summary.docker_volumes", "array must not be null")
+		if err := validateConfigSummary(prefix+".config_summary", profile.ConfigSummary); err != nil {
+			return err
 		}
-		if len(profile.ConfigSummary.DockerVolumes) > MaxDockerVolumes {
-			return validationError(validationCodeInvalidValue, prefix+".config_summary.docker_volumes", "array exceeds the allowed size")
+	}
+	if profile.MixtureOfAgents != nil {
+		if err := validateMixtureOfAgents(prefix+".mixture_of_agents", profile.MixtureOfAgents); err != nil {
+			return err
 		}
-		for volumeIndex, volume := range profile.ConfigSummary.DockerVolumes {
-			if err := validateRequiredString(fmt.Sprintf("%s.config_summary.docker_volumes[%d]", prefix, volumeIndex), volume, MaxDockerVolumeLength); err != nil {
-				return err
-			}
-		}
+	}
+	if err := validateDateTime(prefix+".received_at", profile.ReceivedAt, true); err != nil {
+		return err
 	}
 	if err := validateUpdatedAt(prefix, profile.UpdatedAt, profile.Stale); err != nil {
 		return err
 	}
 	return ValidateExtensionError(prefix+".error", profile.Error)
+}
+
+func validateConfigSummary(prefix string, summary *SanitizedConfigSummary) error {
+	if summary == nil {
+		return nil
+	}
+	for field, value := range map[string]string{
+		"main_model.provider":         summary.MainModel.Provider,
+		"main_model.model":            summary.MainModel.Model,
+		"main_model.base_url":         summary.MainModel.BaseURL,
+		"delegation.provider":         summary.Delegation.Provider,
+		"delegation.model":            summary.Delegation.Model,
+		"delegation.base_url":         summary.Delegation.BaseURL,
+		"delegation.reasoning_effort": summary.Delegation.ReasoningEffort,
+	} {
+		limit := MaxModelLength
+		if strings.Contains(field, "provider") {
+			limit = MaxProviderLength
+		} else if strings.Contains(field, "base_url") {
+			limit = MaxBaseURLLength
+		} else if strings.Contains(field, "reasoning_effort") {
+			limit = MaxReasoningEffortLength
+		}
+		if err := validateStringValue(prefix+"."+field, value, limit); err != nil {
+			return err
+		}
+	}
+	if err := validateCounter(prefix+".main_model.concurrency", summary.MainModel.Concurrency, MaxHermesCounter); err != nil {
+		return err
+	}
+	for field, value := range map[string]*int64{
+		"delegation.max_concurrent_children": summary.Delegation.MaxConcurrentChildren,
+		"delegation.max_spawn_depth":         summary.Delegation.MaxSpawnDepth,
+	} {
+		if err := validateCounter(prefix+"."+field, value, MaxHermesCounter); err != nil {
+			return err
+		}
+	}
+	for field, value := range map[string]*float64{
+		"main_model.timeout_seconds":       summary.MainModel.TimeoutSeconds,
+		"delegation.child_timeout_seconds": summary.Delegation.ChildTimeoutSeconds,
+	} {
+		if err := validateDuration(prefix+"."+field, value); err != nil {
+			return err
+		}
+	}
+	if summary.AuxiliaryModels == nil {
+		return validationError(validationCodeInvalidValue, prefix+".auxiliary_models", "array must not be null")
+	}
+	if len(summary.AuxiliaryModels) > MaxAuxiliaryModels {
+		return validationError(validationCodeInvalidValue, prefix+".auxiliary_models", "array exceeds the allowed size")
+	}
+	for index := range summary.AuxiliaryModels {
+		item := &summary.AuxiliaryModels[index]
+		itemPrefix := fmt.Sprintf("%s.auxiliary_models[%d]", prefix, index)
+		for field, value := range map[string]string{
+			"name": item.Name, "provider": item.Provider, "model": item.Model,
+			"effective_provider": item.EffectiveProvider, "effective_model": item.EffectiveModel,
+			"source": item.Source, "base_url_display": item.BaseURLDisplay, "language": item.Language,
+		} {
+			limit := MaxModelLength
+			switch field {
+			case "name", "source", "language":
+				limit = MaxAuxiliaryNameLength
+			case "provider", "effective_provider":
+				limit = MaxProviderLength
+			case "base_url_display":
+				limit = MaxBaseURLLength
+			}
+			if err := validateStringValue(itemPrefix+"."+field, value, limit); err != nil {
+				return err
+			}
+		}
+		if err := validateCounter(itemPrefix+".max_concurrency", item.MaxConcurrency, MaxHermesCounter); err != nil {
+			return err
+		}
+		if err := validateDuration(itemPrefix+".timeout_seconds", item.TimeoutSeconds); err != nil {
+			return err
+		}
+		if err := validateDuration(itemPrefix+".download_timeout_seconds", item.DownloadTimeoutSeconds); err != nil {
+			return err
+		}
+	}
+	if summary.DockerVolumes == nil {
+		return validationError(validationCodeInvalidValue, prefix+".docker_volumes", "array must not be null")
+	}
+	if len(summary.DockerVolumes) > MaxDockerVolumes {
+		return validationError(validationCodeInvalidValue, prefix+".docker_volumes", "array exceeds the allowed size")
+	}
+	for volumeIndex, volume := range summary.DockerVolumes {
+		if err := validateRequiredString(fmt.Sprintf("%s.docker_volumes[%d]", prefix, volumeIndex), volume, MaxDockerVolumeLength); err != nil {
+			return err
+		}
+		if secretPathPattern.MatchString(volume) {
+			return validationError(validationCodeInvalidValue, fmt.Sprintf("%s.docker_volumes[%d]", prefix, volumeIndex), "volume contains a disallowed secret path")
+		}
+	}
+	return nil
+}
+
+func validateMixtureOfAgents(prefix string, value *MixtureOfAgentsStats) error {
+	for field, item := range map[string]struct {
+		value string
+		limit int
+	}{
+		"source": {value.Source, MaxErrorSourceLength}, "name": {value.Name, MaxMOANameLength},
+		"label": {value.Label, MaxMOANameLength}, "description": {value.Description, MaxMOADescriptionLength},
+	} {
+		if err := validateStringValue(prefix+"."+field, item.value, item.limit); err != nil {
+			return err
+		}
+	}
+	if value.Tools == nil {
+		return validationError(validationCodeInvalidValue, prefix+".tools", "array must not be null")
+	}
+	if len(value.Tools) > MaxMOATools {
+		return validationError(validationCodeInvalidValue, prefix+".tools", "array exceeds the allowed size")
+	}
+	for index, tool := range value.Tools {
+		if err := validateRequiredString(fmt.Sprintf("%s.tools[%d]", prefix, index), tool, MaxMOANameLength); err != nil {
+			return err
+		}
+	}
+	if value.Error != nil {
+		if err := validateOptionalString(prefix+".error", value.Error, MaxErrorCodeLength); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ValidateTokenUsageStats(field string, usage *TokenUsageStats) error {
@@ -587,19 +724,62 @@ func SanitizeExtensionStats(input ExtensionStats) ExtensionStats {
 			profile.Model = sanitizeStringPointer(profile.Model)
 			profile.AuthRefreshedAt = sanitizeStringPointer(profile.AuthRefreshedAt)
 			profile.UpdatedAt = sanitizeStringPointer(profile.UpdatedAt)
+			profile.ReceivedAt = sanitizeStringPointer(profile.ReceivedAt)
 			profile.Usage.WindowStart = sanitizeStringPointer(profile.Usage.WindowStart)
 			profile.Usage.WindowEnd = sanitizeStringPointer(profile.Usage.WindowEnd)
 			profile.Error = sanitizeExtensionError(profile.Error)
 			if profile.ConfigSummary != nil {
 				config := *profile.ConfigSummary
+				config.MainModel.Provider = SanitizeText(config.MainModel.Provider)
+				config.MainModel.Model = SanitizeText(config.MainModel.Model)
+				config.MainModel.BaseURL = SanitizeText(config.MainModel.BaseURL)
+				config.Delegation.Provider = SanitizeText(config.Delegation.Provider)
+				config.Delegation.Model = SanitizeText(config.Delegation.Model)
+				config.Delegation.BaseURL = SanitizeText(config.Delegation.BaseURL)
+				config.Delegation.ReasoningEffort = SanitizeText(config.Delegation.ReasoningEffort)
+				config.AuxiliaryModels = append([]AuxiliaryModelSummary(nil), profile.ConfigSummary.AuxiliaryModels...)
+				if config.AuxiliaryModels == nil {
+					config.AuxiliaryModels = make([]AuxiliaryModelSummary, 0)
+				}
+				for auxiliaryIndex := range config.AuxiliaryModels {
+					item := &config.AuxiliaryModels[auxiliaryIndex]
+					item.Name = SanitizeText(item.Name)
+					item.Provider = SanitizeText(item.Provider)
+					item.Model = SanitizeText(item.Model)
+					item.EffectiveProvider = SanitizeText(item.EffectiveProvider)
+					item.EffectiveModel = SanitizeText(item.EffectiveModel)
+					item.Source = SanitizeText(item.Source)
+					item.BaseURLDisplay = SanitizeText(item.BaseURLDisplay)
+					item.Language = SanitizeText(item.Language)
+				}
 				config.DockerVolumes = append([]string(nil), profile.ConfigSummary.DockerVolumes...)
-				if profile.ConfigSummary.DockerVolumes != nil && config.DockerVolumes == nil {
+				if config.DockerVolumes == nil {
 					config.DockerVolumes = make([]string, 0)
 				}
 				for volumeIndex := range config.DockerVolumes {
-					config.DockerVolumes[volumeIndex] = SanitizeText(config.DockerVolumes[volumeIndex])
+					if secretPathPattern.MatchString(config.DockerVolumes[volumeIndex]) {
+						config.DockerVolumes[volumeIndex] = RedactedValue
+					} else {
+						config.DockerVolumes[volumeIndex] = SanitizeText(config.DockerVolumes[volumeIndex])
+					}
 				}
 				profile.ConfigSummary = &config
+			}
+			if profile.MixtureOfAgents != nil {
+				mixture := *profile.MixtureOfAgents
+				mixture.Source = SanitizeText(mixture.Source)
+				mixture.Name = SanitizeText(mixture.Name)
+				mixture.Label = SanitizeText(mixture.Label)
+				mixture.Description = SanitizeText(mixture.Description)
+				mixture.Error = sanitizeStringPointer(mixture.Error)
+				mixture.Tools = append([]string(nil), profile.MixtureOfAgents.Tools...)
+				if mixture.Tools == nil {
+					mixture.Tools = make([]string, 0)
+				}
+				for toolIndex := range mixture.Tools {
+					mixture.Tools[toolIndex] = SanitizeText(mixture.Tools[toolIndex])
+				}
+				profile.MixtureOfAgents = &mixture
 			}
 		}
 		hermesStats.UpdatedAt = sanitizeStringPointer(hermesStats.UpdatedAt)
@@ -656,6 +836,22 @@ func safeErrorMessage(code string) string {
 		return "Hermes API authorization failed"
 	case "api_timeout":
 		return "Hermes API request timed out"
+	case "api_disabled":
+		return "Hermes API is not configured"
+	case "api_unavailable":
+		return "Hermes API is unavailable"
+	case "api_http_error":
+		return "Hermes API request failed"
+	case "api_invalid_json":
+		return "Hermes API returned invalid data"
+	case "cli_unavailable":
+		return "Hermes CLI status is unavailable"
+	case "snapshot_unavailable":
+		return "Hermes integration snapshot is unavailable"
+	case "snapshot_invalid":
+		return "Hermes integration snapshot is invalid"
+	case "profile_unavailable":
+		return "Hermes profile is unavailable"
 	case "partial_failure":
 		return "One or more extension sources are unavailable"
 	case "clock_skew":
@@ -817,6 +1013,26 @@ func validateOptionalString(field string, value *string, maxLength int) error {
 	}
 	if ContainsSecretLikeText(*value) {
 		return validationError(validationCodeInvalidValue, field, "value contains disallowed content")
+	}
+	return nil
+}
+
+func validateStringValue(field, value string, maxLength int) error {
+	if utf8.RuneCountInString(value) > maxLength {
+		return validationError(validationCodeInvalidValue, field, "value exceeds the allowed length")
+	}
+	if ContainsSecretLikeText(value) {
+		return validationError(validationCodeInvalidValue, field, "value contains disallowed content")
+	}
+	return nil
+}
+
+func validateDuration(field string, value *float64) error {
+	if value == nil {
+		return nil
+	}
+	if math.IsNaN(*value) || math.IsInf(*value, 0) || *value < 0 || *value > 86400 {
+		return validationError(validationCodeInvalidValue, field, "duration is outside the allowed range")
 	}
 	return nil
 }

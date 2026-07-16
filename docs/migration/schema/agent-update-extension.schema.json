@@ -289,11 +289,65 @@
       },
       "additionalProperties": false
     },
+    "configModelSummary": {
+      "type": "object",
+      "required": ["provider", "model", "base_url", "concurrency", "timeout_seconds"],
+      "properties": {
+        "provider": {"type": "string", "maxLength": 128},
+        "model": {"type": "string", "maxLength": 256},
+        "base_url": {"type": "string", "maxLength": 256},
+        "concurrency": {"$ref": "#/$defs/nullableCounter"},
+        "timeout_seconds": {"type": ["number", "null"], "minimum": 0, "maximum": 86400}
+      },
+      "additionalProperties": false
+    },
+    "auxiliaryModelSummary": {
+      "type": "object",
+      "required": ["name", "provider", "model", "effective_provider", "effective_model", "source", "base_url_display", "timeout_seconds", "download_timeout_seconds", "max_concurrency", "language", "extra_body_configured", "credential_configured"],
+      "properties": {
+        "name": {"type": "string", "maxLength": 64},
+        "provider": {"type": "string", "maxLength": 128},
+        "model": {"type": "string", "maxLength": 256},
+        "effective_provider": {"type": "string", "maxLength": 128},
+        "effective_model": {"type": "string", "maxLength": 256},
+        "source": {"type": "string", "enum": ["config", "main_model"]},
+        "base_url_display": {"type": "string", "maxLength": 256},
+        "timeout_seconds": {"type": ["number", "null"], "minimum": 0, "maximum": 86400},
+        "download_timeout_seconds": {"type": ["number", "null"], "minimum": 0, "maximum": 86400},
+        "max_concurrency": {"$ref": "#/$defs/nullableCounter"},
+        "language": {"type": "string", "maxLength": 64},
+        "extra_body_configured": {"type": "boolean"},
+        "credential_configured": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "delegationSummary": {
+      "type": "object",
+      "required": ["provider", "model", "base_url", "reasoning_effort", "max_concurrent_children", "max_spawn_depth", "child_timeout_seconds"],
+      "properties": {
+        "provider": {"type": "string", "maxLength": 128},
+        "model": {"type": "string", "maxLength": 256},
+        "base_url": {"type": "string", "maxLength": 256},
+        "reasoning_effort": {"type": "string", "maxLength": 64},
+        "max_concurrent_children": {"$ref": "#/$defs/nullableCounter"},
+        "max_spawn_depth": {"$ref": "#/$defs/nullableCounter"},
+        "child_timeout_seconds": {"type": ["number", "null"], "minimum": 0, "maximum": 86400}
+      },
+      "additionalProperties": false
+    },
     "configSummary": {
       "type": ["object", "null"],
-      "description": "Release A compatibility projection. Only docker_volumes is allowlisted; P1 config summary fields are intentionally absent.",
+      "description": "Sanitized Release B projection. Legacy objects containing only docker_volumes remain accepted during migration.",
       "required": ["docker_volumes"],
       "properties": {
+        "config_found": {"type": "boolean"},
+        "main_model": {"$ref": "#/$defs/configModelSummary"},
+        "auxiliary_models": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {"$ref": "#/$defs/auxiliaryModelSummary"}
+        },
+        "delegation": {"$ref": "#/$defs/delegationSummary"},
         "docker_volumes": {
           "type": "array",
           "maxItems": 64,
@@ -303,6 +357,22 @@
             "maxLength": 512
           }
         }
+      },
+      "additionalProperties": false
+    },
+    "mixtureOfAgents": {
+      "type": ["object", "null"],
+      "required": ["source", "available", "name", "label", "description", "enabled", "configured", "tools", "error"],
+      "properties": {
+        "source": {"type": "string", "maxLength": 64},
+        "available": {"type": "boolean"},
+        "name": {"type": "string", "maxLength": 128},
+        "label": {"type": "string", "maxLength": 128},
+        "description": {"type": "string", "maxLength": 512},
+        "enabled": {"type": ["boolean", "null"]},
+        "configured": {"type": ["boolean", "null"]},
+        "tools": {"type": "array", "maxItems": 64, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+        "error": {"type": ["string", "null"], "maxLength": 64}
       },
       "additionalProperties": false
     },
@@ -391,13 +461,22 @@
           "minimum": 0,
           "maximum": 1000000000
         },
+        "sessions_has_more": {
+          "type": "boolean"
+        },
         "usage": {
           "$ref": "#/$defs/tokenUsage"
         },
         "config_summary": {
           "$ref": "#/$defs/configSummary"
         },
+        "mixture_of_agents": {
+          "$ref": "#/$defs/mixtureOfAgents"
+        },
         "updated_at": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "received_at": {
           "$ref": "#/$defs/nullableDateTime"
         },
         "stale": {

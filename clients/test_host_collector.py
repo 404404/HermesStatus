@@ -25,6 +25,7 @@ from host_collector import (
     not_reported_docker,
     not_reported_hardware,
     not_reported_hermes,
+    read_hermes_snapshot,
     smart_candidates,
 )
 
@@ -235,6 +236,57 @@ class HostCollectorTests(unittest.TestCase):
             atomic_write_json(path, {"state": "second"})
             self.assertEqual(json.loads(Path(path).read_text(encoding="utf-8")), {"state": "second"})
             self.assertEqual([item.name for item in Path(root).iterdir()], ["hardware.json"])
+
+    def test_hermes_snapshot_reader_accepts_only_profile_projection(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "hermes.json"
+            path.write_text(json.dumps({
+                "extension_version": EXTENSION_VERSION,
+                "received_at": "2026-07-15T00:00:01Z",
+                "profiles": [{"profile": "alpha", "api_status": "ok"}],
+                "updated_at": "2026-07-15T00:00:00Z",
+                "stale": False,
+                "error": None,
+                "unexpected": "not-forwarded",
+            }), encoding="utf-8")
+            payload = read_hermes_snapshot(str(path))
+        self.assertEqual(payload["profiles"], [{"profile": "alpha", "api_status": "ok"}])
+        self.assertEqual(payload["updated_at"], "2026-07-15T00:00:00Z")
+        self.assertNotIn("extension_version", payload)
+        self.assertNotIn("received_at", payload)
+        self.assertNotIn("unexpected", payload)
+
+    def test_hermes_snapshot_reader_degrades_missing_or_corrupt_data(self):
+        missing = read_hermes_snapshot("/does/not/exist")
+        self.assertEqual(missing["profiles"], [])
+        self.assertTrue(missing["stale"])
+        self.assertEqual(missing["error"]["code"], "snapshot_unavailable")
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "hermes.json"
+            path.write_text("{invalid", encoding="utf-8")
+            corrupt = read_hermes_snapshot(str(path))
+        self.assertEqual(corrupt["profiles"], [])
+        self.assertEqual(corrupt["error"]["code"], "snapshot_unavailable")
+
+    def test_collector_forwards_hermes_snapshot_without_source_access(self):
+        with tempfile.TemporaryDirectory() as root:
+            snapshot = Path(root) / "hermes.json"
+            snapshot.write_text(json.dumps({
+                "profiles": [{"profile": "alpha", "api_status": "ok"}],
+                "updated_at": "2026-07-15T00:00:00Z",
+                "stale": False,
+                "error": None,
+            }), encoding="utf-8")
+            collector = HostExtensionCollector(
+                host_os_release_file=str(FIXTURES / "os-release"),
+                hermes_status_file=str(snapshot),
+                status_dir="",
+                command_runner=lambda command, timeout: (0, ""),
+                docker_request=lambda path: [],
+            )
+            payload = collector.collect_hermes_once()
+        self.assertEqual(payload["profiles"][0]["profile"], "alpha")
+        self.assertEqual(collector.extension_payload()["hermes"], payload)
 
     def test_structured_payload_matches_schema_and_contains_no_legacy_or_secret(self):
         with tempfile.TemporaryDirectory() as root:

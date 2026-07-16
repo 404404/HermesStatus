@@ -6,6 +6,8 @@ const path = require('node:path');
 
 const app = require('./app.js');
 const ROOT = path.resolve(__dirname, '../..');
+const indexMarkup = fs.readFileSync(path.join(ROOT, 'web/index.html'), 'utf8');
+const appSource = fs.readFileSync(path.join(ROOT, 'web/js/app.js'), 'utf8');
 
 function fixture(name){
   return JSON.parse(fs.readFileSync(path.join(ROOT, `testdata/migration/stats-${name}.json`), 'utf8'));
@@ -34,6 +36,48 @@ async function run(){
   assert.ok(longValues.profiles[0].model.length > 180);
   assert.ok(longValues.containers[0].command.length > 350);
   assert.ok(longValues.containers[0].image.length > 160);
+  assert.doesNotMatch(indexMarkup, /<th>命令<\/th>/);
+  assert.doesNotMatch(appSource, /container\.command/);
+
+  const modalMarkup = app.profileModalMarkup({
+    profile: 'profile-a',
+    agent_version: '0.3.0',
+    api_status: 'ok',
+    service_status: 'healthy',
+    gateway_service: 'running',
+    manager_mode: 'docker (foreground)',
+    usage_mode: 'auth_provider',
+    provider: 'Example Provider',
+    model: 'example-model',
+    auth_refreshed_at: '2026-07-15T00:00:00Z',
+    scheduled_jobs_active: 2,
+    scheduled_jobs_total: 3,
+    sessions_active: 4,
+    sessions_total: 5,
+    sessions_has_more: true,
+    usage: {input_tokens: 100, output_tokens: 20, total_tokens: 120, estimated: true, source: 'local_logs', window_start: '2026-07-14T00:00:00Z', window_end: '2026-07-15T00:00:00Z'},
+    config_summary: {
+      config_found: true,
+      main_model: {provider: 'Example Provider', model: 'example-model', base_url: 'provider default', concurrency: 4, timeout_seconds: 120},
+      auxiliary_models: [{name: 'vision', provider: 'auto', model: '', effective_provider: 'Example Provider', effective_model: 'example-model', source: 'main_model', base_url_display: 'provider default', timeout_seconds: 120, max_concurrency: null}],
+      delegation: {provider: 'Example Provider', model: 'delegate-model', reasoning_effort: 'medium', max_concurrent_children: 2, max_spawn_depth: 1, child_timeout_seconds: 300},
+      docker_volumes: ['/srv/example/workspace:/workspace']
+    },
+    mixture_of_agents: {available: true, label: 'Mixture of Agents', configured: true, enabled: true, tools: ['mixture_of_agents'], error: null},
+    updated_at: '2026-07-15T00:00:00Z',
+    received_at: '2026-07-15T00:00:01Z',
+    stale: false,
+    error: null
+  });
+  for(const label of ['Agent 版本', '模型提供商', '定时任务 活动/总数', '会话 活动/总数', '输入/输出/总 Token', 'Token 来源', '配置摘要', '辅助模型', '容器挂载点', 'Mixture of Agents', '采集错误']){
+    assert.match(modalMarkup, new RegExp(label));
+  }
+  assert.match(modalMarkup, /本地运行快照/);
+  assert.match(modalMarkup, /继承主模型/);
+  assert.match(modalMarkup, /\/srv\/example\/workspace:\/workspace/);
+  const escapedMarkup = app.profileModalMarkup({profile: '<script>alert(1)</script>', usage: {}, config_summary: {}, mixture_of_agents: {}, error: {message: '<img src=x>'}});
+  assert.doesNotMatch(escapedMarkup, /<script>|<img src=x>/);
+  assert.match(escapedMarkup, /&lt;script&gt;/);
 
   assert.equal(app.buildViewModel({ servers: [] }).host, null);
   const firstDisabled = { name: 'disabled', disabled: true };

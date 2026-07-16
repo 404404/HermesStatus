@@ -32,6 +32,7 @@ MAX_DOCKER_STATUS_LENGTH = 128
 MAX_DOCKER_CREATED_LENGTH = 64
 MAX_DOCKER_IMAGE_LENGTH = 256
 MAX_DOCKER_PORTS_LENGTH = 512
+MAX_HERMES_PROFILES = 64
 
 SMART_TIMEOUT_SECONDS = 12
 DOCKER_TIMEOUT_SECONDS = 4
@@ -128,6 +129,39 @@ def not_reported_hermes():
         "updated_at": None,
         "stale": True,
         "error": _error("not_reported", "Extension data was not reported", "hermes"),
+    }
+
+
+def read_hermes_snapshot(path):
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            payload = json.load(handle)
+    except (OSError, TypeError, ValueError):
+        payload = None
+    if not isinstance(payload, dict) or not isinstance(payload.get("profiles"), list):
+        result = not_reported_hermes()
+        result["error"] = _error(
+            "snapshot_unavailable",
+            "Hermes integration snapshot is unavailable",
+            "hermes-snapshot",
+            True,
+        )
+        return result
+    profiles = payload.get("profiles")[:MAX_HERMES_PROFILES]
+    if not all(isinstance(item, dict) for item in profiles):
+        result = not_reported_hermes()
+        result["error"] = _error(
+            "snapshot_invalid",
+            "Hermes integration snapshot is invalid",
+            "hermes-snapshot",
+            True,
+        )
+        return result
+    return {
+        "profiles": profiles,
+        "updated_at": payload.get("updated_at"),
+        "stale": bool(payload.get("stale", True)),
+        "error": payload.get("error") if isinstance(payload.get("error"), dict) else None,
     }
 
 
@@ -852,6 +886,8 @@ class HostExtensionCollector(object):
         hardware_interval=None,
         docker_interval=None,
         docker_container_limit=None,
+        hermes_status_file=None,
+        hermes_snapshot_interval=None,
         status_dir=None,
         command_runner=None,
         docker_request=None,
@@ -869,6 +905,12 @@ class HostExtensionCollector(object):
         if docker_container_limit is None:
             docker_container_limit = _env_int("DOCKER_CONTAINER_LIMIT", 0, 0)
         self.docker_container_limit = min(max(0, docker_container_limit), MAX_DOCKER_CONTAINERS)
+        self.hermes_status_file = hermes_status_file or os.getenv(
+            "HERMES_STATUS_FILE", "/var/lib/serverstatus-client/hermes/hermes.json"
+        )
+        self.hermes_snapshot_interval = hermes_snapshot_interval or _env_int(
+            "HERMES_SNAPSHOT_INTERVAL", 10
+        )
         self.status_dir = status_dir if status_dir is not None else os.getenv(
             "CLIENT_STATUS_DIR", "/var/lib/serverstatus-client"
         )
@@ -931,6 +973,11 @@ class HostExtensionCollector(object):
         self._store("docker", payload)
         return payload
 
+    def collect_hermes_once(self):
+        payload = read_hermes_snapshot(self.hermes_status_file)
+        self._store("hermes", payload)
+        return payload
+
     def _run_periodically(self, function, interval):
         while not self._stop.is_set():
             try:
@@ -946,6 +993,7 @@ class HostExtensionCollector(object):
         for function, interval, name in (
             (self.collect_hardware_once, self.hardware_interval, "hardware-collector"),
             (self.collect_docker_once, self.docker_interval, "docker-collector"),
+            (self.collect_hermes_once, self.hermes_snapshot_interval, "hermes-snapshot-reader"),
         ):
             thread = threading.Thread(
                 target=self._run_periodically,

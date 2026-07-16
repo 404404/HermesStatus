@@ -127,10 +127,10 @@ table.data tbody tr:hover{background:rgba(255,255,255,.05)}
 .profile-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .strong-cell{max-width:220px!important;overflow:hidden;text-overflow:ellipsis;font-weight:750;color:var(--text)}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.bounded-cell,.wide-cell,.command-cell,.ports-cell{overflow:hidden;text-overflow:ellipsis}
+.bounded-cell,.wide-cell,.ports-cell{overflow:hidden;text-overflow:ellipsis}
 .bounded-cell{max-width:190px!important}
 .wide-cell{max-width:340px!important}
-.command-cell,.ports-cell{max-width:320px!important}
+.ports-cell{max-width:320px!important}
 .token-cell{max-width:320px!important}
 .table-empty{padding:1.25rem!important;color:var(--text-dim);text-align:center!important}
 
@@ -153,6 +153,21 @@ table.data tbody tr:hover{background:rgba(255,255,255,.05)}
 .profile-status-grid span{color:var(--text-dim);font-size:12px;white-space:nowrap}
 .profile-status-grid strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
 .profile-status-grid .modal-status-value{display:block;min-width:0;max-width:72%;overflow:hidden}
+.modal-section{min-width:0;padding:1rem;border:1px solid var(--border);border-radius:8px;background:var(--panel-deep)}
+body.light .modal-section{background:var(--bg)}
+.modal-section h3{margin:0 0 .75rem;color:var(--text);font-size:14px;font-weight:700;letter-spacing:0}
+.modal-metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.55rem;margin-bottom:.75rem}
+.modal-metric-grid>div{display:flex;flex-direction:column;gap:.35rem;min-width:0;padding:.7rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-alt)}
+.modal-metric-grid span{color:var(--text-dim);font-size:11px}
+.modal-metric-grid strong{min-width:0;overflow:hidden;color:var(--text);font-size:13px;text-overflow:ellipsis;white-space:nowrap}
+.modal-two-column{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr);gap:1rem}
+.modal-two-column>div{min-width:0}
+.modal-table-wrap{width:100%;max-width:100%;overflow-x:auto;border:1px solid var(--border);border-radius:6px}
+table.modal-data-table{min-width:760px;background:var(--bg-alt)}
+table.volumes-table{min-width:540px}
+table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-size:12px}
+.compact-details{margin-top:.25rem}
+.compact-details .detail-row{padding:.55rem 0}
 .detail-list{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:1.2rem}
 .detail-row{display:grid;grid-template-columns:minmax(120px,.42fr) minmax(0,1fr);gap:.8rem;min-width:0;padding:.68rem 0;border-bottom:1px solid var(--border)}
 .detail-row dt{color:var(--text-dim)}
@@ -171,13 +186,15 @@ table.data tbody tr:hover{background:rgba(255,255,255,.05)}
     .overview-grid,.health-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     .overview-grid .summary-card:last-child,.health-grid .health-card:last-child{grid-column:span 2}
     .profile-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .modal-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .modal-two-column{grid-template-columns:1fr}
 }
 
 @media (max-width:720px){
     .topbar{flex-wrap:wrap;padding:.7rem .85rem}
     .actions{width:100%;justify-content:flex-end}
     .wrapper{padding:1rem}
-    .overview-grid,.health-grid,.profile-status-grid,.detail-list{grid-template-columns:1fr}
+    .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list{grid-template-columns:1fr}
     .overview-grid .summary-card:last-child,.health-grid .health-card:last-child{grid-column:auto}
     .section-head{display:block}
     .section-meta{display:block;margin:.45rem 0 0;text-align:left}

@@ -1,0 +1,5 @@
+{
+  "hermes_root": "/home/hermes",
+  "status_dir": "/var/lib/serverstatus-client/hermes",
+  "profiles": []
+}

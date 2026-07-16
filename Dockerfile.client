@@ -4,11 +4,14 @@ FROM ${ALPINE_IMAGE}
 WORKDIR /app
 
 # smartmontools reads the configured host device; util-linux provides lscpu.
-RUN apk add --no-cache python3 py3-psutil iproute2 procps smartmontools util-linux
+RUN apk add --no-cache python3 py3-psutil py3-yaml iproute2 procps smartmontools util-linux
 
 COPY clients/client-linux.py /app/client-linux.py
 COPY clients/client-psutil.py /app/client-psutil.py
 COPY clients/host_collector.py /app/host_collector.py
+COPY scripts/export-hermes-status.py /app/export-hermes-status.py
+COPY scripts/hermes_config_summary.py /app/hermes_config_summary.py
+COPY hermes-exporter.json /app/hermes-exporter.json
 COPY clients/entrypoint.sh /app/entrypoint.sh
 
 # Default client and defaults (can be overridden by docker env)
@@ -31,7 +34,14 @@ ENV SERVER=127.0.0.1 \
     HARDWARE_INTERVAL=600 \
     DOCKER_INTERVAL=60 \
     DOCKER_CONTAINER_LIMIT=0 \
-    CLIENT_STATUS_DIR=/var/lib/serverstatus-client
+    CLIENT_STATUS_DIR=/var/lib/serverstatus-client \
+    HERMES_EXPORT_CONFIG=/app/hermes-exporter.json \
+    HERMES_ROOT=/home/hermes \
+    HERMES_STATUS_DIR=/var/lib/serverstatus-client/hermes \
+    HERMES_STATUS_FILE=/var/lib/serverstatus-client/hermes/hermes.json \
+    HERMES_EXPORT_ENABLED=true \
+    HERMES_EXPORT_INTERVAL=600 \
+    HERMES_SNAPSHOT_INTERVAL=10
 
 RUN chmod +x /app/entrypoint.sh
 

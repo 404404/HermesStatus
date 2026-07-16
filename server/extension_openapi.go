@@ -17,6 +17,9 @@ func extensionOpenAPISchemas() map[string]any {
 	nullableNumber := func(description string) map[string]any {
 		return map[string]any{"type": []string{"number", "null"}, "minimum": MinTemperatureCelsius, "maximum": MaxTemperatureCelsius, "description": description}
 	}
+	nullableDuration := func(description string) map[string]any {
+		return map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 86400, "description": description}
+	}
 	nullableRef := func(name string) map[string]any {
 		return map[string]any{"anyOf": []any{schemaRef(name), map[string]any{"type": "null"}}}
 	}
@@ -131,14 +134,76 @@ func extensionOpenAPISchemas() map[string]any {
 			"window_end":    nullableString(MaxTimestampLength, "Diagnostic window end in RFC3339"),
 		},
 	)
-	configSummary := requiredObject(
-		[]string{"docker_volumes"},
+	configModel := requiredObject(
+		[]string{"provider", "model", "base_url", "concurrency", "timeout_seconds"},
 		map[string]any{
-			"docker_volumes": map[string]any{"type": "array", "maxItems": MaxDockerVolumes, "items": map[string]any{"type": "string", "maxLength": MaxDockerVolumeLength}, "default": []any{}},
+			"provider":        map[string]any{"type": "string", "maxLength": MaxProviderLength},
+			"model":           map[string]any{"type": "string", "maxLength": MaxModelLength},
+			"base_url":        map[string]any{"type": "string", "maxLength": MaxBaseURLLength, "description": "Sanitized URL without credentials, query, or fragment"},
+			"concurrency":     nullableInteger(MaxHermesCounter, "Configured main-model concurrency"),
+			"timeout_seconds": nullableDuration("Configured main-model timeout"),
+		},
+	)
+	auxiliaryModel := requiredObject(
+		[]string{"name", "provider", "model", "effective_provider", "effective_model", "source", "base_url_display", "timeout_seconds", "download_timeout_seconds", "max_concurrency", "language", "extra_body_configured", "credential_configured"},
+		map[string]any{
+			"name":                     map[string]any{"type": "string", "maxLength": MaxAuxiliaryNameLength},
+			"provider":                 map[string]any{"type": "string", "maxLength": MaxProviderLength},
+			"model":                    map[string]any{"type": "string", "maxLength": MaxModelLength},
+			"effective_provider":       map[string]any{"type": "string", "maxLength": MaxProviderLength},
+			"effective_model":          map[string]any{"type": "string", "maxLength": MaxModelLength},
+			"source":                   map[string]any{"type": "string", "maxLength": MaxAuxiliaryNameLength, "enum": []string{"config", "main_model"}},
+			"base_url_display":         map[string]any{"type": "string", "maxLength": MaxBaseURLLength},
+			"timeout_seconds":          nullableDuration("Auxiliary model timeout"),
+			"download_timeout_seconds": nullableDuration("Auxiliary download timeout"),
+			"max_concurrency":          nullableInteger(MaxHermesCounter, "Auxiliary model concurrency"),
+			"language":                 map[string]any{"type": "string", "maxLength": MaxAuxiliaryNameLength},
+			"extra_body_configured":    map[string]any{"type": "boolean"},
+			"credential_configured":    map[string]any{"type": "boolean", "description": "Boolean presence flag only; secret values are never returned"},
+		},
+	)
+	delegation := requiredObject(
+		[]string{"provider", "model", "base_url", "reasoning_effort", "max_concurrent_children", "max_spawn_depth", "child_timeout_seconds"},
+		map[string]any{
+			"provider":                map[string]any{"type": "string", "maxLength": MaxProviderLength},
+			"model":                   map[string]any{"type": "string", "maxLength": MaxModelLength},
+			"base_url":                map[string]any{"type": "string", "maxLength": MaxBaseURLLength},
+			"reasoning_effort":        map[string]any{"type": "string", "maxLength": MaxReasoningEffortLength},
+			"max_concurrent_children": nullableInteger(MaxHermesCounter, "Maximum concurrent delegated children"),
+			"max_spawn_depth":         nullableInteger(MaxHermesCounter, "Maximum delegation depth"),
+			"child_timeout_seconds":   nullableDuration("Delegated child timeout"),
+		},
+	)
+	configSummary := requiredObject(
+		[]string{"config_found", "main_model", "auxiliary_models", "delegation", "docker_volumes"},
+		map[string]any{
+			"config_found": map[string]any{"type": "boolean"},
+			"main_model":   schemaRef("ConfigModelSummary"),
+			"auxiliary_models": map[string]any{
+				"type": "array", "maxItems": MaxAuxiliaryModels, "items": schemaRef("AuxiliaryModelSummary"), "default": []any{},
+			},
+			"delegation": schemaRef("DelegationSummary"),
+			"docker_volumes": map[string]any{
+				"type": "array", "maxItems": MaxDockerVolumes, "items": map[string]any{"type": "string", "maxLength": MaxDockerVolumeLength}, "default": []any{},
+			},
+		},
+	)
+	mixtureOfAgents := requiredObject(
+		[]string{"source", "available", "name", "label", "description", "enabled", "configured", "tools", "error"},
+		map[string]any{
+			"source":      map[string]any{"type": "string", "maxLength": MaxErrorSourceLength},
+			"available":   map[string]any{"type": "boolean"},
+			"name":        map[string]any{"type": "string", "maxLength": MaxMOANameLength},
+			"label":       map[string]any{"type": "string", "maxLength": MaxMOANameLength},
+			"description": map[string]any{"type": "string", "maxLength": MaxMOADescriptionLength},
+			"enabled":     map[string]any{"type": []string{"boolean", "null"}},
+			"configured":  map[string]any{"type": []string{"boolean", "null"}},
+			"tools":       map[string]any{"type": "array", "maxItems": MaxMOATools, "items": map[string]any{"type": "string", "maxLength": MaxMOANameLength}, "default": []any{}},
+			"error":       nullableString(MaxErrorCodeLength, "Safe diagnostic code"),
 		},
 	)
 	hermesProfile := requiredObject(
-		[]string{"profile", "agent_version", "api_status", "service_status", "gateway_service", "manager_mode", "usage_mode", "provider", "model", "auth_refreshed_at", "scheduled_jobs_active", "scheduled_jobs_total", "sessions_active", "sessions_total", "usage", "config_summary", "updated_at", "stale", "error"},
+		[]string{"profile", "agent_version", "api_status", "service_status", "gateway_service", "manager_mode", "usage_mode", "provider", "model", "auth_refreshed_at", "scheduled_jobs_active", "scheduled_jobs_total", "sessions_active", "sessions_total", "sessions_has_more", "usage", "config_summary", "mixture_of_agents", "updated_at", "received_at", "stale", "error"},
 		map[string]any{
 			"profile":               map[string]any{"type": "string", "maxLength": MaxProfileNameLength, "pattern": "^[A-Za-z0-9_.-]+$"},
 			"agent_version":         nullableString(MaxAgentVersionLength, "Hermes Agent version"),
@@ -154,9 +219,12 @@ func extensionOpenAPISchemas() map[string]any {
 			"scheduled_jobs_total":  nullableInteger(MaxHermesCounter, "Total scheduled jobs"),
 			"sessions_active":       nullableInteger(MaxHermesCounter, "Active sessions"),
 			"sessions_total":        nullableInteger(MaxHermesCounter, "Total sessions"),
+			"sessions_has_more":     map[string]any{"type": "boolean", "description": "True when the configured pagination ceiling was reached"},
 			"usage":                 schemaRef("TokenUsageStats"),
 			"config_summary":        nullableRef("SanitizedConfigSummary"),
+			"mixture_of_agents":     nullableRef("MixtureOfAgentsStats"),
 			"updated_at":            nullableString(MaxTimestampLength, "Profile collection time in RFC3339"),
+			"received_at":           nullableString(MaxTimestampLength, "Profile snapshot write time in RFC3339"),
 			"stale":                 map[string]any{"type": "boolean", "description": "Recomputed by the Go server using a 900 second threshold"},
 			"error":                 nullableRef("ExtensionError"),
 		},
@@ -175,9 +243,9 @@ func extensionOpenAPISchemas() map[string]any {
 			"profile": "profile-example", "agent_version": nil, "api_status": "unknown", "service_status": nil,
 			"gateway_service": nil, "manager_mode": nil, "usage_mode": nil, "provider": nil, "model": nil,
 			"auth_refreshed_at": nil, "scheduled_jobs_active": nil, "scheduled_jobs_total": nil,
-			"sessions_active": nil, "sessions_total": nil,
+			"sessions_active": nil, "sessions_total": nil, "sessions_has_more": false,
 			"usage":          map[string]any{"input_tokens": nil, "output_tokens": nil, "total_tokens": nil, "estimated": true, "source": "unavailable", "window_start": nil, "window_end": nil},
-			"config_summary": nil, "updated_at": nil, "stale": true,
+			"config_summary": nil, "mixture_of_agents": nil, "updated_at": nil, "received_at": nil, "stale": true,
 			"error": map[string]any{"code": "not_reported", "message": "Extension data was not reported", "source": "hermes", "retryable": false, "http_status": nil},
 		}},
 		"updated_at": nil, "stale": true,
@@ -223,7 +291,11 @@ func extensionOpenAPISchemas() map[string]any {
 		"DockerContainerStats":   dockerContainer,
 		"DockerStats":            dockerStats,
 		"TokenUsageStats":        tokenUsage,
+		"ConfigModelSummary":     configModel,
+		"AuxiliaryModelSummary":  auxiliaryModel,
+		"DelegationSummary":      delegation,
 		"SanitizedConfigSummary": configSummary,
+		"MixtureOfAgentsStats":   mixtureOfAgents,
 		"HermesProfileStats":     hermesProfile,
 		"HermesStats":            hermesStats,
 		"StatsServer":            statsServer,
