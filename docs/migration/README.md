@@ -35,7 +35,8 @@
 7. [DATA_SOURCE_MAP.md](DATA_SOURCE_MAP.md) 与 [SOURCE_TRACE.md](SOURCE_TRACE.md)：核对每个字段的真实来源、刷新、fallback 和传输链。
 8. [DATA_GAP_REPORT.md](DATA_GAP_REPORT.md) 与 [DATA_SOURCE_DECISIONS.md](DATA_SOURCE_DECISIONS.md)：确认缺口、阻断和来源决策。
 9. [MILESTONE_B_PR_PLAN.md](MILESTONE_B_PR_PLAN.md)：按 B1 至 B6 的独立 PR 边界开始实施。
-10. [MIGRATION_PLAN.md](MIGRATION_PLAN.md)：查看完整 P0/P1/P2 发布路线。
+10. [LEGACY_PROTOCOL_INVENTORY.md](LEGACY_PROTOCOL_INVENTORY.md)：核对旧扩展 wire 的当前兼容入口、限额、验证、测试与移除门槛。
+11. [MIGRATION_PLAN.md](MIGRATION_PLAN.md)：查看完整 P0/P1/P2 发布路线。
 
 ## 文档索引
 
@@ -58,6 +59,7 @@
 | [DATA_GAP_REPORT.md](DATA_GAP_REPORT.md) | 当前缺口、风险、未验证项和 B1/B2/B3 阻断是什么？ |
 | [DATA_SOURCE_DECISIONS.md](DATA_SOURCE_DECISIONS.md) | 宿主机身份、SMART、Docker、Hermes、freshness 和 secret 采用什么来源规则？ |
 | [MILESTONE_B_PR_PLAN.md](MILESTONE_B_PR_PLAN.md) | 后续 Go model、pipeline、client、Dashboard 和 Compose PR 如何隔离？ |
+| [LEGACY_PROTOCOL_INVENTORY.md](LEGACY_PROTOCOL_INVENTORY.md) | `hardware_json`、`docker_json`、`hermes_json` 当前如何解码、限制、降级，以及何时才可移除？ |
 | [schema/](schema/) | Agent update 与 stats 扩展的 Draft 2020-12 JSON Schema。 |
 | [../../testdata/migration](../../testdata/migration) | 正常、空、降级和长值的脱敏合同 fixture。 |
 
