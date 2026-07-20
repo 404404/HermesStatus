@@ -1,6 +1,6 @@
 # HermesStatus Release C
 
-Status: code frozen on `origin/2.0`; version and release date require user confirmation. Release title recommendation: **HermesStatus Release C — Unified Read-only Status Dashboard**.
+Status: code frozen on `origin/2.0`; candidate deployment accepted and stable weekend operation user-confirmed. Version and release date still require user confirmation. Release title recommendation: **HermesStatus Release C — Unified Read-only Status Dashboard**.
 
 ## Verified scope
 
@@ -34,10 +34,14 @@ The Go Server does not access the Docker Socket or read Hermes secrets. Host col
 
 ## Compatibility and limitations
 
-This release retains the ServerStatus TCP protocol and existing Compose deployment shape. It is a single-host, read-only current-state dashboard. See [Known limitations](../operations/KNOWN_LIMITATIONS.md) and [validation](../testing/VALIDATION.md).
+This release retains the ServerStatus TCP protocol and existing Compose deployment shape. It is a single-host, read-only current-state dashboard. See [known limitations](../operations/KNOWN_LIMITATIONS.md), [validation](../testing/VALIDATION.md), and [repository governance](../operations/REPOSITORY_GOVERNANCE.md).
+
+## Stability evidence
+
+Immediate, one-hour, and 24-hour checkpoints are recorded as Passed. The deployed candidate also completed at least one stable weekend according to user confirmation. This documentation update did not reconnect to the deployment environment or collect independent performance telemetry. The 72-hour and 7-day checkpoints remain Pending, and no formal release, long-term SLA, high-availability result, or performance benchmark is claimed.
 
 ## Release preparation
 
-Suggested next version: `2.1.0` (minor), based on the repository's documented `2.0.0` baseline and the completed dashboard/Hermes capability set. No Git tag currently exists, so this recommendation must be confirmed before tagging.
+Suggested next version: `2.1.0` (minor), based on the repository's documented `2.0.0` baseline and the completed dashboard/Hermes capability set. No Git tag or GitHub Release currently exists, so this recommendation must be confirmed before publishing either.
 
 Recommended annotated tag message: `Release HermesStatus 2.1.0: unified read-only status dashboard`.
