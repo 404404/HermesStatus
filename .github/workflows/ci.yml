@@ -1,42 +1,114 @@
 name: CI
 
 on:
-  push:
   pull_request:
+    branches: ["2.0"]
+  push:
+    branches: ["2.0"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  validate:
+  contracts:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python3 scripts/validate_migration_contracts.py
 
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
+      - run: go mod download
+      - run: test -z "$(gofmt -l .)"
+      - run: go test ./...
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go build ./...
 
-      - name: Test Go server
-        working-directory: server
-        run: |
-          test -z "$(gofmt -l .)"
-          go vet ./...
-          go test -race ./...
-          CGO_ENABLED=0 go build -trimpath -o /tmp/serverstatus .
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python3 -m unittest discover -s clients -p 'test_*.py'
+      - run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - run: python3 -m py_compile clients/client-linux.py clients/client-psutil.py clients/host_collector.py scripts/export-hermes-status.py scripts/hermes_config_summary.py
+      - run: sh -n clients/entrypoint.sh && bash -n status.sh
 
-      - name: Check clients, WebUI and shell scripts
-        run: |
-          python3 -m py_compile clients/client-linux.py clients/client-psutil.py
-          python3 -m unittest clients/test_client_args.py
-          sh -n clients/entrypoint.sh
-          bash -n status.sh
-          node --check web/js/app.js
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: find web -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+      - run: node --test web/js/app.test.js
+      - run: python3 scripts/check_release_boundaries.py
 
-      - name: Validate compose files
-        run: |
-          docker compose -f docker-compose-server.yml config
-          docker compose -f docker-compose-client.yml config
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - run: ADMIN_TOKEN=ci-placeholder docker compose -f docker-compose-server.yml config --quiet
+      - run: SERVER=192.0.2.10 SERVERSTATUS_USER=ci-node PASSWORD=ci-placeholder CLIENT_PRIVILEGED=false HERMES_ROOT_HOST=/tmp/hermes CLIENT_STATUS_DIR_HOST=/tmp/client-status docker compose -f docker-compose-client.yml config --quiet
 
-      - name: Build Docker images
-        run: |
-          docker build -f Dockerfile.server -t serverstatus-server:test .
-          docker build -f Dockerfile.client -t serverstatus-client:test .
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.server
+          push: false
+          load: true
+          tags: hermesstatus-server:ci
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,mode=max,scope=server
+      - run: docker image inspect hermesstatus-server:ci --format '{{json .Config.Entrypoint}}' | grep serverstatus
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.client
+          push: false
+          load: true
+          tags: hermesstatus-client:ci
+          cache-from: type=gha,scope=client
+          cache-to: type=gha,mode=max,scope=client
+      - run: docker image inspect hermesstatus-client:ci --format '{{json .Config.Entrypoint}}' | grep entrypoint.sh
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: python3 scripts/check_release_boundaries.py
