@@ -14,11 +14,16 @@ Never infer a pass from missing data. Record timestamps, measurements, and sanit
 
 | Time point | Status | Evidence |
 | --- | --- | --- |
-| Immediately after deployment | Pending | Requires an approved candidate deployment |
-| 1 hour | Pending | Requires an approved candidate deployment and elapsed observation |
-| 24 hours | Pending | Not elapsed |
+| Immediately after deployment | Passed | Candidate deployment acceptance was completed |
+| 1 hour | Passed | Continued operation was confirmed after candidate acceptance |
+| 24 hours | Passed | User-confirmed weekend operation covers this checkpoint |
+| Weekend run | Passed / User-confirmed | The user confirmed the deployed version ran stably for at least one weekend |
 | 72 hours | Pending | Not elapsed |
 | 7 days | Pending | Not elapsed |
+
+The weekend result is user-confirmed. This documentation task did not reconnect to the deployment environment or independently collect measurements. No restart loop, page failure, or data interruption was reported by the user. No CPU, RSS, goroutine, FD, or detailed time-series values are asserted, and no exact observation start or end time is inferred.
+
+These checkpoints are not a formal performance benchmark, high-availability test, multi-node production validation, long-term SLA, Git tag, or GitHub Release. The 72-hour and 7-day checkpoints remain Pending until direct evidence establishes them.
 
 ## Coding-phase gates
 

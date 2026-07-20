@@ -9,4 +9,4 @@
 - Docker collection depends on a high-trust Socket mount; the code limits collection to listing containers, but the Socket itself is privileged.
 - API/CLI fallbacks may produce stale/error states rather than fabricated values.
 - Older deployment overrides may leave `/app/data` in the Server container writable layer. Stats must be backed up before container recreation unless preflight confirms a host bind or named volume.
-- Stability observations at 24h, 72h, and 7d cannot be completed during the coding phase and remain Pending.
+- Immediate, one-hour, 24-hour, and weekend stability checkpoints have passed based on candidate acceptance and user confirmation. The documentation task did not independently measure the deployment; 72-hour and 7-day observations remain Pending.
