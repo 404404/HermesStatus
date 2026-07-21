@@ -1,5 +1,10 @@
 FROM golang:1.25-alpine AS builder
 
+ARG VERSION=dev
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
+ARG SOURCE_URL=https://github.com/404404/HermesStatus
+
 WORKDIR /src/server
 
 COPY server/go.mod server/go.sum ./
@@ -7,18 +12,26 @@ RUN go mod download
 
 COPY server/*.go ./
 
-ARG VERSION=2.0.0
-ARG COMMIT=none
-ARG BUILD_TIME=unknown
-
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -trimpath \
-    -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME}" \
+    -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${VCS_REF} -X main.buildTime=${BUILD_DATE}" \
     -o /out/serverstatus .
 
 FROM alpine:3.22
 
-LABEL maintainer="cppla <https://cpp.la>"
+ARG VERSION=dev
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
+ARG SOURCE_URL=https://github.com/404404/HermesStatus
+
+LABEL maintainer="cppla <https://cpp.la>" \
+    org.opencontainers.image.title="HermesStatus Server" \
+    org.opencontainers.image.description="HermesStatus Go server and read-only dashboard" \
+    org.opencontainers.image.version="${VERSION}" \
+    org.opencontainers.image.revision="${VCS_REF}" \
+    org.opencontainers.image.created="${BUILD_DATE}" \
+    org.opencontainers.image.source="${SOURCE_URL}" \
+    org.opencontainers.image.licenses="MIT"
 
 RUN apk add --no-cache ca-certificates tzdata \
     && mkdir -p /app/config /app/data /app/web
