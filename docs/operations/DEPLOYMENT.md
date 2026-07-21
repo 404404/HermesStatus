@@ -12,6 +12,8 @@ The Server configuration surface is `ADMIN_TOKEN`, `HTTP_ADDR`, `AGENT_ADDR`, `C
 
 The supported base Server Compose file binds `./web/json` to `/app/data`. Older Release A/C override deployments may omit that bind and leave `STATS_PATH` in the container writable layer. Treat such a preflight result as non-persistent: copy the current stats file into the protected backup set before any recreate, and do not claim restart persistence until a reviewed host bind or named volume is present.
 
+Build and artifact identity requirements are defined in [Build Provenance](BUILD_PROVENANCE.md). Record the full source SHA, UTC build date, OCI version, and immutable image ID or digest for both images before deployment. Tags alone are not rollback evidence.
+
 Use a protected environment file outside version control. Validate before starting:
 
 ```bash

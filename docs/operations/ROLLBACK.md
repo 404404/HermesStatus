@@ -1,6 +1,6 @@
 # Rollback
 
-Rollback uses the recorded pre-deployment Compose configuration and immutable previous image references. Never delete the old images during an upgrade.
+Rollback uses the recorded pre-deployment Compose configuration and immutable previous image IDs or registry digests. Never rely on a mutable tag alone, and never delete the old images during an upgrade.
 
 1. Stop further candidate changes and capture current health/log summaries.
 2. Restore the prior image references in the existing Compose project without altering ports or data mounts.
@@ -9,3 +9,5 @@ Rollback uses the recorded pre-deployment Compose configuration and immutable pr
 5. If configuration changed, restore only the sanitized, pre-deployment configuration backup appropriate to that version. Do not overwrite live data blindly.
 
 Exact commands depend on the discovered project and file paths and must be generated from the pre-deployment record, not guessed.
+
+Compare the OCI revision, version, build date, and source labels against the deployment record before restoring an image. See [Build Provenance](BUILD_PROVENANCE.md).
