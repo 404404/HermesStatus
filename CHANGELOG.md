@@ -10,6 +10,7 @@
 - Record user-confirmed stable weekend operation while keeping the 72-hour and 7-day checkpoints Pending.
 - Inventory the transitional `hardware_json`, `docker_json`, and `hermes_json` input compatibility without changing runtime behavior.
 - Add consistent OCI build provenance for Server and Client images, including source revision, UTC build time, local validation, and deployment-record guidance.
+- Move the default Server stats bind out of the WebUI tree, make its host directory configurable, add non-overwriting migration and persistence validation assets, and sanitize damaged-stats restore diagnostics.
 - No business feature, data-source, statistical-semantic, or page-layout changes.
 
 ## Release C — version pending confirmation

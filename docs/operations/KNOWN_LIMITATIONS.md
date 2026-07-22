@@ -8,5 +8,5 @@
 - SMART/hwmon availability depends on host hardware, kernel exposure, and Client permissions.
 - Docker collection depends on a high-trust Socket mount; the code limits collection to listing containers, but the Socket itself is privileged.
 - API/CLI fallbacks may produce stale/error states rather than fabricated values.
-- Older deployment overrides may leave `/app/data` in the Server container writable layer. Stats must be backed up before container recreation unless preflight confirms a host bind or named volume.
+- Older deployment overrides may use the former `./web/json` bind or leave `/app/data` in the Server container writable layer. Preflight must discover and preserve the existing source before adopting `SERVER_DATA_DIR`; deployment migration and production restart/recreate/rollback remain Pending.
 - Immediate, one-hour, 24-hour, and weekend stability checkpoints have passed based on candidate acceptance and user confirmation. The documentation task did not independently measure the deployment; 72-hour and 7-day observations remain Pending.
