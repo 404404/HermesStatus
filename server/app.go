@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -388,10 +389,14 @@ func formatUptime(seconds int64) string {
 func (a *App) restorePersistentState() {
 	data, err := os.ReadFile(a.opts.StatsPath)
 	if err != nil {
+		primaryErr := err
 		data, err = os.ReadFile(a.opts.StatsPath + "~")
-	}
-	if err != nil {
-		return
+		if err != nil {
+			if code := statsReadErrorCode(primaryErr, err); code != "" {
+				a.logger.Printf("read previous stats: %s", code)
+			}
+			return
+		}
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
@@ -399,7 +404,7 @@ func (a *App) restorePersistentState() {
 		Servers []map[string]any `json:"servers"`
 	}
 	if err := decoder.Decode(&previous); err != nil {
-		a.logger.Printf("read previous stats: %v", err)
+		a.logger.Printf("read previous stats: invalid_json")
 		return
 	}
 	a.nodeMu.Lock()
@@ -416,6 +421,16 @@ func (a *App) restorePersistentState() {
 			break
 		}
 	}
+}
+
+func statsReadErrorCode(primaryErr, backupErr error) string {
+	if errors.Is(primaryErr, os.ErrPermission) || errors.Is(backupErr, os.ErrPermission) {
+		return "permission_denied"
+	}
+	if errors.Is(primaryErr, os.ErrNotExist) && errors.Is(backupErr, os.ErrNotExist) {
+		return ""
+	}
+	return "unavailable"
 }
 
 func anyString(value any) string {
