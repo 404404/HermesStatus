@@ -2,6 +2,7 @@
 
 ## Unreleased — Release D Foundation
 
+- Harden the Server and Client runtime with read-only root filesystems, bounded tmpfs mounts, `no-new-privileges`, and an explicit read-only Server config bind while retaining documented permissions that did not pass isolated removal tests.
 - Archive the verified Release C feature and architecture baseline.
 - Add release, deployment, upgrade, rollback, troubleshooting, validation, security, and limitation documentation.
 - Add CI gates for Go, Python, migration contracts, frontend invariants, Compose, container builds, and repository secrets.
