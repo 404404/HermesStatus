@@ -9,6 +9,7 @@ Never infer a pass from missing data. Record timestamps, measurements, and sanit
 | Hermes Exporter | profile count, snapshot age, API fallback, CLI fallback, 401, timeout, stale semantics |
 | Web | ten-minute refresh, manual refresh, page navigation, Profile modal, model/provider/source/mode, Docker page, browser request count |
 | Security | no API key, Authorization, password, `.env`, raw config.yaml, Docker command, or raw smartctl output in logs/output |
+| Image provenance | exact OCI labels, full Git SHA, UTC build time, expected entrypoints, immutable image IDs, and no `.git` directory |
 
 ## Observation record
 
@@ -28,3 +29,5 @@ These checkpoints are not a formal performance benchmark, high-availability test
 ## Coding-phase gates
 
 Run migration contracts; all Go tests, race tests, vet, and build; both Python unittest suites; JavaScript syntax and Node tests; release-boundary/secret checks; both Compose config validations; both image builds; and Actions YAML validation when an available parser exists. A local pass is not evidence that GitHub Actions itself ran.
+
+For image builds, pass the same provenance arguments to both Dockerfiles and run `scripts/validate_image_provenance.py`. Deployment validation remains Pending until an explicitly approved candidate is checked in its target environment.

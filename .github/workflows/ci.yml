@@ -83,6 +83,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
+      - name: Prepare image provenance
+        id: provenance
+        shell: bash
+        run: |
+          echo "version=2.0-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "vcs_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          echo "source=https://github.com/404404/HermesStatus" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -90,6 +98,11 @@ jobs:
           push: false
           load: true
           tags: hermesstatus-server:ci
+          build-args: |
+            VERSION=${{ steps.provenance.outputs.version }}
+            VCS_REF=${{ steps.provenance.outputs.vcs_ref }}
+            BUILD_DATE=${{ steps.provenance.outputs.build_date }}
+            SOURCE_URL=${{ steps.provenance.outputs.source }}
           cache-from: type=gha,scope=server
           cache-to: type=gha,mode=max,scope=server
       - run: docker image inspect hermesstatus-server:ci --format '{{json .Config.Entrypoint}}' | grep serverstatus
@@ -100,9 +113,23 @@ jobs:
           push: false
           load: true
           tags: hermesstatus-client:ci
+          build-args: |
+            VERSION=${{ steps.provenance.outputs.version }}
+            VCS_REF=${{ steps.provenance.outputs.vcs_ref }}
+            BUILD_DATE=${{ steps.provenance.outputs.build_date }}
+            SOURCE_URL=${{ steps.provenance.outputs.source }}
           cache-from: type=gha,scope=client
           cache-to: type=gha,mode=max,scope=client
       - run: docker image inspect hermesstatus-client:ci --format '{{json .Config.Entrypoint}}' | grep entrypoint.sh
+      - name: Validate image provenance
+        run: |
+          python3 scripts/validate_image_provenance.py \
+            --server-image hermesstatus-server:ci \
+            --client-image hermesstatus-client:ci \
+            --version "${{ steps.provenance.outputs.version }}" \
+            --revision "${{ steps.provenance.outputs.vcs_ref }}" \
+            --created "${{ steps.provenance.outputs.build_date }}" \
+            --source "${{ steps.provenance.outputs.source }}"
 
   security:
     runs-on: ubuntu-latest

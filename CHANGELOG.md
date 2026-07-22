@@ -9,6 +9,7 @@
 - Remove merged temporary branches for PRs #2 through #9 after PR, reachability, protection, and dependency checks.
 - Record user-confirmed stable weekend operation while keeping the 72-hour and 7-day checkpoints Pending.
 - Inventory the transitional `hardware_json`, `docker_json`, and `hermes_json` input compatibility without changing runtime behavior.
+- Add consistent OCI build provenance for Server and Client images, including source revision, UTC build time, local validation, and deployment-record guidance.
 - No business feature, data-source, statistical-semantic, or page-layout changes.
 
 ## Release C — version pending confirmation
