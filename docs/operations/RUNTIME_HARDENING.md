@@ -61,3 +61,7 @@ The production-isolated sequence completed in this order:
 5. After a host reboot, both containers started automatically as healthy with restart count zero. Read-only rootfs, tmpfs, and `no-new-privileges` remained active, and the hardware, SMART, Docker, and Hermes gateways recovered. Hermes API listeners returned HTTP `200`; the dashboard's initial `unavailable` value was an early-boot collection result pending the next ten-minute refresh.
 
 These observations establish compatibility for the implemented controls only. They are not a long-term performance, SLA, or unattended stability claim.
+
+## Final status
+
+The Runtime Hardening change was merged through PR #13. The post-merge baseline `0d953ac7b9842efcd888351d87426b8427465b5f` was rebuilt, deployed as a matching Server/Client pair, and passed the HTTP, telemetry, restart-count, OCI revision, read-only rootfs, tmpfs, and `no-new-privileges` gates. Final Closure images are rebuilt again from the later documentation merge SHA; this earlier baseline remains the tested rollback pair.

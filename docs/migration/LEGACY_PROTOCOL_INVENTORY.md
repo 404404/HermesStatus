@@ -16,6 +16,8 @@
 
 This inventory records the transitional input compatibility for `hardware_json`, `docker_json`, and `hermes_json`. It is a static code audit only: no parser, wire protocol, Schema, payload, logging, telemetry, or Server behavior was changed.
 
+Final Closure decision: **Retained Compatibility**. The parser, Legacy fixtures, Legacy Schema coverage, and compatibility tests remain unchanged.
+
 The authoritative implementation is the current Go code on `2.0`. Some earlier migration documents describe the pre-B2 state in which Go ignored these fields; those statements are historical gap evidence, not the current implementation.
 
 ## Wire fields
@@ -74,7 +76,7 @@ Persisted stats may contain the validated structured extension, but startup reco
 
 `clients/host_collector.py` constructs `extension_version`, `hardware`, `docker`, and `hermes` directly. `clients/test_host_collector.py` asserts that generated payloads contain no key ending in `_json` and validates the structured payload against the migration Schema.
 
-The repository therefore has no current tracked producer of the three legacy JSON-string fields. This static result does not prove that every external or previously deployed client has been upgraded; the Server has no legacy-usage telemetry, and this task did not inspect a deployment environment.
+The repository therefore has no current tracked producer of the three legacy JSON-string fields. The final 2.0 deployment uses the structured Client payload and the 1.0 runtime has been archived and removed. This still does not prove that every external or previously deployed client has been upgraded; the Server has no legacy-usage telemetry.
 
 ## Failure behavior
 
@@ -119,7 +121,7 @@ Do not remove the compatibility parser as part of repository governance. A futur
 5. Contract and migration-document updates made in the same removal PR.
 6. Explicit approval to change the wire compatibility boundary.
 
-Static repository evidence supports eventual removal, but deployment coverage is unknown. The current recommendation is **retain**.
+Static repository evidence supports eventual removal, but external deployment coverage is unknown. The final decision is **Retained Compatibility** until every exit condition is met and the user separately approves deletion.
 
 ## Risks and open items
 

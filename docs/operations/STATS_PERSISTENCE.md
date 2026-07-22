@@ -17,6 +17,8 @@ The default keeps runtime data outside the WebUI source tree. Relative Compose b
 
 Bind storage was selected because operators can inspect, back up, migrate, and restore it without an extra Docker helper container. The deployment preflight must verify that the directory exists with the intended owner and mode before Compose starts; do not rely on Docker's automatic directory creation. Confirm free space, backup-system coverage, and applicable SELinux/AppArmor labeling. Compose project renames do not affect an absolute `SERVER_DATA_DIR`, but they can change the meaning of the relative default.
 
+The validated production value is `/var/lib/hermesstatus/server`. Its parent and Server directory are root-managed with mode `0750`; active `stats.json` is root-owned with mode `0644`. Protected backups are stored below `/var/backups/hermesstatus`, whose root is mode `0700`.
+
 A Docker named volume would also survive restart and recreation and avoids host UID/path selection. It was not selected as the default because backup and migration require Docker volume tooling, and the current deployment model already uses host-managed files. A reviewed deployment may use a named volume if its backup and restore procedure is tested separately.
 
 ## Runtime behavior
@@ -62,9 +64,12 @@ Restoring a Compose configuration with no bind is a disaster-recovery-only path.
 | Local persistence simulation | Passed using the local Docker context and temporary bind data |
 | Local restart test | Passed |
 | Local recreate test | Passed, including Compose down/up and container removal |
-| Deployment migration | Pending |
-| Production restart test | Pending |
-| Production recreate test | Pending |
-| Production rollback test | Pending |
+| Deployment migration | Passed; source SHA-256 `26708e464bc1796a1c98279d6eacb4bbe1c2d3805cd8474ce148e7b56d1112ed`, migrated SHA-256 `6a3b4a1e522e2511dee8c138fcec573142dc607e2ad994e503b7cf0fd5bf4f32` |
+| Six pre-existing stats backups | Passed; all six are regular files with mode `0600`, with content checksums unchanged during permission tightening |
+| Production restart test | Passed |
+| Production down/up test | Passed |
+| Production recreate test | Passed |
+| Production rollback test | Passed with the previous validated image pair and the same `/app/data` bind |
+| Damaged-input recovery | Passed without restoring extension freshness or blocking startup |
 
-Local validation is not production evidence. Deployment work requires a new explicit approval and a preflight that discovers the actual existing bind and project configuration.
+These results cover persistence and recovery behavior only. They do not establish a long-term SLA or complete the still-pending 72-hour and 7-day observation windows.

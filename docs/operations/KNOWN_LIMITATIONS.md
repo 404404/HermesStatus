@@ -10,5 +10,7 @@
 - The Client remains privileged and uses host PID/network plus the read-only host device tree. These permissions preserve SMART auto-discovery, host process semantics, and loopback Hermes API access; a portable device/capability allowlist has not yet been proven.
 - The Server retains its current capability set. A complete capability drop caused the published HTTP endpoint to fail during an isolated production test and was rolled back.
 - API/CLI fallbacks may produce stale/error states rather than fabricated values.
-- Older deployment overrides may use the former `./web/json` bind or leave `/app/data` in the Server container writable layer. Preflight must discover and preserve the existing source before adopting `SERVER_DATA_DIR`; deployment migration and production restart/recreate/rollback remain Pending.
-- Immediate, one-hour, 24-hour, and weekend stability checkpoints have passed based on candidate acceptance and user confirmation. The documentation task did not independently measure the deployment; 72-hour and 7-day observations remain Pending.
+- The production stats migration, restart, down/up, recreation, and same-bind rollback passed. Other installations may still use the former `./web/json` bind or container writable layer and must run their own preflight.
+- Legacy `hardware_json`, `docker_json`, and `hermes_json` parsers remain as Retained Compatibility. Repository clients use structured payloads, but external old-client usage has not been proven to be zero.
+- The 1.0 runtime is available only as an offline recovery package and frozen Git branch; it is no longer a warm online rollback target.
+- Immediate, one-hour, 24-hour, and weekend stability checkpoints have passed based on candidate acceptance and user confirmation. Later closure checks directly validated current health and telemetry but did not collect a continuous performance series; 72-hour and 7-day observations remain Pending.

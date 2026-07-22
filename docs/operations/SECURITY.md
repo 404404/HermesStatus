@@ -9,3 +9,5 @@ CI uses read-only repository permissions, synthetic variables, mocks/fixtures, a
 The Client's privileged/device and Docker Socket access is a known trust boundary. Deploy it only on the intended host with reviewed mounts. The application does not provide RBAC, multi-user isolation, container controls, or Hermes execution controls.
 
 The runtime hardening baseline uses read-only root filesystems, bounded `/tmp` tmpfs mounts, and `no-new-privileges` for both containers. The Server configuration mount is read-only. See [Runtime Permission Hardening](RUNTIME_HARDENING.md) for the evidence matrix, failed capability-drop test, and retained Client risks.
+
+The 1.0 offline recovery package is root-managed: its directory is mode `0700`, and the compressed archive, image archive, manifest, copied `.env`, and configuration artifacts are mode `0600`. Never publish, attach, or commit this package. Its existence does not authorize starting the archived services or exposing their former ports.

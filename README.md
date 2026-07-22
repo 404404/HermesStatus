@@ -287,12 +287,23 @@ docker compose -f docker-compose-client.yml config
 
 CI 还会检查 Go 格式、Python 客户端、Shell 脚本、WebUI JavaScript、服务端/客户端 Compose 文件和两个 Docker 镜像。
 
+## HermesStatus 2.0 运维基线
+
+- [部署与升级](docs/operations/DEPLOYMENT.md)
+- [Stats 持久化](docs/operations/STATS_PERSISTENCE.md)
+- [运行权限收敛](docs/operations/RUNTIME_HARDENING.md)
+- [安全边界与已知限制](docs/operations/SECURITY.md)
+- [HermesStatus 1.0 下线与离线恢复](docs/operations/DECOMMISSION_1_0.md)
+- [最终验证记录](docs/testing/VALIDATION.md)
+
+当前集成和发布分支为 `2.0`。旧 `1.0` 运行环境已归档并停止，Git `1.0` 分支继续作为冻结参考实现保留。Legacy wire parser 仍属于兼容边界，不代表 1.0 在线服务仍在运行。
+
 ## 从旧服务端迁移
 
 1. 备份原来的 `config.json` 和 `web/json/stats.json`。
 2. 原配置结构和客户端账号无需转换。
 3. Docker 挂载目标改为 `/app/config/config.json` 和 `/app/data`。
-4. 删除旧的 nginx、`manage_api.py`、`sergate` 启动或监督配置。
+4. 按 [1.0 下线文档](docs/operations/DECOMMISSION_1_0.md) 先生成并验证离线恢复包，再精确删除旧运行资源。
 5. 启动 Go 服务端后检查 `/api/health`，再观察客户端自动重连。
 
 `stats.json` 会按节点的 `name/type/host/location` 恢复月流量基线。修改这些身份字段会被视为新节点。
