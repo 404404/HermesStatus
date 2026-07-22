@@ -6,9 +6,12 @@ Never infer a pass from missing data. Record timestamps, measurements, and sanit
 | --- | --- |
 | Go Server | RSS, CPU, goroutines, FDs, restart recovery, valid stats output |
 | Python Client | process count, collector threads, CPU, RSS, SMART cadence, Docker Socket read, TCP update send |
+| Runtime permissions | read-only rootfs, bounded tmpfs, `no-new-privileges`, writable stats/status binds, retained SMART/Docker/Hermes telemetry, and documented rollback of unsafe permission removal |
 | Hermes Exporter | profile count, snapshot age, API fallback, CLI fallback, 401, timeout, stale semantics |
 | Web | ten-minute refresh, manual refresh, page navigation, Profile modal, model/provider/source/mode, Docker page, browser request count |
 | Security | no API key, Authorization, password, `.env`, raw config.yaml, Docker command, or raw smartctl output in logs/output |
+
+Runtime permission acceptance must include a host-reboot check. Both containers must auto-start healthy, preserve their expected read-only rootfs, tmpfs, and `no-new-privileges` settings, keep restart counts at zero, and recover hardware, SMART, Docker, and Hermes telemetry. A dashboard sample captured before the first scheduled collector refresh must not be treated as a permanent API failure; verify the loopback health endpoint and then confirm the next ten-minute snapshot.
 | Image provenance | exact OCI labels, full Git SHA, UTC build time, expected entrypoints, immutable image IDs, and no `.git` directory |
 | Stats persistence | missing/empty/invalid input, atomic replacement, permissions, restart, down/up, recreation, backup, migration, rollback, multi-node selection, and dynamic Docker counts |
 

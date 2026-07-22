@@ -8,6 +8,11 @@ services:
     image: cppla/serverstatus:client
     container_name: serverstatus-client
     restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=32m,mode=1777,nosuid,nodev,noexec
     network_mode: host
     pid: host
     # Release A keeps the 1.0 SMART access model. This is intentionally broad
