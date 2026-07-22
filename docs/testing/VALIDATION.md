@@ -23,10 +23,13 @@ Runtime permission acceptance must include a host-reboot check. Both containers 
 | 1 hour | Passed | Continued operation was confirmed after candidate acceptance |
 | 24 hours | Passed | User-confirmed weekend operation covers this checkpoint |
 | Weekend run | Passed / User-confirmed | The user confirmed the deployed version ran stably for at least one weekend |
+| Stats persistence deployment | Passed | Migration, restart, down/up, recreation, damaged-input recovery, and same-bind image rollback passed in the approved environment |
+| Runtime hardening deployment | Passed | Read-only rootfs, bounded tmpfs, `no-new-privileges`, telemetry recovery, and host-reboot auto-start passed |
+| 1.0 decommission | Passed | Offline package and image tar were verified before precise removal; 2.0 remained healthy after removal |
 | 72 hours | Pending | Not elapsed |
 | 7 days | Pending | Not elapsed |
 
-The weekend result is user-confirmed. This documentation task did not reconnect to the deployment environment or independently collect measurements. No restart loop, page failure, or data interruption was reported by the user. No CPU, RSS, goroutine, FD, or detailed time-series values are asserted, and no exact observation start or end time is inferred.
+The weekend result is user-confirmed. Later approved closure work directly checked container health, restart counts, HTTP responses, persistence, runtime permissions, and current telemetry, but did not collect a continuous CPU, RSS, goroutine, FD, or detailed time-series series. No exact weekend observation start or end time is inferred.
 
 These checkpoints are not a formal performance benchmark, high-availability test, multi-node production validation, long-term SLA, Git tag, or GitHub Release. The 72-hour and 7-day checkpoints remain Pending until direct evidence establishes them.
 
@@ -36,4 +39,4 @@ Run migration contracts; all Go tests, race tests, vet, and build; both Python u
 
 For image builds, pass the same provenance arguments to both Dockerfiles and run `scripts/validate_image_provenance.py`. Deployment validation remains Pending until an explicitly approved candidate is checked in its target environment.
 
-Filesystem and migration-helper tests may run without Docker. Restart, down/up, and container recreation must use only a local Docker context and temporary data. Assertions must locate the target node by stable fields or extension domains rather than array position, fixed node count, or a fixed Docker total. Production persistence remains Pending until explicitly approved deployment validation. See [Stats Persistence](../operations/STATS_PERSISTENCE.md).
+Filesystem and migration-helper tests may run without Docker. Restart, down/up, and container recreation must use only a local Docker context and temporary data unless a separately approved production validation is active. Assertions must locate the target node by stable fields or extension domains rather than array position, fixed node count, or a fixed Docker total. Production persistence validation is recorded in [Stats Persistence](../operations/STATS_PERSISTENCE.md).

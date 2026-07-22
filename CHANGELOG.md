@@ -12,6 +12,10 @@
 - Inventory the transitional `hardware_json`, `docker_json`, and `hermes_json` input compatibility without changing runtime behavior.
 - Add consistent OCI build provenance for Server and Client images, including source revision, UTC build time, local validation, and deployment-record guidance.
 - Move the default Server stats bind out of the WebUI tree, make its host directory configurable, add non-overwriting migration and persistence validation assets, and sanitize damaged-stats restore diagnostics.
+- Complete the production stats migration to `/var/lib/hermesstatus/server`, including restart, down/up, recreation, same-bind rollback, checksums, and protected backups.
+- Complete and deploy the Runtime Hardening baseline after isolated permission tests and a host-reboot recovery check.
+- Retain the three Legacy JSON-string input fields as compatibility-only parsers with explicit removal gates.
+- Archive the HermesStatus 1.0 runtime into a checksummed offline recovery package, remove its containers, network, images, ports, and online directory, and retain the Git `1.0` branch.
 - No business feature, data-source, statistical-semantic, or page-layout changes.
 
 ## Release C — version pending confirmation

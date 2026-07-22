@@ -12,3 +12,5 @@ Schema extensions are backward-compatible and nullable/stale-aware, but Server a
 Validate both artifacts with `scripts/validate_image_provenance.py` and record immutable image IDs or registry digests. See [Build Provenance](BUILD_PROVENANCE.md).
 
 When adopting the independent stats directory, resolve `SERVER_DATA_DIR` from the actual Compose project directory and run `scripts/migrate_stats_data.py` without `--apply` first. The dry-run must not create directories, temporary files, or backups. Stop the writer only during a separately approved deployment window, apply into an empty preflighted target, preserve the original source, and validate restart and recreation before retiring rollback assets. See [Stats Persistence](STATS_PERSISTENCE.md).
+
+The production migration has completed, but future upgrades must continue to resolve `/app/data` to the persistent directory and must not reintroduce a bind into the archived 1.0 tree. The normal rollback path is the previous validated 2.0 image pair on the same stats bind. Recreating 1.0 from its offline package is disaster recovery, not an ordinary upgrade step.

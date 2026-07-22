@@ -64,9 +64,9 @@ Do not record environment values, API keys, passwords, Authorization headers, pr
 | Item | Status |
 | --- | --- |
 | Provenance validator unit tests | Passed locally |
-| Local image validation | Failed - public base-image authorization timed out before either candidate image was produced |
-| CI validation | Pending |
-| Deployment validation | Pending |
-| Production rollback validation | Pending |
+| Local image validation | Passed for matching Server and Client images |
+| CI validation | Passed in PR #11 and after merge to `2.0` |
+| Deployment validation | Passed with matching OCI revisions and expected entrypoints |
+| Production rollback validation | Passed with the recorded previous 2.0 image pair |
 
-The local build failure is an external dependency-fetch failure, not a passed artifact check. Image tags, IDs, labels, and entrypoints remain unavailable until a complete local or CI build succeeds.
+The earlier public base-image authorization timeout was an external dependency-fetch failure. A later complete build, CI image job, deployment, and rollback supplied the missing artifact evidence. Locally built images have no RepoDigest unless they are pushed to or pulled from a registry; record their immutable Image IDs without relabeling those IDs as RepoDigests.

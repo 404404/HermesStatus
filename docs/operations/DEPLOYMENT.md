@@ -6,6 +6,8 @@
 
 The Server persists stats under `/app/data` and mounts its configuration at `/app/config/config.json`. Its defaults expose HTTP `8080` on the host and Agent TCP `35601`. The Client uses host networking/PID, read-only host OS, hwmon, device, Docker Socket, and Hermes mounts, plus a writable status directory. Actual production paths and ports must be read from its Compose configuration and environment; never copy them into public documentation.
 
+The active 2.0 deployment must not mount or read an archived 1.0 deployment directory. Hermes snapshots belong beneath the 2.0 Client status bind. Before removing an old deployment, inspect resolved Compose mounts and replace any obsolete compatibility bind with the 2.0-owned status directory.
+
 ## Configuration surface
 
 The Server configuration surface is `ADMIN_TOKEN`, `HTTP_ADDR`, `AGENT_ADDR`, `CONFIG_PATH`, `STATS_PATH`, and `WEB_DIR`. The Client surface covers connection identity, probe settings, collection intervals, host OS/hwmon/SMART paths, Docker Socket and limits, status storage, and Hermes exporter paths, intervals, API limits, and host identity. Keep values in a protected deployment environment file; documentation and CI may name variables but must use only synthetic values.
@@ -26,3 +28,5 @@ docker compose -f docker-compose-client.yml build
 For a candidate, build unique immutable local tags from the reviewed worktree. Reuse the target's existing environment and Compose project. Do not expose a new port or replace persistent data. Deployment requires explicit user approval and a pre-deployment backup.
 
 Health endpoints are `/api/health` and `/json/stats.json`. The Server and Client images both declare health checks.
+
+HermesStatus 1.0 is no longer an online rollback service. Its validated offline package and recovery boundary are described in [Decommissioning HermesStatus 1.0](DECOMMISSION_1_0.md).

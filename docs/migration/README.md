@@ -60,6 +60,7 @@
 | [DATA_SOURCE_DECISIONS.md](DATA_SOURCE_DECISIONS.md) | 宿主机身份、SMART、Docker、Hermes、freshness 和 secret 采用什么来源规则？ |
 | [MILESTONE_B_PR_PLAN.md](MILESTONE_B_PR_PLAN.md) | 后续 Go model、pipeline、client、Dashboard 和 Compose PR 如何隔离？ |
 | [LEGACY_PROTOCOL_INVENTORY.md](LEGACY_PROTOCOL_INVENTORY.md) | `hardware_json`、`docker_json`、`hermes_json` 当前如何解码、限制、降级，以及何时才可移除？ |
+| [1.0 Decommission](../operations/DECOMMISSION_1_0.md) | 1.0 运行资源如何归档、验证、清除和离线恢复？ |
 | [schema/](schema/) | Agent update 与 stats 扩展的 Draft 2020-12 JSON Schema。 |
 | [../../testdata/migration](../../testdata/migration) | 正常、空、降级和长值的脱敏合同 fixture。 |
 
