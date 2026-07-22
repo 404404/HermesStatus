@@ -10,3 +10,5 @@
 Schema extensions are backward-compatible and nullable/stale-aware, but Server and Client should be upgraded as one reviewed candidate to keep collection and rendering behavior aligned.
 
 Validate both artifacts with `scripts/validate_image_provenance.py` and record immutable image IDs or registry digests. See [Build Provenance](BUILD_PROVENANCE.md).
+
+When adopting the independent stats directory, resolve `SERVER_DATA_DIR` from the actual Compose project directory and run `scripts/migrate_stats_data.py` without `--apply` first. The dry-run must not create directories, temporary files, or backups. Stop the writer only during a separately approved deployment window, apply into an empty preflighted target, preserve the original source, and validate restart and recreation before retiring rollback assets. See [Stats Persistence](STATS_PERSISTENCE.md).

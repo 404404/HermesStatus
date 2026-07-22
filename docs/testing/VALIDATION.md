@@ -10,6 +10,7 @@ Never infer a pass from missing data. Record timestamps, measurements, and sanit
 | Web | ten-minute refresh, manual refresh, page navigation, Profile modal, model/provider/source/mode, Docker page, browser request count |
 | Security | no API key, Authorization, password, `.env`, raw config.yaml, Docker command, or raw smartctl output in logs/output |
 | Image provenance | exact OCI labels, full Git SHA, UTC build time, expected entrypoints, immutable image IDs, and no `.git` directory |
+| Stats persistence | missing/empty/invalid input, atomic replacement, permissions, restart, down/up, recreation, backup, migration, rollback, multi-node selection, and dynamic Docker counts |
 
 ## Observation record
 
@@ -31,3 +32,5 @@ These checkpoints are not a formal performance benchmark, high-availability test
 Run migration contracts; all Go tests, race tests, vet, and build; both Python unittest suites; JavaScript syntax and Node tests; release-boundary/secret checks; both Compose config validations; both image builds; and Actions YAML validation when an available parser exists. A local pass is not evidence that GitHub Actions itself ran.
 
 For image builds, pass the same provenance arguments to both Dockerfiles and run `scripts/validate_image_provenance.py`. Deployment validation remains Pending until an explicitly approved candidate is checked in its target environment.
+
+Filesystem and migration-helper tests may run without Docker. Restart, down/up, and container recreation must use only a local Docker context and temporary data. Assertions must locate the target node by stable fields or extension domains rather than array position, fixed node count, or a fixed Docker total. Production persistence remains Pending until explicitly approved deployment validation. See [Stats Persistence](../operations/STATS_PERSISTENCE.md).

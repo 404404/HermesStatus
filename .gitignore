@@ -2,3 +2,9 @@ default.sublime-workspace
 
 # pycharm
 .idea
+
+# Local Server runtime data
+server-data/
+stats-backups/
+stats-persistence-local/
+.stats-migration-*.tmp

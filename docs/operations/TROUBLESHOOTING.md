@@ -7,7 +7,10 @@
 - Hermes stale/error: distinguish API timeout/401 from CLI fallback failure, check snapshot age and profile count, and never log API keys, Authorization headers, `.env`, or raw Hermes configuration.
 - Dashboard error: confirm `/json/stats.json` returns valid JSON and check browser network requests. Page switching should not issue requests; there should be one ten-minute interval.
 - Image identity mismatch: inspect the OCI version, revision, creation time, source, image ID, and entrypoint. Compare them with the candidate record; do not print environment values or image history that may contain sensitive build commands.
+- Stats persistence error: inspect the resolved `/app/data` mount, free space, directory type, ownership, and write permission. Missing, empty, or invalid JSON must not prevent startup; preserve damaged input for offline diagnosis without logging its contents. Do not create a second active stats snapshot.
 
 Rollback when there is a restart loop, persistent HTTP failure, invalid/missing stats, semantic regression, secret exposure, or unacceptable resource growth.
 
 Use [Build Provenance](BUILD_PROVENANCE.md) when distinguishing an expected artifact from a stale or locally rebuilt image.
+
+Migration, backup, and recovery boundaries are documented in [Stats Persistence](STATS_PERSISTENCE.md).

@@ -20,7 +20,7 @@ services:
         ipv4_address: 172.23.0.2
     volumes:
       - ./server/config.json:/app/config/config.json
-      - ./web/json:/app/data
+      - "${SERVER_DATA_DIR:-./server-data}:/app/data"
     ports:
       - 35601:35601
       - 8080:80
