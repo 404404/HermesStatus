@@ -362,7 +362,7 @@ func SanitizeLuckyStats(input LuckyStats) LuckyStats {
 		item.Provider, item.RecordType = sanitizeStringPointer(item.Provider), sanitizeStringPointer(item.RecordType)
 		item.AddressMethod = sanitizeStringPointer(item.AddressMethod)
 		item.LocalRecordChangeStatus = sanitizeStringPointer(item.LocalRecordChangeStatus)
-			item.LastUpdateAt, item.NextSyncAt, item.LastSuccessAt = sanitizeStringPointer(item.LastUpdateAt), sanitizeStringPointer(item.NextSyncAt), sanitizeStringPointer(item.LastSuccessAt)
+		item.LastUpdateAt, item.NextSyncAt, item.LastSuccessAt = sanitizeStringPointer(item.LastUpdateAt), sanitizeStringPointer(item.NextSyncAt), sanitizeStringPointer(item.LastSuccessAt)
 		item.Error = sanitizeExtensionError(item.Error)
 	}
 	result.WebServices.Services = append([]LuckyWebService(nil), input.WebServices.Services...)
