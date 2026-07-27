@@ -52,7 +52,8 @@
 | [LEGACY.md](LEGACY.md) | 哪些未使用、重复、历史兼容或建议废弃，但当前不删除？ |
 | [MIGRATION_PLAN.md](MIGRATION_PLAN.md) | 如何按 P0/P1/P2 迁移，工作量多大，能否一次完成？ |
 | [SCOPE_DECISIONS.md](SCOPE_DECISIONS.md) | Release A 明确包含和排除什么，哪些架构决策不可在实现 PR 中隐式改变？ |
-| [STATS_CONTRACT.md](STATS_CONTRACT.md) | hardware、docker、hermes 的字段、限制、freshness、错误与 secret 边界是什么？ |
+| [STATS_CONTRACT.md](STATS_CONTRACT.md) | hardware、docker、hermes、lucky 的字段、限制、freshness、错误与 secret 边界是什么？ |
+| [Lucky Monitoring](../design/LUCKY_MONITORING.md) | 2.1 Lucky 的 API 选择、数据合同、安全边界、UI 和部署门禁是什么？ |
 | [GO_IMPLEMENTATION_MAP.md](GO_IMPLEMENTATION_MAP.md) | 合同如何映射到 Go 文件、类型、验证位置和后续 PR？ |
 | [DATA_SOURCE_MAP.md](DATA_SOURCE_MAP.md) | 每个 P0 字段从哪里采集、多久刷新、如何失败、进入哪个输出、如何验证？ |
 | [SOURCE_TRACE.md](SOURCE_TRACE.md) | 1.0/2.0 从 source 到 collector、wire、server、stats 和 browser 的链路在哪里断开？ |

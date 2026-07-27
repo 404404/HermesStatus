@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce frozen frontend and repository secret boundaries for Release D."""
+"""Enforce frontend, protocol, and repository secret boundaries."""
 
 from __future__ import annotations
 
@@ -129,6 +129,8 @@ def main() -> int:
     required = {
         "主页 tab": r">主页</button>",
         "Docker tab": r">Docker</button>",
+        "Lucky tab": r"id=[\"']luckyTab[\"']",
+        "Lucky page": r"id=[\"']luckyPage[\"']",
         "stats endpoint": r"/json/stats\.json",
         "10-minute refresh": r"10\s*\*\s*60\s*\*\s*1000",
     }
@@ -136,6 +138,8 @@ def main() -> int:
         "Docker command rendering": r"docker[^\n]{0,30}command|command[^\n]{0,30}docker",
         "legacy Docker endpoint": r"/api/docker",
         "browser Hermes API": r"fetch\s*\([^)]*/api/(?:hermes|profiles)",
+        "browser Lucky API": r"/(?:api/(?:info|status|netinterfaces|ddnstasklist|webservice|portforwards|ssl)|version)",
+        "browser Lucky credential": r"Lucky-Admin-Token|openToken|LUCKY_TOKEN|127\.0\.0\.1:16601",
         "WebSocket": r"new\s+WebSocket\s*\(",
         "EventSource/SSE": r"new\s+EventSource\s*\(",
     }
@@ -147,6 +151,14 @@ def main() -> int:
             fail(errors, f"frontend invariant violated: {label}")
     if len(re.findall(r"setInterval\s*\(", (ROOT / "web/js/app.js").read_text())) > 1:
         fail(errors, "frontend creates more than one interval call site")
+
+    server_runtime = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "server").glob("*.go")
+        if path.is_file() and not path.name.endswith("_test.go")
+    )
+    if re.search(r"Lucky-Admin-Token|openToken|LUCKY_TOKEN|lucky_json", server_runtime):
+        fail(errors, "server runtime must not receive Lucky credentials or a Legacy lucky_json field")
 
     if errors:
         print("Release boundary validation failed:", file=sys.stderr)

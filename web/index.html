@@ -6,7 +6,7 @@
     <meta name="description" content="HermesStatus 单主机云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260716-2" />
+    <link rel="stylesheet" href="css/app.css?v=20260723-3" />
 </head>
 <body>
     <header class="topbar">
@@ -21,6 +21,7 @@
         <nav class="nav" aria-label="主导航" role="tablist">
             <button id="homeTab" type="button" class="active" role="tab" aria-selected="true" aria-controls="homePage" aria-current="page" data-page-target="home">主页</button>
             <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
+            <button id="luckyTab" type="button" role="tab" aria-selected="false" aria-controls="luckyPage" tabindex="-1" data-page-target="lucky">Lucky</button>
         </nav>
         <div class="actions">
             <span id="lastUpdate" class="last-update">上次刷新 -</span>
@@ -72,8 +73,6 @@
             </div>
 
             <div id="dockerPage" class="page-panel" role="tabpanel" aria-labelledby="dockerTab" data-page="docker" hidden>
-                <section id="dockerSummary" class="docker-summary-grid" aria-label="Docker 状态摘要"></section>
-
                 <section class="data-section" aria-labelledby="containersTitle">
                     <div class="section-head">
                         <h2 id="containersTitle">Docker Containers</h2>
@@ -94,6 +93,38 @@
                     </div>
                 </section>
             </div>
+
+            <div id="luckyPage" class="page-panel" role="tabpanel" aria-labelledby="luckyTab" data-page="lucky" hidden>
+                <section class="data-section" aria-labelledby="luckyConfigTitle">
+                    <div class="section-head"><h2 id="luckyConfigTitle">配置信息</h2></div>
+                    <div class="table-wrap">
+                        <table class="data lucky-table lucky-config-table">
+                            <thead>
+                            <tr>
+                                <th rowspan="2">DDNS服务商</th>
+                                <th rowspan="2">地址获取方式</th>
+                                <th rowspan="2">本地记录状态</th>
+                                <th rowspan="2">最近同步时间/下次同步时间</th>
+                                <th rowspan="2">已更新/总域名记录</th>
+                                <th colspan="3" class="lucky-group-heading">Web服务</th>
+                                <th rowspan="2">已启用/端口转发总和</th>
+                            </tr>
+                            <tr>
+                                <th>监听端口</th>
+                                <th>连接数</th>
+                                <th>已启用/规则总和</th>
+                            </tr>
+                            </thead>
+                            <tbody id="luckyConfigBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="data-section" aria-labelledby="luckyCertificateTitle">
+                    <div class="section-head"><h2 id="luckyCertificateTitle">SSL 证书</h2></div>
+                    <div class="table-wrap"><table class="data lucky-certificate-table"><thead><tr><th>名称</th><th>签发者</th><th>生效时间</th><th>失效时间</th><th>剩余天数</th><th>自动续期</th><th>状态</th></tr></thead><tbody id="luckyCertificateBody"></tbody></table></div>
+                </section>
+            </div>
         </div>
     </main>
 
@@ -112,6 +143,6 @@
         <a href="https://github.com/404404/HermesStatus" target="_blank" rel="noopener">HermesStatus</a>
     </footer>
 
-    <script src="js/app.js?v=20260716-2" defer></script>
+    <script src="js/app.js?v=20260723-6" defer></script>
 </body>
 </html>

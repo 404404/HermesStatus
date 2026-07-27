@@ -99,6 +99,7 @@ type ExtensionStats struct {
 	Hardware         *HardwareStats `json:"hardware"`
 	Docker           *DockerStats   `json:"docker"`
 	Hermes           *HermesStats   `json:"hermes"`
+	Lucky            *LuckyStats    `json:"lucky,omitempty"`
 }
 
 type ExtensionSnapshot struct {
@@ -107,6 +108,7 @@ type ExtensionSnapshot struct {
 	Hardware         *HardwareStats `json:"hardware"`
 	Docker           *DockerStats   `json:"docker"`
 	Hermes           *HermesStats   `json:"hermes"`
+	Lucky            *LuckyStats    `json:"lucky"`
 }
 
 type HardwareStats struct {

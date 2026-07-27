@@ -71,7 +71,11 @@ func TestDefaultConstructors(t *testing.T) {
 	if hermesStats.Profiles == nil || len(hermesStats.Profiles) != 0 || hermesStats.UpdatedAt != nil || !hermesStats.Stale || hermesStats.Error == nil {
 		t.Fatalf("unexpected hermes default: %#v", hermesStats)
 	}
-	for _, extensionError := range []*ExtensionError{hardware.Error, dockerStats.Error, hermesStats.Error} {
+	luckyStats := NewNotReportedLuckyStats()
+	if luckyStats.DynamicDNS.Records == nil || luckyStats.WebServices.Services == nil || luckyStats.PortForwards.Rules == nil || luckyStats.Certificates.Items == nil || !luckyStats.Stale || luckyStats.Error == nil {
+		t.Fatalf("unexpected Lucky default: %#v", luckyStats)
+	}
+	for _, extensionError := range []*ExtensionError{hardware.Error, dockerStats.Error, hermesStats.Error, luckyStats.Error} {
 		if extensionError.Code != "not_reported" || extensionError.Retryable || extensionError.HTTPStatus != nil {
 			t.Fatalf("unexpected not-reported error: %#v", extensionError)
 		}

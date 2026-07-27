@@ -84,11 +84,13 @@ func DecodeExtensionSnapshotJSON(data []byte) (*ExtensionSnapshot, error) {
 		Hardware:         snapshot.Hardware,
 		Docker:           snapshot.Docker,
 		Hermes:           snapshot.Hermes,
+		Lucky:            snapshot.Lucky,
 	})
 	snapshot.ExtensionVersion = stats.ExtensionVersion
 	snapshot.Hardware = stats.Hardware
 	snapshot.Docker = stats.Docker
 	snapshot.Hermes = stats.Hermes
+	snapshot.Lucky = stats.Lucky
 	if ContainsSecretLikeText(snapshot.ReceivedAt) {
 		snapshot.ReceivedAt = RedactedValue
 	}
@@ -187,6 +189,11 @@ func ValidateExtensionStats(stats *ExtensionStats) error {
 	if err := ValidateHermesStats(stats.Hermes); err != nil {
 		return err
 	}
+	if stats.Lucky != nil {
+		if err := ValidateLuckyStats(stats.Lucky); err != nil {
+			return err
+		}
+	}
 	return validatePayloadSize("extension", stats, MaxExtensionPayloadBytes)
 }
 
@@ -202,6 +209,7 @@ func ValidateExtensionSnapshot(snapshot *ExtensionSnapshot) error {
 		Hardware:         snapshot.Hardware,
 		Docker:           snapshot.Docker,
 		Hermes:           snapshot.Hermes,
+		Lucky:            snapshot.Lucky,
 	}
 	if err := ValidateExtensionStats(stats); err != nil {
 		return err
@@ -777,6 +785,10 @@ func SanitizeExtensionStats(input ExtensionStats) ExtensionStats {
 		hermesStats.Error = sanitizeExtensionError(hermesStats.Error)
 		result.Hermes = &hermesStats
 	}
+	if input.Lucky != nil {
+		lucky := SanitizeLuckyStats(*input.Lucky)
+		result.Lucky = &lucky
+	}
 	return result
 }
 
@@ -870,7 +882,13 @@ func validateRequiredExtensionFields(data []byte, snapshot bool) error {
 	if err := validateRequiredDocker(root["docker"]); err != nil {
 		return err
 	}
-	return validateRequiredHermes(root["hermes"])
+	if err := validateRequiredHermes(root["hermes"]); err != nil {
+		return err
+	}
+	if raw, ok := root["lucky"]; ok {
+		return validateRequiredLucky(raw)
+	}
+	return nil
 }
 
 func validateRequiredHardware(raw json.RawMessage) error {

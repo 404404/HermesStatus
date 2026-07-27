@@ -127,5 +127,207 @@
     "updated_at": "2026-07-13T12:00:00Z",
     "stale": false,
     "error": null
+  },
+  "lucky": {
+    "status": "ok",
+    "source": "local_api",
+    "service": {
+      "state": "running",
+      "process_running": true,
+      "process_pid": 4200,
+      "uptime_seconds": 86400,
+      "api_reachable": true,
+      "web_reachable": true,
+      "error": null
+    },
+    "version": {
+      "current": "2.27.2",
+      "latest": "2.28.0",
+      "update_available": true,
+      "build_info": "example build",
+      "checked_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": null
+    },
+    "ip_resolution": {
+      "mode": "interface-auto",
+      "resolved_ip_count": 3,
+      "ipv4_count": 1,
+      "ipv6_count": 2,
+      "status": "ok",
+      "updated_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": null
+    },
+    "dynamic_dns": {
+      "total": 2,
+      "enabled": 2,
+      "disabled": 0,
+      "healthy": 2,
+      "error_count": 0,
+      "records": [
+        {
+          "id": "ddns-8b648f22c759",
+          "display_name": "Home IPv4",
+          "provider": "Example DNS",
+          "enabled": true,
+          "status": "ok",
+          "record_type": "A",
+          "last_update_at": "2026-07-23T01:58:00Z",
+          "next_sync_at": "2026-07-23T02:08:00Z",
+          "last_success_at": "2026-07-23T01:58:00Z",
+          "error": null
+        },
+        {
+          "id": "ddns-7606f5030a75",
+          "display_name": "Home IPv6",
+          "provider": "Example DNS",
+          "enabled": true,
+          "status": "ok",
+          "record_type": "AAAA",
+          "last_update_at": "2026-07-23T01:58:00Z",
+          "next_sync_at": "2026-07-23T02:08:00Z",
+          "last_success_at": "2026-07-23T01:58:00Z",
+          "error": null
+        }
+      ],
+      "status": "ok",
+      "updated_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": null
+    },
+    "web_services": {
+      "total": 2,
+      "enabled": 2,
+      "disabled": 0,
+      "healthy": 2,
+      "error_count": 0,
+      "services": [
+        {
+          "id": "web-582fd0ddf2e1",
+          "display_name": "Status Console",
+          "enabled": true,
+          "status": "running",
+          "protocol": "https",
+          "listen_port": 443,
+          "upstream_type": "http",
+          "tls_enabled": true,
+          "certificate_ref": "Primary certificate",
+          "error": null
+        },
+        {
+          "id": "web-6d13b46d638f",
+          "display_name": "Media Gateway",
+          "enabled": true,
+          "status": "running",
+          "protocol": "https",
+          "listen_port": 8443,
+          "upstream_type": "http",
+          "tls_enabled": true,
+          "certificate_ref": "Media certificate",
+          "error": null
+        }
+      ],
+      "status": "ok",
+      "updated_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": null
+    },
+    "port_forwards": {
+      "total": 2,
+      "enabled": 2,
+      "disabled": 0,
+      "healthy": 2,
+      "error_count": 0,
+      "rules": [
+        {
+          "id": "forward-8250a677844e",
+          "display_name": "Secure Shell",
+          "enabled": true,
+          "status": "running",
+          "protocol": "tcp",
+          "listen_port": 22022,
+          "target_type": "tcp",
+          "error": null
+        },
+        {
+          "id": "forward-8a0aabff1fe1",
+          "display_name": "Game Relay",
+          "enabled": true,
+          "status": "running",
+          "protocol": "udp",
+          "listen_port": 30000,
+          "target_type": "udp",
+          "error": null
+        }
+      ],
+      "status": "ok",
+      "updated_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": null
+    },
+    "certificates": {
+      "total": 3,
+      "valid": 1,
+      "expiring": 1,
+      "expired": 1,
+      "not_yet_valid": 0,
+      "invalid": 0,
+      "unknown": 0,
+      "items": [
+        {
+          "id": "cert-cb218e58d717",
+          "display_name": "Primary certificate",
+          "san_count": 2,
+          "issuer": "Example Trust CA",
+          "source": "acme",
+          "not_before": "2026-06-01T00:00:00Z",
+          "not_after": "2026-09-01T00:00:00Z",
+          "remaining_days": 39,
+          "status": "valid",
+          "auto_renew": true,
+          "last_renew_at": "2026-06-01T00:00:00Z",
+          "next_renew_at": "2026-08-01T00:00:00Z",
+          "error": null
+        },
+        {
+          "id": "cert-3b439abe711e",
+          "display_name": "Media certificate",
+          "san_count": 1,
+          "issuer": "Example Trust CA",
+          "source": "acme",
+          "not_before": "2026-05-10T00:00:00Z",
+          "not_after": "2026-08-05T00:00:00Z",
+          "remaining_days": 13,
+          "status": "expiring",
+          "auto_renew": true,
+          "last_renew_at": "2026-05-10T00:00:00Z",
+          "next_renew_at": "2026-07-26T00:00:00Z",
+          "error": null
+        },
+        {
+          "id": "cert-1ce1409dc02d",
+          "display_name": "Legacy certificate",
+          "san_count": 1,
+          "issuer": "Example Trust CA",
+          "source": "manual",
+          "not_before": "2025-07-01T00:00:00Z",
+          "not_after": "2026-07-01T00:00:00Z",
+          "remaining_days": -23,
+          "status": "expired",
+          "auto_renew": false,
+          "last_renew_at": null,
+          "next_renew_at": null,
+          "error": null
+        }
+      ],
+      "status": "degraded",
+      "updated_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": null
+    },
+    "updated_at": "2026-07-23T02:00:00Z",
+    "stale": false,
+    "error": null
   }
 }

@@ -10,6 +10,7 @@
 - [dockercontainers](#dockercontainers)
 - [hermes](#hermes)
 - [hermesprofiles](#hermesprofiles)
+- [lucky](#lucky)
 - [Token usage](#token-usage)
 - [错误合同](#错误合同)
 - [updated_at 与 stale](#updated_at-与-stale)
@@ -25,7 +26,7 @@
 - [agent-update-extension.schema.json](schema/agent-update-extension.schema.json)
 - [stats-extension.schema.json](schema/stats-extension.schema.json)
 
-Release A 实现 HS-004 至 HS-011、HS-021、HS-022、HS-023。Release B 在不改变扩展版本和 Go 管线的前提下启用 Profile health、jobs、sessions、diagnostic token、config summary、Volumes 和 MoA 白名单字段；Runs、聊天、停止和审批仍不在合同内。
+Release A 实现 HS-004 至 HS-011、HS-021、HS-022、HS-023。Release B 在不改变扩展版本和 Go 管线的前提下启用 Profile health、jobs、sessions、diagnostic token、config summary、Volumes 和 MoA 白名单字段；Runs、聊天、停止和审批仍不在合同内。HermesStatus 2.1 增加独立 `lucky` 域，其详细字段合同见 [Lucky 数据合同](../design/LUCKY_DATA_CONTRACT.md)。
 
 ## 通用约定
 
@@ -51,6 +52,7 @@ Release A 实现 HS-004 至 HS-011、HS-021、HS-022、HS-023。Release B 在不
 | `hardware` | object | 是 | 否 | 空降级对象 | 不适用 | 不适用 | 宿主机采集 | 仅状态 | 是 | 是 | 是 |
 | `docker` | object | 是 | 否 | 空集合对象 | 不适用 | 不适用 | Docker Socket | 仅状态/计数 | 是 | 是 | 是 |
 | `hermes` | object | 是 | 否 | 空 Profile 对象 | 不适用 | 不适用 | exporter 快照 | 仅状态/计数 | 是 | 是 | 是 |
+| `lucky` | object | 是 | 否 | `not_configured` 空对象 | 不适用 | 各业务集合 256 | Lucky 回环只读 API adapter | 仅状态/计数 | 是 | 是 | 是 |
 
 ### Stats 扩展
 
@@ -150,6 +152,17 @@ Release C 的容器对象只允许上述四个字段。`id`、`state`、`created
 
 `config_summary` 是严格 allowlist：`config_found`、`main_model`、最多 32 个 `auxiliary_models`、`delegation` 和最多 64 个 `docker_volumes`。模型/Provider/Base URL/并发/超时只投影显示值；Base URL 删除凭证、query 和 fragment。任何 `.env`、auth、secret、token、credential 或 password 文件挂载必须删除或拒绝。旧迁移 fixture 仅含 `docker_volumes` 时仍可解码，服务端输出会补齐稳定空结构。
 
+## lucky
+
+`lucky` 是 2.1 新增的独立结构化域，包含 service、version、IP 数量摘要、DDNS、Web 服务、端口转发和证书白名单对象。完整字段、枚举、长度、集合上限、证书口径及错误语义由 [LUCKY_DATA_CONTRACT.md](../design/LUCKY_DATA_CONTRACT.md) 定义；机器可执行约束位于 [lucky-extension.schema.json](schema/lucky-extension.schema.json)。
+
+- Browser 只从 `/json/stats.json` 读取，不直接调用 Lucky。
+- Lucky 凭据只在 Client 只读文件挂载中存在，不进入 wire、NodeState、stats、OpenAPI、日志或浏览器。
+- 不允许 `raw_response`、原始配置、地址列表、私钥、Cookie、认证 Header 或任意未知字段。
+- Lucky 单模块失败只降级对应模块；Lucky 整体失败不阻断 Hardware、Docker、Hermes 或原生指标。
+- 空集合固定输出 `[]`。未启用使用 `not_configured`；已配置但不可达使用 `unavailable`。
+- 2.1 不引入 `lucky_json`，也不为不存在的旧 Lucky 客户端建立 Legacy parser。
+
 ## Token usage
 
 | 字段 | JSON 类型 | 必填 | null | 默认值 | 最大值/字符串 | 数据来源 | 输出规则 |
@@ -189,6 +202,8 @@ Token usage 在 Release B 启用，但仍是 diagnostic，不是计费账本。�
 | `docker` | 120 秒 | 1.0 通常随 client update 采集；两分钟无成功值视为陈旧 |
 | `hermes` | 900 秒 | 覆盖 600 秒 exporter 周期及调度余量 |
 | `hermes.profiles[]` | 900 秒 | 每 Profile 独立计算 |
+| `lucky` 及业务模块 | 900 秒 | 覆盖 600 秒采集周期及调度余量 |
+| `lucky.version` | 86400 秒 | 最新版本检查使用 21600 秒缓存 TTL，24 小时未成功检查才 stale |
 
 服务端规则：
 
@@ -222,10 +237,11 @@ Token usage 在 Release B 启用，但仍是 diagnostic，不是计费账本。�
 
 ## 兼容规则
 
-- 新客户端发送结构化 `hardware`、`docker`、`hermes`。
+- 新客户端发送结构化 `hardware`、`docker`、`hermes`、`lucky`。
 - 过渡期旧客户端可发送 `hardware_json`、`docker_json`、`hermes_json`；Go wire decoder 在内存中解析为结构化对象后执行同一验证。
 - 若同一 update 同时包含结构化和旧字段，结构化字段优先；旧字段不参与合并。
 - 原始旧字段绝不进入 NodeState、stats 或日志。
+- Lucky 只接受结构化字段，不支持或输出 `lucky_json`。
 - 没有任何扩展字段的原生客户端仍可上报基础指标；服务端输出 `not_reported` 的空/stale 扩展对象。
 - 扩展字段失败不拒绝基础 update，除非整个 TCP JSON 无法解析或超过 Go 全局请求上限。
 
@@ -236,3 +252,5 @@ Token usage 在 Release B 启用，但仍是 diagnostic，不是计费账本。�
 - 配置来源：[CONFIG_DIFF.md](CONFIG_DIFF.md)
 - Go 映射：[GO_IMPLEMENTATION_MAP.md](GO_IMPLEMENTATION_MAP.md)
 - Fixture：[../../testdata/migration](../../testdata/migration)
+- Lucky 设计与合同：[../design/LUCKY_MONITORING.md](../design/LUCKY_MONITORING.md)、[../design/LUCKY_DATA_CONTRACT.md](../design/LUCKY_DATA_CONTRACT.md)
+- Lucky fixture：[../../testdata/lucky](../../testdata/lucky)

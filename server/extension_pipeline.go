@@ -9,11 +9,13 @@ import (
 )
 
 const (
-	hardwareStaleAfter = 900 * time.Second
-	dockerStaleAfter   = 120 * time.Second
-	hermesStaleAfter   = 900 * time.Second
-	profileStaleAfter  = 900 * time.Second
-	maxFutureClockSkew = 300 * time.Second
+	hardwareStaleAfter     = 900 * time.Second
+	dockerStaleAfter       = 120 * time.Second
+	hermesStaleAfter       = 900 * time.Second
+	luckyStaleAfter        = 900 * time.Second
+	luckyVersionStaleAfter = 24 * time.Hour
+	profileStaleAfter      = 900 * time.Second
+	maxFutureClockSkew     = 300 * time.Second
 )
 
 type extensionDecodeIssue struct {
@@ -38,7 +40,7 @@ func decodeAgentUpdate(data []byte) (AgentStats, ExtensionStats, []extensionDeco
 
 	extension := newNotReportedExtensionStats()
 	issues := make([]extensionDecodeIssue, 0, 3)
-	hasStructured := hasAnyField(fields, "hardware", "docker", "hermes")
+	hasStructured := hasAnyField(fields, "hardware", "docker", "hermes", "lucky")
 	versionCode := ""
 	if raw, ok := fields["extension_version"]; ok {
 		var version string
@@ -66,6 +68,14 @@ func decodeAgentUpdate(data []byte) (AgentStats, ExtensionStats, []extensionDeco
 		MaxHermesPayloadBytes, MaxLegacyHermesJSONBytes,
 		DecodeHermesStatsJSON, pointerTo(NewNotReportedHermesStats()), newDegradedHermesStats, &issues,
 	)
+	if raw, ok := fields["lucky"]; ok {
+		if versionCode != "" {
+			issues = append(issues, extensionDecodeIssue{Domain: "lucky", Code: versionCode, PayloadLength: len(raw)})
+			extension.Lucky = newDegradedLuckyStats(versionCode)
+		} else {
+			extension.Lucky = decodeDomainPayload("lucky", raw, MaxLuckyPayloadBytes, DecodeLuckyStatsJSON, newDegradedLuckyStats, &issues)
+		}
+	}
 	return native, extension, issues, nil
 }
 
@@ -160,11 +170,13 @@ func newNotReportedExtensionStats() ExtensionStats {
 	hardware := NewNotReportedHardwareStats()
 	dockerStats := NewNotReportedDockerStats()
 	hermesStats := NewNotReportedHermesStats()
+	luckyStats := NewNotReportedLuckyStats()
 	return ExtensionStats{
 		ExtensionVersion: ExtensionSchemaVersion,
 		Hardware:         &hardware,
 		Docker:           &dockerStats,
 		Hermes:           &hermesStats,
+		Lucky:            &luckyStats,
 	}
 }
 
@@ -183,6 +195,11 @@ func newDegradedDockerStats(code string) *DockerStats {
 func newDegradedHermesStats(code string) *HermesStats {
 	stats := NewNotReportedHermesStats()
 	stats.Error = newPipelineError("hermes", code)
+	return &stats
+}
+
+func newDegradedLuckyStats(code string) *LuckyStats {
+	stats := newEmptyLuckyStats(LuckyStatusError, LuckySourceUnavailable, newPipelineError("lucky", code))
 	return &stats
 }
 
@@ -206,6 +223,7 @@ func extensionSnapshotAt(stats ExtensionStats, receivedAt time.Time) ExtensionSn
 		Hardware:         stats.Hardware,
 		Docker:           stats.Docker,
 		Hermes:           stats.Hermes,
+		Lucky:            stats.Lucky,
 	}
 }
 
@@ -215,6 +233,7 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 		Hardware:         input.Hardware,
 		Docker:           input.Docker,
 		Hermes:           input.Hermes,
+		Lucky:            input.Lucky,
 	})
 	if stats.ExtensionVersion != ExtensionSchemaVersion {
 		stats.ExtensionVersion = ExtensionSchemaVersion
@@ -228,6 +247,9 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 	if stats.Hermes == nil {
 		stats.Hermes = pointerTo(NewNotReportedHermesStats())
 	}
+	if stats.Lucky == nil {
+		stats.Lucky = pointerTo(NewNotReportedLuckyStats())
+	}
 	receivedAt := input.ReceivedAt
 	if _, err := time.Parse(time.RFC3339, receivedAt); err != nil {
 		receivedAt = now.UTC().Format(time.RFC3339Nano)
@@ -236,6 +258,13 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 	applyDomainFreshness("hardware", stats.Hardware.UpdatedAt, hardwareStaleAfter, now, &stats.Hardware.Stale, &stats.Hardware.Error)
 	applyDomainFreshness("docker", stats.Docker.UpdatedAt, dockerStaleAfter, now, &stats.Docker.Stale, &stats.Docker.Error)
 	applyDomainFreshness("hermes", stats.Hermes.UpdatedAt, hermesStaleAfter, now, &stats.Hermes.Stale, &stats.Hermes.Error)
+	applyDomainFreshness("lucky", stats.Lucky.UpdatedAt, luckyStaleAfter, now, &stats.Lucky.Stale, &stats.Lucky.Error)
+	applyLuckyModuleFreshness("lucky.ip_resolution", stats.Lucky.IPResolution.UpdatedAt, now, &stats.Lucky.IPResolution.Stale, &stats.Lucky.IPResolution.Error)
+	applyLuckyModuleFreshness("lucky.dynamic_dns", stats.Lucky.DynamicDNS.UpdatedAt, now, &stats.Lucky.DynamicDNS.Stale, &stats.Lucky.DynamicDNS.Error)
+	applyLuckyModuleFreshness("lucky.web_services", stats.Lucky.WebServices.UpdatedAt, now, &stats.Lucky.WebServices.Stale, &stats.Lucky.WebServices.Error)
+	applyLuckyModuleFreshness("lucky.port_forwards", stats.Lucky.PortForwards.UpdatedAt, now, &stats.Lucky.PortForwards.Stale, &stats.Lucky.PortForwards.Error)
+	applyLuckyModuleFreshness("lucky.certificates", stats.Lucky.Certificates.UpdatedAt, now, &stats.Lucky.Certificates.Stale, &stats.Lucky.Certificates.Error)
+	applyDomainFreshness("lucky.version", stats.Lucky.Version.CheckedAt, luckyVersionStaleAfter, now, &stats.Lucky.Version.Stale, &stats.Lucky.Version.Error)
 	for index := range stats.Hermes.Profiles {
 		profile := &stats.Hermes.Profiles[index]
 		applyDomainFreshness("hermes", profile.UpdatedAt, profileStaleAfter, now, &profile.Stale, &profile.Error)
@@ -247,7 +276,12 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 		Hardware:         stats.Hardware,
 		Docker:           stats.Docker,
 		Hermes:           stats.Hermes,
+		Lucky:            stats.Lucky,
 	}
+}
+
+func applyLuckyModuleFreshness(source string, updatedAt *string, now time.Time, stale *bool, extensionError **ExtensionError) {
+	applyDomainFreshness(source, updatedAt, luckyStaleAfter, now, stale, extensionError)
 }
 
 func applyDomainFreshness(source string, updatedAt *string, threshold time.Duration, now time.Time, stale *bool, extensionError **ExtensionError) {

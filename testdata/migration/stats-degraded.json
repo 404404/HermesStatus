@@ -119,5 +119,132 @@
       "retryable": true,
       "http_status": null
     }
+  },
+  "lucky": {
+    "status": "degraded",
+    "source": "local_api",
+    "service": {
+      "state": "running",
+      "process_running": true,
+      "process_pid": null,
+      "uptime_seconds": null,
+      "api_reachable": false,
+      "web_reachable": true,
+      "error": {
+        "code": "unauthorized",
+        "message": "Lucky API authentication failed",
+        "source": "lucky.info",
+        "retryable": false,
+        "http_status": 401
+      }
+    },
+    "version": {
+      "current": "2.27.2",
+      "latest": null,
+      "update_available": null,
+      "build_info": null,
+      "checked_at": null,
+      "stale": true,
+      "error": {
+        "code": "version_check_failed",
+        "message": "Lucky version check is unavailable",
+        "source": "lucky.version",
+        "retryable": true,
+        "http_status": null
+      }
+    },
+    "ip_resolution": {
+      "mode": null,
+      "resolved_ip_count": 0,
+      "ipv4_count": 0,
+      "ipv6_count": 0,
+      "status": "error",
+      "updated_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": {
+        "code": "timeout",
+        "message": "Lucky API request timed out",
+        "source": "lucky.interfaces",
+        "retryable": true,
+        "http_status": null
+      }
+    },
+    "dynamic_dns": {
+      "total": 0,
+      "enabled": 0,
+      "disabled": 0,
+      "healthy": 0,
+      "error_count": 0,
+      "records": [],
+      "status": "error",
+      "updated_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": {
+        "code": "unauthorized",
+        "message": "Lucky API authentication failed",
+        "source": "lucky.ddns",
+        "retryable": false,
+        "http_status": 401
+      }
+    },
+    "web_services": {
+      "total": 0,
+      "enabled": 0,
+      "disabled": 0,
+      "healthy": 0,
+      "error_count": 0,
+      "services": [],
+      "status": "error",
+      "updated_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": {
+        "code": "schema_mismatch",
+        "message": "Lucky API response format is unsupported",
+        "source": "lucky.web",
+        "retryable": false,
+        "http_status": null
+      }
+    },
+    "port_forwards": {
+      "total": 0,
+      "enabled": 0,
+      "disabled": 0,
+      "healthy": 0,
+      "error_count": 0,
+      "rules": [],
+      "status": "error",
+      "updated_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": {
+        "code": "timeout",
+        "message": "Lucky API request timed out",
+        "source": "lucky.forward",
+        "retryable": true,
+        "http_status": null
+      }
+    },
+    "certificates": {
+      "total": 0,
+      "valid": 0,
+      "expiring": 0,
+      "expired": 0,
+      "not_yet_valid": 0,
+      "invalid": 0,
+      "unknown": 0,
+      "items": [],
+      "status": "error",
+      "updated_at": "2026-07-23T02:00:00Z",
+      "stale": false,
+      "error": {
+        "code": "forbidden",
+        "message": "Lucky API access was denied",
+        "source": "lucky.ssl",
+        "retryable": false,
+        "http_status": 403
+      }
+    },
+    "updated_at": "2026-07-23T02:00:00Z",
+    "stale": false,
+    "error": null
   }
 }

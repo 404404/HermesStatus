@@ -14,6 +14,8 @@ import tempfile
 import threading
 import time
 
+from lucky_collector import collector_from_environment, not_configured_lucky
+
 
 EXTENSION_VERSION = "1.0-draft"
 REDACTED_VALUE = "[redacted]"
@@ -854,6 +856,8 @@ class HostExtensionCollector(object):
         status_dir=None,
         command_runner=None,
         docker_request=None,
+        lucky_collector=None,
+        lucky_interval=None,
     ):
         self.host_os_release_file = host_os_release_file or os.getenv(
             "HOST_OS_RELEASE_FILE", "/host/etc/os-release"
@@ -879,12 +883,15 @@ class HostExtensionCollector(object):
         )
         self.command_runner = command_runner
         self.docker_request = docker_request
+        self.lucky_collector = lucky_collector or collector_from_environment()
+        self.lucky_interval = lucky_interval or _env_int("LUCKY_INTERVAL", 600)
         self.host_os, os_error = collect_host_os(self.host_os_release_file)
         self.cpu_model, cpu_error = collect_cpu_model(command_runner)
         self.identity_errors = [item for item in (os_error, cpu_error) if item]
         self._hardware = not_reported_hardware()
         self._docker = not_reported_docker()
         self._hermes = not_reported_hermes()
+        self._lucky = not_configured_lucky()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._started = False
@@ -941,6 +948,21 @@ class HostExtensionCollector(object):
         self._store("hermes", payload)
         return payload
 
+    def collect_lucky_once(self):
+        try:
+            payload = self.lucky_collector.collect()
+        except Exception:
+            payload = not_configured_lucky()
+            payload["status"] = "unavailable"
+            payload["error"] = _error(
+                "internal_error",
+                "Lucky data is unavailable",
+                "lucky-collector",
+                True,
+            )
+        self._store("lucky", payload)
+        return payload
+
     def _run_periodically(self, function, interval):
         while not self._stop.is_set():
             try:
@@ -957,6 +979,7 @@ class HostExtensionCollector(object):
             (self.collect_hardware_once, self.hardware_interval, "hardware-collector"),
             (self.collect_docker_once, self.docker_interval, "docker-collector"),
             (self.collect_hermes_once, self.hermes_snapshot_interval, "hermes-snapshot-reader"),
+            (self.collect_lucky_once, self.lucky_interval, "lucky-collector"),
         ):
             thread = threading.Thread(
                 target=self._run_periodically,
@@ -974,11 +997,13 @@ class HostExtensionCollector(object):
             hardware = copy.deepcopy(self._hardware)
             docker_stats = copy.deepcopy(self._docker)
             hermes = copy.deepcopy(self._hermes)
+            lucky = copy.deepcopy(self._lucky)
         return {
             "extension_version": EXTENSION_VERSION,
             "hardware": hardware,
             "docker": docker_stats,
             "hermes": hermes,
+            "lucky": lucky,
         }
 
 
@@ -992,6 +1017,7 @@ def add_extension_payload(update, collector):
                 "hardware": not_reported_hardware(),
                 "docker": not_reported_docker(),
                 "hermes": not_reported_hermes(),
+                "lucky": not_configured_lucky(),
             }
         )
     return update
