@@ -55,6 +55,14 @@ def _safe_int(value, default=None, minimum=0, maximum=9007199254740991):
     return number
 
 
+def _bounded_config_int(value, default, minimum, maximum):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(number, maximum))
+
+
 def _safe_bool(value, default=None):
     if isinstance(value, bool):
         return value
@@ -147,6 +155,7 @@ def _error_message(code):
         "response_too_large": "Lucky API response exceeded the size limit",
         "schema_mismatch": "Lucky API response format is unsupported",
         "connection_refused": "Lucky service is unavailable",
+        "invalid_configuration": "Lucky monitoring configuration is invalid",
     }.get(code, "Lucky data is unavailable")
 
 
@@ -296,8 +305,8 @@ def _parse_time(value, default_timezone=None):
     except ValueError:
         for pattern in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S"):
             try:
-                local_timezone = datetime.datetime.now().astimezone().tzinfo or datetime.timezone.utc
-                parsed = datetime.datetime.strptime(text, pattern).replace(tzinfo=local_timezone)
+                timezone = default_timezone or _local_timezone()
+                parsed = datetime.datetime.strptime(text, pattern).replace(tzinfo=timezone)
                 break
             except ValueError:
                 parsed = None
@@ -666,11 +675,24 @@ class LuckyCollector(object):
                  token_file=None, timeout=5, warning_days=30, version_check_ttl=21600,
                  verify_tls=True, request_func=None, local_timezone=None):
         self.enabled = bool(enabled)
-        self.warning_days = max(1, min(int(warning_days), 365))
-        self.version_check_ttl = max(3600, min(int(version_check_ttl), 86400))
+        self.warning_days = _bounded_config_int(warning_days, 30, 1, 365)
+        self.version_check_ttl = _bounded_config_int(version_check_ttl, 21600, 3600, 86400)
         self._latest_cache = None
         self.local_timezone = local_timezone or _local_timezone()
-        self.client = LuckyClient(base_url, auth_mode, token_file, timeout, verify_tls, request_func) if self.enabled else None
+        self.client = None
+        self.configuration_error = None
+        if self.enabled:
+            try:
+                request_timeout = _bounded_config_int(timeout, 5, 1, 30)
+                self.client = LuckyClient(
+                    base_url, auth_mode, token_file, request_timeout, verify_tls, request_func
+                )
+            except (TypeError, ValueError):
+                self.configuration_error = _error(
+                    "invalid_configuration",
+                    _error_message("invalid_configuration"),
+                    "lucky.config",
+                )
 
     def _collect_module(self, endpoint, builder, now):
         try:
@@ -685,21 +707,41 @@ class LuckyCollector(object):
 
     def _collect_web_services(self, now):
         try:
-            lite_payload = self.client.get("web_lite")
-            statistics_payload = self.client.get("web")
+            primary_payload = self.client.get("web")
+            rows = _rows(primary_payload, "rulelist", "rules", "list", "items", "data")
+            statistics = _pick(primary_payload, "statistics", "Statistics", default={})
+            prepared = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                item = dict(row)
+                key = _pick(row, "Key", "RuleKey", "ID", "id")
+                counters = _statistics_for_rule(statistics, key)
+                if _pick(item, "ConnectionCount", "Connections", "connection_count") is None:
+                    item["ConnectionCount"] = _safe_int(_pick(counters, "Connections"), None)
+                prepared.append(item)
+            return _normalize_collection(prepared, "services", "web", now, _web_service)
         except LuckyAPIError as exc:
-            result = _empty_collection("services", "error", _module_error(exc, "lucky.web"))
-            result["updated_at"] = now
-            return result
+            primary_error = exc
         except Exception:
-            result = _empty_collection(
-                "services", "error",
-                _error("schema_mismatch", _error_message("schema_mismatch"), "lucky.web"),
-            )
+            primary_error = None
+
+        try:
+            lite_payload = self.client.get("web_lite")
+        except LuckyAPIError as exc:
+            error = _module_error(exc, "lucky.web")
+        except Exception:
+            error = _error("schema_mismatch", _error_message("schema_mismatch"), "lucky.web")
+        else:
+            error = None
+
+        if error is not None:
+            if isinstance(primary_error, LuckyAPIError):
+                error = _module_error(primary_error, "lucky.web")
+            result = _empty_collection("services", "error", error)
             result["updated_at"] = now
             return result
 
-        statistics = _pick(statistics_payload, "statistics", "Statistics", default={})
         prepared = []
         errors = []
         for lite_row in _rows(lite_payload, "rulelist", "rules", "list", "items", "data"):
@@ -714,7 +756,7 @@ class LuckyCollector(object):
             except Exception:
                 errors.append(_error("schema_mismatch", _error_message("schema_mismatch"), "lucky.web.rule"))
                 rule_payload = {}
-            item = _prepare_web_service(lite_row, rule_payload, statistics)
+            item = _prepare_web_service(lite_row, rule_payload, {})
             if errors and not _pick(rule_payload, "rule", default=rule_payload):
                 item["Status"] = "error"
                 item["Error"] = errors[-1]
@@ -730,6 +772,8 @@ class LuckyCollector(object):
     def collect(self, now=None):
         if not self.enabled:
             return not_configured_lucky()
+        if self.configuration_error is not None:
+            return unavailable_lucky("invalid_configuration")
         now_dt = now or datetime.datetime.now(datetime.timezone.utc)
         collected_at = _timestamp(now_dt)
         try:
@@ -812,6 +856,8 @@ class LuckyCollector(object):
 
 def collector_from_environment(request_func=None):
     enabled = os.getenv("LUCKY_ENABLED", "false").strip().lower() in ("1", "true", "yes", "on")
+    if not enabled:
+        return LuckyCollector(enabled=False)
     verify_tls = os.getenv("LUCKY_VERIFY_TLS", "true").strip().lower() not in ("0", "false", "no", "off")
     return LuckyCollector(
         enabled=enabled,

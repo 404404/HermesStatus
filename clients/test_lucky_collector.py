@@ -1,13 +1,17 @@
 import datetime
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from lucky_collector import (
     LuckyAPIError,
     LuckyCollector,
     _certificate_status,
+    _parse_time,
+    collector_from_environment,
     compare_versions,
     not_configured_lucky,
 )
@@ -23,9 +27,25 @@ def normal_responses():
         "/version": {"ret": 0, "version": "2.27.2", "buildTime": "example build"},
         "/api/status": {"ret": 0, "data": {"PID": 4200, "Uptime": 86400}},
         "/api/ddnstasklist": {"ret": 0, "data": {"list": [{"Key": "one", "Remark": "Home IPv4", "Provider": "Example DNS", "Enable": True, "Status": "ok", "Type": "IPv4", "GetIpType": "network-interface", "RecordChanged": True, "UpdatedRecordCount": 2, "TotalRecordCount": 3, "LastSyncTime": "2026-07-23T01:58:00Z", "NextSyncTime": "2026-07-23T02:08:00Z", "Records": [{"UpdateStatus": "SYNC_SUCCESS"}, {"UpdateStatus": "SYNC_SUCCESS"}, {"UpdateStatus": "SYNC_LOC_RECORD_NOCHANGE"}]}]}},
-        "/api/webservice/rules_lite": {"ret": 0, "list": [{"Key": "two", "Name": "Status Console", "SubRuleList": [{"Key": "a"}, {"Key": "b"}, {"Key": "c"}, {"Key": "d"}]}]},
-        "/api/webservice/rules": {"ret": 0, "rulelist": [], "statistics": {"two": {"Connections": 6}}},
-        "/api/webservice/rule/two": {"ret": 0, "rule": {"RuleKey": "two", "RuleName": "Status Console", "Network": "https", "ListenPort": 443, "HTTPS": True, "ProxyList": [{"Enable": True}, {"Enable": True}, {"Enable": True}, {"Enable": False}]}},
+        "/api/webservice/rules": {
+            "ret": 0,
+            "rulelist": [{
+                "Key": "two",
+                "RuleName": "Status Console",
+                "Enable": True,
+                "Status": "running",
+                "Network": "https",
+                "ListenPort": 443,
+                "HTTPS": True,
+                "SubRules": [
+                    {"Enable": True},
+                    {"Enable": True},
+                    {"Enable": True},
+                    {"Enable": False},
+                ],
+            }],
+            "statistics": {"two": {"Connections": 6}},
+        },
         "/api/portforwards": {"ret": 0, "data": {"list": [{"Key": "three", "Remark": "Secure Shell", "Enable": True, "Status": "running", "Protocol": "tcp", "Port": 22022, "TargetType": "tcp", "ConnectionCount": 2}]}},
         "/api/ssl": {"ret": 0, "data": {"list": [{"Key": "four", "Remark": "Primary certificate", "Enable": True, "Type": "acme", "CertsInfo": {"NotBeforeTime": "2026-06-01T00:00:00Z", "NotAfterTime": "2026-09-01T00:00:00Z", "Issuer": "Example Trust CA", "DNSNames": ["masked"]}}]}},
     }
@@ -34,6 +54,44 @@ def normal_responses():
 class LuckyCollectorTests(unittest.TestCase):
     def test_disabled_is_stable_not_configured(self):
         self.assertEqual(LuckyCollector(enabled=False).collect(), not_configured_lucky())
+
+    def test_disabled_ignores_invalid_optional_environment(self):
+        environment = {
+            "LUCKY_ENABLED": "false",
+            "LUCKY_BASE_URL": "not a URL",
+            "LUCKY_TIMEOUT_SECONDS": "invalid",
+            "LUCKY_CERT_WARNING_DAYS": "invalid",
+            "LUCKY_VERSION_CHECK_TTL": "invalid",
+        }
+        with mock.patch.dict(os.environ, environment, clear=True):
+            self.assertEqual(
+                collector_from_environment().collect(),
+                not_configured_lucky(),
+            )
+
+    def test_enabled_invalid_numbers_fall_back_to_safe_defaults(self):
+        responses = normal_responses()
+        environment = {
+            "LUCKY_ENABLED": "true",
+            "LUCKY_TIMEOUT_SECONDS": "invalid",
+            "LUCKY_CERT_WARNING_DAYS": "invalid",
+            "LUCKY_VERSION_CHECK_TTL": "invalid",
+        }
+        with mock.patch.dict(os.environ, environment, clear=True):
+            collector = collector_from_environment(
+                request_func=lambda path, headers: responses[path]
+            )
+        payload = collector.collect(FIXED_NOW)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(collector.warning_days, 30)
+        self.assertEqual(collector.version_check_ttl, 21600)
+        self.assertEqual(collector.client.timeout, 5)
+
+    def test_invalid_base_url_degrades_only_lucky(self):
+        collector = LuckyCollector(enabled=True, base_url="https://example.invalid")
+        payload = collector.collect(FIXED_NOW)
+        self.assertEqual(payload["status"], "unavailable")
+        self.assertEqual(payload["error"]["code"], "invalid_configuration")
 
     def test_normal_projection_contains_no_addresses_or_raw_data(self):
         responses = normal_responses()
@@ -175,9 +233,15 @@ class LuckyCollectorTests(unittest.TestCase):
 
     def test_web_service_uses_rule_detail_and_statistics(self):
         responses = normal_responses()
+        requests = []
+
+        def request(path, headers):
+            requests.append(path)
+            return responses[path]
+
         payload = LuckyCollector(
             enabled=True,
-            request_func=lambda path, headers: responses[path],
+            request_func=request,
             local_timezone=LUCKY_TIMEZONE,
         ).collect(FIXED_NOW)
         service = payload["web_services"]["services"][0]
@@ -186,6 +250,39 @@ class LuckyCollectorTests(unittest.TestCase):
         self.assertEqual(service["enabled_subrules"], 3)
         self.assertEqual(service["total_subrules"], 4)
         self.assertTrue(service["enabled"])
+        self.assertIn("/api/webservice/rules", requests)
+        self.assertNotIn("/api/webservice/rules_lite", requests)
+
+    def test_web_service_falls_back_to_lite_when_primary_is_unavailable(self):
+        responses = normal_responses()
+        responses["/api/webservice/rules_lite"] = {
+            "ret": 0,
+            "list": [{"Key": "two", "Name": "Status Console"}],
+        }
+        responses["/api/webservice/rule/two"] = {
+            "ret": 0,
+            "rule": {
+                "RuleKey": "two",
+                "RuleName": "Status Console",
+                "Network": "https",
+                "ListenPort": 443,
+                "HTTPS": True,
+                "ProxyList": [{"Enable": True}],
+            },
+        }
+
+        def request(path, headers):
+            if path == "/api/webservice/rules":
+                raise LuckyAPIError("not_found", 404)
+            return responses[path]
+
+        payload = LuckyCollector(
+            enabled=True,
+            request_func=request,
+            local_timezone=LUCKY_TIMEZONE,
+        ).collect(FIXED_NOW)
+        self.assertEqual(payload["web_services"]["status"], "ok")
+        self.assertEqual(payload["web_services"]["services"][0]["listen_port"], 443)
 
     def test_certificate_naive_time_uses_lucky_host_timezone(self):
         responses = normal_responses()
@@ -201,6 +298,17 @@ class LuckyCollectorTests(unittest.TestCase):
         certificate = payload["certificates"]["items"][0]
         self.assertEqual(certificate["not_before"], "2026-06-24T16:00:00Z")
         self.assertEqual(certificate["not_after"], "2026-09-23T15:59:59Z")
+
+    def test_slash_timestamp_uses_configured_timezone_across_host_timezones(self):
+        timestamp = "2026/07/23 20:20:38"
+        self.assertEqual(
+            _parse_time(timestamp, datetime.timezone.utc),
+            "2026-07-23T20:20:38Z",
+        )
+        self.assertEqual(
+            _parse_time(timestamp, LUCKY_TIMEZONE),
+            "2026-07-23T12:20:38Z",
+        )
 
     def test_certificate_status_boundaries(self):
         self.assertEqual(_certificate_status("2026-07-01T00:00:00Z", "2026-09-01T00:00:00Z", FIXED_NOW, 30)[0], "valid")
