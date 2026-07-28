@@ -1,5 +1,11 @@
 default.sublime-workspace
 
+# Python-generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
 # pycharm
 .idea
 
