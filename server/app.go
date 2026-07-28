@@ -298,6 +298,7 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 		base["hardware"] = extension.Hardware
 		base["docker"] = extension.Docker
 		base["hermes"] = extension.Hermes
+		base["lucky"] = extension.Lucky
 		if node.Connected && node.HasUpdate {
 			s := node.Stats
 			updateTrafficBaselines(node, s.NetworkIn, s.NetworkOut, monthResetWindow(now, server.MonthStart))

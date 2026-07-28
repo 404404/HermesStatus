@@ -5,7 +5,13 @@
   "description": "Only the HermesStatus extension merged into a native ServerStatus agent update. Native AgentStats fields are intentionally omitted.",
   "$comment": "additionalProperties is false at every contract object boundary so unknown upstream fields and secret-bearing configuration cannot be passed through by accident.",
   "type": "object",
-  "required": ["extension_version", "hardware", "docker", "hermes"],
+  "required": [
+    "extension_version",
+    "hardware",
+    "docker",
+    "hermes",
+    "lucky"
+  ],
   "properties": {
     "extension_version": {
       "const": "1.0-draft",
@@ -19,23 +25,41 @@
     },
     "hermes": {
       "$ref": "#/$defs/hermes"
+    },
+    "lucky": {
+      "$ref": "lucky-extension.schema.json"
     }
   },
   "additionalProperties": false,
   "$defs": {
     "nullableDateTime": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "format": "date-time",
       "maxLength": 40
     },
     "nullableCounter": {
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "minimum": 0,
       "maximum": 9007199254740991
     },
     "error": {
-      "type": ["object", "null"],
-      "required": ["code", "message", "source", "retryable", "http_status"],
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "code",
+        "message",
+        "source",
+        "retryable",
+        "http_status"
+      ],
       "properties": {
         "code": {
           "type": "string",
@@ -58,7 +82,10 @@
           "type": "boolean"
         },
         "http_status": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 100,
           "maximum": 599
         }
@@ -66,8 +93,15 @@
       "additionalProperties": false
     },
     "cpuTemperature": {
-      "type": ["object", "null"],
-      "required": ["value", "unit", "source"],
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "value",
+        "unit",
+        "source"
+      ],
       "properties": {
         "value": {
           "type": "number",
@@ -78,28 +112,49 @@
           "const": "C"
         },
         "source": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 128
         }
       },
       "additionalProperties": false
     },
     "diskTemperature": {
-      "type": ["object", "null"],
-      "required": ["current", "highest", "lowest", "unit", "source"],
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "current",
+        "highest",
+        "lowest",
+        "unit",
+        "source"
+      ],
       "properties": {
         "current": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": -100,
           "maximum": 250
         },
         "highest": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": -100,
           "maximum": 250
         },
         "lowest": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": -100,
           "maximum": 250
         },
@@ -107,7 +162,10 @@
           "const": "C"
         },
         "source": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 128
         }
       },
@@ -131,7 +189,10 @@
       ],
       "properties": {
         "cpu_model": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 128
         },
         "cpu_temperature": {
@@ -142,7 +203,11 @@
         },
         "disk_smart_status": {
           "type": "string",
-          "enum": ["passed", "failed", "unknown"]
+          "enum": [
+            "passed",
+            "failed",
+            "unknown"
+          ]
         },
         "disk_power_on_hours": {
           "$ref": "#/$defs/nullableCounter"
@@ -154,11 +219,17 @@
           "$ref": "#/$defs/nullableCounter"
         },
         "disk_device": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 128
         },
         "disk_smart_source": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 64
         },
         "updated_at": {
@@ -175,7 +246,12 @@
     },
     "dockerContainer": {
       "type": "object",
-      "required": ["names", "image", "status", "ports"],
+      "required": [
+        "names",
+        "image",
+        "status",
+        "ports"
+      ],
       "properties": {
         "names": {
           "type": "string",
@@ -202,7 +278,16 @@
     },
     "docker": {
       "type": "object",
-      "required": ["running", "total", "limit", "truncated", "containers", "updated_at", "stale", "error"],
+      "required": [
+        "running",
+        "total",
+        "limit",
+        "truncated",
+        "containers",
+        "updated_at",
+        "stale",
+        "error"
+      ],
       "properties": {
         "running": {
           "type": "integer",
@@ -243,7 +328,15 @@
     },
     "tokenUsage": {
       "type": "object",
-      "required": ["input_tokens", "output_tokens", "total_tokens", "estimated", "source", "window_start", "window_end"],
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "estimated",
+        "source",
+        "window_start",
+        "window_end"
+      ],
       "properties": {
         "input_tokens": {
           "$ref": "#/$defs/nullableCounter"
@@ -259,7 +352,12 @@
         },
         "source": {
           "type": "string",
-          "enum": ["hermes_api_payload", "local_session_state", "local_logs", "unavailable"]
+          "enum": [
+            "hermes_api_payload",
+            "local_session_state",
+            "local_logs",
+            "unavailable"
+          ]
         },
         "window_start": {
           "$ref": "#/$defs/nullableDateTime"
@@ -272,63 +370,192 @@
     },
     "configModelSummary": {
       "type": "object",
-      "required": ["provider", "model", "base_url", "concurrency", "timeout_seconds"],
+      "required": [
+        "provider",
+        "model",
+        "base_url",
+        "concurrency",
+        "timeout_seconds"
+      ],
       "properties": {
-        "provider": {"type": "string", "maxLength": 128},
-        "model": {"type": "string", "maxLength": 256},
-        "base_url": {"type": "string", "maxLength": 256},
-        "concurrency": {"$ref": "#/$defs/nullableCounter"},
-        "timeout_seconds": {"type": ["number", "null"], "minimum": 0, "maximum": 86400}
+        "provider": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "base_url": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "concurrency": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "timeout_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 86400
+        }
       },
       "additionalProperties": false
     },
     "auxiliaryModelSummary": {
       "type": "object",
-      "required": ["name", "provider", "model", "effective_provider", "effective_model", "source", "base_url_display", "timeout_seconds", "download_timeout_seconds", "max_concurrency", "language", "extra_body_configured", "credential_configured"],
+      "required": [
+        "name",
+        "provider",
+        "model",
+        "effective_provider",
+        "effective_model",
+        "source",
+        "base_url_display",
+        "timeout_seconds",
+        "download_timeout_seconds",
+        "max_concurrency",
+        "language",
+        "extra_body_configured",
+        "credential_configured"
+      ],
       "properties": {
-        "name": {"type": "string", "maxLength": 64},
-        "provider": {"type": "string", "maxLength": 128},
-        "model": {"type": "string", "maxLength": 256},
-        "effective_provider": {"type": "string", "maxLength": 128},
-        "effective_model": {"type": "string", "maxLength": 256},
-        "source": {"type": "string", "enum": ["config", "main_model"]},
-        "base_url_display": {"type": "string", "maxLength": 256},
-        "timeout_seconds": {"type": ["number", "null"], "minimum": 0, "maximum": 86400},
-        "download_timeout_seconds": {"type": ["number", "null"], "minimum": 0, "maximum": 86400},
-        "max_concurrency": {"$ref": "#/$defs/nullableCounter"},
-        "language": {"type": "string", "maxLength": 64},
-        "extra_body_configured": {"type": "boolean"},
-        "credential_configured": {"type": "boolean"}
+        "name": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "provider": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "effective_provider": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "effective_model": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "config",
+            "main_model"
+          ]
+        },
+        "base_url_display": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "timeout_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "download_timeout_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "max_concurrency": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "language": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "extra_body_configured": {
+          "type": "boolean"
+        },
+        "credential_configured": {
+          "type": "boolean"
+        }
       },
       "additionalProperties": false
     },
     "delegationSummary": {
       "type": "object",
-      "required": ["provider", "model", "base_url", "reasoning_effort", "max_concurrent_children", "max_spawn_depth", "child_timeout_seconds"],
+      "required": [
+        "provider",
+        "model",
+        "base_url",
+        "reasoning_effort",
+        "max_concurrent_children",
+        "max_spawn_depth",
+        "child_timeout_seconds"
+      ],
       "properties": {
-        "provider": {"type": "string", "maxLength": 128},
-        "model": {"type": "string", "maxLength": 256},
-        "base_url": {"type": "string", "maxLength": 256},
-        "reasoning_effort": {"type": "string", "maxLength": 64},
-        "max_concurrent_children": {"$ref": "#/$defs/nullableCounter"},
-        "max_spawn_depth": {"$ref": "#/$defs/nullableCounter"},
-        "child_timeout_seconds": {"type": ["number", "null"], "minimum": 0, "maximum": 86400}
+        "provider": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "base_url": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "reasoning_effort": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "max_concurrent_children": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "max_spawn_depth": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "child_timeout_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 86400
+        }
       },
       "additionalProperties": false
     },
     "configSummary": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "description": "Sanitized Release B projection. Legacy objects containing only docker_volumes remain accepted during migration.",
-      "required": ["docker_volumes"],
+      "required": [
+        "docker_volumes"
+      ],
       "properties": {
-        "config_found": {"type": "boolean"},
-        "main_model": {"$ref": "#/$defs/configModelSummary"},
+        "config_found": {
+          "type": "boolean"
+        },
+        "main_model": {
+          "$ref": "#/$defs/configModelSummary"
+        },
         "auxiliary_models": {
           "type": "array",
           "maxItems": 32,
-          "items": {"$ref": "#/$defs/auxiliaryModelSummary"}
+          "items": {
+            "$ref": "#/$defs/auxiliaryModelSummary"
+          }
         },
-        "delegation": {"$ref": "#/$defs/delegationSummary"},
+        "delegation": {
+          "$ref": "#/$defs/delegationSummary"
+        },
         "docker_volumes": {
           "type": "array",
           "maxItems": 64,
@@ -342,18 +569,69 @@
       "additionalProperties": false
     },
     "mixtureOfAgents": {
-      "type": ["object", "null"],
-      "required": ["source", "available", "name", "label", "description", "enabled", "configured", "tools", "error"],
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "source",
+        "available",
+        "name",
+        "label",
+        "description",
+        "enabled",
+        "configured",
+        "tools",
+        "error"
+      ],
       "properties": {
-        "source": {"type": "string", "maxLength": 64},
-        "available": {"type": "boolean"},
-        "name": {"type": "string", "maxLength": 128},
-        "label": {"type": "string", "maxLength": 128},
-        "description": {"type": "string", "maxLength": 512},
-        "enabled": {"type": ["boolean", "null"]},
-        "configured": {"type": ["boolean", "null"]},
-        "tools": {"type": "array", "maxItems": 64, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
-        "error": {"type": ["string", "null"], "maxLength": 64}
+        "source": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "configured": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tools": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        }
       },
       "additionalProperties": false
     },
@@ -388,57 +666,103 @@
           "pattern": "^[A-Za-z0-9_.-]+$"
         },
         "agent_version": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 64
         },
         "api_status": {
           "type": "string",
-          "enum": ["ok", "healthy", "unauthorized", "timeout", "unavailable", "error", "unknown"]
+          "enum": [
+            "ok",
+            "healthy",
+            "unauthorized",
+            "timeout",
+            "unavailable",
+            "error",
+            "unknown"
+          ]
         },
         "service_status": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 64
         },
         "gateway_service": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 64
         },
         "manager_mode": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 96
         },
         "usage_mode": {
-          "type": ["string", "null"],
-          "enum": ["api", "auth_provider", "unknown", null]
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "api",
+            "auth_provider",
+            "unknown",
+            null
+          ]
         },
         "provider": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 128
         },
         "model": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 256
         },
         "auth_refreshed_at": {
           "$ref": "#/$defs/nullableDateTime"
         },
         "scheduled_jobs_active": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1000000000
         },
         "scheduled_jobs_total": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1000000000
         },
         "sessions_active": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1000000000
         },
         "sessions_total": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1000000000
         },
@@ -471,7 +795,12 @@
     },
     "hermes": {
       "type": "object",
-      "required": ["profiles", "updated_at", "stale", "error"],
+      "required": [
+        "profiles",
+        "updated_at",
+        "stale",
+        "error"
+      ],
       "properties": {
         "profiles": {
           "type": "array",
@@ -498,8 +827,18 @@
       "extension_version": "1.0-draft",
       "hardware": {
         "cpu_model": "Example CPU 4-Core",
-        "cpu_temperature": {"value": 42, "unit": "C", "source": "hwmon-package"},
-        "disk_temperature": {"current": 33, "highest": 44, "lowest": 25, "unit": "C", "source": "smartctl-device-statistics"},
+        "cpu_temperature": {
+          "value": 42,
+          "unit": "C",
+          "source": "hwmon-package"
+        },
+        "disk_temperature": {
+          "current": 33,
+          "highest": 44,
+          "lowest": 25,
+          "unit": "C",
+          "source": "smartctl-device-statistics"
+        },
         "disk_smart_status": "passed",
         "disk_power_on_hours": 12000,
         "disk_written_bytes": 3200000000000,
@@ -516,7 +855,12 @@
         "limit": 0,
         "truncated": false,
         "containers": [
-          {"names": "status-client", "image": "example/status-client:1.0", "status": "Up 2 hours", "ports": "-"}
+          {
+            "names": "status-client",
+            "image": "example/status-client:1.0",
+            "status": "Up 2 hours",
+            "ports": "-"
+          }
         ],
         "updated_at": "2026-07-13T12:00:00Z",
         "stale": false,
@@ -539,8 +883,20 @@
             "scheduled_jobs_total": 2,
             "sessions_active": 1,
             "sessions_total": 3,
-            "usage": {"input_tokens": 1200, "output_tokens": 300, "total_tokens": 1500, "estimated": false, "source": "hermes_api_payload", "window_start": "2026-07-13T00:00:00Z", "window_end": "2026-07-13T12:00:00Z"},
-            "config_summary": {"docker_volumes": ["/srv/example/profile-a:/workspace:rw"]},
+            "usage": {
+              "input_tokens": 1200,
+              "output_tokens": 300,
+              "total_tokens": 1500,
+              "estimated": false,
+              "source": "hermes_api_payload",
+              "window_start": "2026-07-13T00:00:00Z",
+              "window_end": "2026-07-13T12:00:00Z"
+            },
+            "config_summary": {
+              "docker_volumes": [
+                "/srv/example/profile-a:/workspace:rw"
+              ]
+            },
             "updated_at": "2026-07-13T12:00:00Z",
             "stale": false,
             "error": null
@@ -549,25 +905,525 @@
         "updated_at": "2026-07-13T12:00:00Z",
         "stale": false,
         "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
       }
     },
     {
       "extension_version": "1.0-draft",
-      "hardware": {"cpu_model": null, "cpu_temperature": null, "disk_temperature": null, "disk_smart_status": "unknown", "disk_power_on_hours": null, "disk_written_bytes": null, "disk_read_bytes": null, "disk_device": null, "disk_smart_source": null, "updated_at": null, "stale": true, "error": null},
-      "docker": {"running": 0, "total": 0, "limit": 0, "truncated": false, "containers": [], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null},
-      "hermes": {"profiles": [], "updated_at": "2026-07-13T12:00:00Z", "stale": false, "error": null}
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      }
     },
     {
       "extension_version": "1.0-draft",
-      "hardware": {"cpu_model": "Example CPU", "cpu_temperature": null, "disk_temperature": null, "disk_smart_status": "unknown", "disk_power_on_hours": null, "disk_written_bytes": null, "disk_read_bytes": null, "disk_device": "/dev/example-disk", "disk_smart_source": null, "updated_at": null, "stale": true, "error": {"code": "smartctl_unavailable", "message": "SMART data is unavailable", "source": "smartctl", "retryable": true, "http_status": null}},
-      "docker": {"running": 0, "total": 0, "limit": 0, "truncated": false, "containers": [], "updated_at": null, "stale": true, "error": {"code": "docker_unavailable", "message": "Docker data is unavailable", "source": "docker-collector", "retryable": true, "http_status": null}},
+      "hardware": {
+        "cpu_model": "Example CPU",
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": "/dev/example-disk",
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "smartctl_unavailable",
+          "message": "SMART data is unavailable",
+          "source": "smartctl",
+          "retryable": true,
+          "http_status": null
+        }
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "docker_unavailable",
+          "message": "Docker data is unavailable",
+          "source": "docker-collector",
+          "retryable": true,
+          "http_status": null
+        }
+      },
       "hermes": {
         "profiles": [
-          {"profile": "profile-a", "agent_version": null, "api_status": "unauthorized", "service_status": null, "gateway_service": null, "manager_mode": null, "usage_mode": null, "provider": null, "model": null, "auth_refreshed_at": null, "scheduled_jobs_active": null, "scheduled_jobs_total": null, "sessions_active": null, "sessions_total": null, "usage": {"input_tokens": null, "output_tokens": null, "total_tokens": null, "estimated": true, "source": "unavailable", "window_start": null, "window_end": null}, "config_summary": null, "updated_at": null, "stale": true, "error": {"code": "api_unauthorized", "message": "Hermes API returned HTTP 401", "source": "hermes-api", "retryable": false, "http_status": 401}}
+          {
+            "profile": "profile-a",
+            "agent_version": null,
+            "api_status": "unauthorized",
+            "service_status": null,
+            "gateway_service": null,
+            "manager_mode": null,
+            "usage_mode": null,
+            "provider": null,
+            "model": null,
+            "auth_refreshed_at": null,
+            "scheduled_jobs_active": null,
+            "scheduled_jobs_total": null,
+            "sessions_active": null,
+            "sessions_total": null,
+            "usage": {
+              "input_tokens": null,
+              "output_tokens": null,
+              "total_tokens": null,
+              "estimated": true,
+              "source": "unavailable",
+              "window_start": null,
+              "window_end": null
+            },
+            "config_summary": null,
+            "updated_at": null,
+            "stale": true,
+            "error": {
+              "code": "api_unauthorized",
+              "message": "Hermes API returned HTTP 401",
+              "source": "hermes-api",
+              "retryable": false,
+              "http_status": 401
+            }
+          }
         ],
         "updated_at": null,
         "stale": true,
-        "error": {"code": "partial_failure", "message": "One or more profiles are unavailable", "source": "hermes-exporter", "retryable": true, "http_status": null}
+        "error": {
+          "code": "partial_failure",
+          "message": "One or more profiles are unavailable",
+          "source": "hermes-exporter",
+          "retryable": true,
+          "http_status": null
+        }
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
       }
     }
   ]

@@ -22,7 +22,7 @@ function statsDocument(name, overrides = {}){
       cpu: 10, memory_used: 7 * 1024 * 1024, memory_total: 10 * 1024 * 1024,
       hdd_used: 90 * 1024, hdd_total: 100 * 1024, uptime: '12 天 3 小时',
       os: 'Example Linux 2.0', hardware: extension.hardware, docker: extension.docker,
-      hermes: extension.hermes, ...overrides
+      hermes: extension.hermes, lucky: extension.lucky, ...overrides
     }]
   };
 }
@@ -32,17 +32,27 @@ async function run(){
   assert.equal(normal.host.name, 'fixture-host');
   assert.equal(normal.profiles.length, 2);
   assert.equal(normal.containers.length, 3);
+  assert.equal(normal.lucky.status, 'ok');
+  assert.equal(normal.lucky.certificates.expiring, 1);
+  assert.equal(app.luckyIsConfigured(normal.lucky), true);
   assert.equal(app.usageBand(normal.resources.cpuPercent), 'low');
   assert.equal(app.usageBand(normal.resources.memoryPercent), 'medium');
   assert.equal(app.usageBand(normal.resources.diskPercent), 'high');
   assert.equal(app.normalizePageName('home'), 'home');
   assert.equal(app.normalizePageName('docker'), 'docker');
+  assert.equal(app.normalizePageName('lucky'), 'lucky');
   assert.equal(app.normalizePageName('unexpected'), 'home');
   assert.equal(app.pageFromHash(''), 'home');
   assert.equal(app.pageFromHash('#home'), 'home');
   assert.equal(app.pageFromHash('#docker'), 'docker');
+  assert.equal(app.pageFromHash('#lucky'), 'lucky');
   assert.equal(app.pageFromHash('#invalid'), 'home');
-  assert.equal(app.dockerStateText(normal.docker), '最新');
+  assert.doesNotMatch(indexMarkup, /Lucky Monitoring|luckyHomeSummary|luckyHomeMeta/);
+  assert.match(appSource, /<h2>CPU温度\/硬盘温度<\/h2>/);
+  assert.match(appSource, /<h2>已运行时间\/操作系统<\/h2>/);
+  assert.match(appSource, /<h2>运行中\/容器总数<\/h2>/);
+  assert.match(appSource, /<h2>Lucky运行状态\/版本<\/h2>/);
+  assert.doesNotMatch(appSource, /硬盘当前\/最高\/最低温度/);
   assert.equal(
     app.modelBreakdown({model: 'example-model', usage_mode: 'api', provider: 'OpenCode Go'}),
     'example-model / api / OpenCode Go'
@@ -52,14 +62,12 @@ async function run(){
   assert.equal(empty.profiles.length, 0);
   assert.equal(empty.containers.length, 0);
   assert.equal(empty.hardware.cpu_temperature, null);
+  assert.equal(app.luckyIsConfigured(empty.lucky), false);
 
   const degraded = app.buildViewModel(statsDocument('degraded'));
   assert.equal(app.collectWarnings(degraded).length, 5);
   assert.equal(degraded.hardware.disk_smart_status, 'unknown');
   assert.deepEqual(degraded.profiles.map(profile => profile.api_status), ['unauthorized', 'timeout']);
-  assert.equal(app.dockerStateText(degraded.docker), '异常');
-  assert.equal(app.dockerStateText({updated_at: null, stale: true, error: null}), '陈旧');
-  assert.equal(app.dockerStateText({updated_at: null, stale: false, error: null}), '未知');
 
   const longValues = app.buildViewModel(statsDocument('long-values'));
   assert.ok(longValues.profiles[0].model.length > 180);
@@ -225,26 +233,42 @@ async function run(){
   assert.match(indexMarkup, /id="refreshButton"/);
   assert.match(indexMarkup, /id="homeTab"[^>]*>主页<\/button>/);
   assert.match(indexMarkup, /id="dockerTab"[^>]*>Docker<\/button>/);
+  assert.match(indexMarkup, /id="luckyTab"[^>]*>Lucky<\/button>/);
   assert.doesNotMatch(indexMarkup, /data-page-target="[^"]+"[^>]*>主机<\/button>/);
   assert.match(indexMarkup, /id="homePage"[^>]*data-page="home"/);
   assert.match(indexMarkup, /id="dockerPage"[^>]*data-page="docker"[^>]*hidden/);
-  assert.match(indexMarkup, /id="dockerSummary"/);
+  assert.match(indexMarkup, /id="luckyPage"[^>]*data-page="lucky"[^>]*hidden/);
+  assert.doesNotMatch(indexMarkup, /id="dockerSummary"/);
   const homeMarkup = indexMarkup.slice(indexMarkup.indexOf('id="homePage"'), indexMarkup.indexOf('id="dockerPage"'));
-  const dockerMarkup = indexMarkup.slice(indexMarkup.indexOf('id="dockerPage"'), indexMarkup.indexOf('id="profileModal"'));
+  const dockerMarkup = indexMarkup.slice(indexMarkup.indexOf('id="dockerPage"'), indexMarkup.indexOf('id="luckyPage"'));
+  const luckyMarkup = indexMarkup.slice(indexMarkup.indexOf('id="luckyPage"'), indexMarkup.indexOf('id="profileModal"'));
   assert.match(homeMarkup, /id="overviewCards"/);
   assert.match(homeMarkup, /id="profilesBody"/);
   assert.doesNotMatch(homeMarkup, /id="containersBody"/);
   assert.match(dockerMarkup, /id="containersBody"/);
   assert.deepEqual(
-    [...indexMarkup.matchAll(/<th>([^<]+)<\/th>/g)]
+    [...dockerMarkup.matchAll(/<th>([^<]+)<\/th>/g)]
       .map(match => match[1])
       .slice(-4),
     ['容器名称', '镜像', '状态', '端口']
   );
+  assert.doesNotMatch(luckyMarkup, /id="luckyOverview"/);
+  assert.match(luckyMarkup, /id="luckyConfigBody"/);
+  assert.doesNotMatch(luckyMarkup, /id="luckyDDNSBody"/);
+  assert.doesNotMatch(luckyMarkup, /id="luckyNetworkBody"/);
+  assert.doesNotMatch(luckyMarkup, /id="luckyWebBody"/);
+  assert.doesNotMatch(luckyMarkup, /id="luckyForwardBody"/);
+  assert.match(luckyMarkup, /id="luckyCertificateBody"/);
+  assert.deepEqual(
+    [...luckyMarkup.matchAll(/<th(?: [^>]*)?>([^<]+)<\/th>/g)].map(match => match[1]).slice(0, 10),
+    ['DDNS服务商', '地址获取方式', '本地记录状态', '最近同步时间/下次同步时间', '已更新/总域名记录', 'Web服务', '已启用/端口转发总和', '监听端口', '连接数', '已启用/规则总和']
+  );
+  assert.doesNotMatch(luckyMarkup, /id="luckyConfigMeta"/);
+  assert.doesNotMatch(appSource, /接口 \/ Web/);
   assert.match(appSource, /refresh\('initial'\)/);
   assert.match(appSource, /setActivePage\(tab\.dataset\.pageTarget\)/);
   assert.match(appSource, /pageFromHash\(window\.location\.hash\)/);
-  assert.match(appSource, /renderDockerSummary\(view\)/);
+  assert.doesNotMatch(appSource, /renderDockerSummary|renderLuckyOverview/);
   const pageSwitchSource = appSource.slice(appSource.indexOf('function setActivePage'), appSource.indexOf('function detailRow'));
   assert.doesNotMatch(pageSwitchSource, /fetchStats|controller\.refresh|setInterval/);
   assert.doesNotMatch(appSource, /WebSocket|EventSource|\/api\/|\/testdata\//);

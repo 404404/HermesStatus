@@ -248,8 +248,93 @@ func extensionOpenAPISchemas() map[string]any {
 		"error": map[string]any{"code": "not_reported", "message": "Extension data was not reported", "source": "hermes", "retryable": false, "http_status": nil},
 	}
 
+	luckyStatus := map[string]any{"type": "string", "enum": []string{"ok", "degraded", "error", "not_configured", "unavailable", "stale", "unknown"}}
+	luckySource := map[string]any{"type": "string", "enum": []string{"api", "local_api", "config", "cli", "web_fallback", "unavailable"}}
+	luckyModuleProperties := func(itemsName, itemSchema string) map[string]any {
+		return map[string]any{
+			"total":       map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems},
+			"enabled":     map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems},
+			"disabled":    map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems},
+			"healthy":     map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems},
+			"error_count": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems},
+			itemsName:     map[string]any{"type": "array", "maxItems": MaxLuckyItems, "items": schemaRef(itemSchema), "default": []any{}},
+			"status":      luckyStatus, "updated_at": nullableString(MaxTimestampLength, "Module collection time in RFC3339"),
+			"stale": map[string]any{"type": "boolean"}, "error": nullableRef("ExtensionError"),
+		}
+	}
+	luckyDDNSRecord := requiredObject(
+		[]string{"id", "display_name", "provider", "address_method", "local_record_change_status", "updated_records", "total_records", "enabled", "status", "record_type", "last_update_at", "next_sync_at", "last_success_at", "error"},
+		map[string]any{
+			"id": map[string]any{"type": "string", "maxLength": MaxLuckyNameLength}, "display_name": map[string]any{"type": "string", "maxLength": MaxLuckyNameLength},
+			"provider": nullableString(MaxLuckyProviderLength, "Sanitized provider name"), "enabled": map[string]any{"type": "boolean"},
+			"address_method": nullableString(MaxLuckyTextLength, "Sanitized address acquisition method"), "local_record_change_status": nullableString(MaxLuckyStatusLength, "Sanitized local record change state"),
+			"updated_records": nullableInteger(MaxSafeInteger, "Updated domain record count"), "total_records": nullableInteger(MaxSafeInteger, "Total domain record count"),
+			"status": map[string]any{"type": "string", "maxLength": MaxLuckyStatusLength}, "record_type": nullableString(MaxLuckyStatusLength, "Record type"),
+			"last_update_at": nullableString(MaxTimestampLength, "Last synchronization time"), "next_sync_at": nullableString(MaxTimestampLength, "Next scheduled synchronization time"), "last_success_at": nullableString(MaxTimestampLength, "Last successful update time"), "error": nullableRef("ExtensionError"),
+		},
+	)
+	luckyWebService := requiredObject(
+		[]string{"id", "display_name", "enabled", "status", "protocol", "listen_port", "upstream_type", "tls_enabled", "certificate_ref", "connection_count", "enabled_subrules", "total_subrules", "error"},
+		map[string]any{
+			"id": map[string]any{"type": "string", "maxLength": MaxLuckyNameLength}, "display_name": map[string]any{"type": "string", "maxLength": MaxLuckyNameLength},
+			"enabled": map[string]any{"type": "boolean"}, "status": map[string]any{"type": "string", "maxLength": MaxLuckyStatusLength},
+			"protocol": map[string]any{"type": "string", "maxLength": MaxLuckyProtocolLength}, "listen_port": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 65535},
+			"upstream_type": nullableString(MaxLuckyStatusLength, "Sanitized upstream class"), "tls_enabled": map[string]any{"type": "boolean"},
+			"certificate_ref": nullableString(MaxLuckyNameLength, "Sanitized certificate label"), "connection_count": nullableInteger(MaxSafeInteger, "Current connection count"),
+			"enabled_subrules": nullableInteger(MaxSafeInteger, "Enabled Web subrule count"), "total_subrules": nullableInteger(MaxSafeInteger, "Total Web subrule count"), "error": nullableRef("ExtensionError"),
+		},
+	)
+	luckyPortForward := requiredObject(
+		[]string{"id", "display_name", "enabled", "status", "protocol", "listen_port", "target_type", "connection_count", "error"},
+		map[string]any{
+			"id": map[string]any{"type": "string", "maxLength": MaxLuckyNameLength}, "display_name": map[string]any{"type": "string", "maxLength": MaxLuckyNameLength},
+			"enabled": map[string]any{"type": "boolean"}, "status": map[string]any{"type": "string", "maxLength": MaxLuckyStatusLength},
+			"protocol": map[string]any{"type": "string", "maxLength": MaxLuckyProtocolLength}, "listen_port": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 65535},
+			"target_type": nullableString(MaxLuckyStatusLength, "Sanitized target class"), "connection_count": nullableInteger(MaxSafeInteger, "Current connection count"), "error": nullableRef("ExtensionError"),
+		},
+	)
+	luckyCertificate := requiredObject(
+		[]string{"id", "display_name", "san_count", "issuer", "source", "not_before", "not_after", "remaining_days", "status", "auto_renew", "last_renew_at", "next_renew_at", "error"},
+		map[string]any{
+			"id": map[string]any{"type": "string", "maxLength": MaxLuckyNameLength}, "display_name": map[string]any{"type": "string", "maxLength": MaxLuckyNameLength},
+			"san_count": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxDockerCount}, "issuer": nullableString(MaxLuckyNameLength, "Sanitized issuer"),
+			"source": map[string]any{"type": "string", "maxLength": MaxLuckyStatusLength}, "not_before": nullableString(MaxTimestampLength, "Certificate activation time"),
+			"not_after": nullableString(MaxTimestampLength, "Certificate expiration time"), "remaining_days": map[string]any{"type": []string{"integer", "null"}, "minimum": -MaxLuckyCertificateDays, "maximum": MaxLuckyCertificateDays},
+			"status": map[string]any{"type": "string", "enum": []string{"valid", "expiring", "expired", "not_yet_valid", "invalid", "unknown"}}, "auto_renew": map[string]any{"type": []string{"boolean", "null"}},
+			"last_renew_at": nullableString(MaxTimestampLength, "Last renewal time"), "next_renew_at": nullableString(MaxTimestampLength, "Next renewal time"), "error": nullableRef("ExtensionError"),
+		},
+	)
+	luckyService := requiredObject([]string{"state", "process_running", "process_pid", "uptime_seconds", "api_reachable", "web_reachable", "error"}, map[string]any{
+		"state": map[string]any{"type": "string", "maxLength": MaxLuckyStatusLength}, "process_running": map[string]any{"type": []string{"boolean", "null"}},
+		"process_pid": nullableInteger(MaxSafeInteger, "Lucky process ID"), "uptime_seconds": nullableInteger(MaxSafeInteger, "Lucky process uptime"),
+		"api_reachable": map[string]any{"type": "boolean"}, "web_reachable": map[string]any{"type": "boolean"}, "error": nullableRef("ExtensionError"),
+	})
+	luckyVersion := requiredObject([]string{"current", "latest", "update_available", "build_info", "checked_at", "stale", "error"}, map[string]any{
+		"current": nullableString(MaxLuckyVersionLength, "Current Lucky version"), "latest": nullableString(MaxLuckyVersionLength, "Latest known Lucky version"),
+		"update_available": map[string]any{"type": []string{"boolean", "null"}}, "build_info": nullableString(MaxLuckyBuildInfoLength, "Sanitized build information"),
+		"checked_at": nullableString(MaxTimestampLength, "Latest-version check time"), "stale": map[string]any{"type": "boolean"}, "error": nullableRef("ExtensionError"),
+	})
+	luckyIPResolution := requiredObject([]string{"mode", "resolved_ip_count", "ipv4_count", "ipv6_count", "status", "updated_at", "stale", "error"}, map[string]any{
+		"mode": nullableString(MaxLuckyTextLength, "Sanitized resolution mode"), "resolved_ip_count": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxDockerCount},
+		"ipv4_count": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxDockerCount}, "ipv6_count": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxDockerCount},
+		"status": luckyStatus, "updated_at": nullableString(MaxTimestampLength, "Module collection time"), "stale": map[string]any{"type": "boolean"}, "error": nullableRef("ExtensionError"),
+	})
+	luckyCertificates := requiredObject([]string{"total", "valid", "expiring", "expired", "not_yet_valid", "invalid", "unknown", "items", "status", "updated_at", "stale", "error"}, map[string]any{
+		"total": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems}, "valid": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems},
+		"expiring": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems}, "expired": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems},
+		"not_yet_valid": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems}, "invalid": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems},
+		"unknown": map[string]any{"type": "integer", "minimum": 0, "maximum": MaxLuckyItems}, "items": map[string]any{"type": "array", "maxItems": MaxLuckyItems, "items": schemaRef("LuckyCertificate"), "default": []any{}},
+		"status": luckyStatus, "updated_at": nullableString(MaxTimestampLength, "Module collection time"), "stale": map[string]any{"type": "boolean"}, "error": nullableRef("ExtensionError"),
+	})
+	luckyStats := requiredObject([]string{"status", "source", "service", "version", "ip_resolution", "dynamic_dns", "web_services", "port_forwards", "certificates", "updated_at", "stale", "error"}, map[string]any{
+		"status": luckyStatus, "source": luckySource, "service": schemaRef("LuckyServiceStats"), "version": schemaRef("LuckyVersionStats"),
+		"ip_resolution": schemaRef("LuckyIPResolutionStats"), "dynamic_dns": schemaRef("LuckyDynamicDNSStats"), "web_services": schemaRef("LuckyWebServicesStats"),
+		"port_forwards": schemaRef("LuckyPortForwardsStats"), "certificates": schemaRef("LuckyCertificatesStats"),
+		"updated_at": nullableString(MaxTimestampLength, "Client collection time in RFC3339"), "stale": map[string]any{"type": "boolean", "description": "Recomputed by the Go server using a 900 second threshold"}, "error": nullableRef("ExtensionError"),
+	})
+
 	statsServer := requiredObject(
-		[]string{"name", "type", "host", "location", "online4", "online6", "extension_version", "received_at", "hardware", "docker", "hermes"},
+		[]string{"name", "type", "host", "location", "online4", "online6", "extension_version", "received_at", "hardware", "docker", "hermes", "lucky"},
 		map[string]any{
 			"name": stringOpenAPISchema(), "type": stringOpenAPISchema(), "host": stringOpenAPISchema(), "location": stringOpenAPISchema(),
 			"online4": map[string]any{"type": "boolean"}, "online6": map[string]any{"type": "boolean"},
@@ -267,6 +352,7 @@ func extensionOpenAPISchemas() map[string]any {
 			"hardware":          schemaRef("HardwareStats"),
 			"docker":            schemaRef("DockerStats"),
 			"hermes":            schemaRef("HermesStats"),
+			"lucky":             schemaRef("LuckyStats"),
 		},
 	)
 	statsDocument := requiredObject(
@@ -294,6 +380,18 @@ func extensionOpenAPISchemas() map[string]any {
 		"MixtureOfAgentsStats":   mixtureOfAgents,
 		"HermesProfileStats":     hermesProfile,
 		"HermesStats":            hermesStats,
+		"LuckyDDNSRecord":        luckyDDNSRecord,
+		"LuckyWebService":        luckyWebService,
+		"LuckyPortForward":       luckyPortForward,
+		"LuckyCertificate":       luckyCertificate,
+		"LuckyServiceStats":      luckyService,
+		"LuckyVersionStats":      luckyVersion,
+		"LuckyIPResolutionStats": luckyIPResolution,
+		"LuckyDynamicDNSStats":   requiredObject([]string{"total", "enabled", "disabled", "healthy", "error_count", "records", "status", "updated_at", "stale", "error"}, luckyModuleProperties("records", "LuckyDDNSRecord")),
+		"LuckyWebServicesStats":  requiredObject([]string{"total", "enabled", "disabled", "healthy", "error_count", "services", "status", "updated_at", "stale", "error"}, luckyModuleProperties("services", "LuckyWebService")),
+		"LuckyPortForwardsStats": requiredObject([]string{"total", "enabled", "disabled", "healthy", "error_count", "rules", "status", "updated_at", "stale", "error"}, luckyModuleProperties("rules", "LuckyPortForward")),
+		"LuckyCertificatesStats": luckyCertificates,
+		"LuckyStats":             luckyStats,
 		"StatsServer":            statsServer,
 		"StatsDocument":          statsDocument,
 	}

@@ -26,6 +26,7 @@ RUN apk add --no-cache python3 py3-psutil py3-yaml iproute2 procps smartmontools
 COPY clients/client-linux.py /app/client-linux.py
 COPY clients/client-psutil.py /app/client-psutil.py
 COPY clients/host_collector.py /app/host_collector.py
+COPY clients/lucky_collector.py /app/lucky_collector.py
 COPY scripts/export-hermes-status.py /app/export-hermes-status.py
 COPY scripts/hermes_config_summary.py /app/hermes_config_summary.py
 COPY hermes-exporter.json /app/hermes-exporter.json
@@ -58,7 +59,15 @@ ENV SERVER=127.0.0.1 \
     HERMES_STATUS_FILE=/var/lib/serverstatus-client/hermes/hermes.json \
     HERMES_EXPORT_ENABLED=true \
     HERMES_EXPORT_INTERVAL=600 \
-    HERMES_SNAPSHOT_INTERVAL=10
+    HERMES_SNAPSHOT_INTERVAL=10 \
+    LUCKY_ENABLED=false \
+    LUCKY_BASE_URL=http://127.0.0.1:16601 \
+    LUCKY_TOKEN_FILE=/run/secrets/lucky-open-token \
+    LUCKY_INTERVAL=600 \
+    LUCKY_TIMEOUT_SECONDS=5 \
+    LUCKY_VERSION_CHECK_TTL=21600 \
+    LUCKY_VERIFY_TLS=true \
+    LUCKY_CERT_WARNING_DAYS=30
 
 RUN chmod +x /app/entrypoint.sh
 

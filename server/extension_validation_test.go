@@ -75,6 +75,8 @@ func TestValidationRejectsUnsupportedEnums(t *testing.T) {
 			stats.Hermes.Profiles[0].UsageMode = &value
 		}},
 		{"token-source", func(stats *ExtensionStats) { stats.Hermes.Profiles[0].Usage.Source = "monthly" }},
+		{"lucky-status", func(stats *ExtensionStats) { stats.Lucky.Status = "ready" }},
+		{"lucky-source", func(stats *ExtensionStats) { stats.Lucky.Source = "raw" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -84,6 +86,30 @@ func TestValidationRejectsUnsupportedEnums(t *testing.T) {
 				t.Fatal("expected validation error")
 			}
 		})
+	}
+}
+
+func TestLuckyRejectsUnknownAndSecretFields(t *testing.T) {
+	data := readFixture(t, "update-normal.json")
+	var object map[string]any
+	if err := json.Unmarshal(data, &object); err != nil {
+		t.Fatal(err)
+	}
+	lucky := object["lucky"].(map[string]any)
+	lucky["raw_response"] = map[string]any{"value": "not allowed"}
+	raw, _ := json.Marshal(lucky)
+	_, err := DecodeLuckyStatsJSON(raw)
+	assertValidationError(t, err, validationCodeUnknownField)
+
+	delete(lucky, "raw_response")
+	lucky["dynamic_dns"].(map[string]any)["records"].([]any)[0].(map[string]any)["display_name"] = "pass" + "word=not-allowed"
+	raw, _ = json.Marshal(lucky)
+	decoded, err := DecodeLuckyStatsJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.DynamicDNS.Records[0].DisplayName != RedactedValue {
+		t.Fatalf("secret-like Lucky value was not redacted: %q", decoded.DynamicDNS.Records[0].DisplayName)
 	}
 }
 

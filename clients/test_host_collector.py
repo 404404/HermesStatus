@@ -27,6 +27,7 @@ from host_collector import (
     read_hermes_snapshot,
     smart_candidates,
 )
+from lucky_collector import not_configured_lucky
 
 
 CLIENT_DIR = Path(__file__).resolve().parent
@@ -308,6 +309,7 @@ class HostCollectorTests(unittest.TestCase):
             "hardware": hardware,
             "docker": docker_stats,
             "hermes": not_reported_hermes(),
+            "lucky": not_configured_lucky(),
         }
         self.assertFalse(any(key.endswith("_json") for key in payload))
         serialized = json.dumps(payload)
@@ -336,6 +338,7 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(update["extension_version"], EXTENSION_VERSION)
         self.assertEqual(update["hardware"], not_reported_hardware())
         self.assertEqual(update["docker"], not_reported_docker())
+        self.assertEqual(update["lucky"], not_configured_lucky())
 
     def test_collector_starts_with_stable_empty_hermes(self):
         collector = HostExtensionCollector(
@@ -353,6 +356,7 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(payload["hermes"], not_reported_hermes())
         self.assertEqual(payload["hardware"], not_reported_hardware())
         self.assertEqual(payload["docker"], not_reported_docker())
+        self.assertEqual(payload["lucky"], not_configured_lucky())
 
     def test_start_runs_collectors_immediately_and_payload_reads_are_cached(self):
         smart_json = json.dumps(fixture_json("smart-normal.json"))

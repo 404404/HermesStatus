@@ -91,16 +91,6 @@ function formatTemperature(value){
   return `${Number.isInteger(number) ? number : number.toFixed(1)} °C`;
 }
 
-function formatDiskTemperature(temperature){
-  if(!temperature || typeof temperature !== 'object') return '-';
-  const values = [temperature.current, temperature.highest, temperature.lowest].map(value => {
-    const number = finiteNumber(value);
-    return number === null ? '-' : Number.isInteger(number) ? String(number) : number.toFixed(1);
-  });
-  if(values.every(value => value === '-')) return '-';
-  return `${values.join(' / ')} °C`;
-}
-
 function formatUptime(value){
   if(typeof value === 'string' && value.trim()) return value.trim();
   const seconds = finiteNumber(value);
@@ -140,7 +130,7 @@ function modelBreakdown(profile){
 }
 
 function normalizePageName(value){
-  return value === 'docker' ? 'docker' : 'home';
+	return ['docker', 'lucky'].includes(value) ? value : 'home';
 }
 
 function pageFromHash(hashValue){
@@ -166,11 +156,12 @@ function safeObject(value){
 function buildViewModel(documentValue){
   const documentObject = normalizeStatsPayload(documentValue);
   const host = selectSingleHost(documentObject.servers);
-  if(!host) return { host: null, document: documentObject, hardware: {}, docker: {}, hermes: {}, profiles: [], containers: [] };
+	if(!host) return { host: null, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, profiles: [], containers: [] };
 
   const hardware = safeObject(host.hardware);
   const docker = safeObject(host.docker);
-  const hermes = safeObject(host.hermes);
+	const hermes = safeObject(host.hermes);
+	const lucky = safeObject(host.lucky);
   const memoryPercent = percentage(host.memory_used, host.memory_total);
   const diskPercent = percentage(host.hdd_used, host.hdd_total);
   const cpuPercent = finiteNumber(host.cpu) === null ? null : clamp(host.cpu, 0, 100);
@@ -180,7 +171,8 @@ function buildViewModel(documentValue){
     host,
     hardware,
     docker,
-    hermes,
+		hermes,
+		lucky,
     profiles: Array.isArray(hermes.profiles) ? hermes.profiles : [],
     containers: Array.isArray(docker.containers) ? docker.containers : [],
     resources: {
@@ -199,8 +191,10 @@ function buildViewModel(documentValue){
 }
 
 function collectWarnings(view){
-  if(!view.host) return [];
-  return [view.hardware, view.docker, view.hermes, ...view.profiles]
+	if(!view.host) return [];
+	const domains = [view.hardware, view.docker, view.hermes, ...view.profiles];
+	if(luckyIsConfigured(view.lucky)) domains.push(view.lucky);
+	return domains
     .map(domain => domain?.error)
     .filter(error => error && typeof error === 'object')
     .map(error => textOrDash(error.message || error.code))
@@ -212,8 +206,9 @@ function statusTone(value){
   if(status.startsWith('up ') || status.includes('(healthy)')) return 'ok';
   if(status.startsWith('exited') || status.startsWith('dead')) return 'err';
   if(status.startsWith('created') || status.startsWith('paused') || status.startsWith('restarting') || status.startsWith('removing')) return 'warn';
-  if(['passed', 'running', 'ok', 'healthy', 'up', 'active'].includes(status)) return 'ok';
-  if(['failed', 'down', 'stopped', 'unauthorized', 'timeout', 'dead', 'exited'].includes(status)) return 'err';
+	if(['passed', 'running', 'ok', 'healthy', 'up', 'active', 'valid'].includes(status)) return 'ok';
+	if(['degraded', 'stale', 'expiring', 'not_yet_valid'].includes(status)) return 'warn';
+	if(['failed', 'down', 'stopped', 'unauthorized', 'timeout', 'dead', 'exited', 'error', 'expired', 'invalid', 'unavailable'].includes(status)) return 'err';
   return 'neutral';
 }
 
@@ -223,7 +218,9 @@ function statusText(value){
     passed: '通过', failed: '失败', unknown: '未知', unavailable: '不可用',
     running: '运行中', healthy: '正常', ok: '正常', active: '活动',
     stopped: '已停止', down: '离线', unauthorized: '未授权', timeout: '超时',
-    exited: '已退出', dead: '异常'
+		exited: '已退出', dead: '异常', degraded: '部分异常', stale: '已陈旧',
+		not_configured: '未配置', error: '异常', valid: '有效', expiring: '即将到期',
+		expired: '已过期', not_yet_valid: '尚未生效', invalid: '无效'
   };
   return labels[status] || textOrDash(value);
 }
@@ -236,6 +233,10 @@ function domainIsUnknown(value){
   return !value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length === 0;
 }
 
+function luckyIsConfigured(lucky){
+	return !domainIsUnknown(lucky) && lucky.status !== 'not_configured' && lucky.error?.code !== 'not_reported';
+}
+
 function dashboardCondition(view, refreshError = null){
   if(refreshError) return {kind: 'error', title: '刷新失败', message: textOrDash(refreshError.message || refreshError)};
   if(!view.host) return {kind: 'empty', title: '暂无主机数据', message: 'stats.json 暂无可显示的主机。'};
@@ -246,9 +247,10 @@ function dashboardCondition(view, refreshError = null){
   if(warnings.length){
     return {kind: 'error', title: '部分数据不可用', message: warnings.join('；')};
   }
-  const staleDomains = [
-    ['硬件', view.hardware], ['Docker', view.docker], ['Hermes', view.hermes]
-  ].filter(([, domain]) => domain?.stale === true).map(([name]) => name);
+	const staleDomains = [
+		['硬件', view.hardware], ['Docker', view.docker], ['Hermes', view.hermes]
+	].filter(([, domain]) => domain?.stale === true).map(([name]) => name);
+	if(luckyIsConfigured(view.lucky) && view.lucky?.stale === true) staleDomains.push('Lucky');
   if(view.profiles.some(profile => profile?.stale === true)) staleDomains.push('Profile');
   if(staleDomains.length){
     return {kind: 'stale', title: '数据已陈旧', message: `${[...new Set(staleDomains)].join('、')} 数据超过刷新时限。`};
@@ -300,8 +302,7 @@ function fitCpuModelToSingleLine(){
 
 function renderOverview(view){
   const resources = view.resources;
-  const dockerRunning = finiteNumber(view.docker.running);
-  const dockerTotal = finiteNumber(view.docker.total);
+  const hardware = view.hardware;
   byId('overviewCards').innerHTML = `
     <article class="summary-card resource-card">
       <h2>CPU</h2>
@@ -318,20 +319,23 @@ function renderOverview(view){
       <div class="card-detail resource-value">${escapeHtml(resources.diskText)}</div>
       ${resourceBar(resources.diskPercent, '硬盘使用率')}
     </article>
-    <article class="summary-card count-card">
-      <h2>运行中/总容器数量</h2>
-      <div class="card-value">${dockerRunning === null || dockerTotal === null ? '-' : `${formatInteger(dockerRunning)} / ${formatInteger(dockerTotal)}`}</div>
+    <article class="summary-card stacked-card temperature-card">
+      <h2>CPU温度/硬盘温度</h2>
+      <div class="card-value">${escapeHtml(formatTemperature(hardware.cpu_temperature?.value))}</div>
+      <div class="card-subvalue">${escapeHtml(formatTemperature(hardware.disk_temperature?.current))}</div>
     </article>
-    <article class="summary-card uptime-card">
-      <h2>已运行时间</h2>
+    <article class="summary-card stacked-card uptime-system-card">
+      <h2>已运行时间/操作系统</h2>
       <div class="card-value">${escapeHtml(formatUptime(view.host.uptime))}</div>
-      <div class="card-detail system-detail" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div>
+      <div class="card-subvalue" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div>
     </article>`;
   requestAnimationFrame(fitCpuModelToSingleLine);
 }
 
 function renderHardware(view){
   const hardware = view.hardware;
+  const docker = view.docker;
+  const lucky = view.lucky;
   const smartStatus = hardware.disk_smart_status ?? 'unknown';
   const powerOnHours = finiteNumber(hardware.disk_power_on_hours);
   const powerOnDays = approximateDays(powerOnHours);
@@ -339,11 +343,52 @@ function renderHardware(view){
     ? '-'
     : `${formatBytes(hardware.disk_written_bytes)} / ${formatBytes(hardware.disk_read_bytes)}`;
   byId('hardwareHealth').innerHTML = `
-    <article class="health-card"><h2>CPU 温度</h2><div class="health-value">${escapeHtml(formatTemperature(hardware.cpu_temperature?.value))}</div></article>
-    <article class="health-card"><h2>硬盘当前/最高/最低温度</h2><div class="health-value">${escapeHtml(formatDiskTemperature(hardware.disk_temperature))}</div></article>
+    <article class="health-card"><h2>运行中/容器总数</h2><div class="health-value">${escapeHtml(formatPair(docker.running, docker.total))}</div></article>
+    <article class="health-card"><h2>Lucky运行状态/版本</h2><div class="health-value lucky-home-value">${escapeHtml(statusText(lucky.status))}<span class="health-inline-meta">(${escapeHtml(textOrDash(lucky.version?.current))})</span></div></article>
     <article class="health-card"><h2>硬盘 SMART 状态</h2><div class="health-value">${badge(smartStatus)}</div></article>
     <article class="health-card"><h2>硬盘通电时间</h2><div class="health-value power-on-value">${powerOnHours === null ? '-' : `${formatInteger(powerOnHours)} h <span class="power-on-days">(约${formatInteger(powerOnDays)}天)</span>`}</div></article>
     <article class="health-card"><h2>硬盘写入/读取量</h2><div class="health-value">${escapeHtml(readWrite)}</div></article>`;
+}
+
+function renderLuckyTables(view){
+	const lucky = view.lucky;
+	const ddns = safeObject(lucky.dynamic_dns);
+	const records = Array.isArray(ddns.records) ? ddns.records : [];
+	const web = safeObject(lucky.web_services);
+	const services = Array.isArray(web.services) ? web.services : [];
+	const forwards = safeObject(lucky.port_forwards);
+	const rules = Array.isArray(forwards.rules) ? forwards.rules : [];
+	const configRows = records.length ? records : (services.length || rules.length ? [{}] : []);
+	const ports = [...new Set(services.map(item => Number(item.listen_port)).filter(Number.isFinite))].sort((left, right) => left - right);
+	const connections = sumLuckyValues(services, 'connection_count');
+	const enabledSubrules = sumLuckyValues(services, 'enabled_subrules');
+	const totalSubrules = sumLuckyValues(services, 'total_subrules');
+	byId('luckyConfigBody').innerHTML = configRows.length ? configRows.map(item => `<tr><td class="strong-cell">${escapeHtml(textOrDash(item.provider))}</td><td>${escapeHtml(textOrDash(item.address_method))}</td><td>${escapeHtml(luckyChangeStatus(item.local_record_change_status))}</td><td class="lucky-sync-cell"><span>${escapeHtml(formatDateTime(item.last_update_at))}</span><span>${escapeHtml(formatDateTime(item.next_sync_at))}</span></td><td>${escapeHtml(formatLuckyCount(item.updated_records, item.total_records))}</td><td>${escapeHtml(ports.length ? ports.join('、') : '-')}</td><td>${escapeHtml(formatInteger(connections))}</td><td>${escapeHtml(formatLuckyCount(enabledSubrules, totalSubrules))}</td><td>${escapeHtml(formatLuckyCount(forwards.enabled, forwards.total))}</td></tr>`).join('') : '<tr><td colspan="9" class="table-empty">暂无配置信息</td></tr>';
+
+	const certs = safeObject(lucky.certificates);
+	const items = Array.isArray(certs.items) ? certs.items : [];
+	byId('luckyCertificateBody').innerHTML = items.length ? items.map(item => `<tr><td class="strong-cell">${escapeHtml(textOrDash(item.display_name))}</td><td class="bounded-cell">${escapeHtml(textOrDash(item.issuer))}</td><td>${escapeHtml(formatDateTime(item.not_before))}</td><td>${escapeHtml(formatDateTime(item.not_after))}</td><td>${escapeHtml(formatInteger(item.remaining_days))}</td><td>${escapeHtml(item.auto_renew === null || item.auto_renew === undefined ? '-' : item.auto_renew ? '是' : '否')}</td><td>${badge(item.status)}</td></tr>`).join('') : '<tr><td colspan="7" class="table-empty">暂无证书数据</td></tr>';
+}
+
+function luckyChangeStatus(value){
+	const normalized = String(value ?? '').trim().toLowerCase();
+	if(normalized === 'changed' || normalized === 'true') return '已变化';
+	if(normalized === 'unchanged' || normalized === 'false') return '无变化';
+	return textOrDash(value);
+}
+
+function formatLuckyCount(current, total){
+	if((current === null || current === undefined) && (total === null || total === undefined)) return '-';
+	return `${formatInteger(current)} / ${formatInteger(total)}`;
+}
+
+function sumLuckyValues(items, field){
+	const values = items.map(item => item?.[field]).filter(value => value !== null && value !== undefined).map(Number).filter(value => Number.isFinite(value) && value >= 0);
+	return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function renderLucky(view){
+	renderLuckyTables(view);
 }
 
 function renderProfiles(view){
@@ -360,43 +405,6 @@ function renderProfiles(view){
       <td>${escapeHtml(formatPair(profile.sessions_active, profile.sessions_total))}</td>
       <td class="token-cell">${escapeHtml(tokenBreakdown(profile.usage))}${profile.usage?.estimated ? '<span class="estimate-mark" title="估算值">估算</span>' : ''}</td>
     </tr>`).join('') : '<tr><td colspan="9" class="table-empty">暂无 Hermes Profile 数据</td></tr>';
-}
-
-function dockerStateText(docker){
-  if(docker?.error) return '异常';
-  if(docker?.stale === true) return '陈旧';
-  if(docker?.updated_at) return '最新';
-  return '未知';
-}
-
-function renderDockerSummary(view){
-  const docker = view.docker;
-  const running = finiteNumber(docker.running);
-  const total = finiteNumber(docker.total);
-  const errorText = docker?.error ? textOrDash(docker.error.message || docker.error.code) : '-';
-  const stateText = dockerStateText(docker);
-  const stateTone = docker?.error ? 'err' : docker?.stale === true ? 'warn' : docker?.updated_at ? 'ok' : 'neutral';
-  byId('dockerSummary').innerHTML = `
-    <article class="docker-summary-card">
-      <h2>运行中</h2>
-      <div class="docker-summary-value">${escapeHtml(formatInteger(running))}</div>
-    </article>
-    <article class="docker-summary-card">
-      <h2>容器总数</h2>
-      <div class="docker-summary-value">${escapeHtml(formatInteger(total))}</div>
-    </article>
-    <article class="docker-summary-card docker-summary-time">
-      <h2>数据更新时间</h2>
-      <div class="docker-summary-detail">${escapeHtml(formatDateTime(docker.updated_at))}</div>
-    </article>
-    <article class="docker-summary-card">
-      <h2>数据状态</h2>
-      <div class="docker-summary-value">${`<span class="badge ${stateTone}">${escapeHtml(stateText)}</span>`}</div>
-    </article>
-    <article class="docker-summary-card docker-summary-error">
-      <h2>采集错误</h2>
-      <div class="docker-summary-detail" title="${escapeHtml(errorText)}">${escapeHtml(errorText)}</div>
-    </article>`;
 }
 
 function renderContainers(view){
@@ -422,10 +430,10 @@ function renderDashboard(view){
     return;
   }
   renderOverview(view);
-  renderHardware(view);
+	renderHardware(view);
   renderProfiles(view);
-  renderDockerSummary(view);
-  renderContainers(view);
+	renderContainers(view);
+	renderLucky(view);
   applyPageVisibility();
   setPageState(dashboardCondition(view));
   if(dashboardState.selectedProfileIndex !== null){
@@ -437,7 +445,7 @@ function renderDashboard(view){
 function applyPageVisibility(){
   const activePage = normalizePageName(dashboardState.activePage);
   dashboardState.activePage = activePage;
-  for(const page of ['home', 'docker']){
+	for(const page of ['home', 'docker', 'lucky']){
     const active = page === activePage;
     const tab = byId(`${page}Tab`);
     const panel = byId(`${page}Page`);
@@ -458,7 +466,7 @@ function setActivePage(page, options = {}){
   if(nextPage !== 'home') closeProfileModal();
   applyPageVisibility();
   if(options.updateHash !== false && typeof window !== 'undefined'){
-    const nextHash = nextPage === 'docker' ? '#docker' : '#home';
+		const nextHash = `#${nextPage}`;
     if(window.location.hash !== nextHash) window.history.replaceState(null, '', nextHash);
   }
   if(nextPage === 'home') requestAnimationFrame(fitCpuModelToSingleLine);
@@ -705,7 +713,9 @@ function bindInteractions(){
     tab.addEventListener('keydown', event => {
       if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-      const nextPage = event.key === 'Home' || event.key === 'ArrowLeft' ? 'home' : 'docker';
+			const pages = ['home', 'docker', 'lucky'];
+			const current = pages.indexOf(dashboardState.activePage);
+			const nextPage = event.key === 'Home' ? pages[0] : event.key === 'End' ? pages[pages.length - 1] : event.key === 'ArrowLeft' ? pages[(current - 1 + pages.length) % pages.length] : pages[(current + 1) % pages.length];
       setActivePage(nextPage);
       byId(`${nextPage}Tab`).focus();
     });
@@ -734,7 +744,7 @@ function initDashboard(){
   dashboardState.controller?.stop();
   const initialHash = window.location.hash;
   dashboardState.activePage = pageFromHash(initialHash);
-  if(initialHash && !['#home', '#docker'].includes(initialHash.toLowerCase())){
+	if(initialHash && !['#home', '#docker', '#lucky'].includes(initialHash.toLowerCase())){
     window.history.replaceState(null, '', '#home');
   }
   applyPageVisibility();
@@ -778,10 +788,9 @@ const exported = {
   collectWarnings,
   createRefreshController,
   dashboardCondition,
-  dockerStateText,
+	luckyIsConfigured,
   fittedFontSize,
   formatBytes,
-  formatDiskTemperature,
   formatPair,
   modelBreakdown,
   normalizeStatsPayload,

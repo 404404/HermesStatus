@@ -33,6 +33,9 @@ func TestDecodeAgentUpdateStructuredAndNativeFields(t *testing.T) {
 	if len(extension.Hermes.Profiles) != 2 {
 		t.Fatalf("Hermes profiles were not decoded: %#v", extension.Hermes)
 	}
+	if extension.Lucky == nil || extension.Lucky.Status != LuckyStatusOK || extension.Lucky.Certificates.Total != 3 {
+		t.Fatalf("Lucky data was not decoded: %#v", extension.Lucky)
+	}
 }
 
 func TestDecodeAgentUpdateLegacyDomains(t *testing.T) {
@@ -89,12 +92,13 @@ func TestNativeClientGetsStableNotReportedDomains(t *testing.T) {
 		"hardware": extension.Hardware.Error,
 		"docker":   extension.Docker.Error,
 		"hermes":   extension.Hermes.Error,
+		"lucky":    extension.Lucky.Error,
 	} {
 		if extensionError == nil || extensionError.Code != "not_reported" {
 			t.Fatalf("%s did not receive not_reported: %#v", domain, extensionError)
 		}
 	}
-	if extension.Docker.Containers == nil || extension.Hermes.Profiles == nil {
+	if extension.Docker.Containers == nil || extension.Hermes.Profiles == nil || extension.Lucky.DynamicDNS.Records == nil || extension.Lucky.Certificates.Items == nil {
 		t.Fatal("default collections must be non-nil")
 	}
 }
@@ -111,10 +115,10 @@ func TestStructuredUpdateRequiresSupportedVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if native.CPU != 55 || len(issues) != 4 {
+	if native.CPU != 55 || len(issues) != 5 {
 		t.Fatalf("version failure did not preserve native update: native=%#v issues=%#v", native, issues)
 	}
-	for _, extensionError := range []*ExtensionError{extension.Hardware.Error, extension.Docker.Error, extension.Hermes.Error} {
+	for _, extensionError := range []*ExtensionError{extension.Hardware.Error, extension.Docker.Error, extension.Hermes.Error, extension.Lucky.Error} {
 		if extensionError == nil || extensionError.Code != validationCodeMissingField {
 			t.Fatalf("structured domain was accepted without version: %#v", extensionError)
 		}
@@ -247,6 +251,9 @@ func TestSnapshotRecomputesFreshnessWithoutMutatingNodeState(t *testing.T) {
 		{"docker", dockerStaleAfter, func(stats *ExtensionStats, value string) { stats.Docker.UpdatedAt = &value }, func(snapshot ExtensionSnapshot) bool { return snapshot.Docker.Stale }},
 		{"hermes", hermesStaleAfter, func(stats *ExtensionStats, value string) { stats.Hermes.UpdatedAt = &value }, func(snapshot ExtensionSnapshot) bool { return snapshot.Hermes.Stale }},
 		{"profile", profileStaleAfter, func(stats *ExtensionStats, value string) { stats.Hermes.Profiles[0].UpdatedAt = &value }, func(snapshot ExtensionSnapshot) bool { return snapshot.Hermes.Profiles[0].Stale }},
+		{"lucky", luckyStaleAfter, func(stats *ExtensionStats, value string) { stats.Lucky.UpdatedAt = &value }, func(snapshot ExtensionSnapshot) bool { return snapshot.Lucky.Stale }},
+		{"lucky-ddns", luckyStaleAfter, func(stats *ExtensionStats, value string) { stats.Lucky.DynamicDNS.UpdatedAt = &value }, func(snapshot ExtensionSnapshot) bool { return snapshot.Lucky.DynamicDNS.Stale }},
+		{"lucky-version", luckyVersionStaleAfter, func(stats *ExtensionStats, value string) { stats.Lucky.Version.CheckedAt = &value }, func(snapshot ExtensionSnapshot) bool { return snapshot.Lucky.Version.Stale }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -275,6 +282,18 @@ func TestSnapshotRecomputesFreshnessWithoutMutatingNodeState(t *testing.T) {
 	}
 	if stats.Hardware.Stale || stats.Hardware.Error != nil || *stats.Hardware.UpdatedAt != future {
 		t.Fatalf("snapshot mutated NodeState input: %#v", stats.Hardware)
+	}
+
+	luckyStats := mustDecodeUpdate(t, "update-normal.json")
+	luckyStats.Lucky.DynamicDNS.UpdatedAt = &future
+	luckyStats.Lucky.DynamicDNS.Stale = false
+	luckyStats.Lucky.DynamicDNS.Error = nil
+	luckySnapshot := snapshotExtension(extensionSnapshotAt(*luckyStats, now), now)
+	if !luckySnapshot.Lucky.DynamicDNS.Stale || luckySnapshot.Lucky.DynamicDNS.Error == nil || luckySnapshot.Lucky.DynamicDNS.Error.Code != "clock_skew" {
+		t.Fatalf("future Lucky timestamp did not generate clock_skew: %#v", luckySnapshot.Lucky.DynamicDNS)
+	}
+	if luckyStats.Lucky.DynamicDNS.Stale || luckyStats.Lucky.DynamicDNS.Error != nil || *luckyStats.Lucky.DynamicDNS.UpdatedAt != future {
+		t.Fatalf("Lucky snapshot mutated NodeState input: %#v", luckyStats.Lucky.DynamicDNS)
 	}
 }
 
@@ -325,7 +344,7 @@ func TestSnapshotEmptyArraysAndPersistenceRestartSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(persisted), `"hardware"`) || !strings.Contains(string(persisted), `"docker"`) || !strings.Contains(string(persisted), `"hermes"`) || strings.Contains(string(persisted), "_json") {
+	if !strings.Contains(string(persisted), `"hardware"`) || !strings.Contains(string(persisted), `"docker"`) || !strings.Contains(string(persisted), `"hermes"`) || !strings.Contains(string(persisted), `"lucky"`) || strings.Contains(string(persisted), "_json") {
 		t.Fatalf("persisted stats do not contain a safe extension snapshot: %s", persisted)
 	}
 
@@ -347,7 +366,7 @@ func TestSnapshotEmptyArraysAndPersistenceRestartSemantics(t *testing.T) {
 	}
 	t.Cleanup(restarted.Close)
 	restartedServer := restarted.SnapshotStats()["servers"].([]any)[0].(map[string]any)
-	if restartedServer["hardware"].(*HardwareStats).Error.Code != "not_reported" || restartedServer["docker"].(*DockerStats).Error.Code != "not_reported" || restartedServer["hermes"].(*HermesStats).Error.Code != "not_reported" {
+	if restartedServer["hardware"].(*HardwareStats).Error.Code != "not_reported" || restartedServer["docker"].(*DockerStats).Error.Code != "not_reported" || restartedServer["hermes"].(*HermesStats).Error.Code != "not_reported" || restartedServer["lucky"].(*LuckyStats).Error.Code != "not_reported" {
 		t.Fatalf("restart restored extension freshness: %#v", restartedServer)
 	}
 	if restartedServer["os"] != "example-os" || restartedServer["cpu_model"] != "Example CPU" {
@@ -372,7 +391,7 @@ func TestReloadResetsExtensionToNotReported(t *testing.T) {
 		t.Fatal(apiErr)
 	}
 	server := app.SnapshotStats()["servers"].([]any)[0].(map[string]any)
-	if server["hardware"].(*HardwareStats).Error.Code != "not_reported" || server["docker"].(*DockerStats).Error.Code != "not_reported" || server["hermes"].(*HermesStats).Error.Code != "not_reported" {
+	if server["hardware"].(*HardwareStats).Error.Code != "not_reported" || server["docker"].(*DockerStats).Error.Code != "not_reported" || server["hermes"].(*HermesStats).Error.Code != "not_reported" || server["lucky"].(*LuckyStats).Error.Code != "not_reported" {
 		t.Fatalf("reload retained extension freshness: %#v", server)
 	}
 }
@@ -400,6 +419,7 @@ func legacyUpdatePayload(t *testing.T, fixture string, native map[string]any) []
 		t.Fatal(err)
 	}
 	delete(fields, "extension_version")
+	delete(fields, "lucky")
 	for domain, legacy := range map[string]string{"hardware": "hardware_json", "docker": "docker_json", "hermes": "hermes_json"} {
 		fields[legacy] = mustRawJSON(t, string(fields[domain]))
 		delete(fields, domain)

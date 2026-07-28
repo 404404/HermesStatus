@@ -21,7 +21,7 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 		t.Fatalf("stats response: status=%d cache=%q", response.Code, response.Header().Get("Cache-Control"))
 	}
 	body := response.Body.String()
-	for _, forbidden := range []string{"hardware_json", "docker_json", "hermes_json", "/usr/local/bin/status-server", "Authorization: Bearer", "api_key="} {
+	for _, forbidden := range []string{"hardware_json", "docker_json", "hermes_json", "lucky_json", "/usr/local/bin/status-server", "Authorization: Bearer", "api_key="} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("stats response contains forbidden content %q: %s", forbidden, body)
 		}
@@ -31,7 +31,7 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := stats["servers"].([]any)[0].(map[string]any)
-	for _, field := range []string{"extension_version", "received_at", "hardware", "docker", "hermes"} {
+	for _, field := range []string{"extension_version", "received_at", "hardware", "docker", "hermes", "lucky"} {
 		if _, ok := server[field]; !ok {
 			t.Fatalf("stats server is missing %s: %#v", field, server)
 		}
@@ -47,7 +47,7 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 		t.Fatalf("OpenAPI response: status=%d body=%s", response.Code, response.Body.String())
 	}
 	openAPIBody := response.Body.String()
-	for _, forbidden := range []string{"/api/hermes", "hardware_json", "docker_json", "hermes_json", "API_SERVER_KEY", "Authorization: Bearer"} {
+	for _, forbidden := range []string{"/api/hermes", "hardware_json", "docker_json", "hermes_json", "lucky_json", "API_SERVER_KEY", "Authorization: Bearer"} {
 		if strings.Contains(openAPIBody, forbidden) {
 			t.Fatalf("OpenAPI contains forbidden content %q", forbidden)
 		}
@@ -63,7 +63,7 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 		t.Fatalf("stats response does not reference StatsDocument: %#v", responseSchema)
 	}
 	schemas := spec["components"].(map[string]any)["schemas"].(map[string]any)
-	for _, name := range []string{"HardwareStats", "DockerStats", "HermesStats", "ConfigModelSummary", "AuxiliaryModelSummary", "DelegationSummary", "SanitizedConfigSummary", "MixtureOfAgentsStats", "StatsServer", "StatsDocument"} {
+	for _, name := range []string{"HardwareStats", "DockerStats", "HermesStats", "LuckyStats", "LuckyServiceStats", "LuckyVersionStats", "LuckyDynamicDNSStats", "LuckyWebServicesStats", "LuckyPortForwardsStats", "LuckyCertificatesStats", "ConfigModelSummary", "AuxiliaryModelSummary", "DelegationSummary", "SanitizedConfigSummary", "MixtureOfAgentsStats", "StatsServer", "StatsDocument"} {
 		schema := schemas[name].(map[string]any)
 		if schema["additionalProperties"] != false {
 			t.Fatalf("%s is not allowlisted: %#v", name, schema)

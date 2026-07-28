@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/404404/HermesStatus/schemas/lucky-extension.schema.json",
+  "title": "HermesStatus Lucky monitoring extension",
+  "$comment": "Strict display-only projection. Authentication, raw responses, addresses, configuration and write operations are deliberately absent.",
+  "type": "object",
+  "required": ["status", "source", "service", "version", "ip_resolution", "dynamic_dns", "web_services", "port_forwards", "certificates", "updated_at", "stale", "error"],
+  "properties": {
+    "status": {"$ref": "#/$defs/status"},
+    "source": {"enum": ["api", "local_api", "config", "cli", "web_fallback", "unavailable"]},
+    "service": {"$ref": "#/$defs/service"},
+    "version": {"$ref": "#/$defs/version"},
+    "ip_resolution": {"$ref": "#/$defs/ipResolution"},
+    "dynamic_dns": {"$ref": "#/$defs/dynamicDNS"},
+    "web_services": {"$ref": "#/$defs/webServices"},
+    "port_forwards": {"$ref": "#/$defs/portForwards"},
+    "certificates": {"$ref": "#/$defs/certificates"},
+    "updated_at": {"$ref": "#/$defs/nullableDateTime"},
+    "stale": {"type": "boolean"},
+    "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "status": {"enum": ["ok", "degraded", "error", "not_configured", "unavailable", "stale", "unknown"]},
+    "nullableDateTime": {"type": ["string", "null"], "format": "date-time", "maxLength": 40},
+    "nullableText": {"type": ["string", "null"], "maxLength": 256},
+    "moduleBase": {
+      "type": "object",
+      "required": ["status", "updated_at", "stale", "error"],
+      "properties": {
+        "status": {"$ref": "#/$defs/status"},
+        "updated_at": {"$ref": "#/$defs/nullableDateTime"},
+        "stale": {"type": "boolean"},
+        "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["state", "process_running", "process_pid", "uptime_seconds", "api_reachable", "web_reachable", "error"],
+      "properties": {
+        "state": {"type": "string", "minLength": 1, "maxLength": 32},
+        "process_running": {"type": ["boolean", "null"]},
+        "process_pid": {"type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991},
+        "uptime_seconds": {"type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991},
+        "api_reachable": {"type": "boolean"},
+        "web_reachable": {"type": "boolean"},
+        "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "version": {
+      "type": "object",
+      "required": ["current", "latest", "update_available", "build_info", "checked_at", "stale", "error"],
+      "properties": {
+        "current": {"type": ["string", "null"], "maxLength": 64},
+        "latest": {"type": ["string", "null"], "maxLength": 64},
+        "update_available": {"type": ["boolean", "null"]},
+        "build_info": {"type": ["string", "null"], "maxLength": 128},
+        "checked_at": {"$ref": "#/$defs/nullableDateTime"},
+        "stale": {"type": "boolean"},
+        "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "ipResolution": {
+      "type": "object",
+      "required": ["mode", "resolved_ip_count", "ipv4_count", "ipv6_count", "status", "updated_at", "stale", "error"],
+      "properties": {
+        "mode": {"$ref": "#/$defs/nullableText"},
+        "resolved_ip_count": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "ipv4_count": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "ipv6_count": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "status": {"$ref": "#/$defs/status"},
+        "updated_at": {"$ref": "#/$defs/nullableDateTime"},
+        "stale": {"type": "boolean"},
+        "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "collectionSummary": {
+      "type": "object",
+      "required": ["total", "enabled", "disabled", "healthy", "error_count", "status", "updated_at", "stale", "error"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0, "maximum": 256},
+        "enabled": {"type": "integer", "minimum": 0, "maximum": 256},
+        "disabled": {"type": "integer", "minimum": 0, "maximum": 256},
+        "healthy": {"type": "integer", "minimum": 0, "maximum": 256},
+        "error_count": {"type": "integer", "minimum": 0, "maximum": 256},
+        "status": {"$ref": "#/$defs/status"},
+        "updated_at": {"$ref": "#/$defs/nullableDateTime"},
+        "stale": {"type": "boolean"},
+        "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+      }
+    },
+    "record": {
+      "type": "object",
+      "required": ["id", "display_name", "provider", "enabled", "status", "record_type", "last_update_at", "next_sync_at", "last_success_at", "error"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "provider": {"type": ["string", "null"], "maxLength": 64},
+        "address_method": {"type": ["string", "null"], "maxLength": 256},
+        "local_record_change_status": {"type": ["string", "null"], "maxLength": 32},
+        "updated_records": {"type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991},
+        "total_records": {"type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991},
+        "enabled": {"type": "boolean"},
+        "status": {"type": "string", "minLength": 1, "maxLength": 32},
+        "record_type": {"type": ["string", "null"], "maxLength": 32},
+        "last_update_at": {"$ref": "#/$defs/nullableDateTime"},
+        "next_sync_at": {"$ref": "#/$defs/nullableDateTime"},
+        "last_success_at": {"$ref": "#/$defs/nullableDateTime"},
+        "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "webService": {
+      "type": "object",
+      "required": ["id", "display_name", "enabled", "status", "protocol", "listen_port", "upstream_type", "tls_enabled", "certificate_ref", "error"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "enabled": {"type": "boolean"},
+        "status": {"type": "string", "minLength": 1, "maxLength": 32},
+        "protocol": {"type": "string", "minLength": 1, "maxLength": 16},
+        "listen_port": {"type": ["integer", "null"], "minimum": 1, "maximum": 65535},
+        "upstream_type": {"type": ["string", "null"], "maxLength": 32},
+        "tls_enabled": {"type": "boolean"},
+        "certificate_ref": {"type": ["string", "null"], "maxLength": 128},
+        "connection_count": {"type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991},
+        "enabled_subrules": {"type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991},
+        "total_subrules": {"type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991},
+        "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "portForward": {
+      "type": "object",
+      "required": ["id", "display_name", "enabled", "status", "protocol", "listen_port", "target_type", "error"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "enabled": {"type": "boolean"},
+        "status": {"type": "string", "minLength": 1, "maxLength": 32},
+        "protocol": {"type": "string", "minLength": 1, "maxLength": 16},
+        "listen_port": {"type": ["integer", "null"], "minimum": 1, "maximum": 65535},
+        "target_type": {"type": ["string", "null"], "maxLength": 32},
+        "connection_count": {"type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991},
+        "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "certificate": {
+      "type": "object",
+      "required": ["id", "display_name", "san_count", "issuer", "source", "not_before", "not_after", "remaining_days", "status", "auto_renew", "last_renew_at", "next_renew_at", "error"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "san_count": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "issuer": {"type": ["string", "null"], "maxLength": 128},
+        "source": {"type": "string", "minLength": 1, "maxLength": 32},
+        "not_before": {"$ref": "#/$defs/nullableDateTime"},
+        "not_after": {"$ref": "#/$defs/nullableDateTime"},
+        "remaining_days": {"type": ["integer", "null"], "minimum": -365000, "maximum": 365000},
+        "status": {"enum": ["valid", "expiring", "expired", "not_yet_valid", "invalid", "unknown"]},
+        "auto_renew": {"type": ["boolean", "null"]},
+        "last_renew_at": {"$ref": "#/$defs/nullableDateTime"},
+        "next_renew_at": {"$ref": "#/$defs/nullableDateTime"},
+        "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "dynamicDNS": {
+      "allOf": [
+        {"$ref": "#/$defs/collectionSummary"},
+        {"type": "object", "required": ["records"], "properties": {"records": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/record"}}}}
+      ],
+      "unevaluatedProperties": false
+    },
+    "webServices": {
+      "allOf": [
+        {"$ref": "#/$defs/collectionSummary"},
+        {"type": "object", "required": ["services"], "properties": {"services": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/webService"}}}}
+      ],
+      "unevaluatedProperties": false
+    },
+    "portForwards": {
+      "allOf": [
+        {"$ref": "#/$defs/collectionSummary"},
+        {"type": "object", "required": ["rules"], "properties": {"rules": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/portForward"}}}}
+      ],
+      "unevaluatedProperties": false
+    },
+    "certificates": {
+      "type": "object",
+      "required": ["total", "valid", "expiring", "expired", "not_yet_valid", "invalid", "unknown", "items", "status", "updated_at", "stale", "error"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0, "maximum": 256},
+        "valid": {"type": "integer", "minimum": 0, "maximum": 256},
+        "expiring": {"type": "integer", "minimum": 0, "maximum": 256},
+        "expired": {"type": "integer", "minimum": 0, "maximum": 256},
+        "not_yet_valid": {"type": "integer", "minimum": 0, "maximum": 256},
+        "invalid": {"type": "integer", "minimum": 0, "maximum": 256},
+        "unknown": {"type": "integer", "minimum": 0, "maximum": 256},
+        "items": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/certificate"}},
+        "status": {"$ref": "#/$defs/status"},
+        "updated_at": {"$ref": "#/$defs/nullableDateTime"},
+        "stale": {"type": "boolean"},
+        "error": {"$ref": "agent-update-extension.schema.json#/$defs/error"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
