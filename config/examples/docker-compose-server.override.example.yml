@@ -1,0 +1,18 @@
+services:
+  serverstatus-server:
+    environment:
+      DEVICE_REGISTRY_PATH: /etc/hermesstatus/devices.json
+      HERMESSTATUS_DEVICE_CREDENTIALS_DIR: /etc/hermesstatus/credentials.d
+      LEGACY_DEVICE_MAPPING_PATH: /etc/hermesstatus/legacy-device-mapping.json
+      PERSISTENCE_PATH: /var/lib/hermesstatus/state-v2.json
+      HERMESSTATUS_DEVICE_ENDPOINT_ENABLED: "true"
+      HERMESSTATUS_DEVICE_TRUSTED_PROXY: "true"
+      HERMESSTATUS_DEVICE_TRUSTED_PROXY_CIDRS: 172.23.0.3/32
+    volumes:
+      - ./device-registry.example.json:/etc/hermesstatus/devices.json:ro
+      - ./credentials.d:/etc/hermesstatus/credentials.d:ro
+      - ./legacy-device-mapping.example.json:/etc/hermesstatus/legacy-device-mapping.json:ro
+      - ./state:/var/lib/hermesstatus
+    ports: !reset []
+    expose:
+      - "80"

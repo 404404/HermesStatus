@@ -5,11 +5,13 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/cppla/serverstatus/server/contracts"
+	"golang.org/x/sys/unix"
 )
 
 const maxRuntimeConfigBytes = 1 << 20
@@ -69,9 +71,21 @@ func (a *App) loadMultiDeviceRuntime(runtime RuntimeConfig) {
 }
 
 func readBoundedFile(path string, limit int64) ([]byte, error) {
-	file, err := os.Open(path)
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return nil, errors.New("document unavailable")
+	}
+	fileFD, err := unix.Open(
+		path,
+		unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW,
+		0,
+	)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("document unavailable")
+	}
+	file := os.NewFile(uintptr(fileFD), "multi-device-document")
+	if file == nil {
+		_ = unix.Close(fileFD)
+		return nil, errors.New("document unavailable")
 	}
 	defer file.Close()
 	info, err := file.Stat()

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "server": {
+    "url": "https://status.example.invalid",
+    "verify_tls": true,
+    "ca_file": "/etc/hermesstatus/example-ca.crt",
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 30
+  },
+  "device": {
+    "id": "compute-01",
+    "name": "Synthetic Compute Observation",
+    "fqdn": null,
+    "token_file": "/run/secrets/hermesstatus-device-token"
+  },
+  "collection": {
+    "interval_seconds": 60
+  }
+}

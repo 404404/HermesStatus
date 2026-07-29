@@ -44,6 +44,19 @@ class ClientV2ConfigContractTests(unittest.TestCase):
         with self.assertRaises(ClientContractError):
             parse_config_json(json.dumps(document))
 
+    def test_checked_in_manual_client_example_uses_the_real_parser(self):
+        example = (
+            ROOT / "config" / "examples" / "client-v2.example.json"
+        ).read_text(encoding="utf-8")
+        config = resolve_client_config(file_values=parse_config_json(example))
+        self.assertEqual(config.device_id, "compute-01")
+        self.assertEqual(config.server_url, "https://status.example.invalid")
+        self.assertTrue(config.verify_tls)
+        self.assertEqual(
+            config.token_file,
+            "/run/secrets/hermesstatus-device-token",
+        )
+
     def test_cli_over_env_over_file_over_defaults(self):
         config = resolve_client_config(
             file_values=self.file_values,

@@ -59,6 +59,24 @@ class ClientArgumentTests(unittest.TestCase):
             namespaces[1]["_device_v2_stats_collector"],
         )
 
+    def test_client_image_does_not_force_legacy_transport_into_v2_mode(self):
+        dockerfile = (CLIENT_DIR.parent / "Dockerfile.client").read_text(
+            encoding="utf-8"
+        )
+        for legacy_default in (
+            "ENV SERVER=",
+            "SERVERSTATUS_USER=s01",
+            "USER=s01",
+            "PORT=35601",
+            "PASSWORD=",
+        ):
+            self.assertNotIn(legacy_default, dockerfile)
+        compose = (
+            CLIENT_DIR.parent / "docker-compose-client.yml"
+        ).read_text(encoding="utf-8")
+        for legacy_key in ("SERVER:", "SERVERSTATUS_USER:", "PASSWORD:", "PORT:"):
+            self.assertIn(legacy_key, compose)
+
 
 if __name__ == "__main__":
     unittest.main()

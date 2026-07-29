@@ -90,6 +90,10 @@ nohup python3 client-linux.py SERVER=127.0.0.1 USER=s01 PASSWORD=USER_DEFAULT_PA
 | `CM` | `cm.tz.cloudcpp.com` | 移动探测地址 |
 | `CLIENT` | `psutil` | 客户端实现，可选 `psutil`、`linux` |
 
+HermesStatus 2.2 的手工设备注册、离线凭据生成、只读配置校验和
+Compose/HTTPS 代理示例见
+[多设备手工注册指南](docs/operations/MULTI_DEVICE_REGISTRATION.md)。
+
 ## 服务端参数
 
 Docker 镜像中的默认路径为：
@@ -98,6 +102,13 @@ Docker 镜像中的默认路径为：
 | --- | --- | --- |
 | `CONFIG_PATH` | `/app/config/config.json` | 主配置文件 |
 | `STATS_PATH` | `/app/data/stats.json` | 月流量与状态持久化文件 |
+| `PERSISTENCE_PATH` | 空 | 2.2 多设备运行状态文件；启用 Registry 时建议显式设置 |
+| `DEVICE_REGISTRY_PATH` | 空 | 2.2 只读设备 Registry 绝对路径 |
+| `HERMESSTATUS_DEVICE_CREDENTIALS_DIR` | 空 | 2.2 只读设备 digest 文件目录 |
+| `LEGACY_DEVICE_MAPPING_PATH` | 空 | 2.2 只读 Legacy username 映射绝对路径 |
+| `HERMESSTATUS_DEVICE_ENDPOINT_ENABLED` | `false` | 显式启用认证后的 v2 HTTPS 上报端点 |
+| `HERMESSTATUS_DEVICE_TRUSTED_PROXY` | `false` | 仅在列出可信代理地址时接受 HTTPS 转发 |
+| `HERMESSTATUS_DEVICE_TRUSTED_PROXY_CIDRS` | 空 | 可信代理地址/CIDR，最多 64 项 |
 | `WEB_DIR` | `/app/web` | WebUI 静态文件目录 |
 | `HTTP_ADDR` | `:80` | WebUI 与 HTTP API 监听地址 |
 | `AGENT_ADDR` | `:35601` | 客户端 TCP 上报监听地址 |
@@ -111,6 +122,14 @@ Docker 镜像中的默认路径为：
 ```text
 --config, -c     config.json 路径
 --stats          stats.json 路径
+--state          2.2 多设备 Persistence 路径
+--device-registry        只读 Registry 绝对路径
+--device-credentials     只读 Credential 目录
+--legacy-device-mapping  只读 Legacy Mapping 绝对路径
+--device-endpoint        启用认证后的 v2 上报端点
+--device-trusted-proxy   启用显式可信代理边界
+--device-trusted-proxy-cidrs 可信代理地址/CIDR
+--validate-device-config 只读校验三类设备配置后退出
 --web-dir, -d    WebUI 目录
 --http           HTTP 监听地址
 --agent          Agent TCP 监听地址

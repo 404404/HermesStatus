@@ -21,6 +21,7 @@ func main() {
 	var legacyBind string
 	var legacyPort int
 	var printVersion bool
+	var validateDeviceConfig bool
 
 	flag.StringVar(&opts.ConfigPath, "config", envOr("CONFIG_PATH", "config.json"), "configuration file")
 	flag.StringVar(&opts.ConfigPath, "c", envOr("CONFIG_PATH", "config.json"), "configuration file (shorthand)")
@@ -43,10 +44,22 @@ func main() {
 	flag.BoolVar(&opts.Verbose, "verbose", envBool("VERBOSE", false), "verbose HTTP logging")
 	flag.BoolVar(&opts.Verbose, "v", envBool("VERBOSE", false), "verbose HTTP logging (shorthand)")
 	flag.BoolVar(&printVersion, "version", false, "print version and exit")
+	flag.BoolVar(&validateDeviceConfig, "validate-device-config", false, "validate read-only multi-device configuration and exit")
 	flag.Parse()
 
 	if printVersion {
 		fmt.Printf("serverstatus %s commit=%s built=%s\n", version, commit, buildTime)
+		return
+	}
+	if validateDeviceConfig {
+		if exitCode := runDeviceConfigValidation(
+			opts,
+			os.Stdout,
+			os.Stderr,
+			time.Now(),
+		); exitCode != 0 {
+			os.Exit(exitCode)
+		}
 		return
 	}
 	if opts.StatsPath == "" {
