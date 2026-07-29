@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"net"
+	"net/netip"
 	"os"
 	"strconv"
 	"sync"
@@ -19,17 +20,24 @@ import (
 )
 
 type Options struct {
-	ConfigPath        string
-	StatsPath         string
-	PersistencePath   string
-	RegistryPath      string
-	LegacyMappingPath string
-	WebDir            string
-	HTTPAddr          string
-	AgentAddr         string
-	AdminToken        string
-	CORSOrigin        string
-	Verbose           bool
+	ConfigPath              string
+	StatsPath               string
+	PersistencePath         string
+	RegistryPath            string
+	LegacyMappingPath       string
+	DeviceCredentialsDir    string
+	DeviceEndpointEnabled   bool
+	TrustedProxyMode        bool
+	TrustedProxyCIDRs       string
+	AllowLoopbackDeviceHTTP bool
+	PreAuthRateLimit        int
+	DeviceRateLimit         int
+	WebDir                  string
+	HTTPAddr                string
+	AgentAddr               string
+	AdminToken              string
+	CORSOrigin              string
+	Verbose                 bool
 }
 
 type NodeState struct {
@@ -80,18 +88,23 @@ type App struct {
 	document   ConfigDocument
 	runtime    RuntimeConfig
 
-	nodeMu              sync.RWMutex
-	nodes               map[string]*NodeState
-	registry            *contracts.DeviceRegistry
-	legacyMap           map[string]string
-	deviceUsers         map[string]string
-	orphans             []contracts.OrphanedDevice
-	ownershipFailClosed bool
-	connectionID        atomic.Uint64
-	updateID            atomic.Uint64
-	generation          atomic.Uint64
-	agentRunning        atomic.Bool
-	reloadWrites        atomic.Int32
+	nodeMu                sync.RWMutex
+	nodes                 map[string]*NodeState
+	registry              *contracts.DeviceRegistry
+	legacyMap             map[string]string
+	deviceUsers           map[string]string
+	orphans               []contracts.OrphanedDevice
+	ownershipFailClosed   bool
+	deviceEndpointEnabled bool
+	deviceCredentials     map[string]deviceCredentialSet
+	trustedProxyPrefixes  []netip.Prefix
+	preAuthLimiter        *boundedRateLimiter
+	deviceLimiter         *boundedRateLimiter
+	connectionID          atomic.Uint64
+	updateID              atomic.Uint64
+	generation            atomic.Uint64
+	agentRunning          atomic.Bool
+	reloadWrites          atomic.Int32
 
 	certMu sync.RWMutex
 	certs  map[string]*CertState
@@ -118,6 +131,10 @@ func NewApp(opts Options) (*App, error) {
 		logger:    log.New(os.Stdout, "serverstatus ", log.LstdFlags|log.Lmicroseconds),
 	}
 	app.loadMultiDeviceRuntime(runtime)
+	if err := app.configureDeviceEndpoint(); err != nil {
+		cancel()
+		return nil, err
+	}
 	app.applyValidatedConfig(doc, runtime, false)
 	app.restorePersistentState()
 	return app, nil
