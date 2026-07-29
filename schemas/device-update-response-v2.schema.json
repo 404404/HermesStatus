@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.invalid/hermesstatus/device-update-response-v2.schema.json",
+  "title": "HermesStatus 2.2 device update public response",
+  "oneOf": [
+    {"$ref": "#/$defs/success"},
+    {"$ref": "#/$defs/errorResponse"}
+  ],
+  "$defs": {
+    "success": {
+      "type": "object",
+      "required": ["accepted", "server_time", "config_generation", "monitors"],
+      "properties": {
+        "accepted": {"const": true},
+        "server_time": {"type": "string", "format": "date-time", "maxLength": 40},
+        "config_generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "monitors": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "required": ["name", "host", "interval", "type"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1, "maxLength": 128},
+              "host": {"type": "string", "minLength": 1, "maxLength": 253},
+              "interval": {"type": "integer", "minimum": 1, "maximum": 86400},
+              "type": {"type": "string", "minLength": 1, "maxLength": 32}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "errorResponse": {
+      "type": "object",
+      "required": ["error"],
+      "properties": {
+        "error": {
+          "type": "object",
+          "required": ["code", "request_id"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z0-9_]+$"
+            },
+            "request_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._-]+$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

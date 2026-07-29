@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "username": "synthetic-legacy-alpha",
+      "device_id": "legacy-alpha"
+    }
+  ]
+}

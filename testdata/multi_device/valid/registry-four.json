@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "defaults": {
+    "default_device_id": "device-beta",
+    "stale_seconds": 900,
+    "offline_seconds": 1800
+  },
+  "devices": [
+    {
+      "id": "device-alpha",
+      "display_name": "Synthetic Alpha",
+      "expected_fqdn": "alpha.example.invalid",
+      "enabled": true,
+      "order": 20,
+      "tags": ["compute"],
+      "group": "synthetic",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "device-beta",
+      "display_name": "Synthetic Beta",
+      "expected_fqdn": "beta.example.invalid",
+      "enabled": true,
+      "order": 10,
+      "tags": ["legacy"],
+      "group": "synthetic",
+      "ingestion": {
+        "mode": "legacy",
+        "active_protocol": "legacy_single_device",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "device-gamma",
+      "display_name": "Synthetic Gamma",
+      "expected_fqdn": null,
+      "enabled": true,
+      "order": 10,
+      "tags": ["cutover"],
+      "group": null,
+      "ingestion": {
+        "mode": "cutover",
+        "active_protocol": "legacy_single_device",
+        "cutover_not_after": "2099-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "device-delta",
+      "display_name": "Synthetic Delta",
+      "expected_fqdn": "delta.example.invalid",
+      "enabled": false,
+      "order": 30,
+      "tags": ["cutover"],
+      "group": "synthetic",
+      "ingestion": {
+        "mode": "cutover",
+        "active_protocol": "device_v2",
+        "cutover_not_after": "2099-01-01T00:00:00Z"
+      }
+    }
+  ]
+}

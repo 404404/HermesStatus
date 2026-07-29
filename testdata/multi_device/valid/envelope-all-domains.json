@@ -1,0 +1,183 @@
+{
+  "schema_version": 2,
+  "device": {
+    "id": "device-alpha",
+    "reported_name": "Synthetic Alpha",
+    "reported_fqdn": "alpha.example.invalid",
+    "hostname": "synthetic-alpha"
+  },
+  "collected_at": "2026-07-01T12:00:00Z",
+  "stats": {
+    "extension_version": "1.0-draft",
+    "hardware": {
+      "cpu_model": "Synthetic CPU",
+      "cpu_temperature": null,
+      "disk_temperature": null,
+      "disk_smart_status": "unknown",
+      "disk_power_on_hours": null,
+      "disk_written_bytes": null,
+      "disk_read_bytes": null,
+      "disk_device": null,
+      "disk_smart_source": null,
+      "updated_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "error": null
+    },
+    "docker": {
+      "running": 1,
+      "total": 1,
+      "limit": 0,
+      "truncated": false,
+      "containers": [
+        {
+          "names": "synthetic-container",
+          "image": "example/synthetic:1",
+          "status": "Up",
+          "ports": "-"
+        }
+      ],
+      "updated_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "error": null
+    },
+    "hermes": {
+      "profiles": [],
+      "updated_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "error": null
+    },
+    "lucky": {
+      "status": "not_configured",
+      "source": "unavailable",
+      "service": {
+        "state": "unknown",
+        "process_running": null,
+        "process_pid": null,
+        "uptime_seconds": null,
+        "api_reachable": false,
+        "web_reachable": false,
+        "error": {
+          "code": "not_configured",
+          "message": "Synthetic integration is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "version": {
+        "current": null,
+        "latest": null,
+        "update_available": null,
+        "build_info": null,
+        "checked_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Synthetic integration is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "ip_resolution": {
+        "mode": null,
+        "resolved_ip_count": 0,
+        "ipv4_count": 0,
+        "ipv6_count": 0,
+        "status": "not_configured",
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Synthetic integration is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "dynamic_dns": {
+        "total": 0,
+        "enabled": 0,
+        "disabled": 0,
+        "healthy": 0,
+        "error_count": 0,
+        "records": [],
+        "status": "not_configured",
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Synthetic integration is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "web_services": {
+        "total": 0,
+        "enabled": 0,
+        "disabled": 0,
+        "healthy": 0,
+        "error_count": 0,
+        "services": [],
+        "status": "not_configured",
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Synthetic integration is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "port_forwards": {
+        "total": 0,
+        "enabled": 0,
+        "disabled": 0,
+        "healthy": 0,
+        "error_count": 0,
+        "rules": [],
+        "status": "not_configured",
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Synthetic integration is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "certificates": {
+        "total": 0,
+        "valid": 0,
+        "expiring": 0,
+        "expired": 0,
+        "not_yet_valid": 0,
+        "invalid": 0,
+        "unknown": 0,
+        "items": [],
+        "status": "not_configured",
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Synthetic integration is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "updated_at": null,
+      "stale": true,
+      "error": {
+        "code": "not_configured",
+        "message": "Synthetic integration is not configured",
+        "source": "lucky",
+        "retryable": false,
+        "http_status": null
+      }
+    }
+  }
+}

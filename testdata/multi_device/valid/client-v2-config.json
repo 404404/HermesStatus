@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "server": {
+    "url": "https://status.example.invalid",
+    "verify_tls": true,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 30
+  },
+  "device": {
+    "id": "device-alpha",
+    "name": "Synthetic Alpha",
+    "fqdn": "alpha.example.invalid",
+    "token_file": "/run/secrets/synthetic-device-token"
+  },
+  "collection": {
+    "interval_seconds": 60
+  }
+}

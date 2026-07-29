@@ -1,0 +1,28 @@
+{
+  "servers": [
+    {
+      "name": "Synthetic Legacy 0",
+      "type": "synthetic",
+      "host": "legacy-0.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 1",
+      "type": "synthetic",
+      "host": "legacy-1.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 2",
+      "type": "synthetic",
+      "host": "legacy-2.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 3",
+      "type": "synthetic",
+      "host": "legacy-3.example.invalid",
+      "location": "fixture"
+    }
+  ]
+}

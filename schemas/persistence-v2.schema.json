@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.invalid/hermesstatus/persistence-v2.schema.json",
+  "title": "HermesStatus 2.2 versioned persistence snapshot",
+  "type": "object",
+  "required": ["version", "generated_at", "devices", "orphaned_devices"],
+  "properties": {
+    "version": {"const": 2},
+    "generated_at": {"type": "string", "format": "date-time", "maxLength": 40},
+    "devices": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {"$ref": "#/$defs/device"}
+    },
+    "orphaned_devices": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {"$ref": "#/$defs/orphan"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "nullableTime": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "maxLength": 40
+    },
+    "device": {
+      "type": "object",
+      "required": [
+        "device_id",
+        "last_accepted_generation",
+        "last_seen",
+        "collected_at",
+        "protocol_mode",
+        "status_at_snapshot",
+        "runtime_observations",
+        "domains"
+      ],
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+        },
+        "last_accepted_generation": {"type": "integer", "minimum": 0},
+        "last_seen": {"$ref": "#/$defs/nullableTime"},
+        "collected_at": {"$ref": "#/$defs/nullableTime"},
+        "protocol_mode": {"enum": ["legacy_single_device", "device_v2", "none"]},
+        "status_at_snapshot": {
+          "enum": ["online", "degraded", "stale", "offline", "never_seen", "disabled", "identity_error"]
+        },
+        "runtime_observations": {
+          "type": "object",
+          "maxProperties": 128,
+          "additionalProperties": true
+        },
+        "domains": {
+          "type": "object",
+          "properties": {
+            "hardware": {"type": "object"},
+            "docker": {"type": "object"},
+            "hermes": {"type": "object"},
+            "lucky": {"type": "object"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "orphan": {
+      "type": "object",
+      "required": ["orphan_id", "device_id", "reason", "source_version", "snapshot"],
+      "properties": {
+        "orphan_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "device_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+        },
+        "reason": {
+          "enum": ["unmatched_v1", "ambiguous_v1", "removed_device", "unknown_v2", "corrupt_entry"]
+        },
+        "source_version": {"type": "integer", "minimum": 1, "maximum": 2},
+        "snapshot": {"type": "object"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$comment": "Registry authority, ingestion ownership, credentials, display metadata, order, enabled state, and freshness thresholds are intentionally absent."
+}

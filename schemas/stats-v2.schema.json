@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.invalid/hermesstatus/stats-v2.schema.json",
+  "title": "HermesStatus 2.2 browser-facing stats",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "default_device_id",
+    "servers",
+    "sslcerts",
+    "updated"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "generated_at": {"type": "string", "format": "date-time", "maxLength": 40},
+    "default_device_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+    },
+    "servers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {"$ref": "#/$defs/server"}
+    },
+    "sslcerts": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "required": ["name", "domain", "port", "expire_ts", "expire_days", "mismatch"],
+        "properties": {
+          "name": {"type": "string", "maxLength": 128},
+          "domain": {"type": "string", "maxLength": 253},
+          "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+          "expire_ts": {"type": "integer"},
+          "expire_days": {"type": "integer"},
+          "mismatch": {"type": "boolean"},
+          "error": {"type": "string", "maxLength": 256}
+        },
+        "additionalProperties": false
+      }
+    },
+    "updated": {"type": "string", "pattern": "^[0-9]+$", "maxLength": 20},
+    "reload": {"type": "boolean"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "nullableTime": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "maxLength": 40
+    },
+    "server": {
+      "type": "object",
+      "required": [
+        "device_id",
+        "display_name",
+        "status",
+        "identity_status",
+        "protocol_mode",
+        "last_seen",
+        "collected_at",
+        "stale",
+        "expected_fqdn",
+        "reported_fqdn",
+        "name",
+        "type",
+        "host",
+        "location",
+        "online4",
+        "online6",
+        "extension_version",
+        "received_at",
+        "hardware",
+        "docker",
+        "hermes",
+        "lucky"
+      ],
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+        },
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "status": {
+          "enum": ["online", "degraded", "stale", "offline", "never_seen", "disabled", "identity_error"]
+        },
+        "identity_status": {
+          "enum": ["matched", "fqdn_mismatch", "missing_fqdn", "unregistered", "disabled", "unknown"]
+        },
+        "protocol_mode": {"enum": ["legacy_single_device", "device_v2", "none"]},
+        "last_seen": {"$ref": "#/$defs/nullableTime"},
+        "collected_at": {"$ref": "#/$defs/nullableTime"},
+        "stale": {"type": "boolean"},
+        "expected_fqdn": {"type": "null"},
+        "reported_fqdn": {"type": "null"},
+        "name": {"type": "string", "maxLength": 128},
+        "type": {"type": "string", "maxLength": 64},
+        "host": {"type": "string", "maxLength": 253},
+        "location": {"type": "string", "maxLength": 128},
+        "online4": {"type": "boolean"},
+        "online6": {"type": "boolean"},
+        "uptime": {"type": "string", "maxLength": 64},
+        "load_1": {"type": "number"},
+        "load_5": {"type": "number"},
+        "load_15": {"type": "number"},
+        "ping_10010": {"type": "number"},
+        "ping_189": {"type": "number"},
+        "ping_10086": {"type": "number"},
+        "time_10010": {"type": "integer"},
+        "time_189": {"type": "integer"},
+        "time_10086": {"type": "integer"},
+        "tcp_count": {"type": "integer"},
+        "udp_count": {"type": "integer"},
+        "process_count": {"type": "integer"},
+        "thread_count": {"type": "integer"},
+        "network_rx": {"type": "integer"},
+        "network_tx": {"type": "integer"},
+        "network_in": {"type": "integer"},
+        "network_out": {"type": "integer"},
+        "cpu": {"type": "number"},
+        "cpu_cores": {"type": "integer"},
+        "cpu_model": {"type": "string", "maxLength": 128},
+        "memory_total": {"type": "integer"},
+        "memory_used": {"type": "integer"},
+        "swap_total": {"type": "integer"},
+        "swap_used": {"type": "integer"},
+        "hdd_total": {"type": "integer"},
+        "hdd_used": {"type": "integer"},
+        "last_network_in": {"type": "integer"},
+        "last_network_out": {"type": "integer"},
+        "io_read": {"type": "integer"},
+        "io_write": {"type": "integer"},
+        "custom": {"type": "string", "maxLength": 1024},
+        "os": {"type": "string", "maxLength": 128},
+        "extension_version": {"const": "1.0-draft"},
+        "received_at": {"type": "string", "format": "date-time", "maxLength": 40},
+        "hardware": {
+          "$ref": "../docs/migration/schema/agent-update-extension.schema.json#/$defs/hardware"
+        },
+        "docker": {
+          "$ref": "../docs/migration/schema/agent-update-extension.schema.json#/$defs/docker"
+        },
+        "hermes": {
+          "$ref": "../docs/migration/schema/agent-update-extension.schema.json#/$defs/hermes"
+        },
+        "lucky": {"$ref": "../docs/migration/schema/lucky-extension.schema.json"},
+        "hardware_json": {"type": "string", "maxLength": 262144},
+        "docker_json": {"type": "string", "maxLength": 262144},
+        "hermes_json": {"type": "string", "maxLength": 262144}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$comment": "Stable (registry order, device_id) ordering and per-item serialization isolation are semantic validator requirements. No devices[] property exists."
+}

@@ -1,0 +1,14 @@
+{
+  "source": {
+    "servers": [
+      {
+        "name": "Synthetic Legacy A",
+        "type": "synthetic",
+        "host": "legacy-a.example.invalid",
+        "location": "fixture"
+      }
+    ]
+  },
+  "bindings": [],
+  "expected_orphan_count": 1
+}

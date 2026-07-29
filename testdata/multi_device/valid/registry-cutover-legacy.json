@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "defaults": {
+    "default_device_id": "cutover-legacy",
+    "stale_seconds": 900,
+    "offline_seconds": 1800
+  },
+  "devices": [
+    {
+      "id": "cutover-legacy",
+      "display_name": "Synthetic Cutover Legacy",
+      "expected_fqdn": "cutover-legacy.example.invalid",
+      "enabled": true,
+      "order": 10,
+      "tags": ["cutover"],
+      "group": "synthetic",
+      "ingestion": {
+        "mode": "cutover",
+        "active_protocol": "legacy_single_device",
+        "cutover_not_after": "2099-01-01T00:00:00Z"
+      }
+    }
+  ]
+}

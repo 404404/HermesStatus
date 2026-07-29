@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "username": "synthetic-user-a",
+      "device_id": "device-alpha"
+    },
+    {
+      "username": "synthetic-user-b",
+      "device_id": "device-alpha"
+    }
+  ]
+}
