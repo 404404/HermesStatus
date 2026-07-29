@@ -25,6 +25,9 @@ RUN apk add --no-cache python3 py3-psutil py3-yaml iproute2 procps smartmontools
 
 COPY clients/client-linux.py /app/client-linux.py
 COPY clients/client-psutil.py /app/client-psutil.py
+COPY clients/multi_device_contracts.py /app/multi_device_contracts.py
+COPY clients/device_client_config.py /app/device_client_config.py
+COPY clients/device_client_transport.py /app/device_client_transport.py
 COPY clients/host_collector.py /app/host_collector.py
 COPY clients/lucky_collector.py /app/lucky_collector.py
 COPY scripts/export-hermes-status.py /app/export-hermes-status.py

@@ -12,10 +12,15 @@
       "properties": {
         "url": {
           "type": "string",
-          "pattern": "^https://[^/?#@]+/?$",
+          "pattern": "^https://[^/?#@\\\\\\s]+/?$",
           "maxLength": 2048
         },
         "verify_tls": {"const": true, "default": true},
+        "ca_file": {
+          "type": ["string", "null"],
+          "pattern": "^/[^\\u0000]*$",
+          "maxLength": 4096
+        },
         "connect_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 60},
         "read_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300}
       },

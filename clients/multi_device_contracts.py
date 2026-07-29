@@ -7,18 +7,76 @@ production entrypoint integration.
 from __future__ import annotations
 
 import json
+import ipaddress
 import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from typing import Any, Mapping, Protocol
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 
 DEVICE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
 DNS_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 MAX_ENVELOPE_BYTES = 1 << 20
+MAX_RESPONSE_BYTES = 1 << 20
+UPDATE_PATH = "/api/v2/device-updates"
+REQUIRED_STATS_FIELDS = {
+    "extension_version",
+    "hardware",
+    "docker",
+    "hermes",
+    "lucky",
+}
+ALLOWED_STATS_FIELDS = {
+    "uptime",
+    "load_1",
+    "load_5",
+    "load_15",
+    "ping_10010",
+    "ping_189",
+    "ping_10086",
+    "time_10010",
+    "time_189",
+    "time_10086",
+    "tcp",
+    "udp",
+    "process",
+    "thread",
+    "network_rx",
+    "network_tx",
+    "network_in",
+    "network_out",
+    "memory_total",
+    "memory_used",
+    "swap_total",
+    "swap_used",
+    "hdd_total",
+    "hdd_used",
+    "io_read",
+    "io_write",
+    "cpu",
+    "cpu_cores",
+    "cpu_model",
+    "custom",
+    "os",
+    "online4",
+    "online6",
+    "extension_version",
+    "hardware",
+    "docker",
+    "hermes",
+    "lucky",
+    "hardware_json",
+    "docker_json",
+    "hermes_json",
+}
+ALLOWED_MONITOR_TYPES = {"http", "https", "tcp"}
+SAFE_GENERATION_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+RFC3339_UTC_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$"
+)
 
 ENV_TO_FIELD = {
     "HERMESSTATUS_SERVER_URL": "server_url",
@@ -26,6 +84,7 @@ ENV_TO_FIELD = {
     "HERMESSTATUS_DEVICE_NAME": "device_name",
     "HERMESSTATUS_DEVICE_FQDN": "device_fqdn",
     "HERMESSTATUS_DEVICE_TOKEN_FILE": "token_file",
+    "HERMESSTATUS_TLS_CA_FILE": "ca_file",
     "HERMESSTATUS_TLS_VERIFY": "verify_tls",
     "HERMESSTATUS_CONNECT_TIMEOUT_SECONDS": "connect_timeout_seconds",
     "HERMESSTATUS_READ_TIMEOUT_SECONDS": "read_timeout_seconds",
@@ -37,6 +96,7 @@ ALLOWED_FIELDS = {
     "device_name",
     "device_fqdn",
     "token_file",
+    "ca_file",
     "verify_tls",
     "connect_timeout_seconds",
     "read_timeout_seconds",
@@ -56,6 +116,7 @@ class ClientV2Config:
     device_name: str | None
     device_fqdn: str | None
     token_file: str
+    ca_file: str | None = None
     verify_tls: bool = True
     connect_timeout_seconds: int = 10
     read_timeout_seconds: int = 30
@@ -80,8 +141,8 @@ class RecordingMockTransport:
 
 def parse_config_json(data: str | bytes) -> dict[str, Any]:
     try:
-        document = json.loads(data)
-    except (TypeError, json.JSONDecodeError) as exc:
+        document = json.loads(data, object_pairs_hook=_strict_object)
+    except (TypeError, json.JSONDecodeError, ClientContractError) as exc:
         raise ClientContractError("config is not valid JSON") from exc
     if not isinstance(document, dict):
         raise ClientContractError("config root must be an object")
@@ -91,9 +152,10 @@ def parse_config_json(data: str | bytes) -> dict[str, Any]:
     server = _object(document["server"], "server")
     device = _object(document["device"], "device")
     collection = _object(document["collection"], "collection")
-    _require_keys(
+    _require_fields(
         server,
         {"url", "verify_tls", "connect_timeout_seconds", "read_timeout_seconds"},
+        {"ca_file"},
         "server",
     )
     _require_keys(device, {"id", "name", "fqdn", "token_file"}, "device")
@@ -103,6 +165,7 @@ def parse_config_json(data: str | bytes) -> dict[str, Any]:
         "verify_tls": server["verify_tls"],
         "connect_timeout_seconds": server["connect_timeout_seconds"],
         "read_timeout_seconds": server["read_timeout_seconds"],
+        "ca_file": server.get("ca_file"),
         "device_id": device["id"],
         "device_name": device["name"],
         "device_fqdn": device["fqdn"],
@@ -138,6 +201,7 @@ def resolve_client_config(
         "collection_interval_seconds": 60,
         "device_name": None,
         "device_fqdn": None,
+        "ca_file": None,
     }
     merged.update(file_values)
     merged.update(env_values)
@@ -172,7 +236,12 @@ def resolve_client_config(
         loopback_test_profile=loopback_test_profile,
     )
     device_id = str(merged["device_id"])
-    if not DEVICE_ID_RE.fullmatch(device_id):
+    try:
+        ipaddress.ip_address(device_id)
+        device_id_is_ip = True
+    except ValueError:
+        device_id_is_ip = False
+    if not DEVICE_ID_RE.fullmatch(device_id) or device_id_is_ip:
         raise ClientContractError("device_id is invalid")
     device_name = _optional_text(merged.get("device_name"), "device_name", 128)
     fqdn = (
@@ -181,12 +250,18 @@ def resolve_client_config(
         else None
     )
     token_file = validate_token_file_path(str(merged["token_file"]))
+    ca_file = (
+        validate_readonly_file_path(str(merged["ca_file"]), "ca_file")
+        if merged.get("ca_file") not in (None, "")
+        else None
+    )
     return ClientV2Config(
         server_url=server_url,
         device_id=device_id,
         device_name=device_name,
         device_fqdn=fqdn,
         token_file=token_file,
+        ca_file=ca_file,
         verify_tls=verify_tls,
         connect_timeout_seconds=connect_timeout,
         read_timeout_seconds=read_timeout,
@@ -198,6 +273,14 @@ def resolve_client_config(
 def validate_server_url(
     value: str, *, verify_tls: bool, loopback_test_profile: bool
 ) -> str:
+    if (
+        not isinstance(value, str)
+        or value != value.strip()
+        or not 1 <= len(value) <= 2048
+        or any(ord(char) < 0x21 or ord(char) == 0x7F for char in value)
+        or "\\" in value
+    ):
+        raise ClientContractError("server URL is invalid")
     try:
         parsed = urlsplit(value)
         port = parsed.port
@@ -210,6 +293,8 @@ def validate_server_url(
     if not parsed.hostname or port is not None and not 1 <= port <= 65535:
         raise ClientContractError("server URL host or port is invalid")
     host = parsed.hostname.lower()
+    if not _safe_network_host(host):
+        raise ClientContractError("server URL host or port is invalid")
     loopback = host in {"localhost", "127.0.0.1", "::1"}
     if parsed.scheme == "https":
         if not verify_tls:
@@ -220,16 +305,26 @@ def validate_server_url(
 
 
 def validate_token_file_path(value: str) -> str:
+    return validate_readonly_file_path(value, "token_file")
+
+
+def validate_readonly_file_path(value: str, field: str) -> str:
     if not value or len(value) > 4096 or "\x00" in value:
-        raise ClientContractError("token_file path is invalid")
+        raise ClientContractError(f"{field} path is invalid")
     path = PurePosixPath(value)
     if not path.is_absolute():
-        raise ClientContractError("token_file must be an absolute path")
+        raise ClientContractError(f"{field} must be an absolute path")
+    if str(path) != value or ".." in path.parts:
+        raise ClientContractError(f"{field} path is invalid")
     return str(path)
 
 
 def normalize_fqdn(value: str) -> str:
-    normalized = value.strip().lower().removesuffix(".")
+    if value != value.strip():
+        raise ClientContractError("FQDN is invalid")
+    normalized = value.lower()
+    if normalized.endswith("."):
+        normalized = normalized[:-1]
     if (
         not normalized
         or len(normalized.encode("utf-8")) > 253
@@ -239,7 +334,12 @@ def normalize_fqdn(value: str) -> str:
     labels = normalized.split(".")
     if len(labels) < 2 or any(not DNS_LABEL_RE.fullmatch(label) for label in labels):
         raise ClientContractError("FQDN is invalid")
-    if all(part.isdigit() for part in labels):
+    try:
+        ipaddress.ip_address(normalized)
+        is_ip = True
+    except ValueError:
+        is_ip = False
+    if is_ip:
         raise ClientContractError("FQDN must not be an IP literal")
     return normalized
 
@@ -254,22 +354,10 @@ def build_envelope(
     _parse_rfc3339_utc(collected_at, "collected_at")
     if not isinstance(stats, Mapping) or not stats:
         raise ClientContractError("stats must be a non-empty object")
-    device: dict[str, Any] = {"id": config.device_id}
-    if config.device_name is not None:
-        device["reported_name"] = config.device_name
-    if config.device_fqdn is not None:
-        device["reported_fqdn"] = config.device_fqdn
-    if hostname is not None:
-        device["hostname"] = _optional_text(hostname, "hostname", 253)
-    envelope = {
-        "schema_version": 2,
-        "device": device,
-        "collected_at": collected_at,
-        "stats": dict(stats),
-    }
-    encoded = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False).encode()
-    if len(encoded) > MAX_ENVELOPE_BYTES:
-        raise ClientContractError("envelope exceeds 1 MiB")
+    if not REQUIRED_STATS_FIELDS.issubset(stats):
+        raise ClientContractError("stats is missing required fields")
+    if set(stats) - ALLOWED_STATS_FIELDS:
+        raise ClientContractError("stats contains unknown fields")
     forbidden = {
         "raw_response",
         "config",
@@ -288,9 +376,122 @@ def build_envelope(
         "lucky_json",
     }
     found = forbidden.intersection(stats)
+    found.update(
+        _find_forbidden_fields(
+            stats,
+            {
+                "raw_response",
+                "token",
+                "cookie",
+                "password",
+                "authorization",
+                "private_key",
+                "command",
+                "device_json",
+                "lucky_json",
+            },
+        )
+    )
     if found:
         raise ClientContractError("stats contains forbidden fields")
+    device: dict[str, Any] = {"id": config.device_id}
+    if config.device_name is not None:
+        device["reported_name"] = config.device_name
+    if config.device_fqdn is not None:
+        device["reported_fqdn"] = config.device_fqdn
+    if hostname is not None:
+        device["hostname"] = _optional_text(hostname, "hostname", 253)
+    envelope = {
+        "schema_version": 2,
+        "device": device,
+        "collected_at": collected_at,
+        "stats": dict(stats),
+    }
+    try:
+        encoded = json.dumps(
+            envelope,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode()
+    except (TypeError, ValueError) as exc:
+        raise ClientContractError("envelope is not JSON serializable") from exc
+    if len(encoded) > MAX_ENVELOPE_BYTES:
+        raise ClientContractError("envelope exceeds 1 MiB")
     return envelope
+
+
+def encode_envelope(envelope: Mapping[str, Any]) -> bytes:
+    try:
+        encoded = json.dumps(
+            envelope,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ClientContractError("envelope is not JSON serializable") from exc
+    if len(encoded) > MAX_ENVELOPE_BYTES:
+        raise ClientContractError("envelope exceeds 1 MiB")
+    return encoded
+
+
+def validate_success_response(document: Any) -> dict[str, Any]:
+    if not isinstance(document, dict) or set(document) != {
+        "accepted",
+        "server_time",
+        "config_generation",
+        "monitors",
+    }:
+        raise ClientContractError("server response fields are invalid")
+    if document["accepted"] is not True:
+        raise ClientContractError("server response was not accepted")
+    _parse_rfc3339_utc(document["server_time"], "server_time")
+    generation = document["config_generation"]
+    if not isinstance(generation, str) or not SAFE_GENERATION_RE.fullmatch(generation):
+        raise ClientContractError("config_generation is invalid")
+    monitors = document["monitors"]
+    if not isinstance(monitors, list) or len(monitors) > 256:
+        raise ClientContractError("monitors are invalid")
+    validated = [validate_monitor(monitor) for monitor in monitors]
+    return {
+        "accepted": True,
+        "server_time": document["server_time"],
+        "config_generation": generation,
+        "monitors": validated,
+    }
+
+
+def decode_success_response(data: bytes) -> dict[str, Any]:
+    if not isinstance(data, bytes) or not data or len(data) > MAX_RESPONSE_BYTES:
+        raise ClientContractError("server response size is invalid")
+    try:
+        document = json.loads(data.decode("utf-8"), object_pairs_hook=_strict_object)
+    except (UnicodeDecodeError, json.JSONDecodeError, ClientContractError) as exc:
+        raise ClientContractError("server response is not valid JSON") from exc
+    return validate_success_response(document)
+
+
+def validate_monitor(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {
+        "name",
+        "host",
+        "interval",
+        "type",
+    }:
+        raise ClientContractError("monitor fields are invalid")
+    name = _required_text(value["name"], "monitor.name", 128)
+    monitor_type = value["type"]
+    if not isinstance(monitor_type, str) or monitor_type not in ALLOWED_MONITOR_TYPES:
+        raise ClientContractError("monitor type is invalid")
+    interval = _int_range(value["interval"], "monitor.interval", 1, 86400)
+    host = _validate_monitor_host(value["host"], monitor_type)
+    return {
+        "name": name,
+        "host": host,
+        "interval": interval,
+        "type": monitor_type,
+    }
 
 
 def retry_delay_seconds(
@@ -307,10 +508,14 @@ def retry_delay_seconds(
 
 
 def _parse_rfc3339_utc(value: str, field: str) -> datetime:
-    if not isinstance(value, str) or not value.endswith("Z") or len(value) > 40:
+    if (
+        not isinstance(value, str)
+        or len(value) > 40
+        or not RFC3339_UTC_RE.fullmatch(value)
+    ):
         raise ClientContractError(f"{field} must be RFC3339 UTC")
     try:
-        parsed = datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
     except ValueError as exc:
         raise ClientContractError(f"{field} must be RFC3339 UTC") from exc
     if parsed.tzinfo != timezone.utc:
@@ -327,6 +532,17 @@ def _object(value: Any, field: str) -> dict[str, Any]:
 def _require_keys(value: Mapping[str, Any], expected: set[str], field: str) -> None:
     actual = set(value)
     if actual != expected:
+        raise ClientContractError(f"{field} fields do not match the contract")
+
+
+def _require_fields(
+    value: Mapping[str, Any],
+    required: set[str],
+    optional: set[str],
+    field: str,
+) -> None:
+    actual = set(value)
+    if not required.issubset(actual) or actual - required - optional:
         raise ClientContractError(f"{field} fields do not match the contract")
 
 
@@ -370,3 +586,101 @@ def _optional_text(value: Any, field: str, maximum: int) -> str | None:
     if any(ord(char) < 32 or ord(char) == 127 for char in value):
         raise ClientContractError(f"{field} is invalid")
     return value
+
+
+def _required_text(value: Any, field: str, maximum: int) -> str:
+    result = _optional_text(value, field, maximum)
+    if result is None:
+        raise ClientContractError(f"{field} is invalid")
+    return result
+
+
+def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ClientContractError("JSON object contains a duplicate field")
+        result[key] = value
+    return result
+
+
+def _find_forbidden_fields(value: Any, forbidden: set[str]) -> set[str]:
+    found: set[str] = set()
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            if str(key).lower() in forbidden:
+                found.add(str(key).lower())
+            found.update(_find_forbidden_fields(child, forbidden))
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            found.update(_find_forbidden_fields(child, forbidden))
+    return found
+
+
+def _validate_monitor_host(value: Any, monitor_type: str) -> str:
+    if not isinstance(value, str) or value != value.strip() or not 1 <= len(value) <= 253:
+        raise ClientContractError("monitor host is invalid")
+    if any(ord(char) < 33 or ord(char) == 127 for char in value) or "\\" in value:
+        raise ClientContractError("monitor host is invalid")
+    if monitor_type == "tcp":
+        host, separator, port_text = value.rpartition(":")
+        if not separator or not host or not port_text.isdigit():
+            raise ClientContractError("monitor host is invalid")
+        if host.startswith("[") and host.endswith("]"):
+            host = host[1:-1]
+        elif ":" in host:
+            raise ClientContractError("monitor host is invalid")
+        if not _safe_network_host(host) or not 1 <= int(port_text) <= 65535:
+            raise ClientContractError("monitor host is invalid")
+        return value
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ClientContractError("monitor host is invalid") from exc
+    if (
+        parsed.scheme != monitor_type
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or port is not None
+        and not 1 <= port <= 65535
+        or not _safe_network_host(parsed.hostname)
+        or any(segment == ".." for segment in unquote(parsed.path).split("/"))
+    ):
+        raise ClientContractError("monitor host is invalid")
+    sensitive_query_names = {"token", "password", "secret", "api_key", "apikey"}
+    try:
+        query_fields = (
+            parse_qsl(
+                parsed.query,
+                keep_blank_values=True,
+                strict_parsing=True,
+            )
+            if parsed.query
+            else []
+        )
+    except ValueError as exc:
+        raise ClientContractError("monitor host is invalid") from exc
+    if any(name.lower() in sensitive_query_names for name, _value in query_fields):
+        raise ClientContractError("monitor host is invalid")
+    return value
+
+
+def _safe_network_host(value: str) -> bool:
+    if not value or len(value) > 253 or "%" in value:
+        return False
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        pass
+    labels = value.split(".")
+    return all(
+        1 <= len(label) <= 63
+        and label[0] != "-"
+        and label[-1] != "-"
+        and all(char.isascii() and (char.isalnum() or char == "-") for char in label)
+        for label in labels
+    )

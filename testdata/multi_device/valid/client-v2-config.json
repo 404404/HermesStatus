@@ -3,6 +3,7 @@
   "server": {
     "url": "https://status.example.invalid",
     "verify_tls": true,
+    "ca_file": null,
     "connect_timeout_seconds": 10,
     "read_timeout_seconds": 30
   },

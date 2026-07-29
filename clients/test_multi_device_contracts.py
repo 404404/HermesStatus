@@ -82,6 +82,7 @@ class ClientV2ConfigContractTests(unittest.TestCase):
             "https://status.example.invalid?device=x",
             "https://status.example.invalid#fragment",
             "https://status.example.invalid/prefix",
+            "https://status.example.invalid\\unexpected",
             "http://status.example.invalid",
         ]
         for value in invalid:
@@ -151,23 +152,26 @@ class ClientV2MockTests(unittest.TestCase):
         self.config = resolve_client_config(file_values=values)
 
     def test_envelope_builder_has_no_credentials(self):
+        stats = {
+            "cpu": 12,
+            "extension_version": "1.0-draft",
+            "hardware": {"error": {"code": "timeout", "message": "unavailable"}},
+            "docker": {},
+            "hermes": {},
+            "lucky": {},
+        }
         envelope = build_envelope(
             self.config,
             collected_at="2026-07-01T12:00:00Z",
             hostname="synthetic-alpha",
-            stats={
-                "extension_version": "1.0-draft",
-                "hardware": {},
-                "docker": {},
-                "hermes": {},
-                "lucky": {},
-            },
+            stats=stats,
         )
         encoded = json.dumps(envelope).lower()
         self.assertNotIn("authorization", encoded)
         self.assertNotIn("token_file", encoded)
         self.assertNotIn("/run/secrets", encoded)
         self.assertEqual(envelope["device"]["id"], "device-alpha")
+        self.assertEqual(envelope["stats"], stats)
 
     def test_envelope_forbidden_fields_time_and_size(self):
         for field in ("token", "config", "command", "device_json", "lucky_json"):
@@ -212,7 +216,13 @@ class ClientV2MockTests(unittest.TestCase):
         envelope = build_envelope(
             self.config,
             collected_at="2026-07-01T12:00:00Z",
-            stats={"extension_version": "1.0-draft"},
+            stats={
+                "extension_version": "1.0-draft",
+                "hardware": {},
+                "docker": {},
+                "hermes": {},
+                "lucky": {},
+            },
         )
         response = transport.send("/api/v2/device-updates", envelope)
         self.assertTrue(response["accepted"])

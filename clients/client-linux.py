@@ -33,6 +33,12 @@ import platform
 from queue import Queue
 
 from host_collector import HostExtensionCollector, add_extension_payload
+from device_client_config import ClientMode, load_client_selection
+from device_client_transport import (
+    create_device_v2_runner,
+    install_monitor_definitions,
+)
+from multi_device_contracts import ClientContractError
 
 def _env_str(name, default):
     value = os.getenv(name)
@@ -277,6 +283,7 @@ diskIO = {
     'write': 0
 }
 monitorServer = {}
+monitorServerLock = threading.RLock()
 
 def _ping_thread(host, mark, port):
     lostPacket = 0
@@ -442,9 +449,9 @@ def get_realtime_data():
         ti.start()
 
 
-def _monitor_thread(name, host, interval, type):
+def _monitor_thread(name, host, interval, type, generation=None):
     while True:
-        if name not in monitorServer.keys():
+        if not _monitor_owned(name, generation):
             break
         try:
             # 1) 解析目标 host 与端口
@@ -495,15 +502,41 @@ def _monitor_thread(name, host, interval, type):
             try:
                 b = timeit.default_timer()
                 socket.create_connection((IP, port), timeout=1).close()
-                monitorServer[name]["latency"] = int((timeit.default_timer() - b) * 1000)
+                _set_monitor_latency(
+                    name,
+                    int((timeit.default_timer() - b) * 1000),
+                    generation,
+                )
             except socket.error as error:
                 if getattr(error, 'errno', None) == errno.ECONNREFUSED:
-                    monitorServer[name]["latency"] = int((timeit.default_timer() - b) * 1000)
+                    _set_monitor_latency(
+                        name,
+                        int((timeit.default_timer() - b) * 1000),
+                        generation,
+                    )
                 else:
-                    monitorServer[name]["latency"] = 0
+                    _set_monitor_latency(name, 0, generation)
         except Exception:
-            monitorServer[name]["latency"] = 0
+            _set_monitor_latency(name, 0, generation)
         time.sleep(interval)
+
+
+def _monitor_owned(name, generation):
+    with monitorServerLock:
+        monitor = monitorServer.get(name)
+        return monitor is not None and (
+            generation is None or monitor.get("_generation") == generation
+        )
+
+
+def _set_monitor_latency(name, latency, generation):
+    with monitorServerLock:
+        monitor = monitorServer.get(name)
+        if monitor is not None and (
+            generation is None or monitor.get("_generation") == generation
+        ):
+            monitor["latency"] = latency
+
 
 def byte_str(object):
     '''
@@ -518,7 +551,96 @@ def byte_str(object):
     else:
         print(type(object))
 
+
+def _device_v2_stats_collector(extension_collector):
+    cpu_cores = get_cpu_cores()
+
+    def collect():
+        cpu = get_cpu()
+        net_in, net_out = liuliang()
+        uptime = get_uptime()
+        load_1, load_5, load_15 = os.getloadavg()
+        memory_total, memory_used, swap_total, swap_free = get_memory()
+        hdd_total, hdd_used = get_hdd()
+        stats = {
+            'uptime': uptime,
+            'load_1': load_1,
+            'load_5': load_5,
+            'load_15': load_15,
+            'memory_total': memory_total,
+            'memory_used': memory_used,
+            'swap_total': swap_total,
+            'swap_used': swap_total - swap_free,
+            'hdd_total': hdd_total,
+            'hdd_used': hdd_used,
+            'cpu': cpu,
+            'cpu_cores': cpu_cores,
+            'cpu_model': extension_collector.cpu_model or "",
+            'network_rx': netSpeed.get("netrx"),
+            'network_tx': netSpeed.get("nettx"),
+            'network_in': net_in,
+            'network_out': net_out,
+            'ping_10010': lostRate.get('10010') * 100,
+            'ping_189': lostRate.get('189') * 100,
+            'ping_10086': lostRate.get('10086') * 100,
+            'time_10010': pingTime.get('10010'),
+            'time_189': pingTime.get('189'),
+            'time_10086': pingTime.get('10086'),
+            'io_read': diskIO.get("read"),
+            'io_write': diskIO.get("write"),
+            'os': extension_collector.host_os,
+        }
+        stats['tcp'], stats['udp'], stats['process'], stats['thread'] = tupd()
+        with monitorServerLock:
+            monitor_snapshot = list(monitorServer.items())
+        items = []
+        for name, monitor in monitor_snapshot:
+            try:
+                latency = int(monitor.get('latency') or 0)
+            except Exception:
+                latency = 0
+            items.append((str(name), max(0, latency)))
+        items.sort(key=lambda item: item[0])
+        stats['custom'] = ';'.join(f"{key}={value}" for key, value in items)
+        add_extension_payload(stats, extension_collector)
+        return stats
+
+    return collect
+
+
+def _run_device_v2(config, extension_collector):
+    def apply_monitors(monitors):
+        with monitorServerLock:
+            install_monitor_definitions(
+                monitorServer,
+                monitors,
+                thread_target=_monitor_thread,
+            )
+
+    runner = create_device_v2_runner(
+        config,
+        collect_stats=_device_v2_stats_collector(extension_collector),
+        apply_monitors=apply_monitors,
+    )
+    extension_collector.start()
+    get_realtime_data()
+    runner.run_forever()
+
+
 if __name__ == '__main__':
+    try:
+        client_selection = load_client_selection(sys.argv[1:])
+    except ClientContractError:
+        print("Client configuration error: invalid_device_v2_configuration", file=sys.stderr)
+        sys.exit(2)
+    if client_selection.mode is ClientMode.DEVICE_V2:
+        try:
+            _run_device_v2(client_selection.device_v2, HostExtensionCollector())
+        except ClientContractError:
+            print("Client configuration error: invalid_device_v2_configuration", file=sys.stderr)
+            sys.exit(2)
+        sys.exit(0)
+
     cli_args = parse_cli_args(sys.argv[1:])
     SERVER = cli_args.get('SERVER', SERVER)
     PORT = int(cli_args.get('PORT', PORT))
