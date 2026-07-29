@@ -1,7 +1,7 @@
 # HermesStatus 2.2 Multi-Device Architecture
 
-Status: Stage A contract candidate implemented as schemas, synthetic fixtures,
-and pure mocks; no runtime activation.
+Status: Stages A–F implemented and locally qualified; production deployment is
+not part of this development change.
 
 This document defines the 2.2 multi-device architecture. It is intentionally
 limited to monitoring. It does not add remote control, automatic registration,
@@ -14,9 +14,8 @@ The formal 2.2 base is the latest integrated 2.1 revision:
 also present in that revision. The current integration branch is `2.0`; there
 were no open pull requests when this design audit was performed.
 
-The runtime image inspected during the audit still declared the earlier
-revision `733b9dd498e9794ca9414bb9ec20b80116720426`. That runtime is evidence only:
-it is not the 2.2 source baseline and this design round does not replace it.
+Any older runtime revision is deployment evidence only: it is not the 2.2
+source baseline, and this development work does not replace production.
 
 Current behavior:
 
@@ -209,31 +208,28 @@ they never consume the 16 active-registry slots and never enter normal
 - Browser output never contains credential data or server credential mappings.
 - Multi-device support adds monitoring endpoints only.
 
-## 9. Expected implementation touch points
+## 9. Implemented runtime boundaries
 
-Likely new files:
+- startup-only strict registry, credential-directory and legacy-mapping
+  loaders;
+- one registry-backed state map and one persistence-v2 snapshot keyed by
+  `device_id`;
+- authenticated `POST /api/v2/device-updates` feeding the common ingestion
+  path;
+- shared Python Client configuration, verified-HTTPS transport and bounded
+  retry runtime;
+- the existing top-level `servers[]` projection with a shared Home/Docker/Lucky
+  selector, one fetch path and one timer;
+- read-only validation, offline credential provisioning, synthetic deployment
+  examples and qualification tests.
 
-- `server/device_registry.go` and tests;
-- `server/device_auth.go` and tests;
-- `server/device_protocol.go` and tests;
-- `server/device_http.go` and tests;
-- a shared Client configuration/transport module and tests;
-- UI selector/routing tests and multi-device fixtures.
-
-Likely modified files:
-
-- `server/app.go`, `server/model.go`, `server/tcp_server.go`;
-- `server/extension_pipeline.go`, stats persistence code and tests;
-- both Client entry points and container configuration examples;
-- `webui/src/dashboard.js`, styles, templates, and tests;
-- stats contract, operations, security, and provenance documentation.
-
-Exact filenames are implementation-stage choices; the design does not authorize
-code changes.
+The v2 endpoint and trusted-proxy interpretation are both disabled by default.
+The browser and public endpoint have no registration, configuration, command,
+control, history, alerting or RBAC capability.
 
 ## 10. Implementation phases
 
-1. **Stage A (current candidate):** freeze schemas and fixtures; add registry,
+1. **Stage A:** freeze schemas and fixtures; add registry,
    state, persistence, Client configuration, envelope, projection, generation,
    and ownership contracts behind no runtime activation.
 2. Re-key state/persistence by `device_id`; keep the TCP adapter passing tests.
@@ -244,14 +240,13 @@ code changes.
 6. Run compatibility, race, security, persistence, and UI matrices.
 7. Perform a separate reviewed deployment phase.
 
-Stage A is implemented only in the uncommitted candidate worktree. Stage B has
-not begun. The production runtime still reports the earlier revision
-`733b9dd498e9794ca9414bb9ec20b80116720426`; that drift is recorded evidence,
-not a development base. Production rollout is blocked until the credential
-source, HTTPS termination ownership, FQDN exposure policy, and legacy retirement
-window have explicit operational owners.
+Stages A–F are implemented as reviewable source commits and synthetic local
+qualification evidence. Production rollout remains a separate operation and
+requires the production registry, per-device secrets, HTTPS termination,
+certificate lifecycle, backup/rollback record and an approved migration
+window. None of those production assets are created or changed here.
 
-## 11. Frozen Stage A artifacts
+## 11. Contract artifacts
 
 The normative schemas are:
 
@@ -264,10 +259,10 @@ The normative schemas are:
 - `schemas/stats-v2.schema.json`;
 - `schemas/persistence-v2.schema.json`.
 
-Pure Go contracts live in `server/contracts` and are not imported by the
-production Server. The Python contract module is not imported by either current
-Client entrypoint. The frontend addition is fixture/test-only. No HTTPS route,
-authentication, NodeState re-key, persistence migration, or selector is active.
+Pure Go contracts live in `server/contracts` and are shared by runtime
+validation and tests. The Python contracts are shared by both v2 Client modes.
+The HTTPS route, authentication, state/persistence model and selector remain
+covered by strict fixtures and regression tests.
 
 ## 12. Related documents
 

@@ -87,7 +87,7 @@ jobs:
         id: provenance
         shell: bash
         run: |
-          echo "version=2.0-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "version=2.2-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
           echo "vcs_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
           echo "source=https://github.com/404404/HermesStatus" >> "$GITHUB_OUTPUT"

@@ -253,7 +253,7 @@ func TestCheckedInManualRegistrationExamplesPassProductionValidation(t *testing.
 			stderr.String(),
 		)
 	}
-	if !strings.Contains(stdout.String(), "total devices: 3") ||
+	if !strings.Contains(stdout.String(), "total devices: 4") ||
 		!strings.Contains(stdout.String(), "credential records count: 2") ||
 		!strings.Contains(stdout.String(), "legacy mappings count: 1") {
 		t.Fatalf("checked-in example summary is incomplete: %q", stdout.String())

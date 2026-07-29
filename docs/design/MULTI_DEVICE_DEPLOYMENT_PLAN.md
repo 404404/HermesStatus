@@ -1,7 +1,8 @@
 # HermesStatus 2.2 Multi-Device Deployment Plan
 
-Status: Stage A contract candidate implemented locally; no production build,
-runtime activation, or deployment is authorized by this document.
+Status: Stages A–F implemented and locally qualified. This document authorizes
+no production build, runtime activation, DNS/TLS change, secret provisioning or
+deployment.
 
 ## 1. Entry gates
 
@@ -259,13 +260,10 @@ Immediate rollback triggers include:
 Never use a force reset, delete the old worktree, purge historical state, or
 re-enable an expired token as a rollback shortcut.
 
-## 9. Blockers and readiness
+## 9. Development readiness and production gates
 
-No unresolved architectural blocker prevents review and a local Stage A
-candidate commit. Stage B remains blocked on explicit approval.
-
-The following block production implementation/rollout decisions, not schema
-mocking:
+The implementation is ready for repository review after its Stage F candidate
+qualification. The following remain production rollout decisions:
 
 - final HTTPS termination component and request-size/log-redaction ownership;
 - final credential distribution/storage owner and rotation interval;
@@ -274,11 +272,9 @@ mocking:
 - operator decision on whether browser FQDN exposure remains disabled;
 - persistence backup/retention owner and orphan purge policy.
 
-The production runtime revision remains
-`733b9dd498e9794ca9414bb9ec20b80116720426`, while the Stage A source base is
-`868e6f995fa877cd77d2200661445d2bd31c3c0f`. This recorded drift does not change
-the development base. After contract review and local commit authorization,
-Stage B may begin only through a separate explicit instruction.
+The 2.2 source base is
+`868e6f995fa877cd77d2200661445d2bd31c3c0f`. Production revision drift does not
+change that base and is not modified by development qualification.
 
 ## 10. Accepted residual risk
 

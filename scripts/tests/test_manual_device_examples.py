@@ -24,10 +24,26 @@ class ManualDeviceExampleTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(len(registry["devices"]), 3)
+        runtime = json.loads(
+            (ROOT / "testdata" / "server-runtime-synthetic.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(len(registry["devices"]), 4)
+        self.assertFalse(registry["devices"][3]["enabled"])
         self.assertIsNone(registry["devices"][0]["expected_fqdn"])
         self.assertEqual(client["device"]["id"], "compute-01")
         self.assertEqual(mapping["mappings"][0]["device_id"], "legacy-01")
+        self.assertEqual(
+            runtime["servers"][0]["username"],
+            "synthetic-legacy-01",
+        )
+        self.assertEqual(
+            runtime["servers"][0]["password"],
+            "USER_DEFAULT_PASSWORD",
+        )
+        self.assertEqual(runtime["monitors"], [])
+        self.assertEqual(runtime["sslcerts"], [])
         for path in EXAMPLES.rglob("*.json"):
             text = path.read_text(encoding="utf-8")
             self.assertNotIn('"token":', text)

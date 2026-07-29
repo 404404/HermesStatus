@@ -17,3 +17,19 @@ For the primary stats-persistence rollback, keep the reviewed `/app/data` bind m
 Removing the bind is a disaster-recovery-only path. A newly created container writable layer is empty and is not evidence of recovery; explicitly restore a validated stats backup before claiming success, and retain both the persistent directory and original backup throughout the recovery window.
 
 The former 1.0 containers, network, images, online directory, and listeners have been removed. Do not silently recreate them during a 2.0 rollback. If both validated 2.0 image pairs are unusable, follow the separately approved offline recovery procedure in [Decommissioning HermesStatus 1.0](DECOMMISSION_1_0.md), restore onto non-conflicting ports, and validate before routing traffic.
+
+## HermesStatus 2.2 rollback
+
+Keep the original pre-2.2 persistence snapshot, reviewed Registry/Legacy
+mapping, prior Client configuration and immutable prior image identities for
+the entire rollback window. Stop the v2 writer for a device before restoring
+its Legacy ownership; never permit both protocols to write one `device_id`.
+Restore the prior Server reader with the persistence format it supports instead
+of feeding it a v2 snapshot blindly. Do not purge the v2 file or its bounded
+orphans.
+
+Rollback DNS/TLS, proxy, Server, Client and persistence as separate changes.
+After every step verify one writer, Registry display-name authority, normal
+`servers[]`, non-online restored state and Hardware/Docker/Hermes/Lucky
+isolation. A rollback never re-enables an expired token or auto-registers an
+unknown device.

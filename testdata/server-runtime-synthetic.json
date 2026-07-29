@@ -1,0 +1,16 @@
+{
+  "servers": [
+    {
+      "username": "synthetic-legacy-01",
+      "name": "Synthetic Legacy Runtime",
+      "type": "synthetic",
+      "host": "synthetic-host",
+      "location": "example-lab",
+      "password": "USER_DEFAULT_PASSWORD",
+      "monthstart": 1,
+      "disabled": false
+    }
+  ],
+  "monitors": [],
+  "sslcerts": []
+}

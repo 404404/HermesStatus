@@ -1,7 +1,7 @@
 # HermesStatus 2.2 Multi-Device Migration
 
-Status: Stage A mapping/ownership/persistence contracts and pure migration mock
-frozen; no production migration is active.
+Status: mapping, ownership, persistence-v2 runtime and migration fixtures are
+implemented and locally qualified; no production migration is active.
 
 ## 1. Compatibility objective
 
