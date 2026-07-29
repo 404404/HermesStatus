@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -48,6 +49,11 @@ type LegacyPersistenceV1 struct {
 	Servers []map[string]any `json:"servers"`
 }
 
+type LegacyPersistenceBinding struct {
+	Source   map[string]any `json:"source"`
+	DeviceID string         `json:"device_id"`
+}
+
 func DecodePersistenceV2(data []byte) (*PersistenceV2, error) {
 	var snapshot PersistenceV2
 	if err := decodeStrict(data, &snapshot); err != nil {
@@ -55,6 +61,22 @@ func DecodePersistenceV2(data []byte) (*PersistenceV2, error) {
 	}
 	if err := ValidatePersistenceV2(&snapshot); err != nil {
 		return nil, err
+	}
+	return &snapshot, nil
+}
+
+func DecodePersistenceV1(data []byte) (*LegacyPersistenceV1, error) {
+	var snapshot LegacyPersistenceV1
+	if err := decodeStrict(data, &snapshot); err != nil {
+		return nil, err
+	}
+	if len(snapshot.Servers) > MaxDevices {
+		return nil, contractError("servers", "must contain at most 128 entries")
+	}
+	for index, server := range snapshot.Servers {
+		if server == nil {
+			return nil, contractError(fmt.Sprintf("servers[%d]", index), "must be an object")
+		}
 	}
 	return &snapshot, nil
 }
@@ -79,6 +101,9 @@ func ValidatePersistenceV2(snapshot *PersistenceV2) error {
 		if !protocolModeSet[device.ProtocolMode] || !deviceStatusSet[device.StatusAtSnapshot] {
 			return contractError(prefix, "contains an invalid enum")
 		}
+		if len(device.RuntimeObservations) > 128 {
+			return contractError(prefix+".runtime_observations", "contains too many fields")
+		}
 		if device.LastSeen != nil {
 			if _, err := parseRFC3339UTC(*device.LastSeen); err != nil {
 				return contractError(prefix+".last_seen", "must be RFC3339 UTC or null")
@@ -93,9 +118,19 @@ func ValidatePersistenceV2(snapshot *PersistenceV2) error {
 			if domain != "hardware" && domain != "docker" && domain != "hermes" && domain != "lucky" {
 				return contractError(prefix+".domains", "contains an unknown domain")
 			}
+			if !rawJSONObject(device.Domains[domain]) {
+				return contractError(prefix+".domains."+domain, "must be an object")
+			}
 		}
 	}
+	if len(snapshot.OrphanedDevices) > 256 {
+		return contractError("orphaned_devices", "must contain at most 256 entries")
+	}
 	orphanIDs := map[string]bool{}
+	reasons := map[string]bool{
+		"unmatched_v1": true, "ambiguous_v1": true, "removed_device": true,
+		"unknown_v2": true, "corrupt_entry": true,
+	}
 	for index, orphan := range snapshot.OrphanedDevices {
 		prefix := fmt.Sprintf("orphaned_devices[%d]", index)
 		if len(orphan.OrphanID) < 1 || len(orphan.OrphanID) > 128 || orphanIDs[orphan.OrphanID] {
@@ -105,11 +140,20 @@ func ValidatePersistenceV2(snapshot *PersistenceV2) error {
 		if orphan.DeviceID != nil && !ValidateDeviceID(*orphan.DeviceID) {
 			return contractError(prefix+".device_id", "is invalid")
 		}
-		if orphan.SourceVersion < 1 || len(orphan.Snapshot) == 0 {
+		if !reasons[orphan.Reason] {
+			return contractError(prefix+".reason", "is invalid")
+		}
+		if orphan.SourceVersion < 1 || orphan.SourceVersion > 2 ||
+			!rawJSONObject(orphan.Snapshot) {
 			return contractError(prefix, "must retain source version and snapshot")
 		}
 	}
 	return nil
+}
+
+func rawJSONObject(data json.RawMessage) bool {
+	var value map[string]json.RawMessage
+	return json.Unmarshal(data, &value) == nil && value != nil
 }
 
 func RestorePersistenceMock(snapshot PersistenceV2, registry DeviceRegistry) map[string]RestoredDevice {
@@ -141,39 +185,59 @@ func RestorePersistenceMock(snapshot PersistenceV2, registry DeviceRegistry) map
 	return result
 }
 
-// MigratePersistenceV1Mock converts only explicitly bound array entries. The
-// binding key is the v1 array index, avoiding hostname/FQDN guessing.
-func MigratePersistenceV1Mock(
+// MigratePersistenceV1 converts only entries whose complete legacy source
+// object is present in an explicit binding table. It never uses array order,
+// hostname/FQDN inference, or username promotion.
+func MigratePersistenceV1(
 	legacy LegacyPersistenceV1,
-	bindings map[int]string,
+	bindings []LegacyPersistenceBinding,
 	registry DeviceRegistry,
 	generatedAt time.Time,
 ) (PersistenceV2, error) {
+	if len(legacy.Servers) > MaxDevices {
+		return PersistenceV2{}, contractError("servers", "must contain at most 128 entries")
+	}
+	if err := ValidateRegistry(&registry, generatedAt); err != nil {
+		return PersistenceV2{}, contractError("registry", "is invalid")
+	}
 	registryDevices := map[string]RegistryDevice{}
 	for _, device := range registry.Devices {
 		registryDevices[device.ID] = device
 	}
 	usedDevices := map[string]bool{}
-	for index, deviceID := range bindings {
-		if index < 0 || index >= len(legacy.Servers) || !ValidateDeviceID(deviceID) {
-			return PersistenceV2{}, contractError("bindings", "contains an invalid source index or device_id")
+	boundSources := make(map[string]string, len(bindings))
+	for _, binding := range bindings {
+		sourceKey, err := legacySourceKey(binding.Source)
+		if err != nil || !ValidateDeviceID(binding.DeviceID) {
+			return PersistenceV2{}, contractError("bindings", "contains an invalid source or device_id")
 		}
-		if usedDevices[deviceID] {
+		if _, exists := boundSources[sourceKey]; exists || usedDevices[binding.DeviceID] {
 			return PersistenceV2{}, contractError("bindings", "contains an ambiguous device collision")
 		}
-		usedDevices[deviceID] = true
+		boundSources[sourceKey] = binding.DeviceID
+		usedDevices[binding.DeviceID] = true
 	}
 
 	result := PersistenceV2{
 		Version: 2, GeneratedAt: generatedAt.UTC().Format(time.RFC3339),
 		Devices: []PersistedDevice{}, OrphanedDevices: []OrphanedDevice{},
 	}
-	for index, legacyServer := range legacy.Servers {
+	seenSources := map[string]bool{}
+	orphanIDs := map[string]int{}
+	for _, legacyServer := range legacy.Servers {
 		encoded, err := json.Marshal(legacyServer)
 		if err != nil {
 			return PersistenceV2{}, contractError("legacy", "cannot serialize source entry")
 		}
-		deviceID, bound := bindings[index]
+		sourceKey, err := legacySourceKey(legacyServer)
+		if err != nil {
+			return PersistenceV2{}, contractError("legacy", "cannot identify source entry")
+		}
+		deviceID, bound := boundSources[sourceKey]
+		if bound && seenSources[sourceKey] {
+			return PersistenceV2{}, contractError("bindings", "matches more than one source entry")
+		}
+		seenSources[sourceKey] = true
 		registryDevice, registered := registryDevices[deviceID]
 		if !bound || !registered {
 			reason := "unmatched_v1"
@@ -183,8 +247,15 @@ func MigratePersistenceV1Mock(
 				value := deviceID
 				optionalID = &value
 			}
+			digest := sha256.Sum256(encoded)
+			orphanBase := fmt.Sprintf("v1-%x", digest[:6])
+			orphanIDs[orphanBase]++
+			orphanID := orphanBase
+			if orphanIDs[orphanBase] > 1 {
+				orphanID = fmt.Sprintf("%s-%d", orphanBase, orphanIDs[orphanBase])
+			}
 			result.OrphanedDevices = append(result.OrphanedDevices, OrphanedDevice{
-				OrphanID: fmt.Sprintf("v1-index-%d", index), DeviceID: optionalID,
+				OrphanID: orphanID, DeviceID: optionalID,
 				Reason: reason, SourceVersion: 1, Snapshot: encoded,
 			})
 			continue
@@ -201,8 +272,36 @@ func MigratePersistenceV1Mock(
 			Domains:             map[string]json.RawMessage{},
 		})
 	}
+	for sourceKey := range boundSources {
+		if !seenSources[sourceKey] {
+			return PersistenceV2{}, contractError("bindings", "contains a source not present in v1")
+		}
+	}
 	sort.Slice(result.Devices, func(i, j int) bool {
 		return result.Devices[i].DeviceID < result.Devices[j].DeviceID
 	})
 	return result, nil
+}
+
+// MigratePersistenceV1Mock remains as a compatibility name for Stage A
+// callers. It delegates to the same production-safe pure conversion.
+func MigratePersistenceV1Mock(
+	legacy LegacyPersistenceV1,
+	bindings []LegacyPersistenceBinding,
+	registry DeviceRegistry,
+	generatedAt time.Time,
+) (PersistenceV2, error) {
+	return MigratePersistenceV1(legacy, bindings, registry, generatedAt)
+}
+
+func legacySourceKey(source map[string]any) (string, error) {
+	if source == nil {
+		return "", contractError("source", "must be an object")
+	}
+	encoded, err := json.Marshal(source)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", digest[:]), nil
 }

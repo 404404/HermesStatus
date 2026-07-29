@@ -212,31 +212,36 @@ def generate_valid() -> None:
         ],
     }
     write(VALID, "persistence-v2.json", persistence)
+    migration_source = {
+        "servers": [
+            {
+                "name": "Synthetic Legacy A",
+                "type": "synthetic",
+                "host": "legacy-a.example.invalid",
+                "location": "fixture",
+            },
+            {
+                "name": "Synthetic Unmatched",
+                "type": "synthetic",
+                "host": "unmatched.example.invalid",
+                "location": "fixture",
+            },
+        ]
+    }
     write(
         VALID,
         "persistence-migration-v1-v2.json",
         {
-            "source": {
-                "servers": [
-                    {
-                        "name": "Synthetic Legacy A",
-                        "type": "synthetic",
-                        "host": "legacy-a.example.invalid",
-                        "location": "fixture",
-                    },
-                    {
-                        "name": "Synthetic Unmatched",
-                        "type": "synthetic",
-                        "host": "unmatched.example.invalid",
-                        "location": "fixture",
-                    },
-                ]
-            },
-            "bindings": [{"source_index": 0, "device_id": "device-alpha"}],
+            "source": migration_source,
+            "bindings": [
+                {
+                    "source": copy.deepcopy(migration_source["servers"][0]),
+                    "device_id": "device-alpha",
+                }
+            ],
             "expected": {
                 "version": 2,
                 "device_ids": ["device-alpha"],
-                "orphan_ids": ["v1-index-1"],
                 "restored_status": "offline",
                 "freshness_reset": True,
             },
@@ -275,7 +280,9 @@ def generate_valid() -> None:
         "persistence-migration-removed.json",
         {
             "source": v1_single,
-            "bindings": [{"source_index": 0, "device_id": "device-removed"}],
+            "bindings": [
+                {"source": copy.deepcopy(v1_single["servers"][0]), "device_id": "device-removed"}
+            ],
             "expected_reason": "removed_device",
         },
     )
@@ -284,7 +291,9 @@ def generate_valid() -> None:
         "persistence-migration-readded.json",
         {
             "source": v1_single,
-            "bindings": [{"source_index": 0, "device_id": "device-alpha"}],
+            "bindings": [
+                {"source": copy.deepcopy(v1_single["servers"][0]), "device_id": "device-alpha"}
+            ],
             "registry_fixture": "registry-single.json",
             "expected_status": "offline",
         },
@@ -294,7 +303,9 @@ def generate_valid() -> None:
         "persistence-migration-disabled.json",
         {
             "source": v1_single,
-            "bindings": [{"source_index": 0, "device_id": "device-delta"}],
+            "bindings": [
+                {"source": copy.deepcopy(v1_single["servers"][0]), "device_id": "device-delta"}
+            ],
             "registry_fixture": "registry-four.json",
             "expected_status": "disabled",
         },
@@ -472,8 +483,8 @@ def generate_invalid() -> None:
         {
             "source": {"servers": [{"name": "Synthetic A"}, {"name": "Synthetic B"}]},
             "bindings": [
-                {"source_index": 0, "device_id": "device-alpha"},
-                {"source_index": 1, "device_id": "device-alpha"},
+                {"source": {"name": "Synthetic A"}, "device_id": "device-alpha"},
+                {"source": {"name": "Synthetic B"}, "device_id": "device-alpha"},
             ],
         },
     )

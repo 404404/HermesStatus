@@ -36,11 +36,8 @@ func TestPersistenceV2RestoreIsNonOnlineAndFreshnessReset(t *testing.T) {
 
 func TestPersistenceV1MigrationExplicitBindingsOrphansAndCollision(t *testing.T) {
 	var migration struct {
-		Source   LegacyPersistenceV1 `json:"source"`
-		Bindings []struct {
-			SourceIndex int    `json:"source_index"`
-			DeviceID    string `json:"device_id"`
-		} `json:"bindings"`
+		Source   LegacyPersistenceV1        `json:"source"`
+		Bindings []LegacyPersistenceBinding `json:"bindings"`
 	}
 	if err := json.Unmarshal(
 		fixture(t, "valid", "persistence-migration-v1-v2.json"), &migration,
@@ -51,11 +48,7 @@ func TestPersistenceV1MigrationExplicitBindingsOrphansAndCollision(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bindings := map[int]string{}
-	for _, binding := range migration.Bindings {
-		bindings[binding.SourceIndex] = binding.DeviceID
-	}
-	snapshot, err := MigratePersistenceV1Mock(migration.Source, bindings, *registry, fixtureNow)
+	snapshot, err := MigratePersistenceV1(migration.Source, migration.Bindings, *registry, fixtureNow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,15 +60,20 @@ func TestPersistenceV1MigrationExplicitBindingsOrphansAndCollision(t *testing.T)
 		t.Fatalf("migrated device became online/fresh: %#v", restored)
 	}
 
-	if _, err := MigratePersistenceV1Mock(
-		migration.Source, map[int]string{0: "device-alpha", 1: "device-alpha"},
+	if _, err := MigratePersistenceV1(
+		migration.Source, []LegacyPersistenceBinding{
+			{Source: migration.Source.Servers[0], DeviceID: "device-alpha"},
+			{Source: migration.Source.Servers[1], DeviceID: "device-alpha"},
+		},
 		*registry, fixtureNow,
 	); err == nil {
 		t.Fatal("ambiguous collision was accepted")
 	}
 
-	snapshot, err = MigratePersistenceV1Mock(
-		migration.Source, map[int]string{0: "device-removed"}, *registry, fixtureNow,
+	snapshot, err = MigratePersistenceV1(
+		migration.Source, []LegacyPersistenceBinding{{
+			Source: migration.Source.Servers[0], DeviceID: "device-removed",
+		}}, *registry, fixtureNow,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -91,22 +89,29 @@ func TestPersistenceRejectsCorruptVersion(t *testing.T) {
 	); err == nil {
 		t.Fatal("corrupt persistence version was accepted")
 	}
+	if _, err := DecodePersistenceV1(
+		[]byte(`{"servers":[],"unexpected":true}`),
+	); err == nil {
+		t.Fatal("v1 persistence with an unknown field was accepted")
+	}
 }
 
-func TestPersistenceV1FourDeviceFixtureMigratesByExplicitIndex(t *testing.T) {
-	var legacy LegacyPersistenceV1
-	if err := json.Unmarshal(fixture(t, "valid", "persistence-v1-four.json"), &legacy); err != nil {
+func TestPersistenceV1FourDeviceFixtureMigratesByExplicitSource(t *testing.T) {
+	legacy, err := DecodePersistenceV1(fixture(t, "valid", "persistence-v1-four.json"))
+	if err != nil {
 		t.Fatal(err)
 	}
 	registry, err := DecodeRegistry(fixture(t, "valid", "registry-four.json"), fixtureNow)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bindings := map[int]string{}
+	bindings := make([]LegacyPersistenceBinding, 0, len(registry.Devices))
 	for index, device := range registry.Devices {
-		bindings[index] = device.ID
+		bindings = append(bindings, LegacyPersistenceBinding{
+			Source: legacy.Servers[index], DeviceID: device.ID,
+		})
 	}
-	snapshot, err := MigratePersistenceV1Mock(legacy, bindings, *registry, fixtureNow)
+	snapshot, err := MigratePersistenceV1(*legacy, bindings, *registry, fixtureNow)
 	if err != nil {
 		t.Fatal(err)
 	}

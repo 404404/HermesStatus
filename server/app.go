@@ -394,7 +394,17 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 func (a *App) PersistStats() error {
 	a.persistMu.Lock()
 	defer a.persistMu.Unlock()
-	return writeStatsFile(a.opts.StatsPath, a.snapshotStats(true))
+	if err := writeStatsFile(a.opts.StatsPath, a.snapshotStats(true)); err != nil {
+		return err
+	}
+	if a.registry == nil {
+		return nil
+	}
+	snapshot, err := a.snapshotPersistenceV2(time.Now())
+	if err != nil {
+		return err
+	}
+	return writePersistenceV2(a.opts.PersistencePath, snapshot)
 }
 
 func monthResetWindow(now time.Time, monthStart int) bool {
@@ -435,6 +445,10 @@ func formatUptime(seconds int64) string {
 }
 
 func (a *App) restorePersistentState() {
+	if a.registry != nil {
+		a.restorePersistenceV2()
+		return
+	}
 	data, err := os.ReadFile(a.opts.StatsPath)
 	if err != nil {
 		primaryErr := err

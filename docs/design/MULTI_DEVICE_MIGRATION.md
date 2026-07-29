@@ -113,9 +113,12 @@ device entries identified by `device_id`, last accepted generation, last-seen
 and collection times, protocol mode, snapshot status, runtime observations,
 domain states, and `orphaned_devices`. Registry display/FQDN/order/enabled/
 threshold/ownership fields and credential mappings are not persistence
-authority. The Stage A v1 migration mock binds old array indexes explicitly;
-unmatched/removed records become orphans and restored records are stale and
-non-online.
+authority. The Stage B v1 migration helper binds the complete legacy source
+object through an explicit mapping table. It does not bind array indexes,
+infer by hostname/FQDN, or promote usernames into device IDs. Unmatched or
+removed records become orphans, and restored records are stale and non-online.
+Operators must retain the original v1 file and a protected backup throughout
+the rollback window; conversion never overwrites the v1 source.
 
 ## 6. Registry lifecycle
 

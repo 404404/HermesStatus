@@ -11,11 +11,15 @@
   },
   "bindings": [
     {
-      "source_index": 0,
+      "source": {
+        "name": "Synthetic A"
+      },
       "device_id": "device-alpha"
     },
     {
-      "source_index": 1,
+      "source": {
+        "name": "Synthetic B"
+      },
       "device_id": "device-alpha"
     }
   ]

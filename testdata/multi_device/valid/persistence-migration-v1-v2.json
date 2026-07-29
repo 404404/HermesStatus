@@ -17,7 +17,12 @@
   },
   "bindings": [
     {
-      "source_index": 0,
+      "source": {
+        "name": "Synthetic Legacy A",
+        "type": "synthetic",
+        "host": "legacy-a.example.invalid",
+        "location": "fixture"
+      },
       "device_id": "device-alpha"
     }
   ],
@@ -25,9 +30,6 @@
     "version": 2,
     "device_ids": [
       "device-alpha"
-    ],
-    "orphan_ids": [
-      "v1-index-1"
     ],
     "restored_status": "offline",
     "freshness_reset": true
