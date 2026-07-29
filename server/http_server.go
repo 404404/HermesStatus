@@ -54,6 +54,7 @@ func (a *App) router() *gin.Engine {
 		c.Header("Cache-Control", "no-store")
 		c.JSON(http.StatusOK, a.SnapshotStats())
 	})
+	router.Any(deviceUpdatePath, a.deviceUpdateHandler)
 
 	api := router.Group("/api", a.authMiddleware())
 	api.GET("/config", func(c *gin.Context) {
@@ -120,7 +121,9 @@ func (a *App) corsMiddleware() gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			c.Header("Vary", "Origin")
 		}
-		if c.Request.Method == http.MethodOptions && strings.HasPrefix(c.Request.URL.Path, "/api/") {
+		if c.Request.Method == http.MethodOptions &&
+			strings.HasPrefix(c.Request.URL.Path, "/api/") &&
+			c.Request.URL.Path != deviceUpdatePath {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}

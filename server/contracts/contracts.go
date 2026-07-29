@@ -526,6 +526,11 @@ func ValidateDeviceUpdateEnvelope(envelope *DeviceUpdateEnvelope) error {
 	if len(envelope.Stats) == 0 {
 		return contractError("stats", "must be a non-empty object")
 	}
+	for _, key := range []string{"extension_version", "hardware", "docker", "hermes", "lucky"} {
+		if _, exists := envelope.Stats[key]; !exists {
+			return contractError("stats."+key, "is required")
+		}
+	}
 	for key := range envelope.Stats {
 		if !statsKeys[key] {
 			return contractError("stats."+key, "is not part of the retained flat update contract")
@@ -552,9 +557,13 @@ func ValidateSuccessResponse(response SuccessResponse) error {
 		!safeTextPattern.MatchString(response.ConfigGeneration) {
 		return contractError("config_generation", "is invalid")
 	}
+	if len(response.Monitors) > 256 {
+		return contractError("monitors", "must contain at most 256 entries")
+	}
 	for index, monitor := range response.Monitors {
 		if !validHumanText(monitor.Name, 128) || !validHumanText(monitor.Host, 253) ||
-			monitor.Interval < 1 || monitor.Type == "" {
+			monitor.Interval < 1 || monitor.Interval > 86400 ||
+			(monitor.Type != "http" && monitor.Type != "https" && monitor.Type != "tcp") {
 			return contractError(fmt.Sprintf("monitors[%d]", index), "is invalid")
 		}
 	}
