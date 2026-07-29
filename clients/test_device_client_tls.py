@@ -147,6 +147,12 @@ class DeviceClientLocalTLSTests(unittest.TestCase):
             "2",
             "-subj",
             f"/CN={name} synthetic CA",
+            "-addext",
+            "basicConstraints=critical,CA:TRUE,pathlen:0",
+            "-addext",
+            "keyUsage=critical,keyCertSign,cRLSign",
+            "-addext",
+            "subjectKeyIdentifier=hash",
             "-keyout",
             str(key),
             "-out",
@@ -161,9 +167,11 @@ class DeviceClientLocalTLSTests(unittest.TestCase):
         cert = cls.root / f"{name}.crt"
         extensions = cls.root / f"{name}.ext"
         extensions.write_text(
-            "basicConstraints=CA:FALSE\n"
-            "keyUsage=digitalSignature,keyEncipherment\n"
+            "basicConstraints=critical,CA:FALSE\n"
+            "keyUsage=critical,digitalSignature,keyEncipherment\n"
             "extendedKeyUsage=serverAuth\n"
+            "subjectKeyIdentifier=hash\n"
+            "authorityKeyIdentifier=keyid,issuer\n"
             f"subjectAltName={san}\n",
             encoding="ascii",
         )
@@ -259,6 +267,21 @@ class DeviceClientLocalTLSTests(unittest.TestCase):
         self.assertEqual(headers["Authorization"], "Bearer " + TOKEN)
         self.assertEqual(headers["X-HermesStatus-Device-ID"], "device-alpha")
         self.assertNotIn(TOKEN, body.decode())
+
+    def test_synthetic_chain_passes_strict_openssl_validation(self):
+        subprocess.run(
+            [
+                "openssl",
+                "verify",
+                "-x509_strict",
+                "-CAfile",
+                str(self.ca_cert),
+                str(self.valid_cert),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     def test_bad_ca_san_mismatch_and_expired_certificate_fail_closed(self):
         cases = [
