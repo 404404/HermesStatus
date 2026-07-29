@@ -1,10 +1,19 @@
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const MAX_UI_DEVICES = 16;
+const DEVICE_STORAGE_KEY = 'hermesstatus.selectedDeviceId';
+const DEVICE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,62}$/;
+const DEVICE_STATUSES = new Set([
+  'online', 'degraded', 'stale', 'offline', 'never_seen', 'disabled',
+  'identity_error'
+]);
 
 const dashboardState = {
   controller: null,
-  lastDocument: null,
+  currentStats: null,
   view: null,
   lastSuccessAt: null,
+  selectedDeviceId: null,
+  deviceSelectionNotice: '',
   selectedProfileIndex: null,
   modalTrigger: null,
   activePage: 'home',
@@ -133,9 +142,99 @@ function normalizePageName(value){
 	return ['docker', 'lucky'].includes(value) ? value : 'home';
 }
 
+function validDeviceId(value){
+  return typeof value === 'string' && DEVICE_ID_PATTERN.test(value);
+}
+
+function parseDashboardHash(hashValue){
+  const raw = String(hashValue ?? '').replace(/^#/, '');
+  const separator = raw.indexOf('?');
+  const rawPage = separator === -1 ? raw : raw.slice(0, separator);
+  const query = separator === -1 ? '' : raw.slice(separator + 1);
+  const page = normalizePageName(rawPage.toLowerCase());
+  const parameters = new URLSearchParams(query);
+  const values = parameters.getAll('device');
+  const unknownParameters = [...parameters.keys()].some(key => key !== 'device');
+  const deviceId = values.length === 1 && validDeviceId(values[0]) ? values[0] : null;
+  return {
+    page,
+    deviceId,
+    needsRewrite:
+      (rawPage !== '' && rawPage !== page) ||
+      unknownParameters ||
+      values.length > 1 ||
+      (values.length === 1 && deviceId === null)
+  };
+}
+
 function pageFromHash(hashValue){
-  const value = String(hashValue ?? '').replace(/^#/, '').toLowerCase();
-  return normalizePageName(value);
+  return parseDashboardHash(hashValue).page;
+}
+
+function canonicalDashboardHash(page, deviceId){
+  const normalizedPage = normalizePageName(page);
+  return validDeviceId(deviceId)
+    ? `#${normalizedPage}?device=${encodeURIComponent(deviceId)}`
+    : `#${normalizedPage}`;
+}
+
+function selectableDevices(documentValue){
+  const servers = Array.isArray(documentValue?.servers) ? documentValue.servers : [];
+  if(servers.length > MAX_UI_DEVICES) return [];
+  const validIDs = servers
+    .filter(server => server && typeof server === 'object' && validDeviceId(server.device_id))
+    .map(server => server.device_id);
+  if(new Set(validIDs).size !== validIDs.length) return [];
+  return servers.filter(server => {
+    if(!server || typeof server !== 'object' || !validDeviceId(server.device_id)) return false;
+    const status = String(server.status ?? '').toLowerCase();
+    return DEVICE_STATUSES.has(status) &&
+      server.disabled !== true &&
+      status !== 'disabled';
+  });
+}
+
+function resolveDeviceSelection(documentValue, routeDeviceId, storedDeviceId){
+  const devices = selectableDevices(documentValue);
+  const allowed = new Set(devices.map(device => device.device_id));
+  const candidates = [
+    routeDeviceId,
+    storedDeviceId,
+    documentValue?.default_device_id,
+    devices[0]?.device_id
+  ];
+  const selectedDeviceId = candidates.find(value => allowed.has(value)) || null;
+  const requestedInvalid = (
+    (routeDeviceId !== null && routeDeviceId !== undefined && !allowed.has(routeDeviceId)) ||
+    (!routeDeviceId && storedDeviceId && !allowed.has(storedDeviceId))
+  );
+  return {selectedDeviceId, devices, recovered: requestedInvalid};
+}
+
+function readStoredDeviceId(storage){
+  try{
+    const value = storage?.getItem?.(DEVICE_STORAGE_KEY);
+    return validDeviceId(value) ? value : null;
+  }catch(_error){
+    return null;
+  }
+}
+
+function writeStoredDeviceId(storage, deviceId){
+  try{
+    if(validDeviceId(deviceId)) storage?.setItem?.(DEVICE_STORAGE_KEY, deviceId);
+    else storage?.removeItem?.(DEVICE_STORAGE_KEY);
+  }catch(_error){
+    // Browser storage may be disabled; selection remains in memory.
+  }
+}
+
+function browserStorage(){
+  try{
+    return typeof window === 'undefined' ? null : window.localStorage;
+  }catch(_error){
+    return null;
+  }
 }
 
 function selectSingleHost(servers){
@@ -145,7 +244,8 @@ function selectSingleHost(servers){
 
 function normalizeStatsPayload(documentValue){
   const documentObject = documentValue && typeof documentValue === 'object' ? documentValue : {};
-  if(Array.isArray(documentObject.servers)) return documentObject;
+  if(Array.isArray(documentObject.servers) &&
+    documentObject.servers.length <= MAX_UI_DEVICES) return documentObject;
   return { ...documentObject, servers: [] };
 }
 
@@ -153,10 +253,16 @@ function safeObject(value){
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
-function buildViewModel(documentValue){
+function buildViewModel(documentValue, selectedDeviceId = null){
   const documentObject = normalizeStatsPayload(documentValue);
-  const host = selectSingleHost(documentObject.servers);
-	if(!host) return { host: null, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, profiles: [], containers: [] };
+  const devices = selectableDevices(documentObject);
+  const hasV2Devices = documentObject.servers.some(
+    server => server && typeof server === 'object' && validDeviceId(server.device_id)
+  );
+  const host = devices.find(device => device.device_id === selectedDeviceId) ||
+    (selectedDeviceId === null ? devices[0] : null) ||
+    (!hasV2Devices ? selectSingleHost(documentObject.servers) : null);
+	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, profiles: [], containers: [] };
 
   const hardware = safeObject(host.hardware);
   const docker = safeObject(host.docker);
@@ -168,6 +274,7 @@ function buildViewModel(documentValue){
 
   return {
     document: documentObject,
+    devices,
     host,
     hardware,
     docker,
@@ -207,8 +314,8 @@ function statusTone(value){
   if(status.startsWith('exited') || status.startsWith('dead')) return 'err';
   if(status.startsWith('created') || status.startsWith('paused') || status.startsWith('restarting') || status.startsWith('removing')) return 'warn';
 	if(['passed', 'running', 'ok', 'healthy', 'up', 'active', 'valid'].includes(status)) return 'ok';
-	if(['degraded', 'stale', 'expiring', 'not_yet_valid'].includes(status)) return 'warn';
-	if(['failed', 'down', 'stopped', 'unauthorized', 'timeout', 'dead', 'exited', 'error', 'expired', 'invalid', 'unavailable'].includes(status)) return 'err';
+	if(['degraded', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error'].includes(status)) return 'warn';
+	if(['failed', 'down', 'offline', 'disabled', 'stopped', 'unauthorized', 'timeout', 'dead', 'exited', 'error', 'expired', 'invalid', 'unavailable'].includes(status)) return 'err';
   return 'neutral';
 }
 
@@ -220,7 +327,10 @@ function statusText(value){
     stopped: '已停止', down: '离线', unauthorized: '未授权', timeout: '超时',
 		exited: '已退出', dead: '异常', degraded: '部分异常', stale: '已陈旧',
 		not_configured: '未配置', error: '异常', valid: '有效', expiring: '即将到期',
-		expired: '已过期', not_yet_valid: '尚未生效', invalid: '无效'
+		expired: '已过期', not_yet_valid: '尚未生效', invalid: '无效',
+    online: '在线', offline: '离线', never_seen: '从未上线', disabled: '已禁用',
+    identity_error: '身份异常', matched: '身份匹配', missing_fqdn: '缺少身份信息',
+    fqdn_mismatch: '身份不匹配'
   };
   return labels[status] || textOrDash(value);
 }
@@ -240,6 +350,22 @@ function luckyIsConfigured(lucky){
 function dashboardCondition(view, refreshError = null){
   if(refreshError) return {kind: 'error', title: '刷新失败', message: textOrDash(refreshError.message || refreshError)};
   if(!view.host) return {kind: 'empty', title: '暂无主机数据', message: 'stats.json 暂无可显示的主机。'};
+  const deviceStatus = String(view.host.status ?? '').toLowerCase();
+  if(deviceStatus === 'never_seen'){
+    return {kind: 'never-seen', title: '设备从未上线', message: '该设备尚未提交任何有效状态。'};
+  }
+  if(deviceStatus === 'offline'){
+    return {kind: 'offline', title: '设备离线', message: '当前显示该设备最后一次可用的状态数据。'};
+  }
+  if(deviceStatus === 'identity_error'){
+    return {kind: 'error', title: '设备身份异常', message: '该设备最近的身份信息未通过验证。'};
+  }
+  if(deviceStatus === 'stale'){
+    return {kind: 'stale', title: '设备数据已陈旧', message: '该设备的数据已超过刷新时限。'};
+  }
+  if(deviceStatus === 'degraded'){
+    return {kind: 'error', title: '设备部分数据不可用', message: '该设备仍在线，但至少一个业务域异常。'};
+  }
   if(view.host.online4 === false && view.host.online6 === false){
     return {kind: 'offline', title: '主机离线', message: '当前显示最后一次可用的状态数据。'};
   }
@@ -266,7 +392,7 @@ function setPageState(condition){
   const element = byId('pageState');
   element.hidden = state.kind === 'ready';
   element.dataset.state = state.kind;
-  const icons = {loading: '↻', empty: '—', offline: '×', error: '!', stale: '◷', unknown: '?'};
+  const icons = {loading: '↻', empty: '—', offline: '×', error: '!', stale: '◷', unknown: '?', 'never-seen': '○'};
   byId('pageStateIcon').textContent = icons[state.kind] || '';
   byId('pageStateTitle').textContent = state.title;
   byId('pageStateMessage').textContent = state.message;
@@ -420,8 +546,59 @@ function renderContainers(view){
     </tr>`).join('') : '<tr><td colspan="4" class="table-empty">暂无 Docker 容器数据</td></tr>';
 }
 
+function normalizedDeviceStatus(device){
+  const status = String(device?.status ?? '').toLowerCase();
+  return DEVICE_STATUSES.has(status) ? status : 'unknown';
+}
+
+function deviceDisplayName(device){
+  const label = textOrDash(device?.display_name || device?.name || device?.device_id);
+  return [...label].slice(0, 128).join('');
+}
+
+function renderDeviceSelector(view){
+  const selector = byId('deviceSelector');
+  const buttons = byId('deviceButtons');
+  const select = byId('deviceSelect');
+  const notice = byId('deviceSelectionNotice');
+  if(!selector || !buttons || !select || !notice) return;
+  buttons.replaceChildren();
+  select.replaceChildren();
+  const devices = view.devices || [];
+  selector.hidden = devices.length === 0;
+  for(const device of devices){
+    const active = device.device_id === dashboardState.selectedDeviceId;
+    const label = deviceDisplayName(device);
+    const status = normalizedDeviceStatus(device);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'device-button';
+    button.dataset.deviceId = device.device_id;
+    button.setAttribute('aria-pressed', String(active));
+    button.title = `${label} (${device.device_id})`;
+    const name = document.createElement('span');
+    name.className = 'device-button-name';
+    name.textContent = label;
+    const state = document.createElement('span');
+    state.className = `device-status ${statusTone(status)}`;
+    state.textContent = statusText(status);
+    button.append(name, state);
+    buttons.append(button);
+
+    const option = document.createElement('option');
+    option.value = device.device_id;
+    option.textContent = `${label} — ${statusText(status)}`;
+    option.selected = active;
+    select.append(option);
+  }
+  select.disabled = devices.length < 2;
+  notice.textContent = dashboardState.deviceSelectionNotice;
+  notice.hidden = !dashboardState.deviceSelectionNotice;
+}
+
 function renderDashboard(view){
   dashboardState.view = view;
+  renderDeviceSelector(view);
   const hasHost = Boolean(view.host);
   byId('dashboard').hidden = !hasHost;
   if(!hasHost){
@@ -440,6 +617,29 @@ function renderDashboard(view){
     if(view.profiles[dashboardState.selectedProfileIndex]) renderProfileModal(view.profiles[dashboardState.selectedProfileIndex]);
     else closeProfileModal();
   }
+}
+
+function replaceDashboardHash(){
+  if(typeof window === 'undefined') return;
+  const nextHash = canonicalDashboardHash(
+    dashboardState.activePage,
+    dashboardState.selectedDeviceId
+  );
+  if(window.location.hash !== nextHash) window.history.replaceState(null, '', nextHash);
+}
+
+function selectDevice(deviceId, options = {}){
+  const devices = selectableDevices(dashboardState.currentStats);
+  if(!devices.some(device => device.device_id === deviceId)) return false;
+  dashboardState.selectedDeviceId = deviceId;
+  dashboardState.deviceSelectionNotice = options.notice || '';
+  writeStoredDeviceId(
+    options.storage || browserStorage(),
+    deviceId
+  );
+  renderDashboard(buildViewModel(dashboardState.currentStats, deviceId));
+  if(options.updateHash !== false) replaceDashboardHash();
+  return true;
 }
 
 function applyPageVisibility(){
@@ -466,8 +666,7 @@ function setActivePage(page, options = {}){
   if(nextPage !== 'home') closeProfileModal();
   applyPageVisibility();
   if(options.updateHash !== false && typeof window !== 'undefined'){
-		const nextHash = `#${nextPage}`;
-    if(window.location.hash !== nextHash) window.history.replaceState(null, '', nextHash);
+    replaceDashboardHash();
   }
   if(nextPage === 'home') requestAnimationFrame(fitCpuModelToSingleLine);
   return nextPage;
@@ -694,15 +893,32 @@ function updateRefreshState(isBusy){
 }
 
 function applySuccessfulDocument(documentValue){
-  dashboardState.lastDocument = documentValue;
+  const currentStats = normalizeStatsPayload(documentValue);
+  const route = parseDashboardHash(
+    typeof window === 'undefined' ? '' : window.location.hash
+  );
+  const storedDeviceId = readStoredDeviceId(browserStorage());
+  const selection = resolveDeviceSelection(
+    currentStats,
+    route.deviceId,
+    dashboardState.selectedDeviceId || storedDeviceId
+  );
+  dashboardState.currentStats = currentStats;
+  dashboardState.activePage = route.page;
+  dashboardState.selectedDeviceId = selection.selectedDeviceId;
+  dashboardState.deviceSelectionNotice = selection.recovered || route.needsRewrite
+    ? '原设备选择已失效，已恢复到可用设备。'
+    : '';
+  writeStoredDeviceId(browserStorage(), selection.selectedDeviceId);
   dashboardState.lastSuccessAt = new Date();
-  const view = buildViewModel(documentValue);
+  const view = buildViewModel(currentStats, selection.selectedDeviceId);
   renderDashboard(view);
+  replaceDashboardHash();
   byId('lastUpdate').textContent = `上次刷新 ${formatDateTime(dashboardState.lastSuccessAt)}`;
 }
 
 function applyRefreshError(error){
-  if(!dashboardState.lastDocument) byId('dashboard').hidden = true;
+  if(!dashboardState.currentStats) byId('dashboard').hidden = true;
   setPageState(dashboardCondition(dashboardState.view || {host: null}, error));
 }
 
@@ -720,6 +936,13 @@ function bindInteractions(){
       byId(`${nextPage}Tab`).focus();
     });
   }
+  byId('deviceButtons').addEventListener('click', event => {
+    const button = event.target.closest('.device-button');
+    if(button) selectDevice(button.dataset.deviceId);
+  });
+  byId('deviceSelect').addEventListener('change', event => {
+    selectDevice(event.target.value);
+  });
   byId('profilesBody').addEventListener('click', event => {
     const row = event.target.closest('.profile-row');
     if(row) openProfileModal(Number(row.dataset.profileIndex), row);
@@ -742,11 +965,8 @@ function bindInteractions(){
 
 function initDashboard(){
   dashboardState.controller?.stop();
-  const initialHash = window.location.hash;
-  dashboardState.activePage = pageFromHash(initialHash);
-	if(initialHash && !['#home', '#docker', '#lucky'].includes(initialHash.toLowerCase())){
-    window.history.replaceState(null, '', '#home');
-  }
+  const initialRoute = parseDashboardHash(window.location.hash);
+  dashboardState.activePage = initialRoute.page;
   applyPageVisibility();
   setPageState({kind: 'loading', title: '正在加载', message: '正在读取 stats.json'});
   bindInteractions();
@@ -768,7 +988,30 @@ function initDashboard(){
   };
   window.addEventListener('resize', dashboardState.resizeHandler);
   if(dashboardState.hashchangeHandler) window.removeEventListener('hashchange', dashboardState.hashchangeHandler);
-  dashboardState.hashchangeHandler = () => setActivePage(pageFromHash(window.location.hash), {updateHash: false});
+  dashboardState.hashchangeHandler = () => {
+    const route = parseDashboardHash(window.location.hash);
+    setActivePage(route.page, {updateHash: false});
+    if(!dashboardState.currentStats) return;
+    const selection = resolveDeviceSelection(
+      dashboardState.currentStats,
+      route.deviceId,
+      dashboardState.selectedDeviceId || readStoredDeviceId(browserStorage())
+    );
+    dashboardState.deviceSelectionNotice = selection.recovered || route.needsRewrite
+      ? '原设备选择已失效，已恢复到可用设备。'
+      : '';
+    if(selection.selectedDeviceId){
+      selectDevice(selection.selectedDeviceId, {
+        updateHash: false,
+        notice: dashboardState.deviceSelectionNotice
+      });
+    }else{
+      dashboardState.selectedDeviceId = null;
+      writeStoredDeviceId(browserStorage(), null);
+      renderDashboard(buildViewModel(dashboardState.currentStats, null));
+    }
+    replaceDashboardHash();
+  };
   window.addEventListener('hashchange', dashboardState.hashchangeHandler);
   if(dashboardState.pagehideHandler) window.removeEventListener('pagehide', dashboardState.pagehideHandler);
   dashboardState.pagehideHandler = () => {
@@ -782,28 +1025,39 @@ function initDashboard(){
 
 const exported = {
   REFRESH_INTERVAL_MS,
+  DEVICE_STORAGE_KEY,
+  MAX_UI_DEVICES,
   approximateDays,
   buildViewModel,
+  canonicalDashboardHash,
   cleanCpuModel,
   collectWarnings,
   createRefreshController,
   dashboardCondition,
+  deviceDisplayName,
 	luckyIsConfigured,
   fittedFontSize,
   formatBytes,
   formatPair,
   modelBreakdown,
   normalizeStatsPayload,
+  normalizedDeviceStatus,
   percentage,
   pageFromHash,
+  parseDashboardHash,
   profileModalMarkup,
+  readStoredDeviceId,
+  resolveDeviceSelection,
   normalizePageName,
+  selectableDevices,
   selectSingleHost,
   statsUrl,
   statusTone,
   tokenSourceText,
   tokenBreakdown,
-  usageBand
+  usageBand,
+  validDeviceId,
+  writeStoredDeviceId
 };
 
 if(typeof module !== 'undefined' && module.exports) module.exports = exported;

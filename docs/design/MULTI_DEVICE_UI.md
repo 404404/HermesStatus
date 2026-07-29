@@ -1,7 +1,7 @@
 # HermesStatus 2.2 Multi-Device UI
 
-Status: Stage A stats fixtures and route/normalization test skeleton only; the
-production UI is unchanged.
+Status: Stage E local implementation complete; production deployment remains
+disabled.
 
 ## 1. Current UI audit
 
@@ -212,7 +212,6 @@ removed, identity mismatch, and `not_configured` devices. Tests cover:
 - invalid device IDs never entering DOM or localStorage.
 
 All current single-device fixtures remain valid through stats normalization.
-
-Stage A adds only synthetic `stats-v2` fixtures and a standalone test skeleton.
-It does not import production dashboard code or change navigation, rendering,
-fetching, routing, localStorage, or timers.
+The implemented dashboard uses safe DOM text binding for device labels/status,
+keeps one `currentStats`, one fetch path, and one interval, and performs
+device/page switches entirely against the cached document.

@@ -3,10 +3,10 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="description" content="HermesStatus 单主机云监控面板" />
+    <meta name="description" content="HermesStatus 多设备云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260723-3" />
+    <link rel="stylesheet" href="css/app.css?v=20260729-1" />
 </head>
 <body>
     <header class="topbar">
@@ -33,6 +33,18 @@
     </header>
 
     <main class="wrapper">
+        <section id="deviceSelector" class="device-selector" aria-labelledby="deviceSelectorLabel" hidden>
+            <div class="device-selector-heading">
+                <strong id="deviceSelectorLabel">设备</strong>
+                <span id="deviceSelectionNotice" class="device-selection-notice" role="status" aria-live="polite" hidden></span>
+            </div>
+            <div id="deviceButtons" class="device-buttons" role="group" aria-labelledby="deviceSelectorLabel"></div>
+            <label class="device-select-label" for="deviceSelect">
+                <span class="sr-only">选择设备</span>
+                <select id="deviceSelect" class="device-select" aria-labelledby="deviceSelectorLabel"></select>
+            </label>
+        </section>
+
         <section id="pageState" class="page-state" data-state="loading" role="status" aria-live="polite">
             <span id="pageStateIcon" class="page-state-icon" aria-hidden="true">&#8635;</span>
             <div class="page-state-copy">
@@ -143,6 +155,6 @@
         <a href="https://github.com/404404/HermesStatus" target="_blank" rel="noopener">HermesStatus</a>
     </footer>
 
-    <script src="js/app.js?v=20260723-6" defer></script>
+    <script src="js/app.js?v=20260729-1" defer></script>
 </body>
 </html>

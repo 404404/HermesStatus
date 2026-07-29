@@ -86,6 +86,89 @@ func TestMultiDeviceRuntimeLoadsAtomicallyAndRekeysNodes(t *testing.T) {
 	}
 }
 
+func TestStageEStatsProjectionPublishesSixteenStableDevices(t *testing.T) {
+	devices := make([]contracts.RegistryDevice, 0, contracts.MaxRegisteredDevices)
+	for index := contracts.MaxRegisteredDevices - 1; index >= 0; index-- {
+		deviceID := fmt.Sprintf("device-%02d", index)
+		devices = append(devices, testRegistryDevice(
+			deviceID, fmt.Sprintf("Device %02d", index), index,
+			true, "device_v2", nil,
+		))
+	}
+	registry := testRegistry(devices...)
+	registry.Defaults.DefaultDeviceID = "device-00"
+	app := newMultiDeviceTestApp(
+		t, minimalTestConfig(), registry,
+		contracts.LegacyMappingDocument{Version: 1},
+	)
+	stats := app.SnapshotStats()
+	if stats["schema_version"] != 2 ||
+		stats["default_device_id"] != "device-00" {
+		t.Fatalf("Stage E stats metadata is incomplete: %#v", stats)
+	}
+	servers := stats["servers"].([]any)
+	if len(servers) != contracts.MaxRegisteredDevices {
+		t.Fatalf("Stage E stats truncated devices: %d", len(servers))
+	}
+	for index, raw := range servers {
+		server := raw.(map[string]any)
+		wantID := fmt.Sprintf("device-%02d", index)
+		if server["device_id"] != wantID ||
+			server["display_name"] != fmt.Sprintf("Device %02d", index) ||
+			server["status"] != "never_seen" ||
+			server["identity_status"] != "unknown" ||
+			server["protocol_mode"] != "none" ||
+			server["expected_fqdn"] != nil ||
+			server["reported_fqdn"] != nil {
+			t.Fatalf("unexpected Stage E projection at %d: %#v", index, server)
+		}
+	}
+}
+
+func TestStageERegistryDisplayNameRemainsAuthoritative(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Registry Alpha", 10, true, "device_v2", nil),
+	)
+	app := newMultiDeviceTestApp(
+		t, minimalTestConfig(), registry,
+		contracts.LegacyMappingDocument{Version: 1},
+	)
+	now := time.Now().UTC()
+	reportedName := "Reported Host"
+	reportedHostname := "reported-host"
+	reportedFQDN := "reported-host.example.invalid"
+	if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
+		DeviceID: "device-alpha", ProtocolMode: "device_v2",
+		CollectedAt: now, FlatStats: []byte(`{"cpu":17}`), Generation: 1,
+		ReportedName: &reportedName, ReportedHostname: &reportedHostname,
+		ReportedFQDN: &reportedFQDN,
+	}, now); err != nil {
+		t.Fatalf("valid update was rejected: %v", err)
+	}
+
+	server := app.SnapshotStats()["servers"].([]any)[0].(map[string]any)
+	if server["display_name"] != "Registry Alpha" || server["name"] != "Registry Alpha" {
+		t.Fatalf("reported identity overrode registry display name: %#v", server)
+	}
+	if server["expected_fqdn"] != nil || server["reported_fqdn"] != nil {
+		t.Fatalf("browser projection exposed identity evidence: %#v", server)
+	}
+
+	renamedRegistry := testRegistry(
+		testRegistryDevice("device-alpha", "Registry Alpha Renamed", 10, true, "device_v2", nil),
+	)
+	app.registry = &renamedRegistry
+	app.applyValidatedConfig(app.ConfigSnapshot(), app.RuntimeSnapshot(), false)
+	renamed := app.SnapshotStats()["servers"].([]any)[0].(map[string]any)
+	if renamed["display_name"] != "Registry Alpha Renamed" ||
+		renamed["name"] != "Registry Alpha Renamed" {
+		t.Fatalf("registry rename did not update browser authority: %#v", renamed)
+	}
+	if _, exists := app.nodes["reported-host"]; exists {
+		t.Fatal("reported hostname was promoted into a registered device")
+	}
+}
+
 func TestInvalidMultiDeviceDocumentsFallBackWithoutPartialActivation(t *testing.T) {
 	validRegistry := testRegistry(
 		testRegistryDevice("device-alpha", "Alpha", 10, true, "legacy", nil),
