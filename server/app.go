@@ -14,20 +14,33 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/cppla/serverstatus/server/contracts"
 )
 
 type Options struct {
-	ConfigPath string
-	StatsPath  string
-	WebDir     string
-	HTTPAddr   string
-	AgentAddr  string
-	AdminToken string
-	CORSOrigin string
-	Verbose    bool
+	ConfigPath        string
+	StatsPath         string
+	PersistencePath   string
+	RegistryPath      string
+	LegacyMappingPath string
+	WebDir            string
+	HTTPAddr          string
+	AgentAddr         string
+	AdminToken        string
+	CORSOrigin        string
+	Verbose           bool
 }
 
 type NodeState struct {
+	DeviceID       string
+	LegacyUsername string
+	DisplayName    string
+	ExpectedFQDN   *string
+	Enabled        bool
+	Order          int
+	Ownership      contracts.IngestionOwnership
+
 	Config         ServerConfig
 	Connected      bool
 	Connection     net.Conn
@@ -42,6 +55,18 @@ type NodeState struct {
 	LastNetworkOut int64
 	LastUpdate     time.Time
 	Pong           bool
+
+	IdentityStatus         string
+	ProtocolMode           string
+	ReportedName           *string
+	ReportedFQDN           *string
+	ReportedHostname       *string
+	LastSeen               time.Time
+	CollectedAt            time.Time
+	LastAcceptedGeneration uint64
+	Restored               bool
+	IdentityError          bool
+	Degraded               bool
 }
 
 type App struct {
@@ -55,12 +80,18 @@ type App struct {
 	document   ConfigDocument
 	runtime    RuntimeConfig
 
-	nodeMu       sync.RWMutex
-	nodes        map[string]*NodeState
-	connectionID atomic.Uint64
-	generation   atomic.Uint64
-	agentRunning atomic.Bool
-	reloadWrites atomic.Int32
+	nodeMu              sync.RWMutex
+	nodes               map[string]*NodeState
+	registry            *contracts.DeviceRegistry
+	legacyMap           map[string]string
+	deviceUsers         map[string]string
+	orphans             []contracts.OrphanedDevice
+	ownershipFailClosed bool
+	connectionID        atomic.Uint64
+	updateID            atomic.Uint64
+	generation          atomic.Uint64
+	agentRunning        atomic.Bool
+	reloadWrites        atomic.Int32
 
 	certMu sync.RWMutex
 	certs  map[string]*CertState
@@ -86,6 +117,7 @@ func NewApp(opts Options) (*App, error) {
 		statsWake: make(chan struct{}, 1),
 		logger:    log.New(os.Stdout, "serverstatus ", log.LstdFlags|log.Lmicroseconds),
 	}
+	app.loadMultiDeviceRuntime(runtime)
 	app.applyValidatedConfig(doc, runtime, false)
 	app.restorePersistentState()
 	return app, nil
@@ -173,31 +205,9 @@ func (a *App) applyValidatedConfig(doc ConfigDocument, runtime RuntimeConfig, di
 	a.configMu.Lock()
 	a.nodeMu.Lock()
 	oldNodes := a.nodes
-	newNodes := make(map[string]*NodeState, len(runtime.Servers))
 	connections := make([]net.Conn, 0)
 	now := time.Now()
-	for _, server := range runtime.Servers {
-		node := &NodeState{
-			Config:    server,
-			Extension: newNotReportedExtensionSnapshot(now),
-		}
-		if old := oldNodes[server.Username]; old != nil && sameServerIdentity(old.Config, server) {
-			node.LastNetworkIn = old.LastNetworkIn
-			node.LastNetworkOut = old.LastNetworkOut
-			node.Stats = old.Stats
-			node.HasUpdate = old.HasUpdate
-			if !disconnect {
-				node.Extension = old.Extension
-				node.Connected = old.Connected
-				node.Connection = old.Connection
-				node.ConnectionID = old.ConnectionID
-				node.Family = old.Family
-				node.Online4 = old.Online4
-				node.Online6 = old.Online6
-			}
-		}
-		newNodes[server.Username] = node
-	}
+	newNodes := a.rebuildNodesLocked(runtime, oldNodes, disconnect, now)
 	if disconnect {
 		for _, node := range oldNodes {
 			if node.Connection != nil {
@@ -278,28 +288,60 @@ func (a *App) SnapshotStats() map[string]any {
 func (a *App) snapshotStats(consumeReload bool) map[string]any {
 	runtime := a.RuntimeSnapshot()
 	now := time.Now()
-	servers := make([]any, 0, len(runtime.Servers))
-	a.nodeMu.Lock()
-	for _, server := range runtime.Servers {
-		if server.Disabled {
-			continue
+	serverKeys := make([]string, 0, len(runtime.Servers))
+	if a.registry != nil {
+		for _, device := range sortedRegistryDevices(a.registry) {
+			serverKeys = append(serverKeys, device.ID)
 		}
-		node := a.nodes[server.Username]
+	} else {
+		for _, server := range runtime.Servers {
+			if !server.Disabled {
+				serverKeys = append(serverKeys, server.Username)
+			}
+		}
+	}
+	servers := make([]any, 0, len(serverKeys))
+	a.nodeMu.Lock()
+	for _, deviceID := range serverKeys {
+		node := a.nodes[deviceID]
 		if node == nil {
 			continue
 		}
+		server := node.Config
 		base := map[string]any{
 			"name": server.Name, "type": server.Type, "host": server.Host, "location": server.Location,
 			"online4": false, "online6": false,
 		}
 		extension := snapshotExtension(node.Extension, now)
+		if node.Restored {
+			forceExtensionStale(&extension)
+		}
 		base["extension_version"] = extension.ExtensionVersion
 		base["received_at"] = extension.ReceivedAt
 		base["hardware"] = extension.Hardware
 		base["docker"] = extension.Docker
 		base["hermes"] = extension.Hermes
 		base["lucky"] = extension.Lucky
-		if node.Connected && node.HasUpdate {
+		if a.registry != nil {
+			status := a.deviceStatusAt(node, now)
+			identityStatus := node.IdentityStatus
+			protocolMode := node.ProtocolMode
+			if !node.Enabled {
+				identityStatus = "disabled"
+				protocolMode = "none"
+			}
+			base["device_id"] = node.DeviceID
+			base["display_name"] = node.DisplayName
+			base["status"] = status
+			base["identity_status"] = identityStatus
+			base["protocol_mode"] = protocolMode
+			base["last_seen"] = nullableTime(node.LastSeen)
+			base["collected_at"] = nullableTime(node.CollectedAt)
+			base["stale"] = a.deviceIsStaleAt(node, now)
+			base["expected_fqdn"] = nil
+			base["reported_fqdn"] = nil
+		}
+		if node.HasUpdate && (a.registry != nil || node.Connected) {
 			s := node.Stats
 			updateTrafficBaselines(node, s.NetworkIn, s.NetworkOut, monthResetWindow(now, server.MonthStart))
 			base["online4"] = node.Online4
@@ -334,6 +376,11 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 		"servers":  servers,
 		"sslcerts": a.sslSnapshot(runtime.SSLCerts, now),
 		"updated":  strconv.FormatInt(now.Unix(), 10),
+	}
+	if a.registry != nil {
+		result["schema_version"] = 2
+		result["generated_at"] = now.UTC().Format(time.RFC3339)
+		result["default_device_id"] = a.registry.Defaults.DefaultDeviceID
 	}
 	if a.reloadWrites.Load() > 0 {
 		result["reload"] = true
@@ -462,7 +509,8 @@ func anyInt64(value any) int64 {
 
 func (a *App) ResetTraffic(username string) (map[string]any, *APIError) {
 	a.nodeMu.Lock()
-	node := a.nodes[username]
+	deviceID := a.resolveNodeKey(username)
+	node := a.nodes[deviceID]
 	if node == nil {
 		a.nodeMu.Unlock()
 		return nil, &APIError{Status: 404, Message: "server was not found", Details: map[string]any{"username": username}}
