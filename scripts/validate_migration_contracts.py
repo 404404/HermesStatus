@@ -15,10 +15,14 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "docs" / "migration" / "schema"
+MULTI_DEVICE_SCHEMA_DIR = ROOT / "schemas"
 FIXTURE_DIR = ROOT / "testdata" / "migration"
+MULTI_DEVICE_FIXTURE_DIR = ROOT / "testdata" / "multi_device" / "valid"
 MIGRATION_DOC_DIR = ROOT / "docs" / "migration"
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
 SAFE_INTEGER_MAX = 9007199254740991
+MAX_REGISTERED_DEVICES = 16
+MAX_ORPHANED_DEVICES = 64
 
 
 class ContractError(Exception):
@@ -32,7 +36,11 @@ def load_json(path: Path) -> Any:
         raise ContractError(f"{path.relative_to(ROOT)}: invalid JSON: {exc}") from exc
 
 
-SCHEMAS = {path.resolve(): load_json(path) for path in sorted(SCHEMA_DIR.glob("*.json"))}
+SCHEMAS = {
+    path.resolve(): load_json(path)
+    for directory in (SCHEMA_DIR, MULTI_DEVICE_SCHEMA_DIR)
+    for path in sorted(directory.glob("*.json"))
+}
 
 
 def pointer_get(document: Any, pointer: str) -> Any:
@@ -327,8 +335,76 @@ def validate_fixture_coverage(fixtures: dict[str, dict[str, Any]]) -> None:
             raise ContractError(f"{prefix}-long-values.json does not exercise all long-value boundaries")
 
 
+def validate_multi_device_fixtures() -> int:
+    schema_by_prefix = {
+        "registry-": "device-registry.schema.json",
+        "credential-": "device-credential.schema.json",
+        "legacy-": "legacy-device-mapping.schema.json",
+        "client-v2-config": "client-v2-config.schema.json",
+        "envelope-": "device-update-v2.schema.json",
+        "stats-": "stats-v2.schema.json",
+        "persistence-v2": "persistence-v2.schema.json",
+    }
+    checked = 0
+    for fixture in sorted(MULTI_DEVICE_FIXTURE_DIR.glob("*.json")):
+        schema_name = next(
+            (schema for prefix, schema in schema_by_prefix.items() if fixture.name.startswith(prefix)),
+            None,
+        )
+        if schema_name is None:
+            # Composite migration expectations and public response oneOf
+            # fixtures are covered by pure Go/Frontend contract tests.
+            continue
+        data = load_json(fixture)
+        schema_path = (MULTI_DEVICE_SCHEMA_DIR / schema_name).resolve()
+        validate(data, SCHEMAS[schema_path], schema_path)
+        scan_secrets(data, fixture.name)
+        checked += 1
+    return checked
+
+
+def validate_multi_device_limit_constants() -> None:
+    registry = SCHEMAS[(MULTI_DEVICE_SCHEMA_DIR / "device-registry.schema.json").resolve()]
+    mapping = SCHEMAS[(MULTI_DEVICE_SCHEMA_DIR / "legacy-device-mapping.schema.json").resolve()]
+    persistence = SCHEMAS[(MULTI_DEVICE_SCHEMA_DIR / "persistence-v2.schema.json").resolve()]
+    stats = SCHEMAS[(MULTI_DEVICE_SCHEMA_DIR / "stats-v2.schema.json").resolve()]
+    limits = {
+        "device registry": registry["properties"]["devices"]["maxItems"],
+        "legacy mapping": mapping["properties"]["mappings"]["maxItems"],
+        "persistence devices": persistence["properties"]["devices"]["maxItems"],
+        "stats servers": stats["properties"]["servers"]["maxItems"],
+    }
+    divergent = {
+        name: value
+        for name, value in limits.items()
+        if value != MAX_REGISTERED_DEVICES
+    }
+    if divergent:
+        raise ContractError(
+            f"registered-device limits diverged from {MAX_REGISTERED_DEVICES}: {divergent}"
+        )
+    orphan_limit = persistence["properties"]["orphaned_devices"]["maxItems"]
+    if orphan_limit != MAX_ORPHANED_DEVICES:
+        raise ContractError(
+            f"orphaned-device limit {orphan_limit} != {MAX_ORPHANED_DEVICES}"
+        )
+    registry_fixture = load_json(MULTI_DEVICE_FIXTURE_DIR / "registry-16.json")
+    stats_fixture = load_json(MULTI_DEVICE_FIXTURE_DIR / "stats-v2-sixteen.json")
+    if len(registry_fixture["devices"]) != MAX_REGISTERED_DEVICES:
+        raise ContractError("registry-16.json does not contain exactly 16 devices")
+    if len(stats_fixture["servers"]) != MAX_REGISTERED_DEVICES:
+        raise ContractError("stats-v2-sixteen.json does not contain exactly 16 servers")
+    for obsolete in (
+        MULTI_DEVICE_FIXTURE_DIR / "registry-128.json",
+        MULTI_DEVICE_FIXTURE_DIR.parent / "invalid" / "registry-129-devices.json",
+    ):
+        if obsolete.exists():
+            raise ContractError(f"obsolete 128-device fixture remains: {obsolete.relative_to(ROOT)}")
+
+
 def main() -> int:
     checked_links = validate_markdown_links()
+    validate_multi_device_limit_constants()
     for path, schema in SCHEMAS.items():
         if schema.get("$schema") != DRAFT_2020_12:
             raise ContractError(f"{path.relative_to(ROOT)}: schema is not Draft 2020-12")
@@ -349,9 +425,12 @@ def main() -> int:
             raise ContractError(f"{name}: compact payload exceeds 65536 bytes")
         print(f"ok  {name:<30} {len(encoded):>5} bytes")
 
+    checked_multi_device = validate_multi_device_fixtures()
+
     print(
         f"validated {checked_links} Markdown links, {len(SCHEMAS)} schemas, "
-        f"their examples, and {len(fixtures)} fixtures"
+        f"their examples, {len(fixtures)} migration fixtures, and "
+        f"{checked_multi_device} multi-device fixtures"
     )
     return 0
 

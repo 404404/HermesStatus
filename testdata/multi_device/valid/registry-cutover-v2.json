@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "defaults": {
+    "default_device_id": "cutover-v2",
+    "stale_seconds": 900,
+    "offline_seconds": 1800
+  },
+  "devices": [
+    {
+      "id": "cutover-v2",
+      "display_name": "Synthetic Cutover V2",
+      "expected_fqdn": "cutover-v2.example.invalid",
+      "enabled": true,
+      "order": 10,
+      "tags": ["cutover"],
+      "group": "synthetic",
+      "ingestion": {
+        "mode": "cutover",
+        "active_protocol": "device_v2",
+        "cutover_not_after": "2099-01-01T00:00:00Z"
+      }
+    }
+  ]
+}

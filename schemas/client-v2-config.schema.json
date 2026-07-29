@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.invalid/hermesstatus/client-v2-config.schema.json",
+  "title": "HermesStatus 2.2 Client configuration",
+  "type": "object",
+  "required": ["version", "server", "device", "collection"],
+  "properties": {
+    "version": {"const": 1},
+    "server": {
+      "type": "object",
+      "required": ["url", "verify_tls", "connect_timeout_seconds", "read_timeout_seconds"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://[^/?#@\\\\\\s]+/?$",
+          "maxLength": 2048
+        },
+        "verify_tls": {"const": true, "default": true},
+        "ca_file": {
+          "type": ["string", "null"],
+          "pattern": "^/[^\\u0000]*$",
+          "maxLength": 4096
+        },
+        "connect_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 60},
+        "read_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300}
+      },
+      "additionalProperties": false
+    },
+    "device": {
+      "type": "object",
+      "required": ["id", "name", "fqdn", "token_file"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+        },
+        "name": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "fqdn": {
+          "type": ["string", "null"],
+          "maxLength": 253,
+          "pattern": "^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.?$"
+        },
+        "token_file": {
+          "type": "string",
+          "pattern": "^/[^\\u0000]*$",
+          "maxLength": 4096
+        }
+      },
+      "additionalProperties": false
+    },
+    "collection": {
+      "type": "object",
+      "required": ["interval_seconds"],
+      "properties": {
+        "interval_seconds": {"type": "integer", "minimum": 10, "maximum": 3600}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$comment": "Loopback HTTP exists only as an explicit pure-validator test profile and is intentionally outside the production JSON schema."
+}

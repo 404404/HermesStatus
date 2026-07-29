@@ -13,11 +13,22 @@ function fixture(name){
   return JSON.parse(fs.readFileSync(path.join(ROOT, `testdata/migration/stats-${name}.json`), 'utf8'));
 }
 
+function multiDeviceFixture(name){
+  return JSON.parse(fs.readFileSync(
+    path.join(ROOT, `testdata/multi_device/valid/${name}.json`),
+    'utf8'
+  ));
+}
+
 function statsDocument(name, overrides = {}){
   const extension = fixture(name);
   return {
+    schema_version: 2,
+    default_device_id: 'device-alpha',
     updated: Math.floor(new Date(extension.received_at).getTime() / 1000),
     servers: [{
+      device_id: 'device-alpha', display_name: 'Fixture Host',
+      status: 'online', identity_status: 'matched', protocol_mode: 'device_v2',
       name: 'fixture-host', disabled: false, online4: true, online6: false,
       cpu: 10, memory_used: 7 * 1024 * 1024, memory_total: 10 * 1024 * 1024,
       hdd_used: 90 * 1024, hdd_total: 100 * 1024, uptime: '12 天 3 小时',
@@ -47,6 +58,18 @@ async function run(){
   assert.equal(app.pageFromHash('#docker'), 'docker');
   assert.equal(app.pageFromHash('#lucky'), 'lucky');
   assert.equal(app.pageFromHash('#invalid'), 'home');
+  assert.deepEqual(app.parseDashboardHash('#docker?device=device-alpha'), {
+    page: 'docker', deviceId: 'device-alpha', needsRewrite: false
+  });
+  assert.equal(app.parseDashboardHash('#lucky?device=device%2Dbeta').deviceId, 'device-beta');
+  assert.equal(app.parseDashboardHash('#home?device=device-a&device=device-b').deviceId, null);
+  assert.equal(app.parseDashboardHash('#home?device=device-a&unexpected=1').needsRewrite, true);
+  assert.equal(app.parseDashboardHash('#home?device=%3Cscript%3E').deviceId, null);
+  assert.equal(app.canonicalDashboardHash('docker', 'device-alpha'), '#docker?device=device-alpha');
+  assert.equal(app.canonicalDashboardHash('unexpected', null), '#home');
+  assert.equal(app.validDeviceId('device-alpha'), true);
+  assert.equal(app.validDeviceId('DEVICE-ALPHA'), false);
+  assert.equal(app.validDeviceId('<script>'), false);
   assert.doesNotMatch(indexMarkup, /Lucky Monitoring|luckyHomeSummary|luckyHomeMeta/);
   assert.match(appSource, /<h2>CPU温度\/硬盘温度<\/h2>/);
   assert.match(appSource, /<h2>已运行时间\/操作系统<\/h2>/);
@@ -137,6 +160,123 @@ async function run(){
   assert.equal(missingExtensions.resources.memoryPercent, null);
   assert.deepEqual(missingExtensions.profiles, []);
   assert.deepEqual(missingExtensions.containers, []);
+
+  const alpha = statsDocument('normal').servers[0];
+  const beta = {
+    ...alpha,
+    device_id: 'device-beta',
+    display_name: 'Beta',
+    name: 'beta-host',
+    status: 'offline',
+    cpu: 77,
+    docker: {...alpha.docker, running: 1, total: 2},
+    lucky: {...alpha.lucky, status: 'not_configured'}
+  };
+  const neverSeen = {
+    ...alpha,
+    device_id: 'device-gamma',
+    display_name: 'Gamma',
+    name: 'gamma-host',
+    status: 'never_seen',
+    hardware: {},
+    docker: {},
+    hermes: {},
+    lucky: {}
+  };
+  const disabled = {
+    ...alpha,
+    device_id: 'device-disabled',
+    display_name: 'Disabled',
+    status: 'disabled'
+  };
+  const multi = {
+    schema_version: 2,
+    default_device_id: 'device-beta',
+    servers: [alpha, beta, neverSeen, disabled]
+  };
+  const frozenFour = multiDeviceFixture('stats-v2-four');
+  assert.equal(
+    app.resolveDeviceSelection(frozenFour, null, null).selectedDeviceId,
+    'device-beta'
+  );
+  assert.deepEqual(
+    app.selectableDevices(frozenFour).map(device => device.device_id),
+    ['device-beta', 'device-gamma', 'device-alpha']
+  );
+  assert.equal(
+    app.dashboardCondition(app.buildViewModel(frozenFour, 'device-beta')).kind,
+    'never-seen'
+  );
+  assert.deepEqual(
+    app.selectableDevices(multi).map(device => device.device_id),
+    ['device-alpha', 'device-beta', 'device-gamma']
+  );
+  assert.equal(app.resolveDeviceSelection(multi, 'device-alpha', 'device-gamma').selectedDeviceId, 'device-alpha');
+  assert.equal(app.resolveDeviceSelection(multi, null, 'device-gamma').selectedDeviceId, 'device-gamma');
+  assert.equal(app.resolveDeviceSelection(multi, null, null).selectedDeviceId, 'device-beta');
+  const recovered = app.resolveDeviceSelection(multi, null, 'removed-device');
+  assert.equal(recovered.selectedDeviceId, 'device-beta');
+  assert.equal(recovered.recovered, true);
+  const betaView = app.buildViewModel(multi, 'device-beta');
+  assert.equal(betaView.host.name, 'beta-host');
+  assert.equal(betaView.resources.cpuPercent, 77);
+  assert.equal(betaView.docker.running, 1);
+  assert.equal(betaView.lucky.status, 'not_configured');
+  assert.equal(app.dashboardCondition(betaView).kind, 'offline');
+  assert.equal(app.dashboardCondition(app.buildViewModel(multi, 'device-gamma')).kind, 'never-seen');
+  assert.equal(app.buildViewModel(multi, 'device-disabled').host, null);
+
+  const stored = new Map();
+  const storage = {
+    getItem: key => stored.get(key) ?? null,
+    setItem: (key, value) => stored.set(key, value),
+    removeItem: key => stored.delete(key)
+  };
+  app.writeStoredDeviceId(storage, 'device-beta');
+  assert.equal(app.readStoredDeviceId(storage), 'device-beta');
+  app.writeStoredDeviceId(storage, '<script>');
+  assert.equal(app.readStoredDeviceId(storage), null);
+  assert.equal(stored.has(app.DEVICE_STORAGE_KEY), false);
+  const hostile = {
+    servers: [{
+      ...alpha,
+      device_id: '<img-src=x>',
+      display_name: '<script>throw 1</script>'
+    }]
+  };
+  assert.deepEqual(app.selectableDevices(hostile), []);
+  assert.equal(app.deviceDisplayName({display_name: '界'.repeat(200)}).length, 128);
+  assert.deepEqual(app.selectableDevices({
+    servers: [alpha, {...alpha}]
+  }), []);
+  assert.deepEqual(app.normalizeStatsPayload({
+    servers: Array.from({length: app.MAX_UI_DEVICES + 1}, (_, index) => ({
+      ...alpha,
+      device_id: `device-${index}`
+    }))
+  }).servers, []);
+  assert.equal(
+    app.deviceDisplayName({
+      device_id: 'device-alpha',
+      display_name: 'Registry Name',
+      name: 'Reported Name',
+      reported_name: 'Untrusted Name',
+      hostname: 'untrusted-host',
+      reported_fqdn: 'untrusted.example.invalid'
+    }),
+    'Registry Name'
+  );
+  const sixteen = multiDeviceFixture('stats-v2-sixteen');
+  assert.equal(app.selectableDevices(sixteen).length, app.MAX_UI_DEVICES);
+  assert.equal(
+    app.selectableDevices(sixteen).map(app.deviceDisplayName).join('|'),
+    sixteen.servers.map(server => server.display_name).join('|')
+  );
+  const hostileError = '<img src=x onerror=throw(1)>';
+  assert.equal(
+    app.dashboardCondition(normal, new Error(hostileError)).message,
+    hostileError
+  );
 
   assert.equal(app.usageBand(0), 'low');
   assert.equal(app.usageBand(60), 'low');
@@ -229,8 +369,15 @@ async function run(){
   assert.match(css, /\.resource-value\{[^}]*height:27px;min-height:27px/);
   assert.match(css, /@media \(max-width:1180px\)/);
   assert.match(css, /@media \(max-width:720px\)/);
+  assert.match(css, /\.device-buttons\{[^}]*overflow-x:auto/);
+  assert.match(css, /@media \(max-width:720px\)\{[\s\S]*\.device-buttons\{display:none\}/);
+  assert.match(css, /@media \(max-width:720px\)\{[\s\S]*\.device-select-label\{display:block\}/);
 
   assert.match(indexMarkup, /id="refreshButton"/);
+  assert.match(indexMarkup, /id="deviceSelector"/);
+  assert.match(indexMarkup, /id="deviceButtons"/);
+  assert.match(indexMarkup, /id="deviceSelect"/);
+  assert.match(indexMarkup, /id="deviceSelectionNotice"[^>]*aria-live="polite"/);
   assert.match(indexMarkup, /id="homeTab"[^>]*>主页<\/button>/);
   assert.match(indexMarkup, /id="dockerTab"[^>]*>Docker<\/button>/);
   assert.match(indexMarkup, /id="luckyTab"[^>]*>Lucky<\/button>/);
@@ -267,7 +414,7 @@ async function run(){
   assert.doesNotMatch(appSource, /接口 \/ Web/);
   assert.match(appSource, /refresh\('initial'\)/);
   assert.match(appSource, /setActivePage\(tab\.dataset\.pageTarget\)/);
-  assert.match(appSource, /pageFromHash\(window\.location\.hash\)/);
+  assert.match(appSource, /parseDashboardHash\(window\.location\.hash\)/);
   assert.doesNotMatch(appSource, /renderDockerSummary|renderLuckyOverview/);
   const pageSwitchSource = appSource.slice(appSource.indexOf('function setActivePage'), appSource.indexOf('function detailRow'));
   assert.doesNotMatch(pageSwitchSource, /fetchStats|controller\.refresh|setInterval/);
@@ -275,6 +422,26 @@ async function run(){
   assert.equal((appSource.match(/\/json\/stats\.json/g) || []).length, 1);
   assert.equal((appSource.match(/setIntervalImplementation\(/g) || []).length, 1);
   assert.equal((appSource.match(/fetchStats\(\)/g) || []).length, 1);
+  assert.equal((appSource.match(/currentStats:/g) || []).length, 1);
+  assert.doesNotMatch(appSource, /lastDocument/);
+  const selectorSource = appSource.slice(
+    appSource.indexOf('function renderDeviceSelector'),
+    appSource.indexOf('function renderDashboard')
+  );
+  assert.match(selectorSource, /\.textContent = label/);
+  assert.match(selectorSource, /option\.textContent/);
+  assert.doesNotMatch(selectorSource, /\.innerHTML/);
+  const pageStateSource = appSource.slice(
+    appSource.indexOf('function setPageState'),
+    appSource.indexOf('function resourceBar')
+  );
+  assert.match(pageStateSource, /pageStateMessage'\)\.textContent = state\.message/);
+  assert.doesNotMatch(pageStateSource, /\.innerHTML/);
+  const deviceSwitchSource = appSource.slice(
+    appSource.indexOf('function selectDevice'),
+    appSource.indexOf('function applyPageVisibility')
+  );
+  assert.doesNotMatch(deviceSwitchSource, /fetchStats|controller\.refresh|setInterval/);
   assert.match(appSource, /event\.key === 'Escape'/);
   assert.match(appSource, /event\.target === byId\('profileModal'\)/);
 

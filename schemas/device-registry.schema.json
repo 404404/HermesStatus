@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.invalid/hermesstatus/device-registry.schema.json",
+  "title": "HermesStatus 2.2 device registry",
+  "type": "object",
+  "required": ["version", "defaults", "devices"],
+  "properties": {
+    "version": {"const": 1},
+    "defaults": {
+      "type": "object",
+      "required": ["default_device_id", "stale_seconds", "offline_seconds"],
+      "properties": {
+        "default_device_id": {"$ref": "#/$defs/deviceId"},
+        "stale_seconds": {"type": "integer", "minimum": 30, "maximum": 86400},
+        "offline_seconds": {"type": "integer", "minimum": 31, "maximum": 604800}
+      },
+      "additionalProperties": false
+    },
+    "devices": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {"$ref": "#/$defs/device"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "deviceId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+    },
+    "fqdn": {
+      "type": ["string", "null"],
+      "maxLength": 253,
+      "pattern": "^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.?$"
+    },
+    "ingestion": {
+      "type": "object",
+      "required": ["mode", "active_protocol", "cutover_not_after"],
+      "properties": {
+        "mode": {"enum": ["legacy", "device_v2", "cutover"]},
+        "active_protocol": {
+          "type": ["string", "null"],
+          "enum": ["legacy_single_device", "device_v2", null]
+        },
+        "cutover_not_after": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "maxLength": 40
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"mode": {"const": "legacy"}}},
+          "then": {
+            "properties": {
+              "active_protocol": {"const": "legacy_single_device"},
+              "cutover_not_after": {"const": null}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"mode": {"const": "device_v2"}}},
+          "then": {
+            "properties": {
+              "active_protocol": {"const": "device_v2"},
+              "cutover_not_after": {"const": null}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"mode": {"const": "cutover"}}},
+          "then": {
+            "properties": {
+              "active_protocol": {"enum": ["legacy_single_device", "device_v2"]},
+              "cutover_not_after": {"type": "string", "format": "date-time", "maxLength": 40}
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "device": {
+      "type": "object",
+      "required": [
+        "id",
+        "display_name",
+        "expected_fqdn",
+        "enabled",
+        "order",
+        "tags",
+        "group",
+        "ingestion"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/deviceId"},
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "expected_fqdn": {"$ref": "#/$defs/fqdn"},
+        "enabled": {"type": "boolean"},
+        "order": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "tags": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          }
+        },
+        "group": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "ingestion": {"$ref": "#/$defs/ingestion"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$comment": "Cross-record uniqueness, default membership/enabled state, offline>stale, FQDN IP/URL rejection, and cutover expiry are enforced by the Stage A pure validator."
+}

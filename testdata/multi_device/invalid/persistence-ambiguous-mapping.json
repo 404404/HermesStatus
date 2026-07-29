@@ -1,0 +1,26 @@
+{
+  "source": {
+    "servers": [
+      {
+        "name": "Synthetic A"
+      },
+      {
+        "name": "Synthetic B"
+      }
+    ]
+  },
+  "bindings": [
+    {
+      "source": {
+        "name": "Synthetic A"
+      },
+      "device_id": "device-alpha"
+    },
+    {
+      "source": {
+        "name": "Synthetic B"
+      },
+      "device_id": "device-alpha"
+    }
+  ]
+}

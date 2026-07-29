@@ -1,0 +1,5 @@
+{
+  "base_fixture": "envelope-all-domains.json",
+  "repeat_field": "custom",
+  "synthetic_size_bytes": 1048577
+}

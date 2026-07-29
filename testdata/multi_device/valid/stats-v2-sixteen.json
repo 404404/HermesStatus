@@ -1,0 +1,2937 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-07-01T12:00:00Z",
+  "default_device_id": "synthetic-000",
+  "servers": [
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-000",
+      "display_name": "Synthetic synthetic-000",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-000",
+      "type": "synthetic",
+      "host": "synthetic-000.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-001",
+      "display_name": "Synthetic synthetic-001",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-001",
+      "type": "synthetic",
+      "host": "synthetic-001.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-002",
+      "display_name": "Synthetic synthetic-002",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-002",
+      "type": "synthetic",
+      "host": "synthetic-002.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-003",
+      "display_name": "Synthetic synthetic-003",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-003",
+      "type": "synthetic",
+      "host": "synthetic-003.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-004",
+      "display_name": "Synthetic synthetic-004",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-004",
+      "type": "synthetic",
+      "host": "synthetic-004.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-005",
+      "display_name": "Synthetic synthetic-005",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-005",
+      "type": "synthetic",
+      "host": "synthetic-005.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-006",
+      "display_name": "Synthetic synthetic-006",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-006",
+      "type": "synthetic",
+      "host": "synthetic-006.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-007",
+      "display_name": "Synthetic synthetic-007",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-007",
+      "type": "synthetic",
+      "host": "synthetic-007.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-008",
+      "display_name": "Synthetic synthetic-008",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-008",
+      "type": "synthetic",
+      "host": "synthetic-008.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-009",
+      "display_name": "Synthetic synthetic-009",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-009",
+      "type": "synthetic",
+      "host": "synthetic-009.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-010",
+      "display_name": "Synthetic synthetic-010",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-010",
+      "type": "synthetic",
+      "host": "synthetic-010.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-011",
+      "display_name": "Synthetic synthetic-011",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-011",
+      "type": "synthetic",
+      "host": "synthetic-011.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-012",
+      "display_name": "Synthetic synthetic-012",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-012",
+      "type": "synthetic",
+      "host": "synthetic-012.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-013",
+      "display_name": "Synthetic synthetic-013",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-013",
+      "type": "synthetic",
+      "host": "synthetic-013.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-014",
+      "display_name": "Synthetic synthetic-014",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-014",
+      "type": "synthetic",
+      "host": "synthetic-014.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    },
+    {
+      "extension_version": "1.0-draft",
+      "received_at": "2026-07-13T12:00:01Z",
+      "hardware": {
+        "cpu_model": null,
+        "cpu_temperature": null,
+        "disk_temperature": null,
+        "disk_smart_status": "unknown",
+        "disk_power_on_hours": null,
+        "disk_written_bytes": null,
+        "disk_read_bytes": null,
+        "disk_device": null,
+        "disk_smart_source": null,
+        "updated_at": null,
+        "stale": true,
+        "error": null
+      },
+      "docker": {
+        "running": 0,
+        "total": 0,
+        "limit": 0,
+        "truncated": false,
+        "containers": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "hermes": {
+        "profiles": [],
+        "updated_at": "2026-07-13T12:00:00Z",
+        "stale": false,
+        "error": null
+      },
+      "lucky": {
+        "status": "not_configured",
+        "source": "unavailable",
+        "service": {
+          "state": "unknown",
+          "process_running": null,
+          "process_pid": null,
+          "uptime_seconds": null,
+          "api_reachable": false,
+          "web_reachable": false,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "version": {
+          "current": null,
+          "latest": null,
+          "update_available": null,
+          "build_info": null,
+          "checked_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "ip_resolution": {
+          "mode": null,
+          "resolved_ip_count": 0,
+          "ipv4_count": 0,
+          "ipv6_count": 0,
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "dynamic_dns": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "records": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "web_services": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "services": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "port_forwards": {
+          "total": 0,
+          "enabled": 0,
+          "disabled": 0,
+          "healthy": 0,
+          "error_count": 0,
+          "rules": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "certificates": {
+          "total": 0,
+          "valid": 0,
+          "expiring": 0,
+          "expired": 0,
+          "not_yet_valid": 0,
+          "invalid": 0,
+          "unknown": 0,
+          "items": [],
+          "status": "not_configured",
+          "updated_at": null,
+          "stale": true,
+          "error": {
+            "code": "not_configured",
+            "message": "Lucky monitoring is not configured",
+            "source": "lucky",
+            "retryable": false,
+            "http_status": null
+          }
+        },
+        "updated_at": null,
+        "stale": true,
+        "error": {
+          "code": "not_configured",
+          "message": "Lucky monitoring is not configured",
+          "source": "lucky",
+          "retryable": false,
+          "http_status": null
+        }
+      },
+      "device_id": "synthetic-015",
+      "display_name": "Synthetic synthetic-015",
+      "status": "online",
+      "identity_status": "matched",
+      "protocol_mode": "device_v2",
+      "last_seen": "2026-07-01T12:00:00Z",
+      "collected_at": "2026-07-01T12:00:00Z",
+      "stale": false,
+      "expected_fqdn": null,
+      "reported_fqdn": null,
+      "name": "Synthetic synthetic-015",
+      "type": "synthetic",
+      "host": "synthetic-015.example.invalid",
+      "location": "fixture",
+      "online4": true,
+      "online6": false
+    }
+  ],
+  "sslcerts": [],
+  "updated": "1782907200"
+}

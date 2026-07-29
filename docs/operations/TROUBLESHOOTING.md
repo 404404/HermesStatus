@@ -16,3 +16,23 @@ Use [Build Provenance](BUILD_PROVENANCE.md) when distinguishing an expected arti
 Migration, backup, and recovery boundaries are documented in [Stats Persistence](STATS_PERSISTENCE.md).
 
 If an operator expects a 1.0 listener or container, first confirm whether the request is an approved disaster-recovery exercise. The normal final state has no 1.0 Compose project, containers, network, images, ports, systemd unit, cron entry, reverse-proxy entry, or online directory. Use the checksummed offline package described in [Decommissioning HermesStatus 1.0](DECOMMISSION_1_0.md); do not reconstruct it from memory.
+
+## HermesStatus 2.2 multi-device
+
+- Startup validation failure: run `serverstatus --validate-device-config`
+  against the same read-only mounts. Use only its fixed error code and field;
+  do not dump Registry, credentials, mappings or paths.
+- Registered device remains `never_seen`: confirm it is enabled, owns
+  `device_v2`, has one active digest slot, and that the client uses the matching
+  stable `device_id`. Never solve this by automatic registration.
+- 401: treat unknown ID, missing credential and bad token identically. Check
+  file ownership/mode and rotation window locally without logging the token.
+- 403: check disabled/ownership/FQDN policy and the HTTPS/trusted-proxy
+  boundary. Forwarded headers from an untrusted source must not enable the
+  endpoint.
+- Wrong dashboard device/name: confirm `servers[].device_id`, Registry
+  `display_name`, hash fallback and localStorage selection. Client-reported
+  name, hostname and FQDN are not display authority.
+- After restart: restored devices must be stale/offline, never online, until a
+  fresh accepted report. Preserve the persistence file and bounded orphan
+  history while diagnosing.

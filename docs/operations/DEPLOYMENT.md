@@ -30,3 +30,18 @@ For a candidate, build unique immutable local tags from the reviewed worktree. R
 Health endpoints are `/api/health` and `/json/stats.json`. The Server and Client images both declare health checks.
 
 HermesStatus 1.0 is no longer an online rollback service. Its validated offline package and recovery boundary are described in [Decommissioning HermesStatus 1.0](DECOMMISSION_1_0.md).
+
+## HermesStatus 2.2 multi-device deployment boundary
+
+Development qualification does not authorize production deployment. Before a
+separate 2.2 rollout, create a protected startup-only Registry (maximum 16),
+one digest-only credential record per v2 device, explicit Legacy mappings and a
+dedicated persistence-v2 bind. Validate them with
+`serverstatus --validate-device-config` before starting any listener.
+
+The v2 endpoint is disabled by default. A production endpoint must be reachable
+only through the exact HTTPS reverse-proxy POST location; the backend port must
+not be public. Disable TLS 1.3 Early Data, replace external forwarding headers,
+trust only the exact proxy address, and keep Registry, credential and mapping
+mounts read-only. Follow [Manual Device Registration](MULTI_DEVICE_REGISTRATION.md)
+and the [2.2 qualification report](../testing/MULTI_DEVICE_QUALIFICATION.md).

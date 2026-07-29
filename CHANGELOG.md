@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased — HermesStatus 2.2 Multi-Device
+
+- Add a startup-only manual Server Registry with a strict 16-device limit,
+  registry-authoritative display names and no automatic registration or
+  discovery.
+- Add per-device 256-bit Bearer credentials stored as server-side SHA-256
+  digests, current/next rotation slots, a read-only validator and an offline
+  provisioning helper.
+- Add verified HTTPS device ingestion behind a default-disabled,
+  reverse-proxy-only public boundary while retaining explicit Legacy TCP
+  mapping and ownership enforcement.
+- Add persistence v2, bounded 64-entry orphan retention, multi-device
+  `servers[]` projection and a shared Home/Docker/Lucky selector with one fetch
+  path and one refresh timer.
+- Add synthetic configuration, Compose and TLS proxy examples plus 4-device,
+  16-device, 17-device rejection, lifecycle, compatibility, security and
+  provenance qualification coverage.
+- This is development-only: no production deployment, production secret, tag
+  or GitHub Release is included.
+
 ## Unreleased — Release D Foundation
 
 - Harden the Server and Client runtime with read-only root filesystems, bounded tmpfs mounts, `no-new-privileges`, and an explicit read-only Server config bind while retaining documented permissions that did not pass isolated removal tests.

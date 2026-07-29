@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "defaults": {
+    "default_device_id": "v2-alpha",
+    "stale_seconds": 900,
+    "offline_seconds": 1800
+  },
+  "devices": [
+    {
+      "id": "v2-alpha",
+      "display_name": "Synthetic V2",
+      "expected_fqdn": "v2-alpha.example.invalid",
+      "enabled": true,
+      "order": 10,
+      "tags": [],
+      "group": null,
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    }
+  ]
+}

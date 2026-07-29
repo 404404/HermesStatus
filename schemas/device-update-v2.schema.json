@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.invalid/hermesstatus/device-update-v2.schema.json",
+  "title": "HermesStatus 2.2 HTTPS device update envelope",
+  "type": "object",
+  "required": ["schema_version", "device", "collected_at", "stats"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "device": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+        },
+        "reported_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        },
+        "reported_fqdn": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.?$"
+        },
+        "hostname": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "collected_at": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 40
+    },
+    "stats": {
+      "type": "object",
+      "required": ["extension_version", "hardware", "docker", "hermes", "lucky"],
+      "properties": {
+        "uptime": {"type": "integer"},
+        "load_1": {"type": "number"},
+        "load_5": {"type": "number"},
+        "load_15": {"type": "number"},
+        "ping_10010": {"type": "number"},
+        "ping_189": {"type": "number"},
+        "ping_10086": {"type": "number"},
+        "time_10010": {"type": "integer"},
+        "time_189": {"type": "integer"},
+        "time_10086": {"type": "integer"},
+        "tcp": {"type": "integer"},
+        "udp": {"type": "integer"},
+        "process": {"type": "integer"},
+        "thread": {"type": "integer"},
+        "network_rx": {"type": "integer"},
+        "network_tx": {"type": "integer"},
+        "network_in": {"type": "integer"},
+        "network_out": {"type": "integer"},
+        "memory_total": {"type": "integer"},
+        "memory_used": {"type": "integer"},
+        "swap_total": {"type": "integer"},
+        "swap_used": {"type": "integer"},
+        "hdd_total": {"type": "integer"},
+        "hdd_used": {"type": "integer"},
+        "io_read": {"type": "integer"},
+        "io_write": {"type": "integer"},
+        "cpu": {"type": "number"},
+        "cpu_cores": {"type": "integer"},
+        "cpu_model": {"type": "string", "maxLength": 128},
+        "custom": {"type": "string", "maxLength": 1024},
+        "os": {"type": "string", "maxLength": 128},
+        "online4": {"type": ["boolean", "null"]},
+        "online6": {"type": ["boolean", "null"]},
+        "extension_version": {"const": "1.0-draft"},
+        "hardware": {
+          "$ref": "../docs/migration/schema/agent-update-extension.schema.json#/$defs/hardware"
+        },
+        "docker": {
+          "$ref": "../docs/migration/schema/agent-update-extension.schema.json#/$defs/docker"
+        },
+        "hermes": {
+          "$ref": "../docs/migration/schema/agent-update-extension.schema.json#/$defs/hermes"
+        },
+        "lucky": {
+          "$ref": "../docs/migration/schema/lucky-extension.schema.json"
+        },
+        "hardware_json": {"type": "string", "maxLength": 262144},
+        "docker_json": {"type": "string", "maxLength": 262144},
+        "hermes_json": {"type": "string", "maxLength": 262144}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$comment": "The request body remains capped at 1 MiB by the pure validator/runtime boundary. Domain refs reuse the retained 2.1 schemas; no second domain contract is created."
+}

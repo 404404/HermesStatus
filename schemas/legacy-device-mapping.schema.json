@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.invalid/hermesstatus/legacy-device-mapping.schema.json",
+  "title": "HermesStatus 2.2 explicit legacy identity mapping",
+  "type": "object",
+  "required": ["version", "mappings"],
+  "properties": {
+    "version": {"const": 1},
+    "mappings": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "required": ["username", "device_id"],
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+          },
+          "device_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$comment": "Username/device uniqueness plus registry existence, enabled state, and legacy ownership are cross-file validation rules."
+}

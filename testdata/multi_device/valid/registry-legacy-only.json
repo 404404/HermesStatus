@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "defaults": {
+    "default_device_id": "legacy-alpha",
+    "stale_seconds": 900,
+    "offline_seconds": 1800
+  },
+  "devices": [
+    {
+      "id": "legacy-alpha",
+      "display_name": "Synthetic Legacy",
+      "expected_fqdn": null,
+      "enabled": true,
+      "order": 10,
+      "tags": [],
+      "group": null,
+      "ingestion": {
+        "mode": "legacy",
+        "active_protocol": "legacy_single_device",
+        "cutover_not_after": null
+      }
+    }
+  ]
+}

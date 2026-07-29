@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "defaults": {
+    "default_device_id": "compute-01",
+    "stale_seconds": 300,
+    "offline_seconds": 900
+  },
+  "devices": [
+    {
+      "id": "compute-01",
+      "display_name": "Synthetic Compute",
+      "expected_fqdn": null,
+      "enabled": true,
+      "order": 10,
+      "tags": ["compute", "synthetic"],
+      "group": "example-lab",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "storage-01",
+      "display_name": "Synthetic Storage",
+      "expected_fqdn": null,
+      "enabled": true,
+      "order": 20,
+      "tags": ["storage", "synthetic"],
+      "group": "example-lab",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "legacy-01",
+      "display_name": "Synthetic Legacy Bridge",
+      "expected_fqdn": null,
+      "enabled": true,
+      "order": 30,
+      "tags": ["legacy", "synthetic"],
+      "group": "example-lab",
+      "ingestion": {
+        "mode": "legacy",
+        "active_protocol": "legacy_single_device",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "disabled-01",
+      "display_name": "Synthetic Disabled",
+      "expected_fqdn": null,
+      "enabled": false,
+      "order": 40,
+      "tags": ["disabled", "synthetic"],
+      "group": "example-lab",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    }
+  ]
+}

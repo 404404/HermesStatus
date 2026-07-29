@@ -21,10 +21,18 @@ func main() {
 	var legacyBind string
 	var legacyPort int
 	var printVersion bool
+	var validateDeviceConfig bool
 
 	flag.StringVar(&opts.ConfigPath, "config", envOr("CONFIG_PATH", "config.json"), "configuration file")
 	flag.StringVar(&opts.ConfigPath, "c", envOr("CONFIG_PATH", "config.json"), "configuration file (shorthand)")
 	flag.StringVar(&opts.StatsPath, "stats", os.Getenv("STATS_PATH"), "persistent stats JSON file")
+	flag.StringVar(&opts.PersistencePath, "state", os.Getenv("PERSISTENCE_PATH"), "multi-device state persistence file")
+	flag.StringVar(&opts.RegistryPath, "device-registry", os.Getenv("DEVICE_REGISTRY_PATH"), "read-only device registry")
+	flag.StringVar(&opts.LegacyMappingPath, "legacy-device-mapping", os.Getenv("LEGACY_DEVICE_MAPPING_PATH"), "read-only legacy username mapping")
+	flag.StringVar(&opts.DeviceCredentialsDir, "device-credentials", os.Getenv("HERMESSTATUS_DEVICE_CREDENTIALS_DIR"), "read-only device credential directory")
+	flag.BoolVar(&opts.DeviceEndpointEnabled, "device-endpoint", envBool("HERMESSTATUS_DEVICE_ENDPOINT_ENABLED", false), "enable the authenticated device update endpoint")
+	flag.BoolVar(&opts.TrustedProxyMode, "device-trusted-proxy", envBool("HERMESSTATUS_DEVICE_TRUSTED_PROXY", false), "trust HTTPS forwarding only from explicit proxy addresses")
+	flag.StringVar(&opts.TrustedProxyCIDRs, "device-trusted-proxy-cidrs", os.Getenv("HERMESSTATUS_DEVICE_TRUSTED_PROXY_CIDRS"), "comma-separated trusted proxy addresses or CIDRs")
 	flag.StringVar(&opts.WebDir, "web-dir", envOr("WEB_DIR", "../web"), "WebUI directory")
 	flag.StringVar(&opts.WebDir, "d", envOr("WEB_DIR", "../web"), "WebUI directory (shorthand)")
 	flag.StringVar(&opts.HTTPAddr, "http", envOr("HTTP_ADDR", ":8080"), "HTTP listen address")
@@ -36,10 +44,22 @@ func main() {
 	flag.BoolVar(&opts.Verbose, "verbose", envBool("VERBOSE", false), "verbose HTTP logging")
 	flag.BoolVar(&opts.Verbose, "v", envBool("VERBOSE", false), "verbose HTTP logging (shorthand)")
 	flag.BoolVar(&printVersion, "version", false, "print version and exit")
+	flag.BoolVar(&validateDeviceConfig, "validate-device-config", false, "validate read-only multi-device configuration and exit")
 	flag.Parse()
 
 	if printVersion {
 		fmt.Printf("serverstatus %s commit=%s built=%s\n", version, commit, buildTime)
+		return
+	}
+	if validateDeviceConfig {
+		if exitCode := runDeviceConfigValidation(
+			opts,
+			os.Stdout,
+			os.Stderr,
+			time.Now(),
+		); exitCode != 0 {
+			os.Exit(exitCode)
+		}
 		return
 	}
 	if opts.StatsPath == "" {

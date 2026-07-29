@@ -1,0 +1,37 @@
+{
+  "source": {
+    "servers": [
+      {
+        "name": "Synthetic Legacy A",
+        "type": "synthetic",
+        "host": "legacy-a.example.invalid",
+        "location": "fixture"
+      },
+      {
+        "name": "Synthetic Unmatched",
+        "type": "synthetic",
+        "host": "unmatched.example.invalid",
+        "location": "fixture"
+      }
+    ]
+  },
+  "bindings": [
+    {
+      "source": {
+        "name": "Synthetic Legacy A",
+        "type": "synthetic",
+        "host": "legacy-a.example.invalid",
+        "location": "fixture"
+      },
+      "device_id": "device-alpha"
+    }
+  ],
+  "expected": {
+    "version": 2,
+    "device_ids": [
+      "device-alpha"
+    ],
+    "restored_status": "offline",
+    "freshness_reset": true
+  }
+}

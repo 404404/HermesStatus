@@ -1,0 +1,25 @@
+{
+  "source": {
+    "servers": [
+      {
+        "name": "Synthetic Legacy A",
+        "type": "synthetic",
+        "host": "legacy-a.example.invalid",
+        "location": "fixture"
+      }
+    ]
+  },
+  "bindings": [
+    {
+      "source": {
+        "name": "Synthetic Legacy A",
+        "type": "synthetic",
+        "host": "legacy-a.example.invalid",
+        "location": "fixture"
+      },
+      "device_id": "device-delta"
+    }
+  ],
+  "registry_fixture": "registry-four.json",
+  "expected_status": "disabled"
+}

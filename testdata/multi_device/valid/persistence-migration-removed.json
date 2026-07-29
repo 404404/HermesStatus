@@ -1,0 +1,24 @@
+{
+  "source": {
+    "servers": [
+      {
+        "name": "Synthetic Legacy A",
+        "type": "synthetic",
+        "host": "legacy-a.example.invalid",
+        "location": "fixture"
+      }
+    ]
+  },
+  "bindings": [
+    {
+      "source": {
+        "name": "Synthetic Legacy A",
+        "type": "synthetic",
+        "host": "legacy-a.example.invalid",
+        "location": "fixture"
+      },
+      "device_id": "device-removed"
+    }
+  ],
+  "expected_reason": "removed_device"
+}

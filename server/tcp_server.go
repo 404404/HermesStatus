@@ -9,6 +9,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/cppla/serverstatus/server/contracts"
 )
 
 type AgentServer struct {
@@ -72,13 +74,12 @@ func (s *AgentServer) handleConnection(conn net.Conn) {
 		return
 	}
 	family := remoteFamily(conn.RemoteAddr())
-	connectionID, monitors, apiErr := s.app.connectAgent(parts[0], parts[1], conn, family)
+	deviceID, connectionID, monitors, apiErr := s.app.connectAgent(parts[0], parts[1], conn, family)
 	if apiErr != nil {
 		_, _ = io.WriteString(conn, apiErr.Message+"\n")
 		return
 	}
-	username := parts[0]
-	defer s.app.disconnectAgent(username, conn, connectionID)
+	defer s.app.disconnectAgent(deviceID, conn, connectionID)
 
 	if _, err := io.WriteString(conn, "Authentication successful. Access granted.\n"); err != nil {
 		return
@@ -107,30 +108,35 @@ func (s *AgentServer) handleConnection(conn net.Conn) {
 		switch {
 		case strings.HasPrefix(line, "update"):
 			body := strings.TrimSpace(strings.TrimPrefix(line, "update"))
-			update, extension, issues, err := decodeAgentUpdate([]byte(body))
+			generation := s.app.updateID.Add(1)
+			issues, err := s.app.ingestDeviceUpdateAt(deviceIngestRequest{
+				DeviceID:     deviceID,
+				ProtocolMode: "legacy_single_device",
+				CollectedAt:  time.Now(),
+				FlatStats:    []byte(body),
+				Generation:   generation,
+				ConnectionID: connectionID,
+			}, time.Now())
 			if err != nil {
-				if s.app.agentPong(username, connectionID) {
+				if s.app.agentPong(deviceID, connectionID) {
 					_, _ = io.WriteString(conn, "1\n")
 				}
 				continue
 			}
 			for _, issue := range issues {
 				s.app.logger.Printf(
-					"extension update username=%q domain=%s code=%s payload_length=%d",
-					username, issue.Domain, issue.Code, issue.PayloadLength,
+					"extension update username=%q domain=%s code=%s payload_length=%d device_id=%q",
+					parts[0], issue.Domain, issue.Code, issue.PayloadLength, deviceID,
 				)
 			}
-			if !s.app.updateAgent(username, connectionID, update, extension) {
-				return
-			}
-			if s.app.agentPong(username, connectionID) {
+			if s.app.agentPong(deviceID, connectionID) {
 				_, _ = io.WriteString(conn, "0\n")
 			}
 		case strings.HasPrefix(line, "pong"):
 			value := strings.TrimSpace(strings.TrimPrefix(line, "pong"))
-			s.app.setAgentPong(username, connectionID, value == "1" || strings.EqualFold(value, "on"))
+			s.app.setAgentPong(deviceID, connectionID, value == "1" || strings.EqualFold(value, "on"))
 		default:
-			if s.app.agentPong(username, connectionID) {
+			if s.app.agentPong(deviceID, connectionID) {
 				_, _ = io.WriteString(conn, "1\n")
 			}
 		}
@@ -147,7 +153,7 @@ func remoteFamily(address net.Addr) int {
 	return 4
 }
 
-func (a *App) connectAgent(username, password string, conn net.Conn, family int) (uint64, []MonitorConfig, *APIError) {
+func (a *App) connectAgent(username, password string, conn net.Conn, family int) (string, uint64, []MonitorConfig, *APIError) {
 	a.configMu.RLock()
 	defer a.configMu.RUnlock()
 	var config *ServerConfig
@@ -159,36 +165,52 @@ func (a *App) connectAgent(username, password string, conn net.Conn, family int)
 		}
 	}
 	if config == nil || config.Password != password {
-		return 0, nil, &APIError{Status: 401, Message: "Wrong username and/or password."}
+		return "", 0, nil, &APIError{Status: 401, Message: "Wrong username and/or password."}
 	}
 	if config.Disabled {
-		return 0, nil, &APIError{Status: 403, Message: "Server is disabled."}
+		return "", 0, nil, &APIError{Status: 403, Message: "Server is disabled."}
+	}
+	if a.ownershipFailClosed {
+		return "", 0, nil, &APIError{Status: 409, Message: "Server protocol is inactive."}
 	}
 	a.nodeMu.Lock()
 	defer a.nodeMu.Unlock()
-	node := a.nodes[username]
+	deviceID, mapped := a.deviceIDForUsername(username)
+	if !mapped {
+		return "", 0, nil, &APIError{Status: 403, Message: "Server is not configured."}
+	}
+	node := a.nodes[deviceID]
 	if node == nil {
-		return 0, nil, &APIError{Status: 404, Message: "Server is not configured."}
+		return "", 0, nil, &APIError{Status: 404, Message: "Server is not configured."}
+	}
+	if !node.Enabled {
+		return "", 0, nil, &APIError{Status: 403, Message: "Server is disabled."}
+	}
+	if a.registry != nil && !contracts.OwnershipAllows(node.Ownership, "legacy_single_device", time.Now()) {
+		return "", 0, nil, &APIError{Status: 409, Message: "Server protocol is inactive."}
 	}
 	if node.Connected {
-		return 0, nil, &APIError{Status: 409, Message: "Only one connection per user allowed."}
+		return "", 0, nil, &APIError{Status: 409, Message: "Only one connection per user allowed."}
 	}
 	id := a.connectionID.Add(1)
 	node.Connected = true
 	node.Connection = conn
 	node.ConnectionID = id
 	node.Family = family
-	node.HasUpdate = false
+	if a.registry == nil {
+		node.HasUpdate = false
+	}
 	node.Pong = false
 	node.Online4 = family == 4
 	node.Online6 = family == 6
 	a.wakeStatsWriter()
-	return id, append([]MonitorConfig(nil), a.runtime.Monitors...), nil
+	return deviceID, id, append([]MonitorConfig(nil), a.runtime.Monitors...), nil
 }
 
-func (a *App) disconnectAgent(username string, conn net.Conn, connectionID uint64) {
+func (a *App) disconnectAgent(identity string, conn net.Conn, connectionID uint64) {
 	a.nodeMu.Lock()
-	node := a.nodes[username]
+	deviceID := a.resolveNodeKey(identity)
+	node := a.nodes[deviceID]
 	if node == nil || node.ConnectionID != connectionID || node.Connection != conn {
 		a.nodeMu.Unlock()
 		return
@@ -197,46 +219,27 @@ func (a *App) disconnectAgent(username string, conn net.Conn, connectionID uint6
 	node.Connection = nil
 	node.Online4 = false
 	node.Online6 = false
-	node.HasUpdate = false
+	if a.registry == nil {
+		node.HasUpdate = false
+	}
 	node.Pong = false
 	a.nodeMu.Unlock()
 	a.wakeStatsWriter()
 }
 
-func (a *App) updateAgent(username string, connectionID uint64, update AgentStats, extension ExtensionStats) bool {
-	now := time.Now()
-	a.nodeMu.Lock()
-	node := a.nodes[username]
-	if node == nil || !node.Connected || node.ConnectionID != connectionID {
-		a.nodeMu.Unlock()
-		return false
-	}
-	if update.Online4 != nil {
-		node.Online4 = *update.Online4
-	}
-	if update.Online6 != nil {
-		node.Online6 = *update.Online6
-	}
-	node.Stats = update
-	node.Extension = extensionSnapshotAt(extension, now)
-	node.HasUpdate = true
-	node.LastUpdate = now
-	a.nodeMu.Unlock()
-	a.wakeStatsWriter()
-	return true
-}
-
-func (a *App) setAgentPong(username string, connectionID uint64, enabled bool) {
+func (a *App) setAgentPong(identity string, connectionID uint64, enabled bool) {
 	a.nodeMu.Lock()
 	defer a.nodeMu.Unlock()
-	if node := a.nodes[username]; node != nil && node.ConnectionID == connectionID {
+	deviceID := a.resolveNodeKey(identity)
+	if node := a.nodes[deviceID]; node != nil && node.ConnectionID == connectionID {
 		node.Pong = enabled
 	}
 }
 
-func (a *App) agentPong(username string, connectionID uint64) bool {
+func (a *App) agentPong(identity string, connectionID uint64) bool {
 	a.nodeMu.RLock()
 	defer a.nodeMu.RUnlock()
-	node := a.nodes[username]
+	deviceID := a.resolveNodeKey(identity)
+	node := a.nodes[deviceID]
 	return node != nil && node.ConnectionID == connectionID && node.Pong
 }

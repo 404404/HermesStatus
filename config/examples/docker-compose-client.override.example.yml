@@ -1,0 +1,8 @@
+services:
+  serverstatus-client:
+    environment: !override
+      HERMESSTATUS_CONFIG_FILE: /etc/hermesstatus/client-v2.json
+    volumes:
+      - ./client-v2.example.json:/etc/hermesstatus/client-v2.json:ro
+      - ./compute-01.token:/run/secrets/hermesstatus-device-token:ro
+      - ./example-ca.crt:/etc/hermesstatus/example-ca.crt:ro
