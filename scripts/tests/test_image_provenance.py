@@ -46,6 +46,12 @@ def validate(payload):
 
 
 class ImageProvenanceTests(unittest.TestCase):
+    def test_server_dockerfile_copies_multi_device_contract_package(self):
+        dockerfile = (
+            pathlib.Path(__file__).resolve().parents[2] / "Dockerfile.server"
+        ).read_text(encoding="utf-8")
+        self.assertIn("COPY server/contracts ./contracts", dockerfile)
+
     def test_valid_metadata(self):
         result = validate(valid_inspect())
         self.assertEqual(result["revision"], REVISION)
