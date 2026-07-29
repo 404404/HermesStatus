@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -115,5 +118,84 @@ func TestDeviceEndpointPerDeviceRateLimitIsIsolatedAndNotPersisted(t *testing.T)
 		if strings.Contains(string(data), forbidden) {
 			t.Fatalf("limiter state leaked into persistence: %q", forbidden)
 		}
+	}
+}
+
+func TestPreAuthSourceKeyTrustBoundary(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
+		activeTestCredentialRecord("device-alpha"),
+	}, func(opts *Options) {
+		opts.TrustedProxyMode = true
+		opts.TrustedProxyCIDRs = "192.0.2.10/32"
+	})
+
+	trusted := httptest.NewRequest(
+		http.MethodPost, "http://backend.invalid"+deviceUpdatePath, nil,
+	)
+	trusted.RemoteAddr = "192.0.2.10:443"
+	trusted.Header.Set("X-Forwarded-For", "203.0.113.7")
+	if got, want := app.preAuthRequestKey(trusted), preAuthSourceKey("203.0.113.7"); got != want {
+		t.Fatalf("trusted proxy source key=%q want=%q", got, want)
+	}
+
+	forged := httptest.NewRequest(
+		http.MethodPost, "https://backend.invalid"+deviceUpdatePath, nil,
+	)
+	forged.RemoteAddr = "198.51.100.8:443"
+	forged.Header.Set("X-Forwarded-For", "203.0.113.7")
+	if got, want := app.preAuthRequestKey(forged), preAuthSourceKey("198.51.100.8"); got != want {
+		t.Fatalf("untrusted XFF changed limiter key: got=%q want=%q", got, want)
+	}
+
+	malformed := httptest.NewRequest(
+		http.MethodPost, "http://backend.invalid"+deviceUpdatePath, nil,
+	)
+	malformed.RemoteAddr = "not-an-address"
+	malformed.Header.Set("X-Forwarded-For", "203.0.113.7")
+	if got := app.preAuthRequestKey(malformed); got != globalUnauthenticatedSourceKey {
+		t.Fatalf("unreliable source did not use bounded global limiter: %q", got)
+	}
+}
+
+func TestPerDeviceLimiterIsBoundedToRegisteredDevices(t *testing.T) {
+	devices := make([]contracts.RegistryDevice, 0, contracts.MaxRegisteredDevices)
+	credentials := make([]contracts.CredentialRecord, 0, contracts.MaxRegisteredDevices)
+	for index := 0; index < contracts.MaxRegisteredDevices; index++ {
+		deviceID := fmt.Sprintf("device-%02d", index)
+		devices = append(devices, testRegistryDevice(
+			deviceID, deviceID, index, true, "device_v2", nil,
+		))
+		credentials = append(credentials, activeTestCredentialRecord(deviceID))
+	}
+	app := newStageCApp(t, testRegistry(devices...), credentials, func(opts *Options) {
+		opts.PreAuthRateLimit = 100
+		opts.DeviceRateLimit = 100
+	})
+	for index := 0; index < contracts.MaxRegisteredDevices; index++ {
+		deviceID := fmt.Sprintf("device-%02d", index)
+		response := performDeviceUpdateRequest(
+			app, http.MethodPost, validDeviceEnvelope(t, deviceID, nil, float64(index)),
+			testCurrentToken, deviceID, true,
+		)
+		if response.Code != http.StatusAccepted {
+			t.Fatalf("registered device %s was rate limited: %d %s",
+				deviceID, response.Code, response.Body.String())
+		}
+	}
+	if got := app.deviceLimiter.Len(); got != contracts.MaxRegisteredDevices {
+		t.Fatalf("per-device limiter state=%d want=%d",
+			got, contracts.MaxRegisteredDevices)
+	}
+	unknown := performDeviceUpdateRequest(
+		app, http.MethodPost, validDeviceEnvelope(t, "device-00", nil, 99),
+		testCurrentToken, "device-17", true,
+	)
+	if unknown.Code != http.StatusUnauthorized ||
+		app.deviceLimiter.Len() != contracts.MaxRegisteredDevices {
+		t.Fatalf("unregistered device created limiter state: status=%d entries=%d",
+			unknown.Code, app.deviceLimiter.Len())
 	}
 }

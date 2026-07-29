@@ -79,7 +79,8 @@ key, raw Client configuration, command, or Docker control instruction.
 Validation is atomic and rejects the entire new registry on any error:
 
 - `version` must equal `1`;
-- `devices` must contain 1 to 128 entries;
+- `devices` must contain 1 to 16 entries; disabled and never-seen entries still
+  consume this quota, while removed entries do not;
 - every ID is unique and matches
   `^[a-z0-9][a-z0-9._-]{0,62}$`;
 - display names are trimmed UTF-8, 1 to 128 characters, without control
@@ -147,7 +148,9 @@ The merge key is only `device_id`:
 
 Removal is therefore reversible and auditable. An operator must use a separate,
 explicit retention procedure to purge orphan history; registry reload never
-purges it.
+purges it. `orphaned_devices` is not part of normal `servers[]`, has the
+independent hard limit `MAX_ORPHANED_DEVICES = 64`, and is rejected rather than
+truncated if that bound is exceeded.
 
 ## 6. Legacy mapping
 

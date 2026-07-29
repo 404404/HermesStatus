@@ -39,7 +39,8 @@ in-flight request from overwriting a newer one.
 
 ### Credential theft/replay
 
-Use independent random tokens, read-only Client files, server-side digests,
+Use independent CSPRNG-generated 32-byte tokens encoded as exactly 43
+unpadded-base64url characters, read-only Client files, server-side digests,
 verified HTTPS, bounded rotation windows, rate limiting, and secret-free logs.
 Bearer tokens are replayable within their validity window, so exposure response
 is immediate per-device rotation. Compromise of one token does not authorize
@@ -52,7 +53,8 @@ redirect state to a different ID. Unknown devices never auto-register.
 
 ### Parser/resource exhaustion
 
-Retain the 1 MiB body limit; cap devices at 128; bound all strings, arrays,
+Retain the 1 MiB body limit; cap registered devices at 16 and independent
+orphans at 64; bound all strings, arrays,
 domain objects, config files, and token files; reject unknown envelope fields;
 set read/connect/header timeouts; rate limit by authenticated identity and
 network source. Domain decode failure remains isolated.
@@ -93,6 +95,9 @@ Production policy:
 - system CA store or explicit read-only custom CA;
 - fresh DNS resolution on reconnect;
 - fail-soft bounded exponential backoff.
+- public traffic terminates at an HTTPS reverse proxy; the internal HTTP port
+  is loopback/private only and is never directly exposed to the Internet;
+- TLS 1.3 0-RTT/Early Data is disabled at the reverse proxy.
 
 Plain HTTP is limited to an explicitly enabled loopback test mode. It cannot be
 activated by a Server response and is rejected for non-loopback hosts.
@@ -100,6 +105,8 @@ activated by a Server response and is rejected for non-loopback hosts.
 ## 6. Secret handling
 
 - one high-entropy token per device;
+- token syntax is exactly `^[A-Za-z0-9_-]{43}$`, produced by unpadded base64url
+  encoding of 32 CSPRNG bytes;
 - token file mode `0400`/`0600`, regular, non-symlink, read-only;
 - token never appears in CLI values, URL, body, cookie, logs, stats, errors,
   browser, registry, persistence, image layer, or repository;
@@ -111,7 +118,17 @@ activated by a Server response and is rejected for non-loopback hosts.
 Credential records and registry files must be independently readable only by
 the Server process/operator boundary.
 
-## 7. Runtime hardening
+## 7. Layered rate limiting
+
+The public boundary uses three independent layers: reverse-proxy source-IP
+limiting, a bounded Server pre-auth source/global limiter, and a fixed-capacity
+authenticated `device_id` limiter sized for 16 registered devices. Only an
+explicit trusted proxy address or narrow CIDR may supply a regenerated source
+address. Untrusted `X-Forwarded-For` never changes the key; an unreliable source
+uses one bounded global unauthenticated key. Limiter state has TTL/capacity,
+never contains headers or tokens, and never enters stats or persistence.
+
+## 8. Runtime hardening
 
 The existing hardening remains a release gate:
 
@@ -127,7 +144,7 @@ Docker socket exposure remain residual risks. Multi-device design must not add
 mounts, capabilities, write access, or lateral network authority to address
 unrelated features.
 
-## 8. Logging, metrics, and errors
+## 9. Logging, metrics, and errors
 
 Safe observability fields:
 
@@ -143,7 +160,7 @@ Never log authorization headers, request bodies, token/digest values, cookie,
 password, private paths, raw collector responses, or credential mappings.
 Public errors are generic; detailed audit events stay in the operator boundary.
 
-## 9. Security validation gates
+## 10. Security validation gates
 
 Tests must prove:
 
@@ -160,7 +177,17 @@ Tests must prove:
 - race tests cover concurrent distinct and same-device updates;
 - runtime hardening, build provenance, and stats persistence checks still pass.
 
-## 10. Non-goals and deferred decisions
+## 11. Accepted residual risk
+
+A valid bearer token can be replayed during its validity window. HermesStatus
+2.2 does not provide cryptographic replay prevention. Current mitigations are
+verified HTTPS, disabled TLS 0-RTT, per-device fixed-format high-entropy tokens,
+bounded current/next rotation, rapid revocation, no secret logs, isolated proxy
+location, three-layer limiting, and a default-disabled endpoint. Future mTLS at
+the reverse proxy or another sender-constrained credential is recommended but
+is outside 2.2.
+
+## 12. Non-goals and deferred decisions
 
 Deferred:
 

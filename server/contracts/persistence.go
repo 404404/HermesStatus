@@ -71,7 +71,7 @@ func DecodePersistenceV1(data []byte) (*LegacyPersistenceV1, error) {
 		return nil, err
 	}
 	if len(snapshot.Servers) > MaxDevices {
-		return nil, contractError("servers", "must contain at most 128 entries")
+		return nil, contractError("servers", "must contain at most 16 entries")
 	}
 	for index, server := range snapshot.Servers {
 		if server == nil {
@@ -89,7 +89,7 @@ func ValidatePersistenceV2(snapshot *PersistenceV2) error {
 		return contractError("generated_at", "must be RFC3339 UTC")
 	}
 	if len(snapshot.Devices) > MaxDevices {
-		return contractError("devices", "must contain at most 128 entries")
+		return contractError("devices", "must contain at most 16 entries")
 	}
 	seen := map[string]bool{}
 	for index, device := range snapshot.Devices {
@@ -123,8 +123,8 @@ func ValidatePersistenceV2(snapshot *PersistenceV2) error {
 			}
 		}
 	}
-	if len(snapshot.OrphanedDevices) > 256 {
-		return contractError("orphaned_devices", "must contain at most 256 entries")
+	if len(snapshot.OrphanedDevices) > MaxOrphanedDevices {
+		return contractError("orphaned_devices", "must contain at most 64 entries")
 	}
 	orphanIDs := map[string]bool{}
 	reasons := map[string]bool{
@@ -195,7 +195,7 @@ func MigratePersistenceV1(
 	generatedAt time.Time,
 ) (PersistenceV2, error) {
 	if len(legacy.Servers) > MaxDevices {
-		return PersistenceV2{}, contractError("servers", "must contain at most 128 entries")
+		return PersistenceV2{}, contractError("servers", "must contain at most 16 entries")
 	}
 	if err := ValidateRegistry(&registry, generatedAt); err != nil {
 		return PersistenceV2{}, contractError("registry", "is invalid")

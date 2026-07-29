@@ -21,10 +21,12 @@ import (
 )
 
 const (
-	MaxDevices          = 128
-	MaxEnvelopeBytes    = 1 << 20
-	MaxDisplayNameRunes = 128
-	MaxFQDNBytes        = 253
+	MaxRegisteredDevices = 16
+	MaxOrphanedDevices   = 64
+	MaxDevices           = MaxRegisteredDevices
+	MaxEnvelopeBytes     = 1 << 20
+	MaxDisplayNameRunes  = 128
+	MaxFQDNBytes         = 253
 )
 
 var (
@@ -266,7 +268,7 @@ func ValidateRegistry(registry *DeviceRegistry, now time.Time) error {
 		return contractError("version", "must equal 1")
 	}
 	if len(registry.Devices) < 1 || len(registry.Devices) > MaxDevices {
-		return contractError("devices", "must contain 1..128 entries")
+		return contractError("devices", "must contain 1..16 entries")
 	}
 	if !ValidateDeviceID(registry.Defaults.DefaultDeviceID) {
 		return contractError("defaults.default_device_id", "is invalid")
@@ -454,6 +456,9 @@ func ValidateLegacyMappings(mappings *LegacyMappingDocument, registry *DeviceReg
 	}
 	if mappings.Version != 1 {
 		return contractError("version", "must equal 1")
+	}
+	if len(mappings.Mappings) > MaxDevices {
+		return contractError("mappings", "must contain at most 16 entries")
 	}
 	devices := map[string]RegistryDevice{}
 	for _, device := range registry.Devices {

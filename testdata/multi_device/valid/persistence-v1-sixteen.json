@@ -1,0 +1,100 @@
+{
+  "servers": [
+    {
+      "name": "Synthetic Legacy 00",
+      "type": "synthetic",
+      "host": "legacy-00.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 01",
+      "type": "synthetic",
+      "host": "legacy-01.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 02",
+      "type": "synthetic",
+      "host": "legacy-02.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 03",
+      "type": "synthetic",
+      "host": "legacy-03.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 04",
+      "type": "synthetic",
+      "host": "legacy-04.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 05",
+      "type": "synthetic",
+      "host": "legacy-05.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 06",
+      "type": "synthetic",
+      "host": "legacy-06.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 07",
+      "type": "synthetic",
+      "host": "legacy-07.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 08",
+      "type": "synthetic",
+      "host": "legacy-08.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 09",
+      "type": "synthetic",
+      "host": "legacy-09.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 10",
+      "type": "synthetic",
+      "host": "legacy-10.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 11",
+      "type": "synthetic",
+      "host": "legacy-11.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 12",
+      "type": "synthetic",
+      "host": "legacy-12.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 13",
+      "type": "synthetic",
+      "host": "legacy-13.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 14",
+      "type": "synthetic",
+      "host": "legacy-14.example.invalid",
+      "location": "fixture"
+    },
+    {
+      "name": "Synthetic Legacy 15",
+      "type": "synthetic",
+      "host": "legacy-15.example.invalid",
+      "location": "fixture"
+    }
+  ]
+}

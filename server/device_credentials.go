@@ -19,9 +19,14 @@ import (
 )
 
 const (
-	maxCredentialFileBytes = 64 << 10
-	minDeviceTokenBytes    = 16
-	maxDeviceTokenBytes    = 4096
+	maxCredentialFileBytes            = 64 << 10
+	deviceTokenBytes                  = 43
+	maxDeviceAuthorizationHeaderBytes = 512
+	fixedDeviceCredentialCompareSlots = 2
+)
+
+var dummyDeviceCredentialDigest = sha256.Sum256(
+	[]byte("HermesStatus fixed dummy device credential digest"),
 )
 
 type deviceCredentialSlot struct {
@@ -111,6 +116,9 @@ func loadDeviceCredentialDirectory(
 	entries, err := directory.ReadDir(-1)
 	if err != nil {
 		return nil, errors.New("credential directory is unavailable")
+	}
+	if len(entries) > contracts.MaxRegisteredDevices {
+		return nil, errors.New("credential directory exceeds the registered device limit")
 	}
 	registryDevices := make(map[string]contracts.RegistryDevice, len(registry.Devices))
 	for _, device := range registry.Devices {
@@ -269,39 +277,66 @@ func authenticateDeviceBearer(
 	credentials deviceCredentialSet,
 	now time.Time,
 ) (authenticatedDevice, bool) {
+	authenticated, ok, _ := authenticateDeviceBearerWithCompareCount(
+		headerValues, credentials, now,
+	)
+	return authenticated, ok
+}
+
+func authenticateDeviceBearerWithCompareCount(
+	headerValues []string,
+	credentials deviceCredentialSet,
+	now time.Time,
+) (authenticatedDevice, bool, int) {
 	token, ok := parseDeviceBearer(headerValues)
 	if !ok {
-		return authenticatedDevice{}, false
+		return authenticatedDevice{}, false, 0
 	}
 	digest := sha256.Sum256([]byte(token))
 	matched := 0
 	slotID := ""
-	for _, slot := range credentials.Slots {
-		active := !now.Before(slot.NotBefore) && now.Before(slot.NotAfter)
-		equal := subtle.ConstantTimeCompare(digest[:], slot.Digest[:])
+	for index := 0; index < fixedDeviceCredentialCompareSlots; index++ {
+		candidateDigest := dummyDeviceCredentialDigest
 		activeInt := 0
-		if active {
-			activeInt = 1
+		candidateSlotID := ""
+		if index < len(credentials.Slots) {
+			slot := credentials.Slots[index]
+			candidateDigest = slot.Digest
+			candidateSlotID = slot.ID
+			if !now.Before(slot.NotBefore) && now.Before(slot.NotAfter) {
+				activeInt = 1
+			}
 		}
+		equal := subtle.ConstantTimeCompare(digest[:], candidateDigest[:])
 		slotMatch := equal & activeInt
 		matched |= slotMatch
 		if slotMatch == 1 {
-			slotID = slot.ID
+			slotID = candidateSlotID
 		}
 	}
 	if matched != 1 {
-		return authenticatedDevice{}, false
+		return authenticatedDevice{}, false, fixedDeviceCredentialCompareSlots
 	}
-	return authenticatedDevice{DeviceID: credentials.DeviceID, SlotID: slotID}, true
+	return authenticatedDevice{
+		DeviceID: credentials.DeviceID,
+		SlotID:   slotID,
+	}, true, fixedDeviceCredentialCompareSlots
 }
 
 func parseDeviceBearer(headerValues []string) (string, bool) {
+	totalBytes := 0
+	for _, value := range headerValues {
+		totalBytes += len(value)
+		if totalBytes > maxDeviceAuthorizationHeaderBytes {
+			return "", false
+		}
+	}
 	if len(headerValues) != 1 {
 		return "", false
 	}
 	value := headerValues[0]
-	if len(value) < len("Bearer ")+minDeviceTokenBytes ||
-		len(value) > len("Bearer ")+maxDeviceTokenBytes {
+	if len(value) > maxDeviceAuthorizationHeaderBytes ||
+		len(value) != len("Bearer ")+deviceTokenBytes {
 		return "", false
 	}
 	separator := strings.IndexByte(value, ' ')
@@ -309,11 +344,15 @@ func parseDeviceBearer(headerValues []string) (string, bool) {
 		return "", false
 	}
 	token := value[separator+1:]
-	if len(token) < minDeviceTokenBytes || len(token) > maxDeviceTokenBytes {
+	if len(token) != deviceTokenBytes {
 		return "", false
 	}
 	for index := 0; index < len(token); index++ {
-		if token[index] <= 0x20 || token[index] == 0x7f {
+		character := token[index]
+		if !((character >= 'A' && character <= 'Z') ||
+			(character >= 'a' && character <= 'z') ||
+			(character >= '0' && character <= '9') ||
+			character == '_' || character == '-') {
 			return "", false
 		}
 	}

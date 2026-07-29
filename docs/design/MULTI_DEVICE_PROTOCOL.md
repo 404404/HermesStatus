@@ -40,6 +40,12 @@ first release rejects credentials, query, fragment, and path prefix in the
 configured URL. It never follows redirects. HTTP is allowed only for explicitly
 enabled loopback development and cannot be selected by a production profile.
 
+The token is generated from 32 CSPRNG bytes, encoded as unpadded base64url, and
+must match exactly `^[A-Za-z0-9_-]{43}$` on both Client and Server. The
+Authorization header has an independent total-size limit. Credential files
+contain only `sha256(token)`; SHA-256 is safe here because the input is a random
+256-bit token and must not be reused for human passwords.
+
 ## 3. Canonical envelope
 
 The envelope wraps the existing flat stats object rather than duplicating every
@@ -163,6 +169,7 @@ Synthetic JSON configuration:
   "server": {
     "url": "https://status.example.invalid",
     "verify_tls": true,
+    "ca_file": null,
     "connect_timeout_seconds": 10,
     "read_timeout_seconds": 30
   },
@@ -181,6 +188,11 @@ Synthetic JSON configuration:
 Unknown configuration keys and ambiguous `DOMAIN` variables are rejected.
 Config and token mounts are read-only. CLI token values are forbidden; CLI may
 set only the token file.
+
+The single custom-CA names are `server.ca_file` in JSON and
+`HERMESSTATUS_TLS_CA_FILE` in the environment/CLI override namespace. There
+are no aliases. The value is an absolute read-only PEM path; `null` selects
+the system CA store.
 
 If any new 2.2 variable is set, incomplete 2.2 configuration fails closed and
 does not silently fall back to a legacy password. Legacy `KEY=VALUE` arguments
@@ -208,7 +220,21 @@ credentials; `404` is treated as a deployment/version error; `429` honors a
 bounded `Retry-After`. Recovery performs fresh DNS resolution and resumes
 automatically.
 
-## 9. Legacy adapter
+## 9. Public ingress and rate-limit contract
+
+The internal Server HTTP listener is private/loopback and is not an Internet
+listener. A production reverse proxy exposes only the fixed POST path, uses TLS
+1.2/1.3 with TLS 1.3 0-RTT/Early Data disabled, strips public forwarding
+headers, regenerates the trusted source/proto fields, prevents redirects and
+caching, redacts Authorization/body logs, bounds body/headers/timeouts, and
+applies source-IP limiting.
+
+The Server then applies a bounded pre-auth source/global limiter and a
+fixed-capacity authenticated limiter for at most 16 registered device IDs.
+Untrusted forwarding headers never influence source keys. Rate limiting does
+not modify `last_seen`, generation, stats, or persistence.
+
+## 10. Legacy adapter
 
 The raw TCP adapter remains for 2.1 Clients. After its existing authentication,
 it maps the legacy username one-to-one to a registry ID and internally creates:
@@ -229,7 +255,16 @@ each have exactly one active protocol; an inactive writer is rejected. Expired
 cutover configuration accepts neither protocol until an explicit final owner is
 configured.
 
-## 10. Frozen Stage A boundary
+## 11. Accepted residual risk
+
+A valid bearer token can be replayed during its validity window. This protocol
+does not claim cryptographic replay prevention. Verified HTTPS, no TLS 0-RTT,
+per-device fixed-format high-entropy tokens, current/next rotation, rapid
+revocation, secret-free logs, proxy path isolation, layered rate limiting, and
+the default-disabled endpoint reduce the risk. Sender-constrained credentials
+such as proxy mTLS are future work, not part of 2.2.
+
+## 12. Frozen Stage A boundary
 
 Normative schemas are `schemas/device-update-v2.schema.json`,
 `schemas/device-update-response-v2.schema.json`, and

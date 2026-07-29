@@ -38,7 +38,7 @@ func TestRegistryFixturesAndStableOrdering(t *testing.T) {
 		"registry-cutover-legacy.json",
 		"registry-cutover-v2.json",
 		"registry-order-tie.json",
-		"registry-128.json",
+		"registry-16.json",
 	} {
 		t.Run(name, func(t *testing.T) {
 			registry, err := DecodeRegistry(fixture(t, "valid", name), fixtureNow)
@@ -73,7 +73,7 @@ func TestRegistryInvalidFixtures(t *testing.T) {
 		"registry-ip-as-fqdn.json",
 		"registry-url-as-fqdn.json",
 		"registry-unknown-field.json",
-		"registry-129-devices.json",
+		"registry-17-devices.json",
 		"registry-invalid-stale-offline.json",
 		"registry-missing-ingestion.json",
 		"registry-invalid-ingestion-mode.json",

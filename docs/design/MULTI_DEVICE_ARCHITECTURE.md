@@ -173,7 +173,8 @@ extension fields, retained compatibility fields, and top-level `sslcerts`
 remain during 2.2.
 
 Items are sorted by registry `order`, then `id`. The registry device limit is
-128. One projection failure produces a safe degraded item for that device
+16. Disabled and never-seen entries consume that quota. One projection failure
+produces a safe degraded item for that device
 instead of dropping or corrupting other devices.
 
 ## 7. Persistence merge
@@ -191,12 +192,15 @@ Persistence version 2 stores runtime observations by `device_id`. On startup:
 A registry removal does not silently erase persisted history. The entry moves
 to an internal `orphaned_devices` section retained for audit/backup and is not
 included in normal browser stats. A later restoration of the same ID may
-re-associate it after validation.
+re-associate it after validation. Orphans use the independent bounded limit 64;
+they never consume the 16 active-registry slots and never enter normal
+`servers[]`.
 
 ## 8. Limits and invariants
 
 - `device_id`: `^[a-z0-9][a-z0-9._-]{0,62}$`.
-- At most 128 registry devices and 128 emitted devices.
+- At most 16 registry devices and 16 emitted devices.
+- At most 64 independently retained `orphaned_devices`.
 - Request body: at most 1 MiB, including the envelope.
 - New structs use strict known-field decoding and bounded strings/arrays.
 - Arbitrary metadata, credentials, raw responses, configuration, commands,

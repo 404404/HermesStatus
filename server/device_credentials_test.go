@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,9 +15,11 @@ import (
 )
 
 const (
-	testCurrentToken = "synthetic-current-token-000000000001"
-	testNextToken    = "synthetic-next-token-000000000002"
-	testWrongToken   = "synthetic-wrong-token-0000000000003"
+	testCurrentToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	testNextToken    = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+	testWrongToken   = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+	testLegacyToken  = "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
+	testSecretToken  = "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
 )
 
 func TestCredentialDirectoryLoadsCurrentAndOverlappingRotation(t *testing.T) {
@@ -87,7 +90,8 @@ func TestCredentialAuthenticationRejectsMalformedAndInactiveTokens(t *testing.T)
 		"wrong-scheme":        {[]string{"Basic " + testCurrentToken}, expired},
 		"empty-token":         {[]string{"Bearer "}, expired},
 		"short-token":         {[]string{"Bearer short"}, expired},
-		"oversized-token":     {[]string{"Bearer " + strings.Repeat("x", maxDeviceTokenBytes+1)}, expired},
+		"wrong-length-token":  {[]string{"Bearer " + strings.Repeat("x", deviceTokenBytes+1)}, expired},
+		"padding-token":       {[]string{"Bearer " + strings.Repeat("x", deviceTokenBytes-1) + "="}, expired},
 		"folded-whitespace":   {[]string{"Bearer " + testCurrentToken + " extra"}, expired},
 		"control-character":   {[]string{"Bearer " + testCurrentToken + "\x7f"}, expired},
 		"expired-token":       {[]string{"Bearer " + testCurrentToken}, expired},
@@ -100,6 +104,74 @@ func TestCredentialAuthenticationRejectsMalformedAndInactiveTokens(t *testing.T)
 				t.Fatal("malformed or inactive token was accepted")
 			}
 		})
+	}
+}
+
+func TestCredentialAuthenticationUsesFixedComparePath(t *testing.T) {
+	now := time.Now().UTC()
+	active := compileTestCredentialSet(t, testCredentialRecord(
+		"device-alpha",
+		testCredentialSlot("current", testCurrentToken, now.Add(-time.Hour), now.Add(time.Hour)),
+	))
+	expired := compileTestCredentialSet(t, testCredentialRecord(
+		"device-alpha",
+		testCredentialSlot("current", testCurrentToken, now.Add(-2*time.Hour), now.Add(-time.Hour)),
+	))
+	for name, credentials := range map[string]deviceCredentialSet{
+		"unknown-device":     {},
+		"missing-credential": {DeviceID: "device-alpha"},
+		"no-active-slot":     expired,
+		"bad-token":          active,
+	} {
+		t.Run(name, func(t *testing.T) {
+			token := testWrongToken
+			if name != "bad-token" {
+				token = testCurrentToken
+			}
+			if authenticated, ok, comparisons := authenticateDeviceBearerWithCompareCount(
+				[]string{"Bearer " + token}, credentials, now,
+			); ok || authenticated.DeviceID != "" ||
+				comparisons != fixedDeviceCredentialCompareSlots {
+				t.Fatalf("fixed dummy path diverged: auth=%#v ok=%t comparisons=%d",
+					authenticated, ok, comparisons)
+			}
+		})
+	}
+	if authenticated, ok, comparisons := authenticateDeviceBearerWithCompareCount(
+		[]string{"Bearer " + testCurrentToken}, active, now,
+	); !ok || authenticated.DeviceID != "device-alpha" ||
+		comparisons != fixedDeviceCredentialCompareSlots {
+		t.Fatalf("valid token did not use fixed compare path: %#v ok=%t comparisons=%d",
+			authenticated, ok, comparisons)
+	}
+}
+
+func TestCredentialDirectoryRejectsSeventeenFilesAtomically(t *testing.T) {
+	now := time.Now().UTC()
+	devices := make([]contracts.RegistryDevice, 0, contracts.MaxRegisteredDevices)
+	directory := t.TempDir()
+	for index := 0; index < contracts.MaxRegisteredDevices; index++ {
+		deviceID := fmt.Sprintf("device-%02d", index)
+		devices = append(devices, testRegistryDevice(
+			deviceID, deviceID, index, true, "device_v2", nil,
+		))
+		writeJSONTestFile(t, filepath.Join(directory, deviceID+".json"), testCredentialRecord(
+			deviceID,
+			testCredentialSlot("current", testCurrentToken, now.Add(-time.Hour), now.Add(time.Hour)),
+		))
+	}
+	registry := testRegistry(devices...)
+	if loaded, err := loadDeviceCredentialDirectory(directory, &registry); err != nil ||
+		len(loaded) != contracts.MaxRegisteredDevices {
+		t.Fatalf("sixteen credential files were rejected: count=%d err=%v", len(loaded), err)
+	}
+	writeJSONTestFile(t, filepath.Join(directory, "device-17.json"), testCredentialRecord(
+		"device-17",
+		testCredentialSlot("current", testNextToken, now.Add(-time.Hour), now.Add(time.Hour)),
+	))
+	if loaded, err := loadDeviceCredentialDirectory(directory, &registry); err == nil ||
+		loaded != nil {
+		t.Fatalf("seventeen credential files were not rejected atomically: %#v", loaded)
 	}
 }
 

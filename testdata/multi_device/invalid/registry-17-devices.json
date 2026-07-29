@@ -1,0 +1,282 @@
+{
+  "version": 1,
+  "defaults": {
+    "default_device_id": "synthetic-000",
+    "stale_seconds": 900,
+    "offline_seconds": 1800
+  },
+  "devices": [
+    {
+      "id": "synthetic-000",
+      "display_name": "Synthetic synthetic-000",
+      "expected_fqdn": "synthetic-000.example.invalid",
+      "enabled": true,
+      "order": 0,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-001",
+      "display_name": "Synthetic synthetic-001",
+      "expected_fqdn": "synthetic-001.example.invalid",
+      "enabled": true,
+      "order": 1,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-002",
+      "display_name": "Synthetic synthetic-002",
+      "expected_fqdn": "synthetic-002.example.invalid",
+      "enabled": true,
+      "order": 2,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-003",
+      "display_name": "Synthetic synthetic-003",
+      "expected_fqdn": "synthetic-003.example.invalid",
+      "enabled": true,
+      "order": 3,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-004",
+      "display_name": "Synthetic synthetic-004",
+      "expected_fqdn": "synthetic-004.example.invalid",
+      "enabled": true,
+      "order": 4,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-005",
+      "display_name": "Synthetic synthetic-005",
+      "expected_fqdn": "synthetic-005.example.invalid",
+      "enabled": true,
+      "order": 5,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-006",
+      "display_name": "Synthetic synthetic-006",
+      "expected_fqdn": "synthetic-006.example.invalid",
+      "enabled": true,
+      "order": 6,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-007",
+      "display_name": "Synthetic synthetic-007",
+      "expected_fqdn": "synthetic-007.example.invalid",
+      "enabled": true,
+      "order": 7,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-008",
+      "display_name": "Synthetic synthetic-008",
+      "expected_fqdn": "synthetic-008.example.invalid",
+      "enabled": true,
+      "order": 8,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-009",
+      "display_name": "Synthetic synthetic-009",
+      "expected_fqdn": "synthetic-009.example.invalid",
+      "enabled": true,
+      "order": 9,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-010",
+      "display_name": "Synthetic synthetic-010",
+      "expected_fqdn": "synthetic-010.example.invalid",
+      "enabled": true,
+      "order": 10,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-011",
+      "display_name": "Synthetic synthetic-011",
+      "expected_fqdn": "synthetic-011.example.invalid",
+      "enabled": true,
+      "order": 11,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-012",
+      "display_name": "Synthetic synthetic-012",
+      "expected_fqdn": "synthetic-012.example.invalid",
+      "enabled": true,
+      "order": 12,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-013",
+      "display_name": "Synthetic synthetic-013",
+      "expected_fqdn": "synthetic-013.example.invalid",
+      "enabled": true,
+      "order": 13,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-014",
+      "display_name": "Synthetic synthetic-014",
+      "expected_fqdn": "synthetic-014.example.invalid",
+      "enabled": true,
+      "order": 14,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-015",
+      "display_name": "Synthetic synthetic-015",
+      "expected_fqdn": "synthetic-015.example.invalid",
+      "enabled": true,
+      "order": 15,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    },
+    {
+      "id": "synthetic-016",
+      "display_name": "Synthetic synthetic-016",
+      "expected_fqdn": "synthetic-016.example.invalid",
+      "enabled": true,
+      "order": 16,
+      "tags": [
+        "synthetic"
+      ],
+      "group": "fixture",
+      "ingestion": {
+        "mode": "device_v2",
+        "active_protocol": "device_v2",
+        "cutover_not_after": null
+      }
+    }
+  ]
+}

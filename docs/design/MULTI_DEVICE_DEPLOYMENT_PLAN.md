@@ -19,6 +19,36 @@ Production deployment additionally requires named operational ownership for
 HTTPS termination, DNS, certificate/CA renewal, credential provisioning,
 backups, rollback, and legacy retirement.
 
+### Public Internet reverse-proxy contract
+
+The HermesStatus Server internal HTTP port must never be directly exposed to
+the public Internet. The production topology is:
+
+```text
+Internet
+  -> HTTPS reverse proxy
+  -> loopback/private-network HermesStatus Server
+```
+
+The public proxy location exposes only exact
+`POST /api/v2/device-updates`. It enforces TLS 1.2/1.3 with TLS 1.3 0-RTT/Early
+Data disabled, POST-only routing, a 1 MiB body limit, bounded headers,
+connect/read/header timeouts, `Cache-Control: no-store`, no redirects, no
+request/response caching, and source-IP limiting. Authorization and request
+bodies are excluded from access/error logs.
+
+The proxy removes public `Forwarded`, `X-Forwarded-For`,
+`X-Forwarded-Proto`, and `X-Forwarded-Host`, then generates only the necessary
+source and `X-Forwarded-Proto: https` values from the real connection. No other
+internal API shares this public location. The backend listens on loopback, a
+Unix socket, or a private container network, and firewall policy prevents
+proxy bypass.
+
+Server trusted-proxy mode remains disabled by default. When enabled, it trusts
+only exact proxy addresses or narrow reviewed CIDRs, never a whole Docker
+bridge by default, and accepts exactly one `X-Forwarded-Proto` value equal to
+`https`.
+
 ## 2. Implementation stages
 
 ### Stage A: contracts and fixtures
@@ -95,7 +125,7 @@ backups, rollback, and legacy retirement.
 | Isolation | two independent devices, Client A cannot update B, one device error leaves others unchanged |
 | Concurrency | concurrent distinct devices, concurrent same device, old request generation, legacy duplicate connection |
 | Payload | size limit, strict envelope, forbidden fields, clock skew, malformed domain isolation |
-| Scale | 128 devices accepted, 129 rejected, stable `(order,id)` sorting |
+| Scale | 1 and 16 devices accepted, 17 rejected without truncation, stable `(order,id)` sorting |
 | Persistence | multi-device restart, renamed/reordered registry, disable/remove/re-add, orphan retention, corrupt snapshot |
 | Freshness | restored data non-online; device and domain stale independently |
 | Race | full Server/ingestion/persistence tests under race detector |
@@ -249,3 +279,12 @@ The production runtime revision remains
 `868e6f995fa877cd77d2200661445d2bd31c3c0f`. This recorded drift does not change
 the development base. After contract review and local commit authorization,
 Stage B may begin only through a separate explicit instruction.
+
+## 10. Accepted residual risk
+
+A valid bearer token can be replayed during its validity window. The 2.2
+mitigations are verified HTTPS, proxy-side TLS 0-RTT prohibition, per-device
+fixed high-entropy tokens, bounded rotation/revocation, no secret logs, isolated
+public path, three-layer rate limiting, and a default-disabled endpoint. This
+is not cryptographic replay prevention. Future mTLS at the reverse proxy or
+another sender-constrained credential requires a separate design and approval.

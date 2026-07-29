@@ -16,6 +16,7 @@ SYNTHETIC_NOW = "2026-07-01T12:00:00Z"
 FUTURE = "2099-01-01T00:00:00Z"
 DIGEST_A = "a" * 64
 DIGEST_B = "b" * 64
+MAX_REGISTERED_DEVICES = 16
 
 
 def write(directory: Path, name: str, value: Any) -> None:
@@ -160,9 +161,30 @@ def generate_valid() -> None:
     write(VALID, "registry-order-tie.json", tie)
     write(
         VALID,
-        "registry-128.json",
-        registry([device(f"synthetic-{index:03d}", index) for index in range(128)]),
+        "registry-16.json",
+        registry(
+            [
+                device(f"synthetic-{index:03d}", index)
+                for index in range(MAX_REGISTERED_DEVICES)
+            ]
+        ),
     )
+    sixteen = {
+        **single,
+        "servers": [
+            stats_server(
+                extension,
+                f"synthetic-{index:03d}",
+                index,
+                "online",
+                "matched",
+                "device_v2",
+            )
+            for index in range(MAX_REGISTERED_DEVICES)
+        ],
+        "default_device_id": "synthetic-000",
+    }
+    write(VALID, "stats-v2-sixteen.json", sixteen)
     write(
         VALID,
         "response-success.json",
@@ -272,6 +294,21 @@ def generate_valid() -> None:
     write(VALID, "persistence-v1-four.json", v1_four)
     write(
         VALID,
+        "persistence-v1-sixteen.json",
+        {
+            "servers": [
+                {
+                    "name": f"Synthetic Legacy {index:02d}",
+                    "type": "synthetic",
+                    "host": f"legacy-{index:02d}.example.invalid",
+                    "location": "fixture",
+                }
+                for index in range(MAX_REGISTERED_DEVICES)
+            ]
+        },
+    )
+    write(
+        VALID,
         "persistence-migration-unmatched.json",
         {"source": v1_single, "bindings": [], "expected_orphan_count": 1},
     )
@@ -346,8 +383,11 @@ def invalid_registry_cases() -> dict[str, Any]:
     value["devices"][0]["unexpected"] = True
     cases["registry-unknown-field.json"] = value
 
-    cases["registry-129-devices.json"] = registry(
-        [device(f"synthetic-{index:03d}", index) for index in range(129)]
+    cases["registry-17-devices.json"] = registry(
+        [
+            device(f"synthetic-{index:03d}", index)
+            for index in range(MAX_REGISTERED_DEVICES + 1)
+        ]
     )
 
     value = copy.deepcopy(base)

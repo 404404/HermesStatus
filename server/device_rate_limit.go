@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const globalUnauthenticatedSourceKey = "global-unauthenticated"
+
 type rateLimitEntry struct {
 	WindowStart time.Time
 	LastSeen    time.Time

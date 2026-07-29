@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -102,6 +104,110 @@ func TestDeviceEndpointAcceptsDirectTLSAndSanitizesSuccess(t *testing.T) {
 	if node.Stats.CPU != 42 || node.ProtocolMode != "device_v2" ||
 		node.LastAcceptedGeneration == 0 {
 		t.Fatalf("TLS adapter did not call unified ingestion: %#v", node)
+	}
+}
+
+func TestPythonDeviceV2ClientToStageCAdapterEndToEnd(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+		testRegistryDevice("device-beta", "Beta", 20, true, "device_v2", nil),
+	)
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
+		activeTestCredentialRecord("device-alpha"),
+		testCredentialRecord("device-beta", testCredentialSlot(
+			"current", testNextToken, time.Now().Add(-time.Hour), time.Now().Add(time.Hour),
+		)),
+	}, nil)
+	var logs bytes.Buffer
+	app.logger = log.New(&logs, "", 0)
+	server := httptest.NewTLSServer(app.router())
+	defer server.Close()
+
+	directory := t.TempDir()
+	tokenPath := filepath.Join(directory, "device.token")
+	if err := os.WriteFile(tokenPath, []byte(testCurrentToken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	certificate := server.Certificate()
+	caData := pem.EncodeToMemory(&pem.Block{
+		Type: "CERTIFICATE", Bytes: certificate.Raw,
+	})
+	caPath := filepath.Join(directory, "local-ca.pem")
+	if err := os.WriteFile(caPath, caData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	repositoryRoot := filepath.Dir(workingDirectory)
+	fixturePath := filepath.Join(
+		repositoryRoot, "testdata", "migration", "update-normal.json",
+	)
+	python := `
+import json
+import sys
+sys.path.insert(0, sys.argv[1])
+from multi_device_contracts import ClientV2Config, build_envelope
+from device_client_transport import DeviceHTTPSClient
+config = ClientV2Config(
+    server_url=sys.argv[2],
+    device_id="device-alpha",
+    device_name="Synthetic Alpha",
+    device_fqdn=None,
+    token_file=sys.argv[3],
+    ca_file=sys.argv[4],
+    connect_timeout_seconds=5,
+    read_timeout_seconds=5,
+)
+with open(sys.argv[5], "r", encoding="utf-8") as source:
+    stats = json.load(source)
+stats["cpu"] = 73
+envelope = build_envelope(
+    config,
+    collected_at="2026-07-01T12:00:00Z",
+    hostname="synthetic-alpha",
+    stats=stats,
+)
+response = DeviceHTTPSClient(config).send(envelope)
+print(json.dumps({
+    "accepted": response["accepted"],
+    "generation": response["config_generation"],
+    "monitor_count": len(response["monitors"]),
+}, separators=(",", ":")))
+`
+	command := exec.Command(
+		"python3", "-c", python,
+		filepath.Join(repositoryRoot, "clients"),
+		server.URL,
+		tokenPath,
+		caPath,
+		fixturePath,
+	)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("local Python→Go integration failed: %v output=%s", err, output)
+	}
+	var result struct {
+		Accepted     bool   `json:"accepted"`
+		Generation   string `json:"generation"`
+		MonitorCount int    `json:"monitor_count"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(output), &result); err != nil {
+		t.Fatalf("invalid local integration output: %v output=%s", err, output)
+	}
+	if !result.Accepted || result.MonitorCount != 1 ||
+		!strings.HasPrefix(result.Generation, "g-") {
+		t.Fatalf("Python Client rejected sanitized Stage C response: %#v", result)
+	}
+	if app.nodes["device-alpha"].Stats.CPU != 73 ||
+		app.nodes["device-beta"].HasUpdate {
+		t.Fatalf("cross-language ingestion crossed device state: alpha=%#v beta=%#v",
+			app.nodes["device-alpha"], app.nodes["device-beta"])
+	}
+	if strings.Contains(logs.String(), testCurrentToken) ||
+		strings.Contains(logs.String(), "synthetic-alpha") {
+		t.Fatalf("cross-language integration leaked secret identity data: %s", logs.String())
 	}
 }
 
@@ -282,6 +388,60 @@ func TestDeviceEndpointHTTPValidationMatrix(t *testing.T) {
 	}
 }
 
+func TestUnknownAndMissingCredentialUseGenericPublicAuthenticationFailure(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+		testRegistryDevice("device-missing", "Missing", 20, false, "device_v2", nil),
+	)
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
+		activeTestCredentialRecord("device-alpha"),
+	}, nil)
+	var logs bytes.Buffer
+	app.logger = log.New(&logs, "", 0)
+	body := validDeviceEnvelope(t, "device-alpha", nil, 12)
+	for _, testCase := range []struct {
+		name     string
+		deviceID string
+		token    string
+	}{
+		{"unknown-device", "device-unknown", testCurrentToken},
+		{"missing-credential", "device-missing", testCurrentToken},
+		{"bad-token", "device-alpha", testWrongToken},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			response := performDeviceUpdateRequest(
+				app, http.MethodPost, body, testCase.token, testCase.deviceID, true,
+			)
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("public authentication status=%d body=%s",
+					response.Code, response.Body.String())
+			}
+			var public contracts.ErrorResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &public); err != nil ||
+				public.Error.Code != "unauthorized" ||
+				!strings.HasPrefix(public.Error.RequestID, "req-") {
+				t.Fatalf("authentication response exposed membership: %#v err=%v",
+					public, err)
+			}
+		})
+	}
+	for _, forbidden := range []string{
+		"device-alpha", "device-missing", "device-unknown",
+		testCurrentToken, testWrongToken,
+	} {
+		if strings.Contains(logs.String(), forbidden) {
+			t.Fatalf("authentication audit log leaked identity or secret %q: %s",
+				forbidden, logs.String())
+		}
+	}
+	for _, deviceID := range []string{"device-alpha", "device-missing"} {
+		node := app.nodes[deviceID]
+		if node.HasUpdate || node.LastAcceptedGeneration != 0 || !node.LastSeen.IsZero() {
+			t.Fatalf("authentication failure modified %s: %#v", deviceID, node)
+		}
+	}
+}
+
 func TestDeviceEndpointIdentityOwnershipAndStateIsolation(t *testing.T) {
 	expected := "alpha.example.invalid"
 	registry := testRegistry(
@@ -300,7 +460,7 @@ func TestDeviceEndpointIdentityOwnershipAndStateIsolation(t *testing.T) {
 			"current", testWrongToken, time.Now().Add(-time.Hour), time.Now().Add(time.Hour),
 		)),
 		testCredentialRecord("device-legacy", testCredentialSlot(
-			"current", "synthetic-legacy-token-000000000004", time.Now().Add(-time.Hour), time.Now().Add(time.Hour),
+			"current", testLegacyToken, time.Now().Add(-time.Hour), time.Now().Add(time.Hour),
 		)),
 	}
 	app := newStageCApp(t, registry, records, nil)
@@ -318,7 +478,7 @@ func TestDeviceEndpointIdentityOwnershipAndStateIsolation(t *testing.T) {
 		{"fqdn-missing", "device-alpha", "device-alpha", testCurrentToken, nil, http.StatusForbidden},
 		{"fqdn-mismatch", "device-alpha", "device-alpha", testCurrentToken, stringPointer("other.example.invalid"), http.StatusForbidden},
 		{"disabled", "device-disabled", "device-disabled", testWrongToken, nil, http.StatusForbidden},
-		{"legacy-owner", "device-legacy", "device-legacy", "synthetic-legacy-token-000000000004", nil, http.StatusForbidden},
+		{"legacy-owner", "device-legacy", "device-legacy", testLegacyToken, nil, http.StatusForbidden},
 		{"no-fqdn-expectation", "device-beta", "device-beta", testNextToken, nil, http.StatusAccepted},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -467,10 +627,10 @@ func TestDeviceEndpointErrorsAndLogsNeverExposeSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	beforePersistence, _ := json.Marshal(beforeSnapshot)
-	wrongDigest := sha256.Sum256([]byte("synthetic-secret-token-000000000099"))
+	wrongDigest := sha256.Sum256([]byte(testSecretToken))
 	response := performDeviceUpdateRequest(
 		app, http.MethodPost, body,
-		"synthetic-secret-token-000000000099", "device-alpha", true,
+		testSecretToken, "device-alpha", true,
 	)
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("wrong credential status=%d", response.Code)
@@ -486,7 +646,7 @@ func TestDeviceEndpointErrorsAndLogsNeverExposeSecrets(t *testing.T) {
 	statsJSON, _ := json.Marshal(app.SnapshotStats())
 	combined := logs.String() + response.Body.String() + string(statsJSON)
 	for _, forbidden := range []string{
-		"synthetic-secret-token", "body-secret-marker", "raw-secret-marker",
+		testSecretToken, "body-secret-marker", "raw-secret-marker",
 		"alpha.example.invalid", "Authorization", "sha256",
 		hex.EncodeToString(wrongDigest[:]), filepath.Dir(app.opts.DeviceCredentialsDir),
 	} {

@@ -181,7 +181,7 @@ func ValidateStatsV2(document StatsV2Document) error {
 		return contractError("default_device_id", "is invalid")
 	}
 	if len(document.Servers) < 1 || len(document.Servers) > MaxDevices {
-		return contractError("servers", "must contain 1..128 entries")
+		return contractError("servers", "must contain 1..16 entries")
 	}
 	seen := map[string]bool{}
 	defaultFound := false

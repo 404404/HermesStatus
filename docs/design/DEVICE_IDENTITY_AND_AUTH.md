@@ -1,7 +1,7 @@
 # HermesStatus 2.2 Device Identity and Authentication
 
-Status: Stage A credential-record schema and pure validator frozen; no runtime
-token loading or HTTP credential authentication is active.
+Status: Stage D public Internet authentication security contract implemented
+locally; production activation remains disabled.
 
 ## 1. Current mechanism
 
@@ -64,8 +64,9 @@ contains digests, never plaintext tokens:
 
 The placeholder above is not a usable credential. A production record contains
 one or, during rotation, two independently generated token digests. SHA-256 is
-acceptable because the inputs are random high-entropy secrets, not human
-passwords. Comparisons are constant-time.
+acceptable only because each input is a CSPRNG-generated 32-byte (256-bit)
+secret encoded as unpadded base64url. SHA-256 is not an acceptable password
+hash for human-created passwords. Comparisons are constant-time.
 
 Credential records are not part of the device registry, stats persistence,
 browser document, API response, or logs. A registry entry without a valid
@@ -85,7 +86,9 @@ Requirements:
 - owner readable by the Client process;
 - read-only mount;
 - regular file, with symlinks rejected;
-- bounded size of 32 to 4096 bytes;
+- exactly 43 ASCII characters after the optional line ending;
+- exact token syntax `^[A-Za-z0-9_-]{43}$`, representing an unpadded base64url
+  encoding of 32 CSPRNG bytes;
 - exactly one trailing line ending may be removed;
 - empty, whitespace-only, or embedded-control-character values are rejected;
 - the value is never echoed, included in exceptions, or placed in a process
@@ -101,12 +104,14 @@ For `POST /api/v2/device-updates`:
 1. enforce HTTPS at the trusted ingress;
 2. reject unsupported method/content type/oversized body before parsing;
 3. syntactically validate the device header without reflecting it;
-4. find the registry entry and credential record;
-5. reject unknown or disabled devices;
-6. verify the bearer token using constant-time digest comparison;
-7. strictly decode the body and require body/header device IDs to match;
-8. validate reported FQDN and other metadata;
-9. call the common device ingestion path.
+4. validate the exact 43-character Bearer syntax and calculate SHA-256;
+5. select the real credential set or the process-level fixed dummy digest;
+6. execute exactly two constant-time digest comparisons, filling absent,
+   inactive, malformed, or unknown slots with the dummy path;
+7. reject unknown/missing credentials with the same generic `401`;
+8. strictly decode the body and require body/header device IDs to match;
+9. validate reported FQDN and other metadata;
+10. call the common device ingestion path.
 
 Recommended outcomes:
 
@@ -173,6 +178,12 @@ timestamps. Rollback during the overlap restores the old Client secret file.
 After retirement, rollback requires a newly reviewed rotation; expired
 credentials are never silently re-enabled.
 
+An operator may generate a candidate outside the repository with
+`python3 -c 'import secrets; value=secrets.token_urlsafe(32); assert len(value) == 43'`
+and must deliver it through the approved secret channel. This command is an
+example only: no generated value is printed, executed, or stored in this
+repository, and all repository tests use synthetic placeholders.
+
 ## 9. Logging and audit
 
 Allowed fields: request ID, outcome class, protocol mode, bounded/hashed device
@@ -185,7 +196,17 @@ errors identify the domain/code and payload size only.
 Audit events cover rejected unknown/disabled/mismatched identities, rotation
 credential use, and rate limiting. Browser APIs never expose this audit stream.
 
-## 10. Legacy boundary
+## 10. Accepted residual risk
+
+A valid bearer token can be replayed during its validity window. The current
+design does not claim cryptographic replay prevention. Mitigations are verified
+HTTPS, disabled TLS 1.3 0-RTT, per-device 256-bit tokens, bounded current/next
+rotation, rapid per-device revocation, secret-free logs, reverse-proxy path
+isolation, pre-auth and per-device rate limiting, and an endpoint that is
+disabled by default. A future release may add mTLS at the reverse proxy or
+another sender-constrained credential; neither is implemented by 2.2.
+
+## 11. Legacy boundary
 
 The TCP adapter retains its current password handshake only for 2.1 Client
 compatibility. An explicit one-to-one mapping converts authenticated legacy

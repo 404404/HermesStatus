@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -60,6 +61,11 @@ func (a *App) deviceUpdateHandler(c *gin.Context) {
 		return
 	}
 	now := time.Now()
+	if allowed, retry := a.preAuthLimiter.Allow(a.preAuthRequestKey(c.Request), now); !allowed {
+		audit.RateLimited = true
+		a.writeDeviceError(c, &audit, http.StatusTooManyRequests, "rate_limited", retry)
+		return
+	}
 	if !validDeviceContentType(c.GetHeader("Content-Type")) {
 		a.writeDeviceError(c, &audit, http.StatusUnsupportedMediaType, "unsupported_content_type", 0)
 		return
@@ -82,27 +88,14 @@ func (a *App) deviceUpdateHandler(c *gin.Context) {
 		a.writeDeviceError(c, &audit, http.StatusBadRequest, "invalid_device_header", 0)
 		return
 	}
-	if allowed, retry := a.preAuthLimiter.Allow(preAuthSourceKey(c.Request.RemoteAddr), now); !allowed {
-		audit.RateLimited = true
-		a.writeDeviceError(c, &audit, http.StatusTooManyRequests, "rate_limited", retry)
-		return
-	}
 	headerDeviceID := headerValues[0]
-	audit.DeviceRef = headerDeviceID
-	registryDevice, exists := a.registryDevice(headerDeviceID)
-	if !exists {
-		a.writeDeviceError(c, &audit, http.StatusUnauthorized, "unauthorized", 0)
-		return
-	}
-	credentialSet, exists := a.deviceCredentials[headerDeviceID]
-	if !exists {
-		a.writeDeviceError(c, &audit, http.StatusUnauthorized, "unauthorized", 0)
-		return
-	}
+	audit.DeviceRef = deviceAuditRef(headerDeviceID)
+	registryDevice, registered := a.registryDevice(headerDeviceID)
+	credentialSet, credentialExists := a.deviceCredentials[headerDeviceID]
 	authenticated, ok := authenticateDeviceBearer(
 		exactHeaderValues(c.Request.Header, "Authorization"), credentialSet, now,
 	)
-	if !ok {
+	if !registered || !credentialExists || !ok {
 		a.writeDeviceError(c, &audit, http.StatusUnauthorized, "unauthorized", 0)
 		return
 	}
@@ -273,6 +266,25 @@ func (a *App) deviceRequestIsSecure(request *http.Request) bool {
 	return len(values) == 1 && values[0] == "https"
 }
 
+func (a *App) preAuthRequestKey(request *http.Request) string {
+	remoteAddress, ok := remoteIP(request.RemoteAddr)
+	if !ok {
+		return globalUnauthenticatedSourceKey
+	}
+	if a.opts.TrustedProxyMode && prefixContains(a.trustedProxyPrefixes, remoteAddress) {
+		values := exactHeaderValues(request.Header, "X-Forwarded-For")
+		if len(values) != 1 {
+			return globalUnauthenticatedSourceKey
+		}
+		forwardedAddress, err := netip.ParseAddr(values[0])
+		if err != nil || forwardedAddress.Zone() != "" {
+			return globalUnauthenticatedSourceKey
+		}
+		return preAuthSourceKey(forwardedAddress.Unmap().String())
+	}
+	return preAuthSourceKey(remoteAddress.String())
+}
+
 func remoteIP(remoteAddress string) (netip.Addr, bool) {
 	host, _, err := net.SplitHostPort(remoteAddress)
 	if err != nil {
@@ -421,8 +433,8 @@ func (a *App) writeDeviceError(
 		if seconds < 1 {
 			seconds = 1
 		}
-		if seconds > 60 {
-			seconds = 60
+		if seconds > 300 {
+			seconds = 300
 		}
 		c.Header("Retry-After", strconv.Itoa(seconds))
 	}
@@ -445,6 +457,11 @@ func newDeviceRequestID() string {
 		return "request-unavailable"
 	}
 	return "req-" + hex.EncodeToString(value[:])
+}
+
+func deviceAuditRef(deviceID string) string {
+	digest := sha256.Sum256([]byte(deviceID))
+	return "device-" + hex.EncodeToString(digest[:6])
 }
 
 func (a *App) logDeviceRequest(audit deviceRequestAudit) {
