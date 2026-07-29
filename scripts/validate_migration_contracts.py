@@ -15,7 +15,9 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "docs" / "migration" / "schema"
+MULTI_DEVICE_SCHEMA_DIR = ROOT / "schemas"
 FIXTURE_DIR = ROOT / "testdata" / "migration"
+MULTI_DEVICE_FIXTURE_DIR = ROOT / "testdata" / "multi_device" / "valid"
 MIGRATION_DOC_DIR = ROOT / "docs" / "migration"
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
 SAFE_INTEGER_MAX = 9007199254740991
@@ -32,7 +34,11 @@ def load_json(path: Path) -> Any:
         raise ContractError(f"{path.relative_to(ROOT)}: invalid JSON: {exc}") from exc
 
 
-SCHEMAS = {path.resolve(): load_json(path) for path in sorted(SCHEMA_DIR.glob("*.json"))}
+SCHEMAS = {
+    path.resolve(): load_json(path)
+    for directory in (SCHEMA_DIR, MULTI_DEVICE_SCHEMA_DIR)
+    for path in sorted(directory.glob("*.json"))
+}
 
 
 def pointer_get(document: Any, pointer: str) -> Any:
@@ -327,6 +333,34 @@ def validate_fixture_coverage(fixtures: dict[str, dict[str, Any]]) -> None:
             raise ContractError(f"{prefix}-long-values.json does not exercise all long-value boundaries")
 
 
+def validate_multi_device_fixtures() -> int:
+    schema_by_prefix = {
+        "registry-": "device-registry.schema.json",
+        "credential-": "device-credential.schema.json",
+        "legacy-": "legacy-device-mapping.schema.json",
+        "client-v2-config": "client-v2-config.schema.json",
+        "envelope-": "device-update-v2.schema.json",
+        "stats-": "stats-v2.schema.json",
+        "persistence-v2": "persistence-v2.schema.json",
+    }
+    checked = 0
+    for fixture in sorted(MULTI_DEVICE_FIXTURE_DIR.glob("*.json")):
+        schema_name = next(
+            (schema for prefix, schema in schema_by_prefix.items() if fixture.name.startswith(prefix)),
+            None,
+        )
+        if schema_name is None:
+            # Composite migration expectations and public response oneOf
+            # fixtures are covered by pure Go/Frontend contract tests.
+            continue
+        data = load_json(fixture)
+        schema_path = (MULTI_DEVICE_SCHEMA_DIR / schema_name).resolve()
+        validate(data, SCHEMAS[schema_path], schema_path)
+        scan_secrets(data, fixture.name)
+        checked += 1
+    return checked
+
+
 def main() -> int:
     checked_links = validate_markdown_links()
     for path, schema in SCHEMAS.items():
@@ -349,9 +383,12 @@ def main() -> int:
             raise ContractError(f"{name}: compact payload exceeds 65536 bytes")
         print(f"ok  {name:<30} {len(encoded):>5} bytes")
 
+    checked_multi_device = validate_multi_device_fixtures()
+
     print(
         f"validated {checked_links} Markdown links, {len(SCHEMAS)} schemas, "
-        f"their examples, and {len(fixtures)} fixtures"
+        f"their examples, {len(fixtures)} migration fixtures, and "
+        f"{checked_multi_device} multi-device fixtures"
     )
     return 0
 
