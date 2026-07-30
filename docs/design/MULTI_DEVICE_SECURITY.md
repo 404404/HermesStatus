@@ -48,6 +48,10 @@ bearer credentials rather than sender-constrained credentials, so exposure
 response is immediate per-device rotation. Compromise of one token does not
 authorize another device.
 
+An equal-time v2 report is idempotent only when both the incoming and persisted
+canonical digests exist and match. State written before digest persistence was
+introduced rejects equal-time reports as conflicts rather than guessing.
+
 ### Identity spoofing
 
 Hostname/FQDN/source address are observations only. FQDN mismatch does not

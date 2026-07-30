@@ -66,7 +66,8 @@ func TestPersistenceV2WriteReadAndRestartNeverRestoresOnline(t *testing.T) {
 	}
 	if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
 		DeviceID: "device-alpha", ProtocolMode: "device_v2",
-		CollectedAt: now, FlatStats: []byte(`{"cpu":44}`), Generation: 3,
+		CollectedAt: now.Add(time.Nanosecond),
+		FlatStats:   []byte(`{"cpu":44}`), Generation: 3,
 	}, now); err != nil {
 		t.Fatal(err)
 	}
@@ -486,7 +487,7 @@ func TestPersistenceUsesValidatedBackupWhenPrimaryIsCorrupt(t *testing.T) {
 	}
 	if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
 		DeviceID: "device-alpha", ProtocolMode: "device_v2",
-		CollectedAt: now, FlatStats: []byte(`{"cpu":44}`), Generation: 2,
+		CollectedAt: now.Add(time.Nanosecond), FlatStats: []byte(`{"cpu":44}`), Generation: 2,
 	}, now); err != nil {
 		t.Fatal(err)
 	}

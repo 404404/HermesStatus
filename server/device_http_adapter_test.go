@@ -979,6 +979,78 @@ func TestDeviceReplayBoundarySurvivesRestart(t *testing.T) {
 	}
 }
 
+func TestRestoredEqualTimestampWithoutDigestFailsClosed(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
+		activeTestCredentialRecord("device-alpha"),
+	}, nil)
+	collectedAt := time.Now().UTC().Truncate(time.Second)
+	if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
+		DeviceID: "device-alpha", ProtocolMode: "device_v2",
+		CollectedAt: collectedAt, FlatStats: []byte(`{"cpu":17}`),
+		Generation: 1,
+	}, collectedAt); err != nil {
+		t.Fatal(err)
+	}
+	if app.nodes["device-alpha"].HasLastRequestDigest {
+		t.Fatal("test fixture unexpectedly has a request digest")
+	}
+	if err := app.PersistStats(); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := NewApp(app.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(restarted.Close)
+	node := restarted.nodes["device-alpha"]
+	if !node.Restored || node.HasLastRequestDigest {
+		t.Fatalf("legacy persistence fixture did not restore as expected: %#v", node)
+	}
+	before, err := restarted.snapshotPersistenceV2(time.Unix(1_800_000_000, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeGeneration := node.LastAcceptedGeneration
+	beforeLastSeen := node.LastSeen
+	for _, cpu := range []float64{17, 99} {
+		body := replaceEnvelopeField(
+			t,
+			validDeviceEnvelope(t, "device-alpha", nil, cpu),
+			"collected_at",
+			collectedAt.Format(time.RFC3339),
+		)
+		response := performDeviceUpdateRequest(
+			restarted,
+			http.MethodPost,
+			body,
+			testCurrentToken,
+			"device-alpha",
+			true,
+		)
+		if response.Code != http.StatusConflict ||
+			!strings.Contains(response.Body.String(), `"report_conflict"`) {
+			t.Fatalf(
+				"equal timestamp without stored digest did not fail closed: %d %s",
+				response.Code,
+				response.Body.String(),
+			)
+		}
+	}
+	after, err := restarted.snapshotPersistenceV2(time.Unix(1_800_000_000, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node.Stats.CPU != 17 ||
+		node.LastAcceptedGeneration != beforeGeneration ||
+		!node.LastSeen.Equal(beforeLastSeen) ||
+		!reflect.DeepEqual(before, after) {
+		t.Fatal("rejected digest-less equal-time replay mutated restored state")
+	}
+}
+
 func TestDeviceReplayCanonicalizesNestedStatsPropertyOrder(t *testing.T) {
 	registry := testRegistry(
 		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),

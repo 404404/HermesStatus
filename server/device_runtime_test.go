@@ -334,7 +334,7 @@ func TestMultiDeviceConcurrentUpdatesRemainIsolatedAndNewestWins(t *testing.T) {
 				defer wait.Done()
 				_, _ = app.ingestDeviceUpdateAt(deviceIngestRequest{
 					DeviceID: deviceID, ProtocolMode: "device_v2",
-					CollectedAt: now,
+					CollectedAt: now.Add(time.Duration(generation) * time.Nanosecond),
 					FlatStats:   []byte(fmt.Sprintf(`{"cpu":%d}`, generation)),
 					Generation:  generation,
 				}, now)

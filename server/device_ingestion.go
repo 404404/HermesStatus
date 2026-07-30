@@ -156,8 +156,10 @@ func (a *App) validateIngestLocked(
 		if request.CollectedAt.Before(node.CollectedAt) {
 			return errStaleReport
 		}
-		if request.CollectedAt.Equal(node.CollectedAt) &&
-			request.HasRequestDigest && node.HasLastRequestDigest {
+		if request.CollectedAt.Equal(node.CollectedAt) {
+			if !request.HasRequestDigest || !node.HasLastRequestDigest {
+				return errReportConflict
+			}
 			if request.RequestDigest == node.LastRequestDigest {
 				return errIdempotentReplay
 			}

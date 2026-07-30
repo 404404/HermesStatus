@@ -92,6 +92,8 @@ pipeline.
 - each v2 device advances `collected_at` monotonically: older reports are
   rejected, an equal timestamp with the same canonical request digest is an
   idempotent `202`, and an equal timestamp with different content is rejected;
+  if a state restored from an earlier persistence-v2 writer has no stored
+  digest, every equal-time report fails closed as a conflict;
 - request size, including headers/envelope, is bounded; body remains at most
   1 MiB;
 - strict decoding rejects unknown properties at new envelope/device levels;
