@@ -290,6 +290,18 @@ func TestPersistencePreflightRejectsUnsafeBackupEvenWithValidPrimary(t *testing.
 
 func TestPersistencePreflightRejectsSpecialFilesAliasesAndUnsafeParent(t *testing.T) {
 	snapshot := orphanBoundarySnapshot(0, false)
+	t.Run("backup_directory", func(t *testing.T) {
+		directory := t.TempDir()
+		path := filepath.Join(directory, "state-v2.json")
+		writeJSONTestFile(t, path, snapshot)
+		if err := os.Mkdir(path+"~", 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if paths, err := openPersistencePaths(path, path+"~", true); err == nil {
+			paths.close()
+			t.Fatal("directory backup passed persistence preflight")
+		}
+	})
 	t.Run("backup_fifo", func(t *testing.T) {
 		directory := t.TempDir()
 		path := filepath.Join(directory, "state-v2.json")
@@ -359,6 +371,98 @@ func TestPersistencePreflightRejectsSpecialFilesAliasesAndUnsafeParent(t *testin
 		}
 		if os.Geteuid() != 0 && err == nil {
 			t.Fatal("inaccessible backup passed persistence preflight")
+		}
+	})
+}
+
+func TestPersistenceStartupRecoveryMatrix(t *testing.T) {
+	newOptions := func(t *testing.T) Options {
+		t.Helper()
+		app := newMultiDeviceTestApp(
+			t,
+			minimalTestConfig(),
+			testRegistry(
+				testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+			),
+			contracts.LegacyMappingDocument{Version: 1},
+		)
+		return app.opts
+	}
+	validSnapshot := func() contracts.PersistenceV2 {
+		return orphanBoundarySnapshot(0, false)
+	}
+
+	t.Run("both_missing_first_start", func(t *testing.T) {
+		_ = newOptions(t)
+	})
+	t.Run("valid_primary_valid_backup", func(t *testing.T) {
+		opts := newOptions(t)
+		writeJSONTestFile(t, opts.PersistencePath, validSnapshot())
+		writeJSONTestFile(t, opts.PersistencePath+"~", validSnapshot())
+		restarted, err := NewApp(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		restarted.Close()
+	})
+	t.Run("valid_primary_missing_backup", func(t *testing.T) {
+		opts := newOptions(t)
+		writeJSONTestFile(t, opts.PersistencePath, validSnapshot())
+		restarted, err := NewApp(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		restarted.Close()
+	})
+	t.Run("missing_primary_valid_backup", func(t *testing.T) {
+		opts := newOptions(t)
+		writeJSONTestFile(t, opts.PersistencePath+"~", validSnapshot())
+		restarted, err := NewApp(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		restarted.Close()
+	})
+	t.Run("both_corrupt", func(t *testing.T) {
+		opts := newOptions(t)
+		if err := os.WriteFile(opts.PersistencePath, []byte(`{"version":`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(opts.PersistencePath+"~", []byte(`{"version":`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if restarted, err := NewApp(opts); err == nil || restarted != nil {
+			if restarted != nil {
+				restarted.Close()
+			}
+			t.Fatalf("two corrupt persistence files did not fail closed: app=%#v err=%v", restarted, err)
+		}
+	})
+	t.Run("corrupt_primary_unsafe_backup", func(t *testing.T) {
+		opts := newOptions(t)
+		if err := os.WriteFile(opts.PersistencePath, []byte(`{"version":`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(filepath.Dir(opts.PersistencePath), "unsafe-backup-target")
+		before := []byte("must-not-change")
+		if err := os.WriteFile(target, before, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, opts.PersistencePath+"~"); err != nil {
+			t.Fatal(err)
+		}
+		if restarted, err := NewApp(opts); err == nil || restarted != nil {
+			if restarted != nil {
+				restarted.Close()
+			}
+			t.Fatalf("corrupt primary bypassed unsafe backup: app=%#v err=%v", restarted, err)
+		}
+		after, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(before, after) {
+			t.Fatal("unsafe backup target changed during failed recovery")
 		}
 	})
 }

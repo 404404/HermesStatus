@@ -28,6 +28,7 @@
   {"name":"otherwise_safe_query","host":"https://example.invalid/?check=health","type":"https","accepted":false},
   {"name":"nested_url","host":"https://example.invalid/?next=https%3A%2F%2Fother.invalid%2F","type":"https","accepted":false},
   {"name":"opaque_long_value","host":"https://example.invalid/?value=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-","type":"https","accepted":false},
+  {"name":"overlong_query","host":"https://example.invalid/?value=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789","type":"https","accepted":false},
   {"name":"userinfo","host":"https://user:pass@example.invalid/health","type":"https","accepted":false},
   {"name":"fragment","host":"https://example.invalid/health#secret","type":"https","accepted":false}
 ]
