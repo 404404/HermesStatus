@@ -59,7 +59,7 @@ func TestHTTPAPIAndStaticUI(t *testing.T) {
 		t.Fatalf("config: status=%d body=%s", response.Code, response.Body.String())
 	}
 
-	monitor := `{"name":"新增服务","host":"tcp://127.0.0.1:80","type":"tcp","interval":"30"}`
+	monitor := `{"name":"新增服务","host":"127.0.0.1:80","type":"tcp","interval":"30"}`
 	response = performRequest(router, http.MethodPost, "/api/monitors", monitor, "test-token")
 	if response.Code != http.StatusCreated || !strings.Contains(response.Body.String(), "新增服务") {
 		t.Fatalf("create monitor: status=%d body=%s", response.Code, response.Body.String())

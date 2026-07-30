@@ -123,6 +123,37 @@ func (a *App) deviceUpdateHandler(c *gin.Context) {
 		a.writeDeviceError(c, &audit, http.StatusForbidden, "inactive_protocol", 0)
 		return
 	}
+	collectedAt, err := time.Parse(time.RFC3339, envelope.CollectedAt)
+	if err != nil || validateDeviceCollectedAt(collectedAt, now) != nil {
+		a.writeDeviceError(c, &audit, http.StatusBadRequest, "invalid_envelope", 0)
+		return
+	}
+	flatStats, err := json.Marshal(envelope.Stats)
+	if err != nil {
+		a.writeDeviceError(c, &audit, http.StatusBadRequest, "invalid_envelope", 0)
+		return
+	}
+	canonicalEnvelope, err := json.Marshal(envelope)
+	if err != nil {
+		a.writeDeviceError(c, &audit, http.StatusBadRequest, "invalid_envelope", 0)
+		return
+	}
+	requestDigest := sha256.Sum256(canonicalEnvelope)
+	monitors, configGeneration, err := a.deviceMonitorSnapshot()
+	if err != nil {
+		a.writeDeviceError(c, &audit, http.StatusInternalServerError, "internal_error", 0)
+		return
+	}
+	response := contracts.SuccessResponse{
+		Accepted:         true,
+		ServerTime:       now.UTC().Format(time.RFC3339),
+		ConfigGeneration: "g-" + strconv.FormatUint(configGeneration, 10),
+		Monitors:         monitors,
+	}
+	if err := contracts.ValidateSuccessResponse(response); err != nil {
+		a.writeDeviceError(c, &audit, http.StatusInternalServerError, "internal_error", 0)
+		return
+	}
 	identityStatus, identityErr := evaluateIdentity(
 		registryDevice.ExpectedFQDN,
 		envelope.Device.ReportedFQDN,
@@ -131,16 +162,6 @@ func (a *App) deviceUpdateHandler(c *gin.Context) {
 	if identityErr != nil {
 		a.markDeviceHTTPIdentityError(authenticated.DeviceID, identityStatus)
 		a.writeDeviceError(c, &audit, http.StatusForbidden, "identity_mismatch", 0)
-		return
-	}
-	collectedAt, err := time.Parse(time.RFC3339, envelope.CollectedAt)
-	if err != nil || collectedAt.Sub(now) > MaxDeviceClockSkew {
-		a.writeDeviceError(c, &audit, http.StatusBadRequest, "invalid_envelope", 0)
-		return
-	}
-	flatStats, err := json.Marshal(envelope.Stats)
-	if err != nil {
-		a.writeDeviceError(c, &audit, http.StatusBadRequest, "invalid_envelope", 0)
 		return
 	}
 	generation := a.updateID.Add(1)
@@ -153,26 +174,12 @@ func (a *App) deviceUpdateHandler(c *gin.Context) {
 		ReportedName:     envelope.Device.ReportedName,
 		ReportedFQDN:     envelope.Device.ReportedFQDN,
 		ReportedHostname: envelope.Device.Hostname,
+		RequestDigest:    requestDigest,
+		HasRequestDigest: true,
 	}, now)
-	if err != nil {
+	if err != nil && !errors.Is(err, errIdempotentReplay) {
 		status, code := deviceIngestHTTPError(err)
 		a.writeDeviceError(c, &audit, status, code, 0)
-		return
-	}
-	monitors, err := a.sanitizedDeviceMonitors()
-	if err != nil {
-		a.writeDeviceError(c, &audit, http.StatusInternalServerError, "internal_error", 0)
-		return
-	}
-
-	response := contracts.SuccessResponse{
-		Accepted:         true,
-		ServerTime:       now.UTC().Format(time.RFC3339),
-		ConfigGeneration: "g-" + strconv.FormatUint(a.generation.Load(), 10),
-		Monitors:         monitors,
-	}
-	if err := contracts.ValidateSuccessResponse(response); err != nil {
-		a.writeDeviceError(c, &audit, http.StatusInternalServerError, "internal_error", 0)
 		return
 	}
 	audit.Status = http.StatusAccepted
@@ -307,12 +314,31 @@ func prefixContains(prefixes []netip.Prefix, address netip.Addr) bool {
 }
 
 func (a *App) sanitizedDeviceMonitors() ([]contracts.SanitizedMonitor, error) {
-	runtime := a.RuntimeSnapshot()
-	if len(runtime.Monitors) > maxDeviceMonitors {
+	monitors, _, err := a.deviceMonitorSnapshot()
+	return monitors, err
+}
+
+func (a *App) deviceMonitorSnapshot() (
+	[]contracts.SanitizedMonitor,
+	uint64,
+	error,
+) {
+	a.configMu.RLock()
+	configured := append([]MonitorConfig(nil), a.runtime.Monitors...)
+	configGeneration := a.generation.Load()
+	a.configMu.RUnlock()
+	monitors, err := sanitizedMonitorSnapshot(configured)
+	return monitors, configGeneration, err
+}
+
+func sanitizedMonitorSnapshot(
+	configured []MonitorConfig,
+) ([]contracts.SanitizedMonitor, error) {
+	if len(configured) > maxDeviceMonitors {
 		return nil, errors.New("monitor response exceeds limit")
 	}
-	monitors := make([]contracts.SanitizedMonitor, 0, len(runtime.Monitors))
-	for _, monitor := range runtime.Monitors {
+	monitors := make([]contracts.SanitizedMonitor, 0, len(configured))
+	for _, monitor := range configured {
 		if !safeMonitorField(monitor.Name, 128) ||
 			!safeMonitorHost(monitor.Host, monitor.Type) ||
 			monitor.Interval < 1 || monitor.Interval > 86400 {
@@ -371,9 +397,22 @@ func safeMonitorHost(value, monitorType string) bool {
 	if parsed.Fragment != "" || strings.Contains(parsed.EscapedPath(), "..") {
 		return false
 	}
-	lower := strings.ToLower(value)
-	for _, forbidden := range []string{"token=", "password=", "secret=", "api_key=", "apikey="} {
-		if strings.Contains(lower, forbidden) {
+	decodedPath, err := url.PathUnescape(parsed.EscapedPath())
+	if err != nil {
+		return false
+	}
+	for _, segment := range strings.Split(decodedPath, "/") {
+		if segment == ".." {
+			return false
+		}
+	}
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return false
+	}
+	for name := range query {
+		switch strings.ToLower(name) {
+		case "token", "password", "secret", "api_key", "apikey":
 			return false
 		}
 	}
@@ -407,12 +446,15 @@ func deviceIngestHTTPError(err error) (int, string) {
 	switch {
 	case errors.Is(err, errDeviceClockSkew):
 		return http.StatusBadRequest, "invalid_envelope"
+	case errors.Is(err, errStaleReport):
+		return http.StatusConflict, "stale_report"
+	case errors.Is(err, errReportConflict),
+		errors.Is(err, errStaleGeneration):
+		return http.StatusConflict, "report_conflict"
 	case errors.Is(err, errDeviceDisabled),
 		errors.Is(err, errInactiveOwner),
 		errors.Is(err, errDeviceIdentity):
 		return http.StatusForbidden, "forbidden"
-	case errors.Is(err, errStaleGeneration):
-		return http.StatusConflict, "forbidden"
 	default:
 		return http.StatusInternalServerError, "internal_error"
 	}

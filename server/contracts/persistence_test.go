@@ -96,6 +96,28 @@ func TestPersistenceRejectsCorruptVersion(t *testing.T) {
 	}
 }
 
+func TestPersistenceRequestDigestIsCanonicalAndBounded(t *testing.T) {
+	snapshot, err := DecodePersistenceV2(fixture(t, "valid", "persistence-v2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.Devices[0].RuntimeObservations["last_request_digest"] =
+		json.RawMessage(`"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`)
+	if err := ValidatePersistenceV2(snapshot); err != nil {
+		t.Fatalf("canonical request digest was rejected: %v", err)
+	}
+	snapshot.Devices[0].RuntimeObservations["last_request_digest"] =
+		json.RawMessage(`"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"`)
+	if err := ValidatePersistenceV2(snapshot); err == nil {
+		t.Fatal("non-canonical uppercase request digest was accepted")
+	}
+	snapshot.Devices[0].RuntimeObservations["last_request_digest"] =
+		json.RawMessage(`"aaaa"`)
+	if err := ValidatePersistenceV2(snapshot); err == nil {
+		t.Fatal("short request digest was accepted")
+	}
+}
+
 func TestPersistenceV1FourDeviceFixtureMigratesByExplicitSource(t *testing.T) {
 	legacy, err := DecodePersistenceV1(fixture(t, "valid", "persistence-v1-four.json"))
 	if err != nil {

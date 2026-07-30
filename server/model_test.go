@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -47,6 +48,62 @@ func TestConfigValidationErrors(t *testing.T) {
 
 	if _, err := decodeDocument([]byte(`{"servers":[]} {"servers":[]}`)); err == nil || !strings.Contains(err.Error(), "more than one") {
 		t.Fatalf("expected trailing JSON error, got %v", err)
+	}
+}
+
+func TestMonitorConfigurationUsesDeviceResponseContract(t *testing.T) {
+	valid := []map[string]any{
+		{"name": "HTTP", "host": "http://example.invalid/health", "type": "http", "interval": 30},
+		{"name": "HTTPS", "host": "https://example.invalid/status", "type": "https", "interval": 60},
+		{"name": "TCP", "host": "127.0.0.1:443", "type": "tcp", "interval": 90},
+	}
+	doc := minimalTestConfig()
+	doc["monitors"] = make([]any, 0, len(valid))
+	for _, monitor := range valid {
+		doc["monitors"] = append(doc["monitors"].([]any), monitor)
+	}
+	_, runtime, apiErr := normalizeConfig(doc)
+	if apiErr != nil {
+		t.Fatalf("valid shared monitor contract was rejected: %v", apiErr)
+	}
+	snapshot, err := sanitizedMonitorSnapshot(runtime.Monitors)
+	if err != nil || len(snapshot) != len(valid) {
+		t.Fatalf("management/device validators diverged: %#v err=%v", snapshot, err)
+	}
+
+	invalid := []map[string]any{
+		{"name": "scheme", "host": "ftp://example.invalid", "type": "ftp", "interval": 30},
+		{"name": "credentials", "host": "https://user:pass@example.invalid", "type": "https", "interval": 30},
+		{"name": "query", "host": "https://example.invalid/?to%6ben=secret", "type": "https", "interval": 30},
+		{"name": "path", "host": "https://example.invalid/%2e%2e/admin", "type": "https", "interval": 30},
+		{"name": "tcp-url", "host": "tcp://127.0.0.1:80", "type": "tcp", "interval": 30},
+		{"name": "long", "host": "https://" + strings.Repeat("a", 254), "type": "https", "interval": 30},
+	}
+	for _, monitor := range invalid {
+		t.Run(fmt.Sprint(monitor["name"]), func(t *testing.T) {
+			candidate := minimalTestConfig()
+			candidate["monitors"] = []any{monitor}
+			if _, _, apiErr := normalizeConfig(candidate); apiErr == nil ||
+				apiErr.Status != 400 ||
+				apiErr.Message != "monitor configuration is invalid" {
+				t.Fatalf("invalid monitor was accepted or leaked details: %#v", apiErr)
+			}
+		})
+	}
+
+	tooMany := minimalTestConfig()
+	monitors := make([]any, maxDeviceMonitors+1)
+	for index := range monitors {
+		monitors[index] = map[string]any{
+			"name": fmt.Sprintf("monitor-%03d", index),
+			"host": "https://example.invalid",
+			"type": "https", "interval": 30,
+		}
+	}
+	tooMany["monitors"] = monitors
+	if _, _, apiErr := normalizeConfig(tooMany); apiErr == nil ||
+		apiErr.Message != "monitor configuration is invalid" {
+		t.Fatalf("monitor limit was not enforced by config validation: %#v", apiErr)
 	}
 }
 

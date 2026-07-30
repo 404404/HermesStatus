@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -65,13 +64,10 @@ func (a *App) loadMultiDeviceRuntime(runtime RuntimeConfig) {
 	a.registry = registry
 	a.legacyMap = legacyMap
 	a.deviceUsers = deviceUsers
-	if a.opts.PersistencePath == "" {
-		a.opts.PersistencePath = a.opts.StatsPath + ".state-v2"
-	}
 }
 
 func readBoundedFile(path string, limit int64) ([]byte, error) {
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+	if err := validateNoSymlinkComponents(path); err != nil {
 		return nil, errors.New("document unavailable")
 	}
 	fileFD, err := unix.Open(
@@ -80,6 +76,12 @@ func readBoundedFile(path string, limit int64) ([]byte, error) {
 		0,
 	)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, os.ErrNotExist
+		}
+		if errors.Is(err, os.ErrPermission) {
+			return nil, os.ErrPermission
+		}
 		return nil, errors.New("document unavailable")
 	}
 	file := os.NewFile(uintptr(fileFD), "multi-device-document")
@@ -220,6 +222,8 @@ func copyNodeRuntime(target, source *NodeState, disconnect bool) {
 	target.LastSeen = source.LastSeen
 	target.CollectedAt = source.CollectedAt
 	target.LastAcceptedGeneration = source.LastAcceptedGeneration
+	target.LastRequestDigest = source.LastRequestDigest
+	target.HasLastRequestDigest = source.HasLastRequestDigest
 	target.Restored = source.Restored
 	target.IdentityError = source.IdentityError
 	target.Degraded = source.Degraded

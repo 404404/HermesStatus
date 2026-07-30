@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -103,6 +104,17 @@ func ValidatePersistenceV2(snapshot *PersistenceV2) error {
 		}
 		if len(device.RuntimeObservations) > 128 {
 			return contractError(prefix+".runtime_observations", "contains too many fields")
+		}
+		if raw, exists := device.RuntimeObservations["last_request_digest"]; exists {
+			var digest string
+			if json.Unmarshal(raw, &digest) != nil || len(digest) != 64 {
+				return contractError(prefix+".runtime_observations.last_request_digest", "is invalid")
+			}
+			decoded, decodeErr := hex.DecodeString(digest)
+			if decodeErr != nil || len(decoded) != sha256.Size ||
+				hex.EncodeToString(decoded) != digest {
+				return contractError(prefix+".runtime_observations.last_request_digest", "is invalid")
+			}
 		}
 		if device.LastSeen != nil {
 			if _, err := parseRFC3339UTC(*device.LastSeen); err != nil {

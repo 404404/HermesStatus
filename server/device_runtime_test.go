@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -354,6 +355,48 @@ func TestMultiDeviceConcurrentUpdatesRemainIsolatedAndNewestWins(t *testing.T) {
 		node := app.nodes[deviceID]
 		if node.LastAcceptedGeneration != 64 || node.Stats.CPU != 64 {
 			t.Fatalf("config merge crossed or erased %s: %#v", deviceID, node)
+		}
+	}
+}
+
+func TestSixteenDevicesMaintainIndependentReplayBoundaries(t *testing.T) {
+	devices := make([]contracts.RegistryDevice, 0, contracts.MaxRegisteredDevices)
+	for index := 0; index < contracts.MaxRegisteredDevices; index++ {
+		devices = append(devices, testRegistryDevice(
+			fmt.Sprintf("device-%02d", index),
+			fmt.Sprintf("Device %02d", index),
+			index, true, "device_v2", nil,
+		))
+	}
+	app := newMultiDeviceTestApp(
+		t, minimalTestConfig(), testRegistry(devices...),
+		contracts.LegacyMappingDocument{Version: 1},
+	)
+	now := time.Now().UTC()
+	for index, device := range devices {
+		collectedAt := now.Add(-time.Duration(index) * time.Second)
+		digest := sha256.Sum256([]byte(device.ID))
+		if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
+			DeviceID: device.ID, ProtocolMode: "device_v2",
+			CollectedAt:   collectedAt,
+			FlatStats:     []byte(fmt.Sprintf(`{"cpu":%d}`, index+1)),
+			Generation:    uint64(index + 1),
+			RequestDigest: digest, HasRequestDigest: true,
+		}, now); err != nil {
+			t.Fatalf("%s initial boundary failed: %v", device.ID, err)
+		}
+		if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
+			DeviceID: device.ID, ProtocolMode: "device_v2",
+			CollectedAt:      collectedAt.Add(-time.Second),
+			FlatStats:        []byte(`{"cpu":99}`),
+			Generation:       uint64(100 + index),
+			RequestDigest:    sha256.Sum256([]byte("stale-" + device.ID)),
+			HasRequestDigest: true,
+		}, now); !errors.Is(err, errStaleReport) {
+			t.Fatalf("%s stale boundary was not isolated: %v", device.ID, err)
+		}
+		if app.nodes[device.ID].Stats.CPU != float64(index+1) {
+			t.Fatalf("%s state crossed replay boundary: %#v", device.ID, app.nodes[device.ID])
 		}
 	}
 }

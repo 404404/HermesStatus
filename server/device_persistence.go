@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +18,18 @@ import (
 
 const maxPersistenceBytes = 8 << 20
 
+var errOrphanLimitExceeded = errors.New("orphan_limit_exceeded")
+
 func writePersistenceV2(path string, snapshot contracts.PersistenceV2) error {
+	if err := contracts.ValidatePersistenceV2(&snapshot); err != nil {
+		return errors.New("multi-device state is invalid")
+	}
+	if err := validateNoSymlinkComponents(path); err != nil {
+		return errUnsafeRuntimePath
+	}
+	if err := validateNoSymlinkComponents(path + "~"); err != nil {
+		return errUnsafeRuntimePath
+	}
 	data, err := marshalIndented(snapshot)
 	if err != nil {
 		return err
@@ -27,6 +39,12 @@ func writePersistenceV2(path string, snapshot contracts.PersistenceV2) error {
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
+	}
+	if err := validateNoSymlinkComponents(path); err != nil {
+		return errUnsafeRuntimePath
+	}
+	if err := validateNoSymlinkComponents(path + "~"); err != nil {
+		return errUnsafeRuntimePath
 	}
 	if previous, err := readBoundedFile(path, maxPersistenceBytes); err == nil {
 		if _, decodeErr := contracts.DecodePersistenceV2(previous); decodeErr == nil {
@@ -61,6 +79,9 @@ func (a *App) snapshotPersistenceV2(now time.Time) (contracts.PersistenceV2, err
 	snapshot.OrphanedDevices = append(
 		[]contracts.OrphanedDevice(nil), a.orphans...,
 	)
+	if err := contracts.ValidatePersistenceV2(&snapshot); err != nil {
+		return contracts.PersistenceV2{}, errors.New("multi-device state is invalid")
+	}
 	return snapshot, nil
 }
 
@@ -93,6 +114,13 @@ func persistedDeviceFromNode(
 			return contracts.PersistedDevice{}, err
 		}
 		observations[key] = raw
+	}
+	if node.HasLastRequestDigest {
+		raw, err := rawJSON(hex.EncodeToString(node.LastRequestDigest[:]))
+		if err != nil {
+			return contracts.PersistedDevice{}, err
+		}
+		observations["last_request_digest"] = raw
 	}
 	domains := make(map[string]json.RawMessage, 4)
 	for key, value := range map[string]any{
@@ -127,30 +155,35 @@ func timeStringPointer(value time.Time) *string {
 	return &formatted
 }
 
-func (a *App) restorePersistenceV2() {
+func (a *App) restorePersistenceV2() error {
 	data, err := readPersistenceWithBackup(a.opts.PersistencePath)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			a.logger.Printf("read multi-device state: %s", persistenceReadErrorCode(err))
 		}
-		return
+		return nil
 	}
 	snapshot, err := contracts.DecodePersistenceV2(data)
 	if err != nil {
 		backup, backupErr := readBoundedFile(a.opts.PersistencePath+"~", maxPersistenceBytes)
 		if backupErr != nil {
 			a.logger.Printf("read multi-device state: invalid_json")
-			return
+			return nil
 		}
 		snapshot, err = contracts.DecodePersistenceV2(backup)
 		if err != nil {
 			a.logger.Printf("read multi-device state: invalid_json")
-			return
+			return nil
 		}
 	}
 
 	a.nodeMu.Lock()
 	defer a.nodeMu.Unlock()
+	candidates := make(map[string]*NodeState, len(a.nodes))
+	for deviceID, node := range a.nodes {
+		candidate := *node
+		candidates[deviceID] = &candidate
+	}
 	registered := make(map[string]bool, len(a.nodes))
 	for deviceID := range a.nodes {
 		registered[deviceID] = true
@@ -159,7 +192,7 @@ func (a *App) restorePersistenceV2() {
 	orphans := make([]contracts.OrphanedDevice, 0, len(snapshot.OrphanedDevices))
 	maxGeneration := uint64(0)
 	for _, persisted := range snapshot.Devices {
-		node := a.nodes[persisted.DeviceID]
+		node := candidates[persisted.DeviceID]
 		if node == nil {
 			orphans = append(orphans, orphanFromPersisted(
 				persisted, "unknown_v2", orphans,
@@ -183,7 +216,7 @@ func (a *App) restorePersistenceV2() {
 			var persisted contracts.PersistedDevice
 			if decodeStrictRuntime(orphan.Snapshot, &persisted) == nil &&
 				persisted.DeviceID == *orphan.DeviceID &&
-				restorePersistedDevice(a.nodes[persisted.DeviceID], persisted) == nil {
+				restorePersistedDevice(candidates[persisted.DeviceID], persisted) == nil {
 				restored[persisted.DeviceID] = true
 				if persisted.LastAcceptedGeneration > maxGeneration {
 					maxGeneration = persisted.LastAcceptedGeneration
@@ -193,8 +226,16 @@ func (a *App) restorePersistenceV2() {
 		}
 		orphans = append(orphans, orphan)
 	}
-	a.orphans = deduplicateOrphans(orphans)
+	orphans = deduplicateOrphans(orphans)
+	if len(orphans) > contracts.MaxOrphanedDevices {
+		return errOrphanLimitExceeded
+	}
+	for deviceID, candidate := range candidates {
+		*a.nodes[deviceID] = *candidate
+	}
+	a.orphans = orphans
 	a.updateID.Store(maxGeneration)
+	return nil
 }
 
 func sanitizedCorruptOrphan(
@@ -267,6 +308,18 @@ func restorePersistedDeviceFields(node *NodeState, persisted contracts.Persisted
 		persisted.RuntimeObservations, "last_network_out", &node.LastNetworkOut,
 	); err != nil {
 		return err
+	}
+	if raw, exists := persisted.RuntimeObservations["last_request_digest"]; exists {
+		var value string
+		if err := decodeStrictRuntime(raw, &value); err != nil || len(value) != 64 {
+			return errors.New("last request digest is invalid")
+		}
+		decoded, err := hex.DecodeString(value)
+		if err != nil || len(decoded) != sha256.Size {
+			return errors.New("last request digest is invalid")
+		}
+		copy(node.LastRequestDigest[:], decoded)
+		node.HasLastRequestDigest = true
 	}
 	_ = decodeOptionalObservation(
 		persisted.RuntimeObservations, "identity_status", &node.IdentityStatus,

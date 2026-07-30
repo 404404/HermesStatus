@@ -15,6 +15,9 @@ var (
 	errInactiveOwner       = errors.New("protocol is not the active ingestion owner")
 	errStaleGeneration     = errors.New("generation is not newer")
 	errDeviceClockSkew     = errors.New("collected_at exceeds clock-skew limit")
+	errStaleReport         = errors.New("collected_at is older than the last accepted report")
+	errReportConflict      = errors.New("collected_at conflicts with the last accepted report")
+	errIdempotentReplay    = errors.New("report was already accepted")
 	errDeviceIdentity      = errors.New("device identity evidence was rejected")
 	errInactiveConnection  = errors.New("connection generation is inactive")
 )
@@ -29,6 +32,8 @@ type deviceIngestRequest struct {
 	ReportedName     *string
 	ReportedFQDN     *string
 	ReportedHostname *string
+	RequestDigest    [32]byte
+	HasRequestDigest bool
 }
 
 // ingestDeviceUpdate is the single decoder-and-state entry point shared by
@@ -56,7 +61,7 @@ func (a *App) ingestDeviceUpdateAt(
 	if request.CollectedAt.IsZero() {
 		request.CollectedAt = now
 	}
-	if request.CollectedAt.Sub(now) > MaxDeviceClockSkew {
+	if err := validateDeviceCollectedAt(request.CollectedAt, now); err != nil {
 		return nil, errDeviceClockSkew
 	}
 
@@ -101,6 +106,10 @@ func (a *App) ingestDeviceUpdateAt(
 	node.LastSeen = now
 	node.CollectedAt = request.CollectedAt
 	node.LastAcceptedGeneration = request.Generation
+	if request.HasRequestDigest {
+		node.LastRequestDigest = request.RequestDigest
+		node.HasLastRequestDigest = true
+	}
 	node.ProtocolMode = request.ProtocolMode
 	node.IdentityStatus = identityStatus
 	node.ReportedName = cloneStringPointer(request.ReportedName)
@@ -112,6 +121,15 @@ func (a *App) ingestDeviceUpdateAt(
 	a.nodeMu.Unlock()
 	a.wakeStatsWriter()
 	return issues, nil
+}
+
+func validateDeviceCollectedAt(collectedAt, now time.Time) error {
+	if collectedAt.IsZero() ||
+		collectedAt.Before(now.Add(-MaxDeviceClockSkew)) ||
+		collectedAt.After(now.Add(MaxDeviceClockSkew)) {
+		return errDeviceClockSkew
+	}
+	return nil
 }
 
 func (a *App) validateIngestLocked(
@@ -133,6 +151,18 @@ func (a *App) validateIngestLocked(
 	}
 	if a.registry == nil && request.ProtocolMode != "legacy_single_device" {
 		return errInactiveOwner
+	}
+	if request.ProtocolMode == "device_v2" && !node.CollectedAt.IsZero() {
+		if request.CollectedAt.Before(node.CollectedAt) {
+			return errStaleReport
+		}
+		if request.CollectedAt.Equal(node.CollectedAt) &&
+			request.HasRequestDigest && node.HasLastRequestDigest {
+			if request.RequestDigest == node.LastRequestDigest {
+				return errIdempotentReplay
+			}
+			return errReportConflict
+		}
 	}
 	if request.Generation == 0 || request.Generation <= node.LastAcceptedGeneration {
 		return errStaleGeneration

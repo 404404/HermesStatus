@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -72,6 +73,8 @@ type NodeState struct {
 	LastSeen               time.Time
 	CollectedAt            time.Time
 	LastAcceptedGeneration uint64
+	LastRequestDigest      [sha256.Size]byte
+	HasLastRequestDigest   bool
 	Restored               bool
 	IdentityError          bool
 	Degraded               bool
@@ -115,6 +118,11 @@ type App struct {
 }
 
 func NewApp(opts Options) (*App, error) {
+	var err error
+	opts, err = resolveOptionsPaths(opts)
+	if err != nil {
+		return nil, err
+	}
 	doc, runtime, err := readConfig(opts.ConfigPath)
 	if err != nil {
 		return nil, err
@@ -136,7 +144,10 @@ func NewApp(opts Options) (*App, error) {
 		return nil, err
 	}
 	app.applyValidatedConfig(doc, runtime, false)
-	app.restorePersistentState()
+	if err := app.restorePersistentState(); err != nil {
+		cancel()
+		return nil, err
+	}
 	return app, nil
 }
 
@@ -461,10 +472,9 @@ func formatUptime(seconds int64) string {
 	return fmt.Sprintf("%02d:%02d:%02d", seconds/3600, (seconds/60)%60, seconds%60)
 }
 
-func (a *App) restorePersistentState() {
+func (a *App) restorePersistentState() error {
 	if a.registry != nil {
-		a.restorePersistenceV2()
-		return
+		return a.restorePersistenceV2()
 	}
 	data, err := os.ReadFile(a.opts.StatsPath)
 	if err != nil {
@@ -474,7 +484,7 @@ func (a *App) restorePersistentState() {
 			if code := statsReadErrorCode(primaryErr, err); code != "" {
 				a.logger.Printf("read previous stats: %s", code)
 			}
-			return
+			return nil
 		}
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -484,7 +494,7 @@ func (a *App) restorePersistentState() {
 	}
 	if err := decoder.Decode(&previous); err != nil {
 		a.logger.Printf("read previous stats: invalid_json")
-		return
+		return nil
 	}
 	a.nodeMu.Lock()
 	defer a.nodeMu.Unlock()
@@ -500,6 +510,7 @@ func (a *App) restorePersistentState() {
 			break
 		}
 	}
+	return nil
 }
 
 func statsReadErrorCode(primaryErr, backupErr error) string {

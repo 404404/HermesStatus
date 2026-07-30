@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -341,4 +345,145 @@ func TestPersistenceSnapshotIsSelfConsistentDuringConcurrentUpdates(t *testing.T
 		}
 	}
 	<-done
+}
+
+func TestOrphanLimitFailsClosedBeforeRegistryTransition(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+		testRegistryDevice("device-beta", "Beta", 20, true, "device_v2", nil),
+	)
+	app := newMultiDeviceTestApp(
+		t, minimalTestConfig(), registry, contracts.LegacyMappingDocument{Version: 1},
+	)
+	opts := app.opts
+	app.Close()
+	snapshot := orphanBoundarySnapshot(contracts.MaxOrphanedDevices, true)
+	writeJSONTestFile(t, opts.PersistencePath, snapshot)
+	writeJSONTestFile(t, opts.PersistencePath+"~", snapshot)
+	beforePrimary, err := os.ReadFile(opts.PersistencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeBackup, err := os.ReadFile(opts.PersistencePath + "~")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeJSONTestFile(t, opts.RegistryPath, testRegistry(
+		testRegistryDevice("device-beta", "Beta", 20, true, "device_v2", nil),
+	))
+	restarted, err := NewApp(opts)
+	if restarted != nil || !errors.Is(err, errOrphanLimitExceeded) {
+		t.Fatalf("65th projected orphan did not fail closed: app=%#v err=%v", restarted, err)
+	}
+	afterPrimary, err := os.ReadFile(opts.PersistencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterBackup, err := os.ReadFile(opts.PersistencePath + "~")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(beforePrimary, afterPrimary) || !bytes.Equal(beforeBackup, afterBackup) {
+		t.Fatal("rejected orphan transition changed primary or backup")
+	}
+}
+
+func TestOrphanLimitAllowsExactlySixtyFourAndRestarts(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+		testRegistryDevice("device-beta", "Beta", 20, true, "device_v2", nil),
+	)
+	app := newMultiDeviceTestApp(
+		t, minimalTestConfig(), registry, contracts.LegacyMappingDocument{Version: 1},
+	)
+	opts := app.opts
+	app.Close()
+	snapshot := orphanBoundarySnapshot(contracts.MaxOrphanedDevices-1, true)
+	writeJSONTestFile(t, opts.PersistencePath, snapshot)
+	writeJSONTestFile(t, opts.RegistryPath, testRegistry(
+		testRegistryDevice("device-beta", "Beta", 20, true, "device_v2", nil),
+	))
+	restarted, err := NewApp(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(restarted.orphans) != contracts.MaxOrphanedDevices {
+		t.Fatalf("63 + removed device did not become 64: %d", len(restarted.orphans))
+	}
+	if err := restarted.PersistStats(); err != nil {
+		t.Fatal(err)
+	}
+	restarted.Close()
+	again, err := NewApp(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(again.Close)
+	if len(again.orphans) != contracts.MaxOrphanedDevices {
+		t.Fatalf("64-orphan snapshot did not restart: %d", len(again.orphans))
+	}
+}
+
+func TestPersistenceWriterRejectsInvalidSnapshotBeforeFileChanges(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "state-v2.json")
+	primary := []byte("primary-must-remain")
+	backup := []byte("backup-must-remain")
+	if err := os.WriteFile(path, primary, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path+"~", backup, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	invalid := orphanBoundarySnapshot(contracts.MaxOrphanedDevices+1, false)
+	if err := writePersistenceV2(path, invalid); err == nil {
+		t.Fatal("65-orphan snapshot was written")
+	}
+	afterPrimary, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterBackup, err := os.ReadFile(path + "~")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(primary, afterPrimary) || !bytes.Equal(backup, afterBackup) {
+		t.Fatal("invalid writer input changed primary or backup")
+	}
+	matches, err := filepath.Glob(filepath.Join(root, ".serverstatus-*.tmp"))
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("invalid snapshot created temporary files: %v %v", matches, err)
+	}
+}
+
+func orphanBoundarySnapshot(
+	orphanCount int,
+	includeRemovedDevice bool,
+) contracts.PersistenceV2 {
+	snapshot := contracts.PersistenceV2{
+		Version:         2,
+		GeneratedAt:     time.Now().UTC().Format(time.RFC3339),
+		Devices:         []contracts.PersistedDevice{},
+		OrphanedDevices: make([]contracts.OrphanedDevice, 0, orphanCount),
+	}
+	if includeRemovedDevice {
+		snapshot.Devices = append(snapshot.Devices, contracts.PersistedDevice{
+			DeviceID:            "device-alpha",
+			ProtocolMode:        "device_v2",
+			StatusAtSnapshot:    "offline",
+			RuntimeObservations: map[string]json.RawMessage{},
+			Domains:             map[string]json.RawMessage{},
+		})
+	}
+	for index := 0; index < orphanCount; index++ {
+		snapshot.OrphanedDevices = append(
+			snapshot.OrphanedDevices,
+			contracts.OrphanedDevice{
+				OrphanID: fmt.Sprintf("orphan-%02d", index),
+				Reason:   "removed_device", SourceVersion: 2,
+				Snapshot: json.RawMessage(`{}`),
+			},
+		)
+	}
+	return snapshot
 }

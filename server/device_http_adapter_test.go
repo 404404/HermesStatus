@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -147,6 +148,7 @@ func TestPythonDeviceV2ClientToStageCAdapterEndToEnd(t *testing.T) {
 	python := `
 import json
 import sys
+from datetime import datetime, timezone
 sys.path.insert(0, sys.argv[1])
 from multi_device_contracts import ClientV2Config, build_envelope
 from device_client_transport import DeviceHTTPSClient
@@ -165,7 +167,9 @@ with open(sys.argv[5], "r", encoding="utf-8") as source:
 stats["cpu"] = 73
 envelope = build_envelope(
     config,
-    collected_at="2026-07-01T12:00:00Z",
+    collected_at=datetime.now(timezone.utc).replace(
+        microsecond=0
+    ).isoformat().replace("+00:00", "Z"),
     hostname="synthetic-alpha",
     stats=stats,
 )
@@ -660,27 +664,244 @@ func TestDeviceEndpointErrorsAndLogsNeverExposeSecrets(t *testing.T) {
 	}
 }
 
-func TestDeviceEndpointReturns500ForUnsafeMonitorAfterValidIngestion(t *testing.T) {
+func TestDeviceEndpointValidatesMonitorSnapshotBeforeIngestion(t *testing.T) {
 	registry := testRegistry(
 		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
 	)
-	doc := minimalTestConfig()
-	doc["monitors"] = []any{map[string]any{
-		"name": "unsafe", "host": "https://example.invalid/?token=raw-secret-marker",
-		"interval": 60, "type": "https",
-	}}
-	app := newStageCAppWithConfig(t, doc, registry, []contracts.CredentialRecord{
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
 		activeTestCredentialRecord("device-alpha"),
 	}, nil)
+	beforeGeneration := app.generation.Load()
+	beforeUpdateID := app.updateID.Load()
+	select {
+	case <-app.statsWake:
+	default:
+	}
+	beforeNode := *app.nodes["device-alpha"]
+	beforeSnapshot, err := app.snapshotPersistenceV2(time.Unix(1_800_000_000, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.configMu.Lock()
+	app.runtime.Monitors = []MonitorConfig{{
+		Name: "unsafe", Host: "https://example.invalid/?token=raw-secret-marker",
+		Interval: 60, Type: "https",
+	}}
+	app.configMu.Unlock()
 	response := performDeviceUpdateRequest(
 		app, http.MethodPost, validDeviceEnvelope(t, "device-alpha", nil, 77),
 		testCurrentToken, "device-alpha", true,
 	)
+	afterSnapshot, err := app.snapshotPersistenceV2(time.Unix(1_800_000_000, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if response.Code != http.StatusInternalServerError ||
-		!app.nodes["device-alpha"].HasUpdate ||
-		app.nodes["device-alpha"].Stats.CPU != 77 ||
+		app.nodes["device-alpha"].HasUpdate != beforeNode.HasUpdate ||
+		!app.nodes["device-alpha"].LastSeen.Equal(beforeNode.LastSeen) ||
+		app.nodes["device-alpha"].LastAcceptedGeneration != beforeNode.LastAcceptedGeneration ||
+		app.generation.Load() != beforeGeneration ||
+		app.updateID.Load() != beforeUpdateID ||
+		len(app.statsWake) != 0 ||
+		!reflect.DeepEqual(beforeSnapshot, afterSnapshot) ||
 		strings.Contains(response.Body.String(), "raw-secret-marker") {
 		t.Fatalf("unsafe monitor boundary failed: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestDeviceEndpointRejectsStaleConflictAndAcceptsIdempotentReplay(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
+		activeTestCredentialRecord("device-alpha"),
+	}, nil)
+	var logs bytes.Buffer
+	app.logger = log.New(&logs, "", 0)
+	collectedAt := time.Now().UTC().Truncate(time.Second)
+	first := replaceEnvelopeField(
+		t, validDeviceEnvelope(t, "device-alpha", nil, 31),
+		"collected_at", collectedAt.Format(time.RFC3339),
+	)
+	if response := performDeviceUpdateRequest(
+		app, http.MethodPost, first, testCurrentToken, "device-alpha", true,
+	); response.Code != http.StatusAccepted {
+		t.Fatalf("first report failed: %d %s", response.Code, response.Body.String())
+	}
+	node := app.nodes["device-alpha"]
+	acceptedGeneration := node.LastAcceptedGeneration
+	acceptedLastSeen := node.LastSeen
+	before, err := app.snapshotPersistenceV2(time.Unix(1_800_000_000, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response := performDeviceUpdateRequest(
+		app, http.MethodPost, first, testCurrentToken, "device-alpha", true,
+	); response.Code != http.StatusAccepted {
+		t.Fatalf("identical replay was not idempotent: %d %s", response.Code, response.Body.String())
+	}
+	after, err := app.snapshotPersistenceV2(time.Unix(1_800_000_000, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node.LastAcceptedGeneration != acceptedGeneration ||
+		!node.LastSeen.Equal(acceptedLastSeen) ||
+		!reflect.DeepEqual(before, after) {
+		t.Fatal("idempotent replay mutated device or persistence state")
+	}
+
+	conflict := replaceEnvelopeField(
+		t, validDeviceEnvelope(t, "device-alpha", nil, 99),
+		"collected_at", collectedAt.Format(time.RFC3339),
+	)
+	response := performDeviceUpdateRequest(
+		app, http.MethodPost, conflict, testCurrentToken, "device-alpha", true,
+	)
+	if response.Code != http.StatusConflict ||
+		!strings.Contains(response.Body.String(), `"report_conflict"`) {
+		t.Fatalf("same-time conflict was not rejected safely: %d %s", response.Code, response.Body.String())
+	}
+	stale := replaceEnvelopeField(
+		t, validDeviceEnvelope(t, "device-alpha", nil, 88),
+		"collected_at", collectedAt.Add(-time.Second).Format(time.RFC3339),
+	)
+	response = performDeviceUpdateRequest(
+		app, http.MethodPost, stale, testCurrentToken, "device-alpha", true,
+	)
+	if response.Code != http.StatusConflict ||
+		!strings.Contains(response.Body.String(), `"stale_report"`) ||
+		node.Stats.CPU != 31 ||
+		node.LastAcceptedGeneration != acceptedGeneration ||
+		!node.LastSeen.Equal(acceptedLastSeen) {
+		t.Fatalf("stale report changed accepted state: %d %s", response.Code, response.Body.String())
+	}
+	digest := sha256.Sum256(first)
+	publicStats, err := json.Marshal(app.SnapshotStats())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, public := range []string{
+		string(publicStats), logs.String(), response.Body.String(),
+	} {
+		if strings.Contains(public, "last_request_digest") ||
+			strings.Contains(public, hex.EncodeToString(digest[:])) {
+			t.Fatal("request digest escaped persistence-only state")
+		}
+	}
+}
+
+func TestDeviceReplayBoundarySurvivesRestart(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
+		activeTestCredentialRecord("device-alpha"),
+	}, nil)
+	collectedAt := time.Now().UTC().Truncate(time.Second)
+	body := replaceEnvelopeField(
+		t, validDeviceEnvelope(t, "device-alpha", nil, 57),
+		"collected_at", collectedAt.Format(time.RFC3339),
+	)
+	if response := performDeviceUpdateRequest(
+		app, http.MethodPost, body, testCurrentToken, "device-alpha", true,
+	); response.Code != http.StatusAccepted {
+		t.Fatalf("initial report failed: %d %s", response.Code, response.Body.String())
+	}
+	if err := app.PersistStats(); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := NewApp(app.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(restarted.Close)
+	beforeGeneration := restarted.nodes["device-alpha"].LastAcceptedGeneration
+	if response := performDeviceUpdateRequest(
+		restarted, http.MethodPost, body, testCurrentToken, "device-alpha", true,
+	); response.Code != http.StatusAccepted {
+		t.Fatalf("identical replay after restart was not idempotent: %d %s",
+			response.Code, response.Body.String())
+	}
+	if restarted.nodes["device-alpha"].LastAcceptedGeneration != beforeGeneration {
+		t.Fatal("restart replay advanced accepted generation")
+	}
+	older := replaceEnvelopeField(
+		t, validDeviceEnvelope(t, "device-alpha", nil, 99),
+		"collected_at", collectedAt.Add(-time.Second).Format(time.RFC3339),
+	)
+	response := performDeviceUpdateRequest(
+		restarted, http.MethodPost, older, testCurrentToken, "device-alpha", true,
+	)
+	if response.Code != http.StatusConflict ||
+		!strings.Contains(response.Body.String(), `"stale_report"`) ||
+		restarted.nodes["device-alpha"].Stats.CPU != 57 {
+		t.Fatalf("restart accepted stale report: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestDeviceEndpointEnforcesClockSkewInBothDirections(t *testing.T) {
+	cases := []struct {
+		name   string
+		offset time.Duration
+		status int
+	}{
+		{name: "past-4m59s", offset: -4*time.Minute - 59*time.Second, status: http.StatusAccepted},
+		{name: "past-5m01s", offset: -5*time.Minute - time.Second, status: http.StatusBadRequest},
+		{name: "future-4m59s", offset: 4*time.Minute + 59*time.Second, status: http.StatusAccepted},
+		{name: "future-5m01s", offset: 5*time.Minute + time.Second, status: http.StatusBadRequest},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			registry := testRegistry(
+				testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+			)
+			app := newStageCApp(t, registry, []contracts.CredentialRecord{
+				activeTestCredentialRecord("device-alpha"),
+			}, nil)
+			body := replaceEnvelopeField(
+				t, validDeviceEnvelope(t, "device-alpha", nil, 45),
+				"collected_at",
+				time.Now().UTC().Add(testCase.offset).Format(time.RFC3339),
+			)
+			response := performDeviceUpdateRequest(
+				app, http.MethodPost, body,
+				testCurrentToken, "device-alpha", true,
+			)
+			if response.Code != testCase.status {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+			if testCase.status != http.StatusAccepted && app.nodes["device-alpha"].HasUpdate {
+				t.Fatal("clock-skew rejection mutated device state")
+			}
+		})
+	}
+}
+
+func TestExpiredReportCannotMutateIdentityState(t *testing.T) {
+	expected := "alpha.example.invalid"
+	reported := "wrong.example.invalid"
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", &expected),
+	)
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
+		activeTestCredentialRecord("device-alpha"),
+	}, nil)
+	body := replaceEnvelopeField(
+		t, validDeviceEnvelope(t, "device-alpha", &reported, 45),
+		"collected_at",
+		time.Now().UTC().Add(-MaxDeviceClockSkew-time.Second).Format(time.RFC3339),
+	)
+	response := performDeviceUpdateRequest(
+		app, http.MethodPost, body,
+		testCurrentToken, "device-alpha", true,
+	)
+	node := app.nodes["device-alpha"]
+	if response.Code != http.StatusBadRequest ||
+		node.IdentityError ||
+		node.IdentityStatus != "unknown" ||
+		node.HasUpdate {
+		t.Fatalf("expired report mutated identity state: status=%d node=%#v",
+			response.Code, node)
 	}
 }
 

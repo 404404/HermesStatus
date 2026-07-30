@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"net"
+	"os"
+	"reflect"
 	"testing"
 )
 
@@ -46,5 +49,38 @@ func TestDisconnectPreservesOfflineDisplayMetadata(t *testing.T) {
 	}
 	if serverStats["os"] != "linux" || serverStats["cpu_model"] != "Test CPU" {
 		t.Fatalf("offline display metadata was discarded: %#v", serverStats)
+	}
+}
+
+func TestInvalidMonitorUpdateRetainsLastKnownGoodConfig(t *testing.T) {
+	app := newTestApp(t, minimalTestConfig())
+	beforeDocument := app.ConfigSnapshot()
+	beforeRuntime := app.RuntimeSnapshot()
+	beforeGeneration := app.generation.Load()
+	beforeFile, err := os.ReadFile(app.opts.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalid := app.ConfigSnapshot()
+	invalid["monitors"] = []any{map[string]any{
+		"name":     "unsafe",
+		"host":     "https://example.invalid/?password=must-not-leak",
+		"type":     "https",
+		"interval": 60,
+	}}
+	if _, apiErr := app.ReplaceConfig(invalid); apiErr == nil ||
+		apiErr.Status != 400 ||
+		apiErr.Message != "monitor configuration is invalid" {
+		t.Fatalf("invalid monitor update was not rejected safely: %#v", apiErr)
+	}
+	afterFile, err := os.ReadFile(app.opts.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(app.ConfigSnapshot(), beforeDocument) ||
+		!reflect.DeepEqual(app.RuntimeSnapshot(), beforeRuntime) ||
+		app.generation.Load() != beforeGeneration ||
+		!bytes.Equal(beforeFile, afterFile) {
+		t.Fatal("invalid monitor update replaced last-known-good configuration")
 	}
 }

@@ -219,6 +219,31 @@ class DeviceTransportTests(unittest.TestCase):
                 )
                 self.assertNotIn("secret-response", str(captured.exception))
 
+    def test_conflict_codes_are_bounded_and_redacted(self):
+        for code in ("stale_report", "report_conflict"):
+            response = FakeResponse(
+                status=409,
+                body=json.dumps(
+                    {
+                        "error": {
+                            "code": code,
+                            "request_id": "req-synthetic",
+                        }
+                    }
+                ).encode(),
+            )
+            with self.assertRaises(DeviceTransportError) as captured:
+                self.client_for(FakeConnection(response)).send(self.envelope)
+            self.assertEqual(captured.exception.code, code)
+        hostile = FakeResponse(
+            status=409,
+            body=b'{"error":{"code":"secret-value","request_id":"req"}}',
+        )
+        with self.assertRaises(DeviceTransportError) as captured:
+            self.client_for(FakeConnection(hostile)).send(self.envelope)
+        self.assertEqual(captured.exception.code, "report_conflict")
+        self.assertNotIn("secret-value", str(captured.exception))
+
     def test_malformed_202_responses_are_rejected(self):
         cases = [
             FakeResponse(body=b"{}"),
@@ -513,6 +538,27 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(runner.run_once(), 30.0)
         self.assertEqual(runner.cache.snapshot(), before)
         self.assertEqual(applied, [[monitor]])
+
+    def test_stale_and_conflict_reports_wait_for_normal_collection(self):
+        logs = []
+        runner = self.runner(
+            [
+                DeviceTransportError("stale_report"),
+                DeviceTransportError("report_conflict"),
+            ],
+            [],
+            logs,
+            random_value=lambda: 0.0,
+        )
+        runner.attempt = 9
+        self.assertEqual(runner.run_once(), 60.0)
+        self.assertEqual(runner.attempt, 0)
+        self.assertEqual(runner.run_once(), 60.0)
+        self.assertEqual(runner.attempt, 0)
+        self.assertEqual(logs, [
+            "device_v2 transport: stale_report",
+            "device_v2 transport: report_conflict",
+        ])
 
     def test_full_jitter_cap_no_busy_loop_and_throttled_logs(self):
         outcomes = [DeviceTransportError("server_unavailable")] * 12
