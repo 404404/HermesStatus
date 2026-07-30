@@ -165,6 +165,16 @@ func (a *App) deviceUpdateHandler(c *gin.Context) {
 		a.writeDeviceError(c, &audit, http.StatusForbidden, "identity_mismatch", 0)
 		return
 	}
+	persistencePaths, err := openPersistencePaths(
+		a.opts.PersistencePath,
+		a.opts.PersistencePath+"~",
+		true,
+	)
+	if err != nil {
+		a.writeDeviceError(c, &audit, http.StatusInternalServerError, "internal_error", 0)
+		return
+	}
+	persistencePaths.close()
 	generation := a.updateID.Add(1)
 	_, err = a.ingestDeviceUpdateAt(deviceIngestRequest{
 		DeviceID:         authenticated.DeviceID,
@@ -422,6 +432,13 @@ func safeMonitorHost(value, monitorType string) bool {
 	if parsed.Fragment != "" || strings.Contains(parsed.EscapedPath(), "..") {
 		return false
 	}
+	// Monitor definitions are copied into both the Management API config and
+	// device responses. Queries are forbidden outright so authorization
+	// material cannot cross either boundary under an unexpected parameter
+	// name or encoding.
+	if parsed.ForceQuery || parsed.RawQuery != "" {
+		return false
+	}
 	decodedPath, err := url.PathUnescape(parsed.EscapedPath())
 	if err != nil {
 		return false
@@ -429,25 +446,6 @@ func safeMonitorHost(value, monitorType string) bool {
 	for _, segment := range strings.Split(decodedPath, "/") {
 		if segment == ".." {
 			return false
-		}
-	}
-	query, err := url.ParseQuery(parsed.RawQuery)
-	if err != nil {
-		return false
-	}
-	for name := range query {
-		normalizedName := strings.NewReplacer(
-			"_", "", "-", "", ".", "",
-		).Replace(strings.ToLower(name))
-		if normalizedName == "key" {
-			return false
-		}
-		for _, protectedTerm := range []string{
-			"token", "password", "passwd", "secret", "credential", "apikey",
-		} {
-			if strings.Contains(normalizedName, protectedTerm) {
-				return false
-			}
 		}
 	}
 	return true

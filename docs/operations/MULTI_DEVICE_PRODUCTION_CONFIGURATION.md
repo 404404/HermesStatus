@@ -169,6 +169,22 @@ path prefix. The Client appends the fixed
 certificate. For a private PKI, mount only the issuing CA certificate
 read-only and set its container path; never disable verification.
 
+Server-side HTTP/HTTPS monitor targets are separate from `server.url`. They may
+use a bounded path such as `https://example.net/health`, but must not contain
+any query (including a trailing `?`), fragment, or UserInfo. If a health
+endpoint requires a query credential, expose a credential-free dedicated
+health path instead. `serverstatus --validate-device-config` reads the active
+Server configuration with the same Monitor validator and rejects such a target
+before startup.
+
+The directory containing the v2 persistence file must exist before Server
+startup and be writable by the Server process. The primary file and its
+automatically derived `~` backup must be absent or readable regular files, must
+be writable by the Server process, must not be symlinks/special files, and must
+not be hard links to any other name.
+Startup fails before listeners bind when this preflight fails; do not manually
+bind either file to an external target.
+
 The device ID must exactly match the header, request body, registry entry, and
 credential filename. If `expected_fqdn` is configured on the Server, set the
 Client `fqdn` to that exact normalized value.

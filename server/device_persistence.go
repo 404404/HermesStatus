@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"time"
 
 	"github.com/cppla/serverstatus/server/contracts"
+	"golang.org/x/sys/unix"
 )
 
 const maxPersistenceBytes = 8 << 20
@@ -24,12 +24,6 @@ func writePersistenceV2(path string, snapshot contracts.PersistenceV2) error {
 	if err := contracts.ValidatePersistenceV2(&snapshot); err != nil {
 		return errors.New("multi-device state is invalid")
 	}
-	if err := validateNoSymlinkComponents(path); err != nil {
-		return errUnsafeRuntimePath
-	}
-	if err := validateNoSymlinkComponents(path + "~"); err != nil {
-		return errUnsafeRuntimePath
-	}
 	data, err := marshalIndented(snapshot)
 	if err != nil {
 		return err
@@ -37,23 +31,25 @@ func writePersistenceV2(path string, snapshot contracts.PersistenceV2) error {
 	if len(data) > maxPersistenceBytes {
 		return errors.New("multi-device state exceeds size limit")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	paths, err := openPersistencePaths(path, path+"~", true)
+	if err != nil {
 		return err
 	}
-	if err := validateNoSymlinkComponents(path); err != nil {
-		return errUnsafeRuntimePath
-	}
-	if err := validateNoSymlinkComponents(path + "~"); err != nil {
-		return errUnsafeRuntimePath
-	}
-	if previous, err := readBoundedFile(path, maxPersistenceBytes); err == nil {
+	defer paths.close()
+	if previous, err := paths.readBounded(paths.primaryName, maxPersistenceBytes); err == nil {
 		if _, decodeErr := contracts.DecodePersistenceV2(previous); decodeErr == nil {
-			if err := atomicWrite(path+"~", previous, 0o600, false); err != nil {
+			if _, err := paths.validateEntry(paths.backupName); err != nil {
+				return err
+			}
+			if err := paths.atomicWrite(paths.backupName, previous, 0o600); err != nil {
 				return err
 			}
 		}
 	}
-	return atomicWrite(path, data, 0o600, false)
+	if _, err := paths.validateEntry(paths.primaryName); err != nil {
+		return err
+	}
+	return paths.atomicWrite(paths.primaryName, data, 0o600)
 }
 
 func (a *App) snapshotPersistenceV2(now time.Time) (contracts.PersistenceV2, error) {
@@ -166,7 +162,7 @@ func (a *App) restorePersistenceV2() error {
 	}
 	snapshot, err := contracts.DecodePersistenceV2(data)
 	if err != nil {
-		backup, backupErr := readBoundedFile(a.opts.PersistencePath+"~", maxPersistenceBytes)
+		backup, backupErr := readPersistenceBackup(a.opts.PersistencePath)
 		if backupErr != nil {
 			a.logger.Printf("read multi-device state: invalid_json")
 			return errors.New("multi-device state is invalid")
@@ -401,12 +397,17 @@ func decodeStrictRuntime(data []byte, target any) error {
 }
 
 func readPersistenceWithBackup(path string) ([]byte, error) {
-	data, err := readBoundedFile(path, maxPersistenceBytes)
+	paths, err := openPersistencePaths(path, path+"~", true)
+	if err != nil {
+		return nil, err
+	}
+	defer paths.close()
+	data, err := paths.readBounded(paths.primaryName, maxPersistenceBytes)
 	if err == nil {
 		return data, nil
 	}
 	primaryErr := err
-	data, err = readBoundedFile(path+"~", maxPersistenceBytes)
+	data, err = paths.readBounded(paths.backupName, maxPersistenceBytes)
 	if err == nil {
 		return data, nil
 	}
@@ -414,6 +415,110 @@ func readPersistenceWithBackup(path string) ([]byte, error) {
 		return nil, os.ErrNotExist
 	}
 	return nil, primaryErr
+}
+
+func readPersistenceBackup(path string) ([]byte, error) {
+	paths, err := openPersistencePaths(path, path+"~", true)
+	if err != nil {
+		return nil, err
+	}
+	defer paths.close()
+	return paths.readBounded(paths.backupName, maxPersistenceBytes)
+}
+
+func (paths *openedPersistencePaths) readBounded(
+	name string,
+	limit int64,
+) ([]byte, error) {
+	if _, err := paths.validateEntry(name); err != nil {
+		return nil, err
+	}
+	fileFD, err := unix.Openat(
+		paths.directoryFD,
+		name,
+		unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW,
+		0,
+	)
+	if err != nil {
+		if errors.Is(err, unix.ENOENT) {
+			return nil, os.ErrNotExist
+		}
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fileFD), "multi-device-state")
+	if file == nil {
+		_ = unix.Close(fileFD)
+		return nil, errors.New("multi-device state is unavailable")
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, errors.New("multi-device state is unavailable")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil || int64(len(data)) > limit {
+		return nil, errors.New("multi-device state is unavailable")
+	}
+	return data, nil
+}
+
+func (paths *openedPersistencePaths) atomicWrite(
+	name string,
+	data []byte,
+	mode os.FileMode,
+) error {
+	tmpName, err := randomPersistenceName(".hermesstatus-state-", ".tmp")
+	if err != nil {
+		return err
+	}
+	fileFD, err := unix.Openat(
+		paths.directoryFD,
+		tmpName,
+		unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_CLOEXEC|unix.O_NOFOLLOW,
+		uint32(mode.Perm()),
+	)
+	if err != nil {
+		return err
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = unix.Unlinkat(paths.directoryFD, tmpName, 0)
+		}
+	}()
+	file := os.NewFile(uintptr(fileFD), "multi-device-state-temporary")
+	if file == nil {
+		_ = unix.Close(fileFD)
+		return errors.New("multi-device state is unavailable")
+	}
+	if err := file.Chmod(mode); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := unix.Renameat(
+		paths.directoryFD,
+		tmpName,
+		paths.directoryFD,
+		name,
+	); err != nil {
+		return err
+	}
+	cleanup = false
+	return unix.Fsync(paths.directoryFD)
 }
 
 func persistenceReadErrorCode(err error) string {

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from typing import Any, Mapping, Protocol
-from urllib.parse import parse_qsl, unquote, urlsplit
+from urllib.parse import unquote, urlsplit
 
 
 DEVICE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
@@ -644,26 +644,12 @@ def _validate_monitor_host(value: Any, monitor_type: str) -> str:
         or parsed.username is not None
         or parsed.password is not None
         or parsed.fragment
+        or "?" in value
         or port is not None
         and not 1 <= port <= 65535
         or not _safe_network_host(parsed.hostname)
         or any(segment == ".." for segment in unquote(parsed.path).split("/"))
     ):
-        raise ClientContractError("monitor host is invalid")
-    sensitive_query_names = {"token", "password", "secret", "api_key", "apikey"}
-    try:
-        query_fields = (
-            parse_qsl(
-                parsed.query,
-                keep_blank_values=True,
-                strict_parsing=True,
-            )
-            if parsed.query
-            else []
-        )
-    except ValueError as exc:
-        raise ClientContractError("monitor host is invalid") from exc
-    if any(name.lower() in sensitive_query_names for name, _value in query_fields):
         raise ClientContractError("monitor host is invalid")
     return value
 

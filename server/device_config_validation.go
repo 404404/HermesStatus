@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,6 +29,31 @@ func validateDeviceConfiguration(
 	opts Options,
 	now time.Time,
 ) (deviceConfigValidationSummary, *deviceConfigValidationError) {
+	if opts.ConfigPath != "" {
+		configPath, err := filepath.Abs(opts.ConfigPath)
+		if err != nil {
+			return deviceConfigValidationSummary{}, configValidationError(
+				"config_unavailable", "config",
+			)
+		}
+		configData, err := readBoundedFile(configPath, maxRuntimeConfigBytes)
+		if err != nil {
+			return deviceConfigValidationSummary{}, configValidationError(
+				"config_unavailable", "config",
+			)
+		}
+		configDocument, err := decodeDocument(configData)
+		if err != nil {
+			return deviceConfigValidationSummary{}, configValidationError(
+				"config_invalid", "config",
+			)
+		}
+		if _, _, apiErr := normalizeConfig(configDocument); apiErr != nil {
+			return deviceConfigValidationSummary{}, configValidationError(
+				"config_invalid", "config",
+			)
+		}
+	}
 	if opts.RegistryPath == "" {
 		return deviceConfigValidationSummary{}, configValidationError(
 			"registry_missing", "registry",

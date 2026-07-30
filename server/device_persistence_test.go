@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cppla/serverstatus/server/contracts"
+	"golang.org/x/sys/unix"
 )
 
 func TestPersistenceV2WriteReadAndRestartNeverRestoresOnline(t *testing.T) {
@@ -231,6 +232,135 @@ func TestPersistenceUnsafePathFailsStartupWithoutChangingTarget(t *testing.T) {
 	if !bytes.Equal(after, original) {
 		t.Fatal("failed startup changed symlink target")
 	}
+}
+
+func TestPersistencePreflightRejectsUnsafeBackupEvenWithValidPrimary(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	app := newMultiDeviceTestApp(
+		t, minimalTestConfig(), registry, contracts.LegacyMappingDocument{Version: 1},
+	)
+	if err := app.PersistStats(); err != nil {
+		t.Fatal(err)
+	}
+	opts := app.opts
+	app.Close()
+	primaryBefore, err := os.ReadFile(opts.PersistencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(opts.PersistencePath + "~"); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(filepath.Dir(opts.PersistencePath), "backup-target.json")
+	targetBefore := []byte("backup-target-must-remain-unchanged")
+	if err := os.WriteFile(target, targetBefore, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, opts.PersistencePath+"~"); err != nil {
+		t.Fatal(err)
+	}
+	if restarted, err := NewApp(opts); err == nil || restarted != nil {
+		if restarted != nil {
+			restarted.Close()
+		}
+		t.Fatalf("valid primary bypassed unsafe backup preflight: app=%#v err=%v", restarted, err)
+	}
+	primaryAfter, err := os.ReadFile(opts.PersistencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetAfter, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(primaryBefore, primaryAfter) ||
+		!bytes.Equal(targetBefore, targetAfter) {
+		t.Fatal("failed backup preflight changed primary or symlink target")
+	}
+	matches, err := filepath.Glob(filepath.Join(
+		filepath.Dir(opts.PersistencePath),
+		".hermesstatus-*.tmp",
+	))
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("failed preflight left temporary state: %v %v", matches, err)
+	}
+}
+
+func TestPersistencePreflightRejectsSpecialFilesAliasesAndUnsafeParent(t *testing.T) {
+	snapshot := orphanBoundarySnapshot(0, false)
+	t.Run("backup_fifo", func(t *testing.T) {
+		directory := t.TempDir()
+		path := filepath.Join(directory, "state-v2.json")
+		writeJSONTestFile(t, path, snapshot)
+		if err := unix.Mkfifo(path+"~", 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if paths, err := openPersistencePaths(path, path+"~", true); err == nil {
+			paths.close()
+			t.Fatal("FIFO backup passed persistence preflight")
+		}
+	})
+	t.Run("hardlink_alias", func(t *testing.T) {
+		directory := t.TempDir()
+		path := filepath.Join(directory, "state-v2.json")
+		writeJSONTestFile(t, path, snapshot)
+		if err := os.Link(path, path+"~"); err != nil {
+			t.Fatal(err)
+		}
+		if paths, err := openPersistencePaths(path, path+"~", true); err == nil {
+			paths.close()
+			t.Fatal("primary/backup inode alias passed persistence preflight")
+		}
+	})
+	t.Run("same_path", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "state-v2.json")
+		if paths, err := openPersistencePaths(path, path, true); err == nil {
+			paths.close()
+			t.Fatal("same primary and backup path passed persistence preflight")
+		}
+	})
+	t.Run("missing_parent", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "missing", "state-v2.json")
+		if paths, err := openPersistencePaths(path, path+"~", true); err == nil {
+			paths.close()
+			t.Fatal("missing persistence parent passed preflight")
+		}
+	})
+	t.Run("symlink_parent", func(t *testing.T) {
+		root := t.TempDir()
+		targetDirectory := filepath.Join(root, "target")
+		if err := os.Mkdir(targetDirectory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		linkDirectory := filepath.Join(root, "linked")
+		if err := os.Symlink(targetDirectory, linkDirectory); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(linkDirectory, "state-v2.json")
+		if paths, err := openPersistencePaths(path, path+"~", true); err == nil {
+			paths.close()
+			t.Fatal("symlinked persistence parent passed preflight")
+		}
+	})
+	t.Run("inaccessible_backup", func(t *testing.T) {
+		directory := t.TempDir()
+		path := filepath.Join(directory, "state-v2.json")
+		writeJSONTestFile(t, path, snapshot)
+		writeJSONTestFile(t, path+"~", snapshot)
+		if err := os.Chmod(path+"~", 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(path+"~", 0o600) })
+		paths, err := openPersistencePaths(path, path+"~", true)
+		if paths != nil {
+			paths.close()
+		}
+		if os.Geteuid() != 0 && err == nil {
+			t.Fatal("inaccessible backup passed persistence preflight")
+		}
+	})
 }
 
 func TestPersistenceUsesValidatedBackupWhenPrimaryIsCorrupt(t *testing.T) {

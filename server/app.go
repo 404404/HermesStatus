@@ -139,6 +139,18 @@ func NewApp(opts Options) (*App, error) {
 		logger:    log.New(os.Stdout, "serverstatus ", log.LstdFlags|log.Lmicroseconds),
 	}
 	app.loadMultiDeviceRuntime(runtime)
+	if app.registry != nil {
+		paths, pathErr := openPersistencePaths(
+			app.opts.PersistencePath,
+			app.opts.PersistencePath+"~",
+			true,
+		)
+		if pathErr != nil {
+			cancel()
+			return nil, errors.New("multi-device persistence path is unavailable")
+		}
+		paths.close()
+	}
 	if err := app.configureDeviceEndpoint(); err != nil {
 		cancel()
 		return nil, err

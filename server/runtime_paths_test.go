@@ -17,6 +17,9 @@ func TestPersistencePathIsCanonicalAndStableAcrossWorkingDirectories(t *testing.
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(configDirectory, "config.json")
+	if err := os.MkdirAll(filepath.Join(root, "web", "json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	registryPath := filepath.Join(root, "registry.json")
 	mappingPath := filepath.Join(root, "mapping.json")
 	writeJSONTestFile(t, configPath, minimalTestConfig())

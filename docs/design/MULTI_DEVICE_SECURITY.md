@@ -71,7 +71,20 @@ credential mappings, full internal addresses, raw responses, and raw configs.
 
 Use versioned strict decoding, atomic writes, size limits, validated IDs, and
 registry-authoritative merge. Never promote unknown persisted entries into the
-registry or mark restored data fresh.
+registry or mark restored data fresh. Before listeners start, validate the
+canonical primary path and its derived `~` backup unconditionally: the parent
+must already exist, contain no symlink component, and be writable; both entries
+must be missing or readable/writable regular non-symlink files with one link;
+and the two entries must not alias the same inode. Repeat the same preflight
+before accepting a device update and before every write. Persistence writes use
+a held parent-directory file descriptor, `openat`/`renameat`, non-following
+exclusive temporary files, file and directory sync, and explicit error
+propagation.
+
+HTTP and HTTPS monitor URLs never carry a query or fragment. This is a
+structural deny-all rule, not a sensitive-parameter-name denylist, and applies
+equally at configuration, Management API, reload, Device response, Fixture,
+and Client boundaries.
 
 ## 4. FQDN and address exposure
 

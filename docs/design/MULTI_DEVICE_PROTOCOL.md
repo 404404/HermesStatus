@@ -137,12 +137,17 @@ this capability without adding a control channel. A successful response is:
 
 Monitor definitions use the current sanitized, bounded schema. They contain no
 command, credentials, registry authority, or arbitrary executable
-configuration. Configuration load, Management API updates, and Device HTTPS
-responses use the same validator. The Server obtains an immutable validated
-Monitor snapshot before ingestion, so response validation cannot fail after a
-device mutation. The Client caches only validated definitions and keeps the
+configuration. HTTP and HTTPS monitor targets may contain a bounded safe path,
+but query and fragment components are forbidden, including an empty trailing
+`?`; TCP targets remain a host and port only. Configuration load, Management
+API updates/reload, Device HTTPS responses, and the Python Client are checked
+against the same acceptance fixture and fail closed on any difference. The
+Server obtains an immutable validated Monitor snapshot and a writable
+persistence preflight before ingestion, so either validation cannot fail after
+a device mutation. The Client caches only validated definitions and keeps the
 last known-good definitions if a response is malformed. `202 Accepted` is used
-because publication/persistence may complete after validation.
+because publication may complete after these validation and durability
+preconditions.
 
 ## 7. Client configuration
 

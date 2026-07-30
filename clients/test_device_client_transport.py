@@ -392,6 +392,29 @@ class ResponseAndCacheTests(unittest.TestCase):
             ):
                 validate_success_response(response)
 
+    def test_monitor_validation_fixture_matches_client_boundary(self):
+        fixture_path = (
+            CLIENT_DIR.parent
+            / "testdata"
+            / "multi_device"
+            / "monitor_validation.json"
+        )
+        cases = json.loads(fixture_path.read_text(encoding="utf-8"))
+        for case in cases:
+            monitor = {
+                "name": case["name"],
+                "host": case["host"],
+                "interval": 60,
+                "type": case["type"],
+            }
+            with self.subTest(case=case["name"]):
+                if case["accepted"]:
+                    validated = validate_success_response(success_document([monitor]))
+                    self.assertEqual(validated["monitors"], [monitor])
+                else:
+                    with self.assertRaises(ClientContractError):
+                        validate_success_response(success_document([monitor]))
+
     def test_monitor_cache_only_replaces_after_valid_response(self):
         cache = MonitorCache()
         valid = validate_success_response(

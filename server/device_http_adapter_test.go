@@ -710,6 +710,70 @@ func TestDeviceEndpointValidatesMonitorSnapshotBeforeIngestion(t *testing.T) {
 	}
 }
 
+func TestDeviceEndpointFailsBeforeMutationWhenPersistencePreflightFails(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
+		activeTestCredentialRecord("device-alpha"),
+	}, nil)
+	if err := app.PersistStats(); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.PersistStats(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(app.opts.PersistencePath + "~"); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(filepath.Dir(app.opts.PersistencePath), "unsafe-backup-target")
+	targetBefore := []byte("must-not-change")
+	if err := os.WriteFile(target, targetBefore, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, app.opts.PersistencePath+"~"); err != nil {
+		t.Fatal(err)
+	}
+	beforeNode := *app.nodes["device-alpha"]
+	beforeUpdateID := app.updateID.Load()
+	beforeGeneration := app.generation.Load()
+	beforePrimary, err := os.ReadFile(app.opts.PersistencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := performDeviceUpdateRequest(
+		app,
+		http.MethodPost,
+		validDeviceEnvelope(t, "device-alpha", nil, 77),
+		testCurrentToken,
+		"device-alpha",
+		true,
+	)
+	afterPrimary, err := os.ReadFile(app.opts.PersistencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetAfter, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterNode := app.nodes["device-alpha"]
+	if response.Code != http.StatusInternalServerError ||
+		afterNode.HasUpdate != beforeNode.HasUpdate ||
+		afterNode.LastAcceptedGeneration != beforeNode.LastAcceptedGeneration ||
+		!afterNode.LastSeen.Equal(beforeNode.LastSeen) ||
+		app.updateID.Load() != beforeUpdateID ||
+		app.generation.Load() != beforeGeneration ||
+		!bytes.Equal(beforePrimary, afterPrimary) ||
+		!bytes.Equal(targetBefore, targetAfter) {
+		t.Fatalf(
+			"failed persistence boundary mutated state: status=%d body=%s",
+			response.Code,
+			response.Body.String(),
+		)
+	}
+}
+
 func TestDeviceEndpointRejectsStaleConflictAndAcceptsIdempotentReplay(t *testing.T) {
 	registry := testRegistry(
 		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
@@ -906,7 +970,8 @@ func TestDeviceEndpointEnforcesClockSkewInBothDirections(t *testing.T) {
 			body := replaceEnvelopeField(
 				t, validDeviceEnvelope(t, "device-alpha", nil, 45),
 				"collected_at",
-				time.Now().UTC().Add(testCase.offset).Format(time.RFC3339),
+				time.Now().UTC().Truncate(time.Second).
+					Add(testCase.offset).Format(time.RFC3339),
 			)
 			response := performDeviceUpdateRequest(
 				app, http.MethodPost, body,

@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -104,6 +106,63 @@ func TestMonitorConfigurationUsesDeviceResponseContract(t *testing.T) {
 	if _, _, apiErr := normalizeConfig(tooMany); apiErr == nil ||
 		apiErr.Message != "monitor configuration is invalid" {
 		t.Fatalf("monitor limit was not enforced by config validation: %#v", apiErr)
+	}
+}
+
+func TestMonitorValidationFixtureMatchesManagementAndDeviceBoundaries(t *testing.T) {
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(
+		filepath.Dir(workingDirectory),
+		"testdata",
+		"multi_device",
+		"monitor_validation.json",
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Name     string `json:"name"`
+		Host     string `json:"host"`
+		Type     string `json:"type"`
+		Accepted bool   `json:"accepted"`
+	}
+	if err := json.Unmarshal(data, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			monitor := map[string]any{
+				"name": testCase.Name, "host": testCase.Host,
+				"type": testCase.Type, "interval": 60,
+			}
+			doc := minimalTestConfig()
+			doc["monitors"] = []any{monitor}
+			_, runtime, apiErr := normalizeConfig(doc)
+			managementAccepted := apiErr == nil
+			deviceAccepted := false
+			if managementAccepted {
+				_, snapshotErr := sanitizedMonitorSnapshot(runtime.Monitors)
+				deviceAccepted = snapshotErr == nil
+			} else {
+				_, snapshotErr := sanitizedMonitorSnapshot([]MonitorConfig{{
+					Name: testCase.Name, Host: testCase.Host,
+					Type: testCase.Type, Interval: 60,
+				}})
+				deviceAccepted = snapshotErr == nil
+			}
+			if managementAccepted != testCase.Accepted ||
+				deviceAccepted != testCase.Accepted {
+				t.Fatalf(
+					"fixture divergence: expected=%t management=%t device=%t",
+					testCase.Accepted,
+					managementAccepted,
+					deviceAccepted,
+				)
+			}
+		})
 	}
 }
 
