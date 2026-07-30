@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -133,7 +134,7 @@ func (a *App) deviceUpdateHandler(c *gin.Context) {
 		a.writeDeviceError(c, &audit, http.StatusBadRequest, "invalid_envelope", 0)
 		return
 	}
-	canonicalEnvelope, err := json.Marshal(envelope)
+	canonicalEnvelope, err := canonicalDeviceEnvelope(envelope)
 	if err != nil {
 		a.writeDeviceError(c, &audit, http.StatusBadRequest, "invalid_envelope", 0)
 		return
@@ -186,6 +187,30 @@ func (a *App) deviceUpdateHandler(c *gin.Context) {
 	audit.Outcome = "accepted"
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusAccepted, response)
+}
+
+func canonicalDeviceEnvelope(envelope *contracts.DeviceUpdateEnvelope) ([]byte, error) {
+	canonicalStats := make(map[string]json.RawMessage, len(envelope.Stats))
+	for name, raw := range envelope.Stats {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			return nil, err
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+			return nil, errors.New("nested stats contains multiple JSON values")
+		}
+		canonical, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+		canonicalStats[name] = canonical
+	}
+	copy := *envelope
+	copy.Stats = canonicalStats
+	return json.Marshal(copy)
 }
 
 func exactHeaderValues(header http.Header, name string) []string {

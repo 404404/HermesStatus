@@ -193,17 +193,43 @@ func TestPersistenceRejectsCorruptAndOversizedSnapshotsWithoutPartialState(t *te
 			if err := os.WriteFile(opts.PersistencePath, testCase.data, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			restarted, err := NewApp(opts)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer restarted.Close()
-			node := restarted.nodes["device-alpha"]
-			if node.Restored || node.HasUpdate ||
-				restarted.deviceStatusAt(node, time.Now()) != "never_seen" {
-				t.Fatalf("invalid persistence partially restored state: %#v", node)
+			if restarted, err := NewApp(opts); err == nil {
+				restarted.Close()
+				t.Fatal("invalid persistence did not fail startup")
 			}
 		})
+	}
+}
+
+func TestPersistenceUnsafePathFailsStartupWithoutChangingTarget(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	app := newMultiDeviceTestApp(
+		t, minimalTestConfig(), registry, contracts.LegacyMappingDocument{Version: 1},
+	)
+	opts := app.opts
+	app.Close()
+	_ = os.Remove(opts.PersistencePath)
+	_ = os.Remove(opts.PersistencePath + "~")
+	target := filepath.Join(filepath.Dir(opts.PersistencePath), "target.json")
+	original := []byte("target-must-remain-unchanged")
+	if err := os.WriteFile(target, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, opts.PersistencePath); err != nil {
+		t.Fatal(err)
+	}
+	if restarted, err := NewApp(opts); err == nil {
+		restarted.Close()
+		t.Fatal("symlink persistence path did not fail startup")
+	}
+	after, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, original) {
+		t.Fatal("failed startup changed symlink target")
 	}
 }
 

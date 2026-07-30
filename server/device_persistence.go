@@ -158,22 +158,23 @@ func timeStringPointer(value time.Time) *string {
 func (a *App) restorePersistenceV2() error {
 	data, err := readPersistenceWithBackup(a.opts.PersistencePath)
 	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			a.logger.Printf("read multi-device state: %s", persistenceReadErrorCode(err))
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
 		}
-		return nil
+		a.logger.Printf("read multi-device state: %s", persistenceReadErrorCode(err))
+		return errors.New("multi-device state is unavailable")
 	}
 	snapshot, err := contracts.DecodePersistenceV2(data)
 	if err != nil {
 		backup, backupErr := readBoundedFile(a.opts.PersistencePath+"~", maxPersistenceBytes)
 		if backupErr != nil {
 			a.logger.Printf("read multi-device state: invalid_json")
-			return nil
+			return errors.New("multi-device state is invalid")
 		}
 		snapshot, err = contracts.DecodePersistenceV2(backup)
 		if err != nil {
 			a.logger.Printf("read multi-device state: invalid_json")
-			return nil
+			return errors.New("multi-device state is invalid")
 		}
 	}
 

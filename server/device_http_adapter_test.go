@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -850,6 +851,39 @@ func TestDeviceReplayBoundarySurvivesRestart(t *testing.T) {
 	}
 }
 
+func TestDeviceReplayCanonicalizesNestedStatsPropertyOrder(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
+		activeTestCredentialRecord("device-alpha"),
+	}, nil)
+	collectedAt := time.Now().UTC().Truncate(time.Second)
+	body := replaceEnvelopeField(
+		t, validDeviceEnvelope(t, "device-alpha", nil, 61),
+		"collected_at", collectedAt.Format(time.RFC3339),
+	)
+	reordered := reverseNestedStatsObject(t, body, "hardware")
+	if bytes.Equal(body, reordered) {
+		t.Fatal("test did not reorder nested stats JSON")
+	}
+	if response := performDeviceUpdateRequest(
+		app, http.MethodPost, body, testCurrentToken, "device-alpha", true,
+	); response.Code != http.StatusAccepted {
+		t.Fatalf("initial report failed: %d %s", response.Code, response.Body.String())
+	}
+	beforeGeneration := app.nodes["device-alpha"].LastAcceptedGeneration
+	response := performDeviceUpdateRequest(
+		app, http.MethodPost, reordered, testCurrentToken, "device-alpha", true,
+	)
+	if response.Code != http.StatusAccepted ||
+		app.nodes["device-alpha"].LastAcceptedGeneration != beforeGeneration ||
+		app.nodes["device-alpha"].Stats.CPU != 61 {
+		t.Fatalf("reordered idempotent report changed state: %d %s",
+			response.Code, response.Body.String())
+	}
+}
+
 func TestDeviceEndpointEnforcesClockSkewInBothDirections(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -1070,6 +1104,53 @@ func replaceStatsEnvelopeField(t *testing.T, body []byte, key string, value any)
 		t.Fatal(err)
 	}
 	envelope["stats"].(map[string]any)[key] = value
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func reverseNestedStatsObject(t *testing.T, body []byte, name string) []byte {
+	t.Helper()
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	var stats map[string]json.RawMessage
+	if err := json.Unmarshal(envelope["stats"], &stats); err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(stats[name], &fields); err != nil {
+		t.Fatal(err)
+	}
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(keys)))
+	var nested bytes.Buffer
+	nested.WriteByte('{')
+	for index, key := range keys {
+		if index > 0 {
+			nested.WriteByte(',')
+		}
+		encodedKey, err := json.Marshal(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		nested.Write(encodedKey)
+		nested.WriteByte(':')
+		nested.Write(fields[key])
+	}
+	nested.WriteByte('}')
+	stats[name] = nested.Bytes()
+	encodedStats, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope["stats"] = encodedStats
 	data, err := json.Marshal(envelope)
 	if err != nil {
 		t.Fatal(err)
