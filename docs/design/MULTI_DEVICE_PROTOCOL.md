@@ -87,7 +87,11 @@ pipeline.
   characters respectively, with control characters rejected;
 - `reported_fqdn` is optional, lower-case-normalized for comparison, at most
   253 characters, and must be a DNS name rather than a URL/IP literal;
-- `collected_at` is required RFC3339 UTC and subject to clock-skew limits;
+- `collected_at` is required RFC3339 UTC and must be within five minutes of
+  Server receipt time in either direction;
+- each v2 device advances `collected_at` monotonically: older reports are
+  rejected, an equal timestamp with the same canonical request digest is an
+  idempotent `202`, and an equal timestamp with different content is rejected;
 - request size, including headers/envelope, is bounded; body remains at most
   1 MiB;
 - strict decoding rejects unknown properties at new envelope/device levels;
@@ -133,8 +137,11 @@ this capability without adding a control channel. A successful response is:
 
 Monitor definitions use the current sanitized, bounded schema. They contain no
 command, credentials, registry authority, or arbitrary executable
-configuration. The Client caches only validated definitions and keeps the last
-known-good definitions if a response is malformed. `202 Accepted` is used
+configuration. Configuration load, Management API updates, and Device HTTPS
+responses use the same validator. The Server obtains an immutable validated
+Monitor snapshot before ingestion, so response validation cannot fail after a
+device mutation. The Client caches only validated definitions and keeps the
+last known-good definitions if a response is malformed. `202 Accepted` is used
 because publication/persistence may complete after validation.
 
 ## 7. Client configuration
@@ -257,12 +264,15 @@ configured.
 
 ## 11. Accepted residual risk
 
-A valid bearer token can be replayed during its validity window. This protocol
-does not claim cryptographic replay prevention. Verified HTTPS, no TLS 0-RTT,
-per-device fixed-format high-entropy tokens, current/next rotation, rapid
-revocation, secret-free logs, proxy path isolation, layered rate limiting, and
-the default-disabled endpoint reduce the risk. Sender-constrained credentials
-such as proxy mTLS are future work, not part of 2.2.
+A valid bearer token is not sender-constrained during its validity window.
+Exact accepted report replays are idempotent, older reports cannot replace
+newer state, and same-time different content is rejected. A stolen token can
+still submit a new current report, so this is bounded application replay
+protection rather than cryptographic proof of sender identity. Verified HTTPS,
+no TLS 0-RTT, per-device fixed-format high-entropy tokens, current/next
+rotation, rapid revocation, secret-free logs, proxy path isolation, layered
+rate limiting, and the default-disabled endpoint reduce the residual risk.
+Sender-constrained credentials such as proxy mTLS are future work.
 
 ## 12. Frozen Stage A boundary
 

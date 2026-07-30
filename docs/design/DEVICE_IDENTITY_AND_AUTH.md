@@ -198,13 +198,15 @@ credential use, and rate limiting. Browser APIs never expose this audit stream.
 
 ## 10. Accepted residual risk
 
-A valid bearer token can be replayed during its validity window. The current
-design does not claim cryptographic replay prevention. Mitigations are verified
-HTTPS, disabled TLS 1.3 0-RTT, per-device 256-bit tokens, bounded current/next
-rotation, rapid per-device revocation, secret-free logs, reverse-proxy path
-isolation, pre-auth and per-device rate limiting, and an endpoint that is
-disabled by default. A future release may add mTLS at the reverse proxy or
-another sender-constrained credential; neither is implemented by 2.2.
+A valid bearer token is not sender-constrained during its validity window.
+Bidirectional clock skew, per-device monotonic timestamps, and canonical
+request-digest idempotency prevent an old or altered replay from replacing
+newer state, but a stolen token may still submit a new current report.
+Additional mitigations are verified HTTPS, disabled TLS 1.3 0-RTT, per-device
+256-bit tokens, bounded current/next rotation, rapid per-device revocation,
+secret-free logs, reverse-proxy path isolation, pre-auth and per-device rate
+limiting, and an endpoint that is disabled by default. A future release may add
+mTLS or another sender-constrained credential; neither is implemented by 2.2.
 
 ## 11. Legacy boundary
 

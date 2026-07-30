@@ -42,9 +42,11 @@ in-flight request from overwriting a newer one.
 Use independent CSPRNG-generated 32-byte tokens encoded as exactly 43
 unpadded-base64url characters, read-only Client files, server-side digests,
 verified HTTPS, bounded rotation windows, rate limiting, and secret-free logs.
-Bearer tokens are replayable within their validity window, so exposure response
-is immediate per-device rotation. Compromise of one token does not authorize
-another device.
+Application replay is bounded by bidirectional clock skew, per-device
+monotonic timestamps, and canonical request-digest idempotency. Tokens remain
+bearer credentials rather than sender-constrained credentials, so exposure
+response is immediate per-device rotation. Compromise of one token does not
+authorize another device.
 
 ### Identity spoofing
 
@@ -179,13 +181,14 @@ Tests must prove:
 
 ## 11. Accepted residual risk
 
-A valid bearer token can be replayed during its validity window. HermesStatus
-2.2 does not provide cryptographic replay prevention. Current mitigations are
-verified HTTPS, disabled TLS 0-RTT, per-device fixed-format high-entropy tokens,
-bounded current/next rotation, rapid revocation, no secret logs, isolated proxy
-location, three-layer limiting, and a default-disabled endpoint. Future mTLS at
-the reverse proxy or another sender-constrained credential is recommended but
-is outside 2.2.
+A valid bearer token is not sender-constrained during its validity window.
+HermesStatus rejects reports outside the bidirectional five-minute clock
+window, rejects timestamps older than the device's last accepted report,
+treats an equal timestamp and canonical digest as idempotent, and rejects an
+equal timestamp with different content. The digest is persistence-only and is
+never emitted to Stats, logs, errors, fixtures, or the browser. A stolen token
+can still submit a new current report, so future proxy mTLS or another
+sender-constrained credential remains recommended and outside 2.2.
 
 ## 12. Non-goals and deferred decisions
 

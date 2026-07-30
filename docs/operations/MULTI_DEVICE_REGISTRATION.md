@@ -23,6 +23,13 @@ non-symlink directory containing only `<device_id>.json` ordinary files.
 Mount the three configuration inputs read-only. Persistence is separate and
 writable.
 
+An explicit relative `PERSISTENCE_PATH`/`--state` is resolved against the
+configuration document directory; parent traversal components are rejected.
+If the state path is omitted, the Server first canonicalizes the Stats path
+against that same directory and derives `<stats-path>.state-v2`. Primary and
+backup then use that fixed absolute directory. Existing symlink components are
+rejected.
+
 The registry is authoritative for device ID, display name, expected FQDN,
 enabled state, ordering, groups, tags, time thresholds, default device and
 ingestion ownership. Client-reported name, hostname and FQDN are observations
