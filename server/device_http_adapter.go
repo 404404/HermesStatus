@@ -411,9 +411,18 @@ func safeMonitorHost(value, monitorType string) bool {
 		return false
 	}
 	for name := range query {
-		switch strings.ToLower(name) {
-		case "token", "password", "secret", "api_key", "apikey":
+		normalizedName := strings.NewReplacer(
+			"_", "", "-", "", ".", "",
+		).Replace(strings.ToLower(name))
+		if normalizedName == "key" {
 			return false
+		}
+		for _, protectedTerm := range []string{
+			"token", "password", "passwd", "secret", "credential", "apikey",
+		} {
+			if strings.Contains(normalizedName, protectedTerm) {
+				return false
+			}
 		}
 	}
 	return true

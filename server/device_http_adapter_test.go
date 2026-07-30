@@ -797,10 +797,11 @@ func TestDeviceReplayBoundarySurvivesRestart(t *testing.T) {
 	app := newStageCApp(t, registry, []contracts.CredentialRecord{
 		activeTestCredentialRecord("device-alpha"),
 	}, nil)
-	collectedAt := time.Now().UTC().Truncate(time.Second)
+	collectedAt := time.Now().UTC().Truncate(time.Second).
+		Add(123456789 * time.Nanosecond)
 	body := replaceEnvelopeField(
 		t, validDeviceEnvelope(t, "device-alpha", nil, 57),
-		"collected_at", collectedAt.Format(time.RFC3339),
+		"collected_at", collectedAt.Format(time.RFC3339Nano),
 	)
 	if response := performDeviceUpdateRequest(
 		app, http.MethodPost, body, testCurrentToken, "device-alpha", true,
@@ -825,11 +826,21 @@ func TestDeviceReplayBoundarySurvivesRestart(t *testing.T) {
 	if restarted.nodes["device-alpha"].LastAcceptedGeneration != beforeGeneration {
 		t.Fatal("restart replay advanced accepted generation")
 	}
+	conflict := replaceStatsEnvelopeField(t, body, "cpu", 99)
+	response := performDeviceUpdateRequest(
+		restarted, http.MethodPost, conflict, testCurrentToken, "device-alpha", true,
+	)
+	if response.Code != http.StatusConflict ||
+		!strings.Contains(response.Body.String(), `"report_conflict"`) ||
+		restarted.nodes["device-alpha"].Stats.CPU != 57 {
+		t.Fatalf("restart accepted fractional same-time conflict: %d %s",
+			response.Code, response.Body.String())
+	}
 	older := replaceEnvelopeField(
 		t, validDeviceEnvelope(t, "device-alpha", nil, 99),
 		"collected_at", collectedAt.Add(-time.Second).Format(time.RFC3339),
 	)
-	response := performDeviceUpdateRequest(
+	response = performDeviceUpdateRequest(
 		restarted, http.MethodPost, older, testCurrentToken, "device-alpha", true,
 	)
 	if response.Code != http.StatusConflict ||
@@ -928,6 +939,11 @@ func TestSanitizedMonitorTargetsRejectExecutableOrPathInjection(t *testing.T) {
 		{"https://user:password@example.invalid", "https"},
 		{"https://example.invalid/#fragment", "https"},
 		{"https://example.invalid/?token=secret", "https"},
+		{"https://example.invalid/?access_token=secret", "https"},
+		{"https://example.invalid/?refresh-token=secret", "https"},
+		{"https://example.invalid/?client.secret=secret", "https"},
+		{"https://example.invalid/?db_password=secret", "https"},
+		{"https://example.invalid/?service_credential=secret", "https"},
 		{"https://example.invalid/../admin", "https"},
 		{"example.invalid:443", "command"},
 		{"https://example.invalid", "tcp"},
@@ -1045,6 +1061,20 @@ func addEnvelopeField(t *testing.T, body []byte, key string, value any) []byte {
 
 func replaceEnvelopeField(t *testing.T, body []byte, key string, value any) []byte {
 	return addEnvelopeField(t, body, key, value)
+}
+
+func replaceStatsEnvelopeField(t *testing.T, body []byte, key string, value any) []byte {
+	t.Helper()
+	var envelope map[string]any
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	envelope["stats"].(map[string]any)[key] = value
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
 
 func addDeviceEnvelopeField(t *testing.T, body []byte, key string, value any) []byte {

@@ -151,7 +151,7 @@ func timeStringPointer(value time.Time) *string {
 	if value.IsZero() {
 		return nil
 	}
-	formatted := value.UTC().Format(time.RFC3339)
+	formatted := value.UTC().Format(time.RFC3339Nano)
 	return &formatted
 }
 
