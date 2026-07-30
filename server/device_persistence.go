@@ -37,12 +37,20 @@ func writePersistenceV2(path string, snapshot contracts.PersistenceV2) error {
 	}
 	defer paths.close()
 	if previous, err := paths.readBounded(paths.primaryName, maxPersistenceBytes); err == nil {
-		if _, decodeErr := contracts.DecodePersistenceV2(previous); decodeErr == nil {
+		if previousSnapshot, decodeErr := contracts.DecodePersistenceV2(previous); decodeErr == nil {
 			if _, err := paths.validateEntry(paths.backupName); err != nil {
 				return err
 			}
 			if err := paths.atomicWrite(paths.backupName, previous, 0o600); err != nil {
 				return err
+			}
+			comparison := snapshot
+			comparison.GeneratedAt = previousSnapshot.GeneratedAt
+			previousCanonical, previousErr := marshalIndented(previousSnapshot)
+			comparisonCanonical, comparisonErr := marshalIndented(comparison)
+			if previousErr == nil && comparisonErr == nil &&
+				bytes.Equal(previousCanonical, comparisonCanonical) {
+				return nil
 			}
 		}
 	}
@@ -53,14 +61,21 @@ func writePersistenceV2(path string, snapshot contracts.PersistenceV2) error {
 }
 
 func (a *App) snapshotPersistenceV2(now time.Time) (contracts.PersistenceV2, error) {
+	a.nodeMu.RLock()
+	defer a.nodeMu.RUnlock()
+	return a.snapshotPersistenceV2Locked(now)
+}
+
+// snapshotPersistenceV2Locked requires nodeMu to be held. Device HTTP commits
+// use it to build the durable snapshot in the same critical section as replay
+// classification and NodeState mutation.
+func (a *App) snapshotPersistenceV2Locked(now time.Time) (contracts.PersistenceV2, error) {
 	snapshot := contracts.PersistenceV2{
 		Version:         2,
 		GeneratedAt:     now.UTC().Format(time.RFC3339),
 		Devices:         make([]contracts.PersistedDevice, 0, len(a.nodes)),
 		OrphanedDevices: nil,
 	}
-	a.nodeMu.RLock()
-	defer a.nodeMu.RUnlock()
 	for _, device := range sortedRegistryDevices(a.registry) {
 		node := a.nodes[device.ID]
 		if node == nil {

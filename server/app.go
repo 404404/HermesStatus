@@ -92,6 +92,7 @@ type App struct {
 	runtime    RuntimeConfig
 
 	nodeMu                sync.RWMutex
+	deviceIngestLocks     sync.Map
 	nodes                 map[string]*NodeState
 	registry              *contracts.DeviceRegistry
 	legacyMap             map[string]string

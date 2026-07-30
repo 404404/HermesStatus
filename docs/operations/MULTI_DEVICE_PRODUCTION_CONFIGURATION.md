@@ -239,6 +239,25 @@ device without changing any other device. See the
 the exact validation order, replay rules, FQDN evidence, rotation, and accepted
 residual risk.
 
+Before migrating a canary, record its accepted generation, `last_seen`,
+identity status, business values, and persistence checksum. Using synthetic
+current-window payloads for that canary, verify in order:
+
+1. an exact same-timestamp/body replay returns idempotent `202` without changing
+   those values or the persistence checksum;
+2. same timestamp with changed content and a mismatched FQDN returns
+   `409 report_conflict`, not `403`, with no state change;
+3. an older timestamp with a mismatched FQDN returns `409 stale_report`, not
+   `403`, with no state change;
+4. a strictly newer mismatched FQDN returns `403` without advancing the
+   accepted boundary; and
+5. a corrected identity report at that same timestamp is accepted and is
+   durable across Server restart.
+
+Do not run these checks with arbitrary real business observations. Stop the
+canary v2 writer first, use a bounded synthetic payload, and retain the
+validated Legacy rollback configuration until the observation window closes.
+
 ## 7. Give other networks a domain
 
 Use a dedicated hostname such as `status.example.net`; do not expose the

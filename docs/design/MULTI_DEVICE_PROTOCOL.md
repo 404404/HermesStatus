@@ -94,6 +94,10 @@ pipeline.
   idempotent `202`, and an equal timestamp with different content is rejected;
   if a state restored from an earlier persistence-v2 writer has no stored
   digest, every equal-time report fails closed as a conflict;
+- replay classification is performed under the device's ingestion lock before
+  FQDN policy can authorize or reject a commit. Stale and equal-time requests
+  never change identity, business domains, `last_seen`, generation, the
+  accepted boundary, or persistence;
 - request size, including headers/envelope, is bounded; body remains at most
   1 MiB;
 - strict decoding rejects unknown properties at new envelope/device levels;
@@ -106,6 +110,23 @@ token, cookie, password, or authorization material.
 No `device_json` compatibility field is introduced. Existing
 `hardware_json`, `docker_json`, `hermes_json`, and retained compatibility
 parsers remain. `lucky_json` is not added.
+
+The Device HTTP adapter follows one parse/decision/commit pipeline. Transport,
+authentication, enabled state, and active ownership are checked first. Strict
+Envelope, UTC clock-skew, stats, Monitor Snapshot, canonical digest, and FQDN
+classification are mutation-free. Under the per-device ingestion lock, replay
+is classified before identity policy. Only a strictly newer, identity-valid
+decision may commit. That commit updates business state and the accepted
+boundary atomically and durably writes persistence before returning `202`;
+write failure rolls the in-memory candidate back and returns `5xx`.
+
+| decision | response | public or persisted state change |
+|---|---:|---|
+| stale timestamp | `409 stale_report` | none |
+| equal timestamp, same digest | `202` idempotent | none |
+| equal timestamp, different/missing digest | `409 report_conflict` | none |
+| strictly newer, missing/mismatched FQDN | `403` | none |
+| strictly newer, identity valid | `202` | one durable commit |
 
 ## 5. Domain failure isolation
 

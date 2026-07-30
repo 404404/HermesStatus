@@ -120,6 +120,7 @@ Recommended outcomes:
 - `401`: missing/invalid credential, with a generic challenge;
 - `403`: known disabled device or authenticated identity/body mismatch;
 - `404`: endpoint not supported, never used to reveal registry membership;
+- `409`: stale report or equal-time canonical digest conflict;
 - `413`: body exceeds the shared limit;
 - `415`: unsupported content type;
 - `429`: rate limited;
@@ -138,9 +139,11 @@ If `expected_fqdn` exists:
 - invalid syntax rejects the envelope.
 
 Policy for the first 2.2 rollout is fail closed for mismatch/missing evidence:
-the request is authenticated but does not replace metrics, and the device may
-enter `identity_error`. A registry device with no expectation receives
-`unknown`; authentication still depends on its credential.
+the request is authenticated but does not replace metrics or any public
+`NodeState`. A registry device with no expectation receives `unknown`;
+authentication still depends on its credential. Because a rejected mismatch
+does not advance the accepted boundary, a corrected report with the same
+timestamp may be accepted.
 
 FQDN is not resolved to authenticate the Client. DNS results and source
 addresses change and are not stable identity.
@@ -152,14 +155,26 @@ addresses change and are not stable identity.
 - Map lookup and mutation use only the captured authenticated ID.
 - A request/connection generation prevents stale writers from replacing newer
   state for the same device.
+- For Device HTTPS, canonical replay classification occurs under the
+  per-device ingestion lock before identity rejection is acted on. Older
+  reports return `409 stale_report`; equal-time same-digest reports return an
+  idempotent `202`; equal-time different- or missing-digest reports return
+  `409 report_conflict`. None of these paths modifies public state or
+  persistence.
+- Only a strictly newer request reaches FQDN policy. Missing or mismatched FQDN
+  returns `403` without changing identity, freshness, generation, accepted
+  boundary, business domains, or persistence. The same timestamp can therefore
+  be retried with corrected identity evidence.
 - Different devices use distinct state objects and credentials.
 - Unknown identities are never auto-created.
 - Disabled devices never update, even with a previously valid token.
 
 The existing duplicate-connection rule stays for legacy TCP. HTTPS updates are
-short requests, so “duplicate connection” becomes serialized last-accepted
-updates for the same device. A monotonic server receipt/generation rule prevents
-an older in-flight request from overwriting a newer accepted request.
+short requests, so “duplicate connection” becomes a per-device decision and
+commit lock. Replay classification and the final commit share that critical
+section; persistence serialization is the only required cross-device commit
+lock. A newer accepted request therefore cannot be overwritten by an older
+in-flight request.
 
 ## 8. Token rotation
 

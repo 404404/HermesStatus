@@ -280,8 +280,11 @@ change that base and is not modified by development qualification.
 
 A valid bearer token is not sender-constrained during its validity window.
 2.2 rejects out-of-window and older timestamps, makes an exact same-time replay
-idempotent, and rejects same-time altered content. Verified HTTPS, proxy-side
-TLS 0-RTT prohibition, per-device fixed high-entropy tokens, bounded
+idempotent, and rejects same-time altered content. Replay is decided before
+FQDN policy under the per-device ingestion lock, so stale/equal requests cannot
+modify public or persisted state. A normal accepted update is durably persisted
+before `202`; persistence failure rolls back the in-memory candidate. Verified
+HTTPS, proxy-side TLS 0-RTT prohibition, per-device fixed high-entropy tokens, bounded
 rotation/revocation, no secret logs, isolated public path, three-layer rate
 limiting, and a default-disabled endpoint provide additional mitigation.
 Future mTLS or another sender-constrained credential requires separate design.

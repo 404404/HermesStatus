@@ -104,6 +104,47 @@ func TestPersistenceV2WriteReadAndRestartNeverRestoresOnline(t *testing.T) {
 	}
 }
 
+func TestPersistenceV2LogicalNoopKeepsPrimaryBytes(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	app := newMultiDeviceTestApp(
+		t, minimalTestConfig(), registry,
+		contracts.LegacyMappingDocument{Version: 1},
+	)
+	now := time.Now().UTC().Truncate(time.Second)
+	if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
+		DeviceID: "device-alpha", ProtocolMode: "device_v2",
+		CollectedAt: now, FlatStats: []byte(`{"cpu":42}`), Generation: 1,
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.PersistStats(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(app.opts.PersistencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := app.snapshotPersistenceV2(now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writePersistenceV2(app.opts.PersistencePath, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(app.opts.PersistencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("logical no-op rewrote primary persistence bytes")
+	}
+	if _, err := os.Stat(app.opts.PersistencePath + "~"); err != nil {
+		t.Fatalf("logical no-op did not retain a validated backup: %v", err)
+	}
+}
+
 func TestPersistenceRegistryRenameOrderDisableRemoveAndReadd(t *testing.T) {
 	registry := testRegistry(
 		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),

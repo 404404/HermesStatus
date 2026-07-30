@@ -51,6 +51,13 @@ authorize another device.
 An equal-time v2 report is idempotent only when both the incoming and persisted
 canonical digests exist and match. State written before digest persistence was
 introduced rejects equal-time reports as conflicts rather than guessing.
+Replay classification is authoritative before FQDN policy: stale reports and
+equal-time conflicts return `409`, even when their reported FQDN is missing or
+mismatched. They cannot change identity, freshness, generation, accepted
+boundary, business domains, or persistence. An exact equal-time replay returns
+`202` without a second logical commit. Only a strictly newer request can reach
+identity policy, and a rejected identity report does not advance the replay
+boundary.
 
 ### Identity spoofing
 

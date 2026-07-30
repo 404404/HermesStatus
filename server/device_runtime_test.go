@@ -281,14 +281,15 @@ func TestUnifiedIngestionOwnershipIdentityGenerationAndFreshness(t *testing.T) {
 		t.Fatalf("identity mismatch was not rejected: %v", err)
 	}
 	if app.nodes["device-alpha"].Stats.CPU != 11 ||
-		app.deviceStatusAt(app.nodes["device-alpha"], now) != "identity_error" {
-		t.Fatal("identity failure replaced data or did not set identity_error")
+		app.nodes["device-alpha"].IdentityError != beforeRejected.IdentityError ||
+		app.nodes["device-alpha"].IdentityStatus != beforeRejected.IdentityStatus ||
+		app.deviceStatusAt(app.nodes["device-alpha"], now) != "online" {
+		t.Fatal("identity failure modified public device state")
 	}
 	if app.deviceIsStaleAt(app.nodes["device-alpha"], now) {
 		t.Fatal("identity failure incorrectly changed server-time freshness")
 	}
 
-	app.nodes["device-alpha"].IdentityError = false
 	if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
 		DeviceID: "device-alpha", ProtocolMode: "device_v2",
 		CollectedAt: now, FlatStats: []byte(`{"cpu":22}`), Generation: 1,

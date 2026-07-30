@@ -153,6 +153,14 @@ frontend, Compose, image build/provenance and security. Their commands are
 defined in `.github/workflows/ci.yml`; all must be repeated at the final merge
 SHA.
 
+Request-order qualification additionally fixes an accepted boundary and checks
+the stale/equal/FQDN cross-product. Stale and equal-conflict requests must
+return `409` before identity policy and leave NodeState plus the persistence
+bytes unchanged. Exact equal-time replays must return idempotent `202` with one
+generation and one logical persistence commit. Concurrent same-time requests,
+newest-wins ordering, distinct-device isolation, restart replay, and durable
+write rollback are all covered under `go test -race ./...`.
+
 ## Residual risk and production work
 
 Bearer tokens are replayable during their validity window. Verified HTTPS,
