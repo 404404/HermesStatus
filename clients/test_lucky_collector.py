@@ -8,6 +8,7 @@ from unittest import mock
 
 from lucky_collector import (
     LuckyAPIError,
+    LuckyClient,
     LuckyCollector,
     _certificate_status,
     _parse_time,
@@ -206,6 +207,25 @@ class LuckyCollectorTests(unittest.TestCase):
                 local_timezone=LUCKY_TIMEZONE,
             ).collect(FIXED_NOW)
         self.assertTrue(all(headers.get("openToken") == "fixture-value" for headers in seen_headers))
+
+    def test_lucky_token_rejects_final_and_parent_symlinks(self):
+        with tempfile.TemporaryDirectory() as root_value:
+            root = Path(root_value)
+            real = root / "real"
+            real.mkdir()
+            token = real / "credential"
+            token.write_text("fixture-value", encoding="utf-8")
+            final_link = root / "credential-link"
+            final_link.symlink_to(token)
+            parent_link = root / "linked"
+            parent_link.symlink_to(real, target_is_directory=True)
+            for path in (final_link, parent_link / "credential"):
+                with self.subTest(path=path.name):
+                    client = LuckyClient(
+                        "http://127.0.0.1:16601",
+                        token_file=str(path),
+                    )
+                    self.assertIsNone(client._token())
 
     def test_version_comparison_handles_prefix_and_prerelease(self):
         self.assertTrue(compare_versions("v2.27.2", "2.28.0"))

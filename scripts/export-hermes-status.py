@@ -13,8 +13,12 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+CLIENT_DIR = SCRIPT_DIR.parent / "clients"
+if CLIENT_DIR.is_dir() and str(CLIENT_DIR) not in sys.path:
+    sys.path.insert(0, str(CLIENT_DIR))
 
 from hermes_config_summary import sanitize_summary_snapshot, summarize_config
+from secure_file import SecureFileError, secure_read_bounded_regular_file
 
 
 def _dict(value):
@@ -48,6 +52,17 @@ MAX_PROFILE_COUNTER = 1000000000
 SECRET_TEXT_PATTERN = re.compile(
     r"(?i)(authorization\s*:|\bbearer\s+\S+|(api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential)\s*[:=]|--(token|password)(=|\s+)|[?&](api[_-]?key|key|token|password)=)"
 )
+MAX_EXPORT_CONFIG_BYTES = 1 << 20
+MAX_PROFILE_ENV_BYTES = 64 << 10
+MAX_PROFILE_TEXT_BYTES = 2 << 20
+
+
+def secure_read_text(path, maximum, errors="replace"):
+    try:
+        data = secure_read_bounded_regular_file(str(Path(path)), maximum)
+        return data.decode("utf-8", errors=errors)
+    except (SecureFileError, UnicodeError):
+        return None
 
 
 def utc_timestamp(now=None):
@@ -148,9 +163,9 @@ def load_export_config():
     if not path:
         return {}
     config_path = Path(path)
-    if not config_path.is_file():
+    text = secure_read_text(config_path, MAX_EXPORT_CONFIG_BYTES)
+    if text is None:
         return {}
-    text = config_path.read_text(encoding="utf-8", errors="replace")
     if config_path.suffix.lower() in (".yaml", ".yml"):
         try:
             import yaml  # type: ignore
@@ -332,7 +347,10 @@ def load_profile_env(profile):
     pconf = profile_config(profile)
     path = Path(pconf.get("env_path") or (profile_dir_for(profile) / ".env"))
     try:
-        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        text = secure_read_text(path, MAX_PROFILE_ENV_BYTES, errors="ignore")
+        if text is None:
+            raise ValueError("profile environment unavailable")
+        for line in text.splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
@@ -673,7 +691,10 @@ def find_model(profile_dir):
     found = []
     for path in iter_text_files(profile_dir):
         try:
-            for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            text = secure_read_text(path, MAX_PROFILE_TEXT_BYTES, errors="ignore")
+            if text is None:
+                continue
+            for line in text.splitlines():
                 for pattern in patterns:
                     match = pattern.search(line)
                     if match:
@@ -687,7 +708,8 @@ def find_model(profile_dir):
 
 def load_json(path):
     try:
-        return json.loads(path.read_text(encoding="utf-8", errors="ignore"))
+        text = secure_read_text(path, MAX_PROFILE_TEXT_BYTES, errors="ignore")
+        return json.loads(text) if text is not None else None
     except Exception:
         return None
 

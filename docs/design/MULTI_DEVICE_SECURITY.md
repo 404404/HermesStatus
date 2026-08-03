@@ -92,6 +92,30 @@ a held parent-directory file descriptor, `openat`/`renameat`, non-following
 exclusive temporary files, file and directory sync, and explicit error
 propagation.
 
+### Secure configuration document opening
+
+Server configuration, Device Registry, Legacy Mapping and validation-command
+documents use one bounded reader. Starting at an opened root directory, it
+opens every intermediate component relative to the currently held directory
+fd with `O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC`. It then opens the final file with
+`openat`, `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`, requires a regular file by
+`fstat`, and reads size plus one byte from that same fd. A pathname is never
+re-resolved after component validation. This closes the parent-replacement
+race that remains when `lstat` is followed by a full-path `open` whose
+`O_NOFOLLOW` protects only the final component.
+
+Credential directory enumeration and record reads share the same directory
+traversal contract and retain a held directory fd between enumeration and
+record opening. Persistence keeps its specialized primary/backup reader but
+uses the same no-symlink directory traversal. Unsafe configured documents fail
+application construction before listeners, nodes or persistence writes.
+
+Namespace safety does not make an attacker-writable directory trustworthy.
+Production configuration lives in a root- or operator-managed directory that
+is not group/world writable; files are not writable by unauthorized users and
+are mounted read-only into the Server. Preview paths under `/tmp` are test
+locations, not production permission examples.
+
 HTTP and HTTPS monitor URLs never carry a query or fragment. This is a
 structural deny-all rule, not a sensitive-parameter-name denylist, and applies
 equally at configuration, Management API, reload, Device response, Fixture,

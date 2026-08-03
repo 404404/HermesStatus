@@ -33,6 +33,20 @@ def summary_for(text):
 
 
 class ConfigSummaryTests(unittest.TestCase):
+    def test_config_summary_rejects_symlinked_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            real = root / "real"
+            real.mkdir()
+            config = write_config(real, "model:\n  provider: synthetic\n")
+            linked = root / "linked"
+            linked.symlink_to(real, target_is_directory=True)
+            summary = MODULE.summarize_config(
+                config_path=str(linked / config.name),
+                env={"HOME": str(root)},
+            )
+            self.assertFalse(summary["config_found"])
+
     def test_release_b_allowlist_and_auxiliary_inheritance(self):
         data = summary_for("""
 model:

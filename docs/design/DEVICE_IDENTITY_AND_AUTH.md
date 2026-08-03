@@ -94,6 +94,15 @@ Requirements:
 - the value is never echoed, included in exceptions, or placed in a process
   argument or URL.
 
+The Client opens its JSON configuration, token, custom CA and local Lucky
+credential with one Linux fail-closed reader. It opens `/`, traverses every
+parent component with directory-fd-relative `openat` semantics plus
+`O_DIRECTORY|O_NOFOLLOW`, opens the final component relative to the held
+parent, and validates the same opened fd with `fstat`. It never performs an
+`lstat` check followed by a second full-path open. Platforms without the
+required no-follow and directory-fd flags fail closed rather than weakening
+this rule.
+
 The Client sends `Authorization: Bearer <token>` over verified HTTPS. Query
 parameters, cookies, and payload fields must not carry credentials.
 

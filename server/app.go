@@ -139,7 +139,10 @@ func NewApp(opts Options) (*App, error) {
 		statsWake: make(chan struct{}, 1),
 		logger:    log.New(os.Stdout, "serverstatus ", log.LstdFlags|log.Lmicroseconds),
 	}
-	app.loadMultiDeviceRuntime(runtime)
+	if err := app.loadMultiDeviceRuntime(runtime); err != nil {
+		cancel()
+		return nil, err
+	}
 	if app.registry != nil {
 		paths, pathErr := openPersistencePaths(
 			app.opts.PersistencePath,

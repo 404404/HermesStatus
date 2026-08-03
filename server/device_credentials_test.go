@@ -70,6 +70,67 @@ func TestCredentialDirectoryLoadsCurrentAndOverlappingRotation(t *testing.T) {
 	}
 }
 
+func TestCredentialDirectoryUsesHeldDescriptorAcrossPathReplacement(t *testing.T) {
+	now := time.Now().UTC()
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	root := t.TempDir()
+	trustedParent := filepath.Join(root, "trusted")
+	directory := filepath.Join(trustedParent, "credentials")
+	moved := filepath.Join(trustedParent, "credentials-held")
+	attacker := filepath.Join(root, "attacker")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(attacker, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeJSONTestFile(t, filepath.Join(directory, "device-alpha.json"), testCredentialRecord(
+		"device-alpha",
+		testCredentialSlot("current", testCurrentToken, now.Add(-time.Hour), now.Add(time.Hour)),
+	))
+	writeJSONTestFile(t, filepath.Join(attacker, "device-alpha.json"), testCredentialRecord(
+		"device-alpha",
+		testCredentialSlot("current", testWrongToken, now.Add(-time.Hour), now.Add(time.Hour)),
+	))
+
+	replaced := false
+	loaded, err := loadDeviceCredentialDirectoryWithHooks(
+		directory,
+		&registry,
+		&securePathTraversalHooks{
+			afterDirectoryOpen: func(_ int, component string, _ int) error {
+				if component != "credentials" || replaced {
+					return nil
+				}
+				replaced = true
+				if err := os.Rename(directory, moved); err != nil {
+					return err
+				}
+				return os.Symlink(attacker, directory)
+			},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := authenticateDeviceBearer(
+		[]string{"Bearer " + testCurrentToken},
+		loaded["device-alpha"],
+		now,
+	); !ok {
+		t.Fatal("held credential directory did not retain trusted record")
+	}
+	if _, ok := authenticateDeviceBearer(
+		[]string{"Bearer " + testWrongToken},
+		loaded["device-alpha"],
+		now,
+	); ok {
+		t.Fatal("credential directory replacement redirected to attacker record")
+	}
+}
+
 func TestCredentialAuthenticationRejectsMalformedAndInactiveTokens(t *testing.T) {
 	now := time.Now().UTC()
 	expired := compileTestCredentialSet(t, testCredentialRecord(
@@ -273,6 +334,16 @@ func TestCredentialDirectoryRejectsInvalidEntriesAtomically(t *testing.T) {
 					[]byte(strings.Repeat("x", maxCredentialFileBytes+1)),
 					0o600,
 				); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "group-writable-file",
+			setup: func(t *testing.T, directory string) {
+				path := filepath.Join(directory, "device-alpha.json")
+				writeJSONTestFile(t, path, valid)
+				if err := os.Chmod(path, 0o620); err != nil {
 					t.Fatal(err)
 				}
 			},

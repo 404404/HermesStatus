@@ -12,10 +12,21 @@ import os
 import re
 import secrets
 import stat
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
+
+CLIENT_DIRECTORY = Path(__file__).resolve().parents[1] / "clients"
+if str(CLIENT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(CLIENT_DIRECTORY))
+
+from secure_file import (  # noqa: E402
+    SecureFileError,
+    secure_open_regular_file,
+    secure_read_bounded_descriptor,
+)
 
 
 DEVICE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
@@ -258,35 +269,17 @@ def _merge_record(existing: dict | None, device_id: str, slot: dict) -> dict:
 
 
 def _open_regular(path: Path) -> int:
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(path, flags)
-    except OSError:
+        return secure_open_regular_file(str(path))
+    except SecureFileError:
         raise ProvisionError("invalid_existing_credential") from None
-    try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode):
-            raise ProvisionError("invalid_existing_credential")
-        return descriptor
-    except Exception:
-        os.close(descriptor)
-        raise
 
 
 def _read_descriptor(descriptor: int, maximum: int) -> bytes:
-    chunks: list[bytes] = []
-    remaining = maximum + 1
-    while remaining > 0:
-        chunk = os.read(descriptor, min(65536, remaining))
-        if not chunk:
-            break
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    data = b"".join(chunks)
-    if len(data) > maximum:
+    try:
+        return secure_read_bounded_descriptor(descriptor, maximum)
+    except SecureFileError:
         raise ProvisionError("invalid_existing_credential")
-    return data
 
 
 def _write_pair_atomically(

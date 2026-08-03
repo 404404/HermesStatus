@@ -170,7 +170,7 @@ func TestStageERegistryDisplayNameRemainsAuthoritative(t *testing.T) {
 	}
 }
 
-func TestInvalidMultiDeviceDocumentsFallBackWithoutPartialActivation(t *testing.T) {
+func TestInvalidMultiDeviceDocumentsFailStartupWithoutStateWrites(t *testing.T) {
 	validRegistry := testRegistry(
 		testRegistryDevice("device-alpha", "Alpha", 10, true, "legacy", nil),
 	)
@@ -215,15 +215,38 @@ func TestInvalidMultiDeviceDocumentsFallBackWithoutPartialActivation(t *testing.
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			app := newMultiDeviceTestAppRaw(
-				t, minimalTestConfig(), testCase.registry, testCase.mapping, testCase.omitMapping,
-			)
-			if app.multiDeviceEnabled() || app.nodes["s01"] == nil ||
-				app.nodes["device-alpha"] != nil {
-				t.Fatalf("invalid documents partially activated 2.2: %#v", app.nodes)
+			directory := t.TempDir()
+			configPath := filepath.Join(directory, "config.json")
+			statsPath := filepath.Join(directory, "stats.json")
+			persistencePath := filepath.Join(directory, "state-v2.json")
+			registryPath := filepath.Join(directory, "registry.json")
+			mappingPath := filepath.Join(directory, "legacy-mapping.json")
+			writeJSONTestFile(t, configPath, minimalTestConfig())
+			writeJSONTestFile(t, registryPath, testCase.registry)
+			if !testCase.omitMapping {
+				writeJSONTestFile(t, mappingPath, testCase.mapping)
 			}
-			if _, exists := app.SnapshotStats()["schema_version"]; exists {
-				t.Fatal("fallback changed the 2.1 stats contract")
+			app, err := NewApp(Options{
+				ConfigPath: configPath, StatsPath: statsPath,
+				PersistencePath: persistencePath, RegistryPath: registryPath,
+				LegacyMappingPath: mappingPath, WebDir: directory,
+				HTTPAddr: "127.0.0.1:0", AgentAddr: "127.0.0.1:0",
+				AdminToken: "test-token",
+			})
+			if err == nil || app != nil {
+				if app != nil {
+					app.Close()
+				}
+				t.Fatalf(
+					"invalid multi-device documents did not fail startup: app=%#v err=%v",
+					app,
+					err,
+				)
+			}
+			for _, output := range []string{statsPath, persistencePath, persistencePath + "~"} {
+				if _, statErr := os.Lstat(output); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("failed startup wrote runtime state %q: %v", filepath.Base(output), statErr)
+				}
 			}
 		})
 	}
@@ -547,21 +570,29 @@ func TestCutoverOwnershipAcceptsOnlyActiveProtocolAndExpiresFailClosed(t *testin
 			Mode: "cutover", ActiveProtocol: &active, CutoverNotAfter: &expired,
 		},
 	})
-	app := newMultiDeviceTestApp(t, minimalTestConfig(), expiredRegistry, contracts.LegacyMappingDocument{
+	directory := t.TempDir()
+	configPath := filepath.Join(directory, "config.json")
+	registryPath := filepath.Join(directory, "registry.json")
+	mappingPath := filepath.Join(directory, "legacy-mapping.json")
+	writeJSONTestFile(t, configPath, minimalTestConfig())
+	writeJSONTestFile(t, registryPath, expiredRegistry)
+	writeJSONTestFile(t, mappingPath, contracts.LegacyMappingDocument{
 		Version: 1,
 		Mappings: []contracts.LegacyDeviceMapping{{
 			Username: "s01", DeviceID: "device-alpha",
 		}},
 	})
-	if !app.ownershipFailClosed {
-		t.Fatal("expired cutover did not enter fail-closed ownership mode")
-	}
-	server, client := net.Pipe()
-	defer server.Close()
-	defer client.Close()
-	if _, _, _, apiErr := app.connectAgent("s01", "secret", server, 4); apiErr == nil ||
-		apiErr.Status != 409 {
-		t.Fatalf("expired cutover relaxed to legacy ingestion: %v", apiErr)
+	app, err := NewApp(Options{
+		ConfigPath:   configPath,
+		StatsPath:    filepath.Join(directory, "stats.json"),
+		RegistryPath: registryPath, LegacyMappingPath: mappingPath,
+		WebDir: directory, HTTPAddr: "127.0.0.1:0", AgentAddr: "127.0.0.1:0",
+	})
+	if err == nil || app != nil {
+		if app != nil {
+			app.Close()
+		}
+		t.Fatalf("expired cutover did not fail startup: app=%#v err=%v", app, err)
 	}
 }
 

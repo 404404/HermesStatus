@@ -451,7 +451,7 @@ func (paths *openedPersistencePaths) readBounded(
 	fileFD, err := unix.Openat(
 		paths.directoryFD,
 		name,
-		unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW,
+		unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK,
 		0,
 	)
 	if err != nil {

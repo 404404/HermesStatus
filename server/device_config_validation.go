@@ -36,7 +36,10 @@ func validateDeviceConfiguration(
 				"config_unavailable", "config",
 			)
 		}
-		configData, err := readBoundedFile(configPath, maxRuntimeConfigBytes)
+		configData, err := secureReadBoundedDocument(
+			configPath,
+			maxRuntimeConfigBytes,
+		)
 		if err != nil {
 			return deviceConfigValidationSummary{}, configValidationError(
 				"config_unavailable", "config",
@@ -59,7 +62,10 @@ func validateDeviceConfiguration(
 			"registry_missing", "registry",
 		)
 	}
-	registryData, err := readBoundedFile(opts.RegistryPath, maxRuntimeConfigBytes)
+	registryData, err := secureReadBoundedDocument(
+		opts.RegistryPath,
+		maxRuntimeConfigBytes,
+	)
 	if err != nil {
 		return deviceConfigValidationSummary{}, configValidationError(
 			"registry_unavailable", "registry",
@@ -97,7 +103,7 @@ func validateDeviceConfiguration(
 			"legacy_mapping_missing", "legacy_mapping",
 		)
 	}
-	mappingData, err := readBoundedFile(
+	mappingData, err := secureReadBoundedDocument(
 		opts.LegacyMappingPath,
 		maxRuntimeConfigBytes,
 	)

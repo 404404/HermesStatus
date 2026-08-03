@@ -22,6 +22,15 @@ If an operator expects a 1.0 listener or container, first confirm whether the re
 - Startup validation failure: run `serverstatus --validate-device-config`
   against the same read-only mounts. Use only its fixed error code and field;
   do not dump Registry, credentials, mappings or paths.
+- Secure document failure: confirm every configured path is absolute and
+  normalized, all intermediate components and final files are non-symlinks,
+  final objects are ordinary bounded files, and the production configuration
+  root is operator-managed and not group/world writable. Do not work around
+  the failure with a copied full-path reader, `/proc/self/fd`, permissive
+  directory modes or a `/tmp` production mount.
+- Configuration changes are startup-only: validate the exact mounts and
+  restart the 2.2 Server. A failed secure open prevents application
+  construction, so no listener, NodeState or persistence output should appear.
 - Registered device remains `never_seen`: confirm it is enabled, owns
   `device_v2`, has one active digest slot, and that the client uses the matching
   stable `device_id`. Never solve this by automatic registration.

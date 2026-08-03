@@ -33,6 +33,21 @@ credentials and tokens outside the source checkout, temporary directories,
 images, and environment variables. Never mount a Client token into the Server
 or another Client.
 
+Use a dedicated configuration root such as `/etc/hermesstatus-2.2`: root or an
+explicit operations account owns the directory, the directory is not
+group/world writable, and the Server runtime user has read-only access.
+Registry, mapping and credential mounts are read-only. The Server securely
+opens each component through held directory descriptors and rejects
+intermediate/final symlinks and special files, but this namespace protection
+does not authorize storing production configuration beneath an
+attacker-writable directory. `/tmp` is reserved for synthetic Preview and
+qualification work.
+
+Configuration is startup-only. After an approved change, first run
+`serverstatus --validate-device-config` with the exact mounts, then restart the
+2.2 Server. A secure-open or validation failure is fatal before any listener,
+NodeState or persistence write; do not retry through a normal full-path open.
+
 ## 2. Write the server registry
 
 Start from

@@ -242,7 +242,10 @@ func TestDeviceConfigValidationRejectsMissingAndUnsafeInputs(t *testing.T) {
 		stderr.String() != "validation failed code=registry_unavailable field=registry\n" {
 		t.Fatalf("symlink input did not fail safely: code=%d stderr=%q", exitCode, stderr.String())
 	}
-	if data, err := readBoundedFile("relative.json", maxRuntimeConfigBytes); err == nil || data != nil {
+	if data, err := secureReadBoundedDocument(
+		"relative.json",
+		maxRuntimeConfigBytes,
+	); err == nil || data != nil {
 		t.Fatal("relative multi-device document was accepted")
 	}
 }

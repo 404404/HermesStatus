@@ -249,6 +249,53 @@ class DeviceTokenFileTests(unittest.TestCase):
         with self.assertRaises(ClientContractError):
             load_custom_ca(str(binary))
 
+    def test_config_token_and_ca_reject_symlinked_parent_components(self):
+        real = self.root / "real"
+        real.mkdir()
+        linked = self.root / "linked"
+        linked.symlink_to(real, target_is_directory=True)
+
+        token = real / "device.token"
+        token.write_text(TOKEN, encoding="ascii")
+        token.chmod(0o600)
+        with self.assertRaises(ClientContractError):
+            load_device_token(str(linked / "device.token"))
+
+        ca = real / "ca.pem"
+        ca.write_text("synthetic CA data", encoding="ascii")
+        with self.assertRaises(ClientContractError):
+            load_custom_ca(str(linked / "ca.pem"))
+
+        config = real / "client.json"
+        config.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "server": {
+                        "url": "https://status.example.invalid",
+                        "verify_tls": True,
+                        "connect_timeout_seconds": 10,
+                        "read_timeout_seconds": 30,
+                    },
+                    "device": {
+                        "id": "device-alpha",
+                        "name": None,
+                        "fqdn": None,
+                        "token_file": str(token),
+                    },
+                    "collection": {"interval_seconds": 60},
+                }
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaises(ClientContractError):
+            load_client_selection(
+                [],
+                environ={
+                    "HERMESSTATUS_CONFIG_FILE": str(linked / "client.json"),
+                },
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

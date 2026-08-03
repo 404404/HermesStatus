@@ -24,6 +24,33 @@ These local image identities are evidence for the source candidate only.
 The merge workflow must rebuild with the final merge SHA and repeat the
 qualification before development can be declared complete.
 
+## Secure document opening closure
+
+Final qualification includes the Server's single bounded configuration reader
+for the main JSON configuration, Registry, Legacy Mapping and validation
+command. It traverses from an opened root fd, opens intermediate directories
+relative to held fds, opens the final file relative to the held parent, and
+validates/reads that same fd. Credential enumeration and file opening retain
+the credential-directory fd; Persistence retains its specialized primary and
+backup implementation while sharing the same directory traversal.
+
+Deterministic tests rename an already opened parent or intermediate directory,
+replace the original pathname with a symlink to an attacker directory, and
+prove the attacker document/credential is never returned. The matrix also
+rejects final/intermediate symlinks, dangling links, directories, FIFO,
+sockets, character devices, traversal/repeated separators and oversized
+files; verifies opened-fd behavior after unlink; and checks concurrent
+success/failure loops for fd growth. Unsafe configured Server documents fail
+application construction without Stats or Persistence output.
+
+Both Python Client variants use the shared Linux fail-closed reader for client
+JSON, bearer token, custom CA, Lucky credential, exporter configuration,
+profile environment and Hermes configuration inputs. Provisioning and stats
+migration source reads use the same implementation. Platforms lacking
+directory-fd/no-follow support do not fall back to a full-path open. These
+tests and `go test -race ./...` must pass again from the final merge SHA;
+neither PR-head nor Preview images qualify as release images.
+
 ## Isolated deployment
 
 The deployment used a new Docker bridge with an RFC1918 test subnet, no

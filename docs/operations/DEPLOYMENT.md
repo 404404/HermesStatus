@@ -39,6 +39,13 @@ one digest-only credential record per v2 device, explicit Legacy mappings and a
 dedicated persistence-v2 bind. Validate them with
 `serverstatus --validate-device-config` before starting any listener.
 
+All startup configuration mounts must be absolute, normalized, read-only and
+root/operator managed. Their host directory must not be group/world writable.
+The Server traverses each document path through held directory descriptors and
+opens the final regular file relative to its held parent; it does not use an
+`lstat`-then-full-path-open sequence or an unsafe fallback. A secure-open or
+validation failure is fatal before listeners or state writes.
+
 The v2 endpoint is disabled by default. A production endpoint must be reachable
 only through the exact HTTPS reverse-proxy POST location; the backend port must
 not be public. Disable TLS 1.3 Early Data, replace external forwarding headers,

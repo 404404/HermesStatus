@@ -6,6 +6,13 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+CLIENT_DIR = SCRIPT_DIR.parent / "clients"
+if CLIENT_DIR.is_dir() and str(CLIENT_DIR) not in sys.path:
+    sys.path.insert(0, str(CLIENT_DIR))
+
+from secure_file import SecureFileError, secure_read_bounded_regular_file
+
 try:
     import yaml  # type: ignore
 except Exception:  # pragma: no cover - exercised by local fallback tests
@@ -40,6 +47,7 @@ MAX_NAME = 64
 MAX_VOLUME = 512
 MAX_COUNTER = 1000000000
 MAX_DURATION = 86400.0
+MAX_HERMES_CONFIG_BYTES = 2 << 20
 
 
 def _string(value):
@@ -161,7 +169,11 @@ def _parse_simple_yaml(text):
 
 
 def parse_yaml_file(path):
-    text = Path(path).read_text(encoding="utf-8", errors="replace")
+    data = secure_read_bounded_regular_file(
+        str(Path(path)),
+        MAX_HERMES_CONFIG_BYTES,
+    )
+    text = data.decode("utf-8", errors="replace")
     if yaml is not None:
         data = yaml.safe_load(text)
     else:
@@ -344,24 +356,6 @@ def config_candidates(profile=None, env=None, home=None, hermes_root=None, profi
     return deduped
 
 
-def find_config_path(profile=None, env=None, home=None, hermes_root=None, profile_dir=None, config_path=None):
-    checked = config_candidates(
-        profile=profile,
-        env=env,
-        home=home,
-        hermes_root=hermes_root,
-        profile_dir=profile_dir,
-        config_path=config_path,
-    )
-    for item in checked:
-        try:
-            if Path(item).is_file():
-                return item, checked
-        except OSError:
-            continue
-    return "", checked
-
-
 def summarize_config_data(data, config_path=""):
     data = _dict(data)
     model = _dict(data.get("model"))
@@ -431,7 +425,7 @@ def summarize_config_data(data, config_path=""):
 
 
 def summarize_config(profile=None, env=None, home=None, hermes_root=None, profile_dir=None, config_path=None):
-    path, checked = find_config_path(
+    checked = config_candidates(
         profile=profile,
         env=env,
         home=home,
@@ -439,12 +433,14 @@ def summarize_config(profile=None, env=None, home=None, hermes_root=None, profil
         profile_dir=profile_dir,
         config_path=config_path,
     )
-    if not path:
-        return empty_summary(False)
-    try:
-        return summarize_config_data(parse_yaml_file(path), path)
-    except Exception:
-        return empty_summary(True)
+    for path in checked:
+        try:
+            return summarize_config_data(parse_yaml_file(path), path)
+        except SecureFileError:
+            continue
+        except Exception:
+            return empty_summary(True)
+    return empty_summary(False)
 
 
 def main():

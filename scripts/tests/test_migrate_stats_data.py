@@ -61,7 +61,7 @@ class StatsMigrationTests(unittest.TestCase):
     def test_source_symlink_is_rejected(self):
         link = self.root / "source-link.json"
         link.symlink_to(self.source)
-        with self.assertRaisesRegex(MODULE.MigrationError, "symbolic link"):
+        with self.assertRaisesRegex(MODULE.MigrationError, "regular file"):
             MODULE.migrate(link, self.target, False)
 
     def test_target_symlink_component_is_rejected(self):

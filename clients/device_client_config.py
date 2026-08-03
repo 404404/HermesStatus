@@ -18,6 +18,12 @@ from multi_device_contracts import (
     resolve_client_config,
     validate_readonly_file_path,
 )
+from secure_file import (
+    SecureFileError,
+    secure_open_regular_file,
+    secure_read_bounded_descriptor,
+    secure_read_bounded_regular_file,
+)
 
 
 CONFIG_FILE_ENV = "HERMESSTATUS_CONFIG_FILE"
@@ -174,44 +180,21 @@ def _parse_cli(arguments: Sequence[str]) -> tuple[dict[str, str], set[str]]:
 
 
 def _open_regular_file(path: str, *, error_code: str) -> int:
-    flags = os.O_RDONLY
-    flags |= getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(path, flags)
-    except OSError:
+        return secure_open_regular_file(path)
+    except SecureFileError:
         raise ClientContractError(error_code) from None
-    try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode):
-            raise ClientContractError(error_code)
-        return descriptor
-    except Exception:
-        os.close(descriptor)
-        raise
 
 
 def _read_regular_file(path: str, *, maximum: int, error_code: str) -> bytes:
-    descriptor = _open_regular_file(path, error_code=error_code)
     try:
-        metadata = os.fstat(descriptor)
-        if metadata.st_size < 0 or metadata.st_size > maximum:
-            raise ClientContractError(error_code)
-        return _read_descriptor(descriptor, maximum)
-    finally:
-        os.close(descriptor)
+        return secure_read_bounded_regular_file(path, maximum)
+    except SecureFileError:
+        raise ClientContractError(error_code) from None
 
 
 def _read_descriptor(descriptor: int, maximum: int) -> bytes:
-    chunks: list[bytes] = []
-    remaining = maximum + 1
-    while remaining > 0:
-        chunk = os.read(descriptor, min(65536, remaining))
-        if not chunk:
-            break
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    data = b"".join(chunks)
-    if len(data) > maximum:
-        raise ClientContractError("secure file exceeds size limit")
-    return data
+    try:
+        return secure_read_bounded_descriptor(descriptor, maximum)
+    except SecureFileError as error:
+        raise ClientContractError(str(error)) from None

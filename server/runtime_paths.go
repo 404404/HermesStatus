@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -12,6 +11,10 @@ import (
 )
 
 var errUnsafeRuntimePath = errors.New("runtime path is invalid")
+
+type securePathTraversalHooks struct {
+	afterDirectoryOpen func(depth int, component string, directoryFD int) error
+}
 
 type openedPersistencePaths struct {
 	primaryName string
@@ -85,36 +88,6 @@ func containsParentTraversal(path string) bool {
 	return false
 }
 
-// validateNoSymlinkComponents rejects an existing symlink at any component.
-// Missing suffixes are allowed so a new private persistence directory can be
-// created, then checked again immediately before the atomic write.
-func validateNoSymlinkComponents(path string) error {
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-		return errUnsafeRuntimePath
-	}
-	current := string(filepath.Separator)
-	for _, component := range strings.Split(
-		strings.TrimPrefix(path, string(filepath.Separator)),
-		string(filepath.Separator),
-	) {
-		if component == "" {
-			continue
-		}
-		current = filepath.Join(current, component)
-		info, err := os.Lstat(current)
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		if err != nil {
-			return errUnsafeRuntimePath
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return errUnsafeRuntimePath
-		}
-	}
-	return nil
-}
-
 // openPersistencePaths is the single preflight used at startup and before
 // every persistence write. It validates primary and backup unconditionally,
 // even when the primary is already readable.
@@ -172,7 +145,15 @@ func openPersistencePaths(
 }
 
 func openDirectoryWithoutSymlinks(path string) (int, error) {
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+	return openDirectoryWithoutSymlinksWithHooks(path, nil)
+}
+
+func openDirectoryWithoutSymlinksWithHooks(
+	path string,
+	hooks *securePathTraversalHooks,
+) (int, error) {
+	if path == "" || strings.ContainsRune(path, '\x00') ||
+		!filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return -1, errUnsafeRuntimePath
 	}
 	currentFD, err := unix.Open(
@@ -183,7 +164,7 @@ func openDirectoryWithoutSymlinks(path string) (int, error) {
 	if err != nil {
 		return -1, err
 	}
-	for _, component := range strings.Split(
+	for depth, component := range strings.Split(
 		strings.TrimPrefix(path, string(filepath.Separator)),
 		string(filepath.Separator),
 	) {
@@ -201,6 +182,16 @@ func openDirectoryWithoutSymlinks(path string) (int, error) {
 			return -1, openErr
 		}
 		currentFD = nextFD
+		if hooks != nil && hooks.afterDirectoryOpen != nil {
+			if hookErr := hooks.afterDirectoryOpen(
+				depth,
+				component,
+				currentFD,
+			); hookErr != nil {
+				_ = unix.Close(currentFD)
+				return -1, hookErr
+			}
+		}
 	}
 	return currentFD, nil
 }
@@ -238,7 +229,7 @@ func (paths *openedPersistencePaths) validateEntry(name string) (*unix.Stat_t, e
 	fileFD, err := unix.Openat(
 		paths.directoryFD,
 		name,
-		unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW,
+		unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK,
 		0,
 	)
 	if err != nil {
