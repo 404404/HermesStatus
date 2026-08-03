@@ -7,7 +7,7 @@
 Run checks from the reviewed worktree:
 
 ```bash
-go test ./...
+(cd server && go test ./...)
 (cd clients && python3 -m unittest discover)
 (cd scripts/tests && python3 -m unittest discover)
 docker compose -f docker-compose-server.yml config --quiet

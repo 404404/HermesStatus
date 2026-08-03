@@ -34,6 +34,10 @@ MAX_DOCKER_PORTS_LENGTH = 512
 MAX_HERMES_PROFILES = 64
 
 SMART_TIMEOUT_SECONDS = 12
+# smartctl bits 0 and 1 mean command-line parsing or device-open failure. Bit
+# 2 only reports that an ATA/SMART command failed (or a checksum warning) and
+# may still accompany a useful JSON snapshot.
+SMARTCTL_UNUSABLE_STATUS_MASK = 0x03
 DOCKER_TIMEOUT_SECONDS = 4
 MAX_DOCKER_RESPONSE_BYTES = 4 * 1024 * 1024
 
@@ -456,10 +460,10 @@ def _smartctl_query_failed(data):
     exit_status = _coerce_int(metadata.get("exit_status"))
     if exit_status is None:
         return False
-    # smartctl exit-status bits 0–2 mean command-line, device-open, or
-    # SMART-command failure. Bits 3–7 may still accompany usable SMART data
-    # (for example a failing disk), so retain those snapshots for reporting.
-    return bool(exit_status & 0x07)
+    # Reject only command-line and device-open failures. A failing individual
+    # SMART command or checksum warning (bit 2) may still leave enough JSON to
+    # report health and temperature, so keep that snapshot.
+    return bool(exit_status & SMARTCTL_UNUSABLE_STATUS_MASK)
 
 
 def _json_nested_value(data, keys):
@@ -561,7 +565,7 @@ def collect_smart(device="auto", command_runner=None):
             if (
                 isinstance(parsed, dict)
                 and not _smartctl_query_failed(parsed)
-                and not (int(returncode) & 0x07)
+                and not (int(returncode) & SMARTCTL_UNUSABLE_STATUS_MASK)
             ):
                 data = parsed
                 json_ok = True

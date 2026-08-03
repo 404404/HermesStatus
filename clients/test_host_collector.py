@@ -167,6 +167,16 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNone(smart)
         self.assertEqual(error["code"], "smartctl_unavailable")
 
+    def test_smartctl_ata_command_warning_keeps_usable_json_snapshot(self):
+        data = fixture_json("smart-normal.json")
+        data["smartctl"] = {"exit_status": 4}
+        smart, error = collect_smart(
+            "/dev/example", SmartRunner(json.dumps(data), json_returncode=4)
+        )
+        self.assertIsNone(error)
+        self.assertEqual(smart["source"], "smartctl-json")
+        self.assertEqual(smart["health"], "passed")
+
     def test_hardware_combines_hwmon_and_smart(self):
         with tempfile.TemporaryDirectory() as root:
             chip = Path(root) / "hwmon0"

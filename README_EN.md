@@ -65,6 +65,11 @@ environment:
   SMART_DEVICE: /dev/sda
 ```
 
+This block replaces, rather than supplements, the legacy broad entries in
+`docker-compose-client.yml`: set `CLIENT_PRIVILEGED=false` and remove its
+`/dev:/dev:ro` volume before adding the capability and single-device mapping.
+Keeping those defaults is not a minimum-permission deployment.
+
 Keep the read-only root filesystem and `no-new-privileges`. Other disks, RAID,
 or NVMe controllers need an explicit, validated device grant.
 
@@ -92,7 +97,7 @@ serverstatus --validate-device-config \
 - [Development and testing](docs/DEVELOPMENT.md)
 
 ```bash
-go test ./...
+(cd server && go test ./...)
 (cd clients && python3 -m unittest discover)
 (cd scripts/tests && python3 -m unittest discover)
 ```

@@ -43,4 +43,4 @@
 - Added the single-host Home and independent Docker views, responsive dashboard states, profile detail modal, ten-minute automatic refresh, and manual refresh.
 - Consolidated browser reads on `/json/stats.json`; page navigation reuses the loaded snapshot.
 - Removed Docker command data and presentation across the collection-to-browser path.
-- Completed the Release A host/hardware/Docker and Release B Hermes profile foundations described in [Release C notes](docs/releases/RELEASE_C.md).
+- Completed the Release A host/hardware/Docker and Release B Hermes profile foundations; see the [current architecture documentation](docs/ARCHITECTURE.md) for the supported system model.
