@@ -45,10 +45,19 @@ def fixture_json(name):
 
 
 class SmartRunner(object):
-    def __init__(self, json_output=None, text_output=None, unavailable=False):
+    def __init__(
+        self,
+        json_output=None,
+        text_output=None,
+        unavailable=False,
+        json_returncode=0,
+        text_returncode=0,
+    ):
         self.json_output = json_output
         self.text_output = text_output
         self.unavailable = unavailable
+        self.json_returncode = json_returncode
+        self.text_returncode = text_returncode
         self.commands = []
 
     def __call__(self, command, timeout):
@@ -58,8 +67,8 @@ class SmartRunner(object):
         if command[:2] == ["smartctl", "--scan"]:
             return 0, "/dev/example -d sat # fixture\n"
         if "-j" in command:
-            return 0, self.json_output or ""
-        return 0, self.text_output or ""
+            return self.json_returncode, self.json_output or ""
+        return self.text_returncode, self.text_output or ""
 
 
 class HostCollectorTests(unittest.TestCase):
@@ -142,6 +151,21 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNone(smart)
         self.assertEqual(error["code"], "smartctl_unavailable")
         self.assertNotIn("/dev/example", error["message"])
+
+    def test_smartctl_json_device_open_failure_is_not_reported_as_unknown(self):
+        output = json.dumps(
+            {
+                "smartctl": {
+                    "exit_status": 2,
+                    "messages": [{"severity": "error", "string": "device open failed"}],
+                }
+            }
+        )
+        smart, error = collect_smart(
+            "/dev/example", SmartRunner(output, json_returncode=2)
+        )
+        self.assertIsNone(smart)
+        self.assertEqual(error["code"], "smartctl_unavailable")
 
     def test_hardware_combines_hwmon_and_smart(self):
         with tempfile.TemporaryDirectory() as root:

@@ -442,6 +442,26 @@ def _smart_health(data, text):
     return "unknown"
 
 
+def _smartctl_query_failed(data):
+    """Return true when smartctl could not open or query the device.
+
+    smartctl emits a syntactically valid JSON document even when opening the
+    target device is denied.  That document must not be treated as a SMART
+    snapshot: doing so turns a permission failure into an unexplained
+    ``unknown`` health value.
+    """
+    metadata = data.get("smartctl") if isinstance(data, dict) else None
+    if not isinstance(metadata, dict):
+        return False
+    exit_status = _coerce_int(metadata.get("exit_status"))
+    if exit_status is None:
+        return False
+    # smartctl exit-status bits 0–2 mean command-line, device-open, or
+    # SMART-command failure. Bits 3–7 may still accompany usable SMART data
+    # (for example a failing disk), so retain those snapshots for reporting.
+    return bool(exit_status & 0x07)
+
+
 def _json_nested_value(data, keys):
     if isinstance(data, dict):
         for key, value in data.items():
@@ -534,9 +554,15 @@ def collect_smart(device="auto", command_runner=None):
         text = ""
         json_ok = False
         try:
-            _, output = runner(["smartctl", "-x", "-j"] + typed + [candidate], SMART_TIMEOUT_SECONDS)
+            returncode, output = runner(
+                ["smartctl", "-x", "-j"] + typed + [candidate], SMART_TIMEOUT_SECONDS
+            )
             parsed = json.loads(output) if output else None
-            if isinstance(parsed, dict):
+            if (
+                isinstance(parsed, dict)
+                and not _smartctl_query_failed(parsed)
+                and not (int(returncode) & 0x07)
+            ):
                 data = parsed
                 json_ok = True
         except (OSError, subprocess.SubprocessError, TypeError, ValueError):
