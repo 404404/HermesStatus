@@ -8,7 +8,7 @@ HermesStatus 是自托管的当前状态面板。Go Server 接收 Client 上报�
 
 - 主页展示设备状态、CPU、内存、磁盘容量、主机/CPU 身份、温度与 SMART。
 - Docker 页面展示容器数量、名称、镜像、状态与端口摘要。
-- Hermes 页面展示已配置 Profile 的网关、运行状态、模型/提供商与用量快照。
+- 主页同时展示已配置 Hermes Profile 的网关、运行状态、模型/提供商与用量快照。
 - Lucky 页面在显式启用后展示版本、DDNS、Web 服务、端口转发和证书摘要。
 - 支持 Legacy TCP Agent；可选 Device v2 使用 Registry、digest credential 与受 HTTPS 代理保护的上报端点。
 

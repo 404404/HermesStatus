@@ -11,8 +11,8 @@ host, hardware/SMART, Docker, Hermes, and optional Lucky data.
 - Home: device state, CPU, memory, disk capacity, host/CPU identity,
   temperature, and SMART.
 - Docker: container counts, names, images, state, and port summaries.
-- Hermes: configured profiles with gateway, runtime, model/provider, and usage
-  snapshots.
+- Home also includes configured Hermes profiles with gateway, runtime,
+  model/provider, and usage snapshots.
 - Lucky: version, DDNS, web service, forwarding, and certificate summaries when
   explicitly enabled.
 - Legacy TCP Agents and optional Device v2 ingestion.
