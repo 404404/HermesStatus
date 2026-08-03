@@ -34,6 +34,10 @@ MAX_DOCKER_PORTS_LENGTH = 512
 MAX_HERMES_PROFILES = 64
 
 SMART_TIMEOUT_SECONDS = 12
+# smartctl bits 0 and 1 mean command-line parsing or device-open failure. Bit
+# 2 only reports that an ATA/SMART command failed (or a checksum warning) and
+# may still accompany a useful JSON snapshot.
+SMARTCTL_UNUSABLE_STATUS_MASK = 0x03
 DOCKER_TIMEOUT_SECONDS = 4
 MAX_DOCKER_RESPONSE_BYTES = 4 * 1024 * 1024
 
@@ -442,6 +446,26 @@ def _smart_health(data, text):
     return "unknown"
 
 
+def _smartctl_query_failed(data):
+    """Return true when smartctl could not open or query the device.
+
+    smartctl emits a syntactically valid JSON document even when opening the
+    target device is denied.  That document must not be treated as a SMART
+    snapshot: doing so turns a permission failure into an unexplained
+    ``unknown`` health value.
+    """
+    metadata = data.get("smartctl") if isinstance(data, dict) else None
+    if not isinstance(metadata, dict):
+        return False
+    exit_status = _coerce_int(metadata.get("exit_status"))
+    if exit_status is None:
+        return False
+    # Reject only command-line and device-open failures. A failing individual
+    # SMART command or checksum warning (bit 2) may still leave enough JSON to
+    # report health and temperature, so keep that snapshot.
+    return bool(exit_status & SMARTCTL_UNUSABLE_STATUS_MASK)
+
+
 def _json_nested_value(data, keys):
     if isinstance(data, dict):
         for key, value in data.items():
@@ -534,9 +558,15 @@ def collect_smart(device="auto", command_runner=None):
         text = ""
         json_ok = False
         try:
-            _, output = runner(["smartctl", "-x", "-j"] + typed + [candidate], SMART_TIMEOUT_SECONDS)
+            returncode, output = runner(
+                ["smartctl", "-x", "-j"] + typed + [candidate], SMART_TIMEOUT_SECONDS
+            )
             parsed = json.loads(output) if output else None
-            if isinstance(parsed, dict):
+            if (
+                isinstance(parsed, dict)
+                and not _smartctl_query_failed(parsed)
+                and not (int(returncode) & SMARTCTL_UNUSABLE_STATUS_MASK)
+            ):
                 data = parsed
                 json_ok = True
         except (OSError, subprocess.SubprocessError, TypeError, ValueError):
