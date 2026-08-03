@@ -159,6 +159,32 @@ class HermesAPITests(unittest.TestCase):
         })
         self.assertTrue(api["mixture_of_agents"]["available"])
 
+    def test_collect_api_does_not_promote_nonhealthy_status_to_ok(self):
+        module = self.module
+
+        def collect_with_health(health):
+            def fake_http(_profile, path, method="GET", payload=None):
+                del method, payload
+                responses = {
+                    "/health": health,
+                    "/health/detailed": {},
+                    "/api/jobs": {"jobs": []},
+                    "/api/sessions?limit=100&offset=0": {"data": []},
+                    "/api/sessions": {"data": []},
+                    "/v1/toolsets": {},
+                }
+                return (responses[path], None) if path in responses else (None, module.safe_error("unexpected", "Unexpected test path"))
+
+            original = module.http_json
+            try:
+                module.http_json = fake_http
+                return module.collect_api("daily")
+            finally:
+                module.http_json = original
+
+        self.assertEqual(collect_with_health({"status": "degraded"})["status"], "unknown")
+        self.assertEqual(collect_with_health({})["status"], "unknown")
+
     def test_cli_status_maps_model_provider_gateway_mode_and_counts(self):
         parsed = self.module.parse_cli_status("""
 ◆ Environment

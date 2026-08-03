@@ -515,6 +515,25 @@ def hermes_agent_version():
     return HERMES_VERSION_CACHE
 
 
+def provider_usage_mode(provider):
+    identity = re.sub(r"[^a-z0-9]+", "", _string(provider).lower())
+    return {
+        "nousportal": "auth_provider",
+        "openaicodex": "auth_provider",
+        "xaioauth": "auth_provider",
+        "supergrok": "auth_provider",
+        "githubcopilot": "auth_provider",
+        "qwenoauth": "auth_provider",
+        "opencodego": "api",
+        "openrouter": "api",
+        "googleaistudio": "api",
+        "deepseek": "api",
+        "zaiglm": "api",
+        "stepfunstepplan": "api",
+        "opencodezen": "api",
+    }.get(identity, "unknown")
+
+
 def parse_cli_status(text):
     result = {}
     if not text:
@@ -620,22 +639,6 @@ def parse_cli_status(text):
         "anthropic": {"anthropic"},
         "stepfunstepplan": {"stepfunstepplan"},
     }
-    explicit_provider_modes = {
-        "nousportal": "auth_provider",
-        "openaicodex": "auth_provider",
-        "xaioauth": "auth_provider",
-        "supergrok": "auth_provider",
-        "githubcopilot": "auth_provider",
-        "qwenoauth": "auth_provider",
-        "opencodego": "api",
-        "openrouter": "api",
-        "googleaistudio": "api",
-        "deepseek": "api",
-        "zaiglm": "api",
-        "stepfunstepplan": "api",
-        "opencodezen": "api",
-    }
-
     def provider_matches(current, candidate):
         current_id = provider_identity(current)
         candidate_id = provider_identity(candidate)
@@ -664,7 +667,7 @@ def parse_cli_status(text):
     elif matching_api:
         result["usage_mode"] = "api"
     else:
-        result["usage_mode"] = explicit_provider_modes.get(provider_identity(provider), "unknown")
+        result["usage_mode"] = provider_usage_mode(provider)
 
     if not result.get("gateway_service"):
         match = re.search(r"gateway\s+service\s*[:：]\s*([^\n]+)", text, re.I)
@@ -950,7 +953,7 @@ def collect_api(profile):
         api["errors"].append(err)
     else:
         status = bounded_text(first_string(health, ("status", "state", "health")).lower(), 32)
-        api["status"] = status if status in ("ok", "healthy") else "ok"
+        api["status"] = status if status in ("ok", "healthy") else "unknown"
         api["health"] = health
 
     detailed, err = http_json(profile, "/health/detailed")
@@ -1115,11 +1118,14 @@ def profile_stats(profile, profile_dir, previous=None):
     else:
         config_summary = sanitize_summary_snapshot(config_summary)
 
+    profile_configuration = profile_config(profile)
     model = cli.get("model") or first_string(detailed, ("model",)) or first_string(health, ("model",))
     model = fallback_value(model, previous, "model", _dict(config_summary.get("main_model")).get("model") or None)
-    provider = cli.get("provider") or first_string(detailed, ("provider",)) or first_string(health, ("provider",))
+    configured_provider = public_text(profile_configuration.get("provider_label"), MAX_PROVIDER) or None
+    provider = cli.get("provider") or first_string(detailed, ("provider",)) or first_string(health, ("provider",)) or configured_provider
     provider = fallback_value(provider, previous, "provider", _dict(config_summary.get("main_model")).get("provider") or None)
-    version = fallback_value(hermes_agent_version(), previous, "agent_version")
+    api_version = first_string(detailed, ("agent_version", "version")) or first_string(health, ("agent_version", "version"))
+    version = fallback_value(api_version or hermes_agent_version(), previous, "agent_version")
     api_status = api.get("status", "unknown")
     if not api_ok and api.get("errors"):
         code = api["errors"][0].get("code")
@@ -1141,15 +1147,25 @@ def profile_stats(profile, profile_dir, previous=None):
     service_value = api.get("status") if api_ok else None
     if not service_value and state and state != "unknown":
         service_value = state
-    gateway_value = cli.get("gateway_service")
-    if not gateway_value and state and state != "unknown":
+    gateway_value = cli.get("gateway_service") or profile_configuration.get("gateway_service")
+    if not gateway_value and api_ok:
+        health_status = bounded_text(first_string(health, ("status", "state", "health")).lower(), 32)
+        if health_status in ("ok", "healthy"):
+            gateway_value = "running"
+        elif health_status:
+            gateway_value = health_status
+    elif not gateway_value and state and state != "unknown":
         gateway_value = state
+    manager_value = cli.get("manager_mode") or profile_configuration.get("manager_mode")
+    configured_usage_mode = _string(profile_configuration.get("usage_mode")).strip().lower()
     if cli_available:
         usage_mode = cli.get("usage_mode") or "unknown"
+    elif configured_usage_mode in ("api", "auth_provider"):
+        usage_mode = configured_usage_mode
     elif previous_used:
         usage_mode = previous.get("usage_mode") or "unknown"
     else:
-        usage_mode = "unknown"
+        usage_mode = provider_usage_mode(provider)
     if usage_mode not in ("api", "auth_provider", "unknown"):
         usage_mode = "unknown"
     config_refreshed_at = profile_config_refreshed_at(profile)
@@ -1166,7 +1182,7 @@ def profile_stats(profile, profile_dir, previous=None):
         "api_status": api_status,
         "service_status": public_text(fallback_value(service_value, previous, "service_status"), 64) or None,
         "gateway_service": public_text(fallback_value(gateway_value, previous, "gateway_service"), 64) or None,
-        "manager_mode": public_text(fallback_value(cli.get("manager_mode"), previous, "manager_mode"), 96) or None,
+        "manager_mode": public_text(fallback_value(manager_value, previous, "manager_mode"), 96) or None,
         "usage_mode": usage_mode,
         "provider": public_text(provider, MAX_PROVIDER) or None,
         "model": public_text(model, MAX_MODEL) or None,
