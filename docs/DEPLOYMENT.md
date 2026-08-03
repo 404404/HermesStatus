@@ -9,13 +9,11 @@ The repository supplies `docker-compose-server.yml` and
 reviewing their environment variables and bind mounts:
 
 ```bash
-ADMIN_TOKEN='replace-this-value' \
-docker compose -f docker-compose-server.yml up -d --build
+docker compose --env-file /secure/path/server.env \
+  -f docker-compose-server.yml up -d --build
 
-SERVER='server.example.internal' \
-SERVERSTATUS_USER='node-01' \
-PASSWORD='replace-this-value' \
-docker compose -f docker-compose-client.yml up -d --build
+docker compose --env-file /secure/path/client.env \
+  -f docker-compose-client.yml up -d --build
 ```
 
 Use a protected environment file in production. Never place production tokens,

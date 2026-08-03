@@ -35,17 +35,15 @@ HermesStatus 是自托管的当前状态面板。Go Server 接收 Client 上报�
 服务端：
 
 ```bash
-ADMIN_TOKEN='replace-this-value' \
-docker compose -f docker-compose-server.yml up -d --build
+docker compose --env-file /secure/path/server.env \
+  -f docker-compose-server.yml up -d --build
 ```
 
 客户端：
 
 ```bash
-SERVER='server.example.internal' \
-SERVERSTATUS_USER='node-01' \
-PASSWORD='replace-this-value' \
-docker compose -f docker-compose-client.yml up -d --build
+docker compose --env-file /secure/path/client.env \
+  -f docker-compose-client.yml up -d --build
 ```
 
 默认服务端地址为 `http://127.0.0.1:8080/`，健康检查为

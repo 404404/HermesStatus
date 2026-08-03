@@ -7,13 +7,11 @@
 仓库提供 `docker-compose-server.yml` 与 `docker-compose-client.yml`。在检查环境变量和挂载后，可用于本地验证：
 
 ```bash
-ADMIN_TOKEN='replace-this-value' \
-docker compose -f docker-compose-server.yml up -d --build
+docker compose --env-file /secure/path/server.env \
+  -f docker-compose-server.yml up -d --build
 
-SERVER='server.example.internal' \
-SERVERSTATUS_USER='node-01' \
-PASSWORD='replace-this-value' \
-docker compose -f docker-compose-client.yml up -d --build
+docker compose --env-file /secure/path/client.env \
+  -f docker-compose-client.yml up -d --build
 ```
 
 生产环境使用受保护的环境文件。不得把生产 token、密码、设备 credential 或私有地址写入仓库。
