@@ -127,8 +127,11 @@ Precedence is:
 `disabled > never_seen > identity_error > offline > stale > degraded > online`.
 
 `last_seen` is server receipt time. `collected_at` is an RFC3339 UTC timestamp
-reported by the Client and is bounded against unreasonable clock skew. Device
-recency is based on `last_seen`, never solely on the Client clock. Domain-level
+reported by the Client and must remain within five minutes of Server receipt
+time in both directions. Per-device accepted timestamps are monotonic. Equal
+timestamp/equal canonical request digest is idempotent; older timestamps or
+equal timestamps with different content cannot replace state. Device recency
+is based on `last_seen`, never solely on the Client clock. Domain-level
 staleness remains independent.
 
 ## 6. Stats contract direction
@@ -194,6 +197,12 @@ included in normal browser stats. A later restoration of the same ID may
 re-associate it after validation. Orphans use the independent bounded limit 64;
 they never consume the 16 active-registry slots and never enter normal
 `servers[]`.
+
+The persistence path is canonicalized to one absolute clean path before
+startup and reused for primary, backup, read, and write operations. If a
+registry transition would project more than 64 orphans, startup fails closed
+before active state is changed and neither persistence file is rewritten.
+Every write validates the complete snapshot before creating a temporary file.
 
 ## 8. Limits and invariants
 

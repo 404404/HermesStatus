@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -169,7 +170,7 @@ func TestStageERegistryDisplayNameRemainsAuthoritative(t *testing.T) {
 	}
 }
 
-func TestInvalidMultiDeviceDocumentsFallBackWithoutPartialActivation(t *testing.T) {
+func TestInvalidMultiDeviceDocumentsFailStartupWithoutStateWrites(t *testing.T) {
 	validRegistry := testRegistry(
 		testRegistryDevice("device-alpha", "Alpha", 10, true, "legacy", nil),
 	)
@@ -214,15 +215,38 @@ func TestInvalidMultiDeviceDocumentsFallBackWithoutPartialActivation(t *testing.
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			app := newMultiDeviceTestAppRaw(
-				t, minimalTestConfig(), testCase.registry, testCase.mapping, testCase.omitMapping,
-			)
-			if app.multiDeviceEnabled() || app.nodes["s01"] == nil ||
-				app.nodes["device-alpha"] != nil {
-				t.Fatalf("invalid documents partially activated 2.2: %#v", app.nodes)
+			directory := t.TempDir()
+			configPath := filepath.Join(directory, "config.json")
+			statsPath := filepath.Join(directory, "stats.json")
+			persistencePath := filepath.Join(directory, "state-v2.json")
+			registryPath := filepath.Join(directory, "registry.json")
+			mappingPath := filepath.Join(directory, "legacy-mapping.json")
+			writeJSONTestFile(t, configPath, minimalTestConfig())
+			writeJSONTestFile(t, registryPath, testCase.registry)
+			if !testCase.omitMapping {
+				writeJSONTestFile(t, mappingPath, testCase.mapping)
 			}
-			if _, exists := app.SnapshotStats()["schema_version"]; exists {
-				t.Fatal("fallback changed the 2.1 stats contract")
+			app, err := NewApp(Options{
+				ConfigPath: configPath, StatsPath: statsPath,
+				PersistencePath: persistencePath, RegistryPath: registryPath,
+				LegacyMappingPath: mappingPath, WebDir: directory,
+				HTTPAddr: "127.0.0.1:0", AgentAddr: "127.0.0.1:0",
+				AdminToken: "test-token",
+			})
+			if err == nil || app != nil {
+				if app != nil {
+					app.Close()
+				}
+				t.Fatalf(
+					"invalid multi-device documents did not fail startup: app=%#v err=%v",
+					app,
+					err,
+				)
+			}
+			for _, output := range []string{statsPath, persistencePath, persistencePath + "~"} {
+				if _, statErr := os.Lstat(output); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("failed startup wrote runtime state %q: %v", filepath.Base(output), statErr)
+				}
 			}
 		})
 	}
@@ -280,14 +304,15 @@ func TestUnifiedIngestionOwnershipIdentityGenerationAndFreshness(t *testing.T) {
 		t.Fatalf("identity mismatch was not rejected: %v", err)
 	}
 	if app.nodes["device-alpha"].Stats.CPU != 11 ||
-		app.deviceStatusAt(app.nodes["device-alpha"], now) != "identity_error" {
-		t.Fatal("identity failure replaced data or did not set identity_error")
+		app.nodes["device-alpha"].IdentityError != beforeRejected.IdentityError ||
+		app.nodes["device-alpha"].IdentityStatus != beforeRejected.IdentityStatus ||
+		app.deviceStatusAt(app.nodes["device-alpha"], now) != "online" {
+		t.Fatal("identity failure modified public device state")
 	}
 	if app.deviceIsStaleAt(app.nodes["device-alpha"], now) {
 		t.Fatal("identity failure incorrectly changed server-time freshness")
 	}
 
-	app.nodes["device-alpha"].IdentityError = false
 	if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
 		DeviceID: "device-alpha", ProtocolMode: "device_v2",
 		CollectedAt: now, FlatStats: []byte(`{"cpu":22}`), Generation: 1,
@@ -333,7 +358,7 @@ func TestMultiDeviceConcurrentUpdatesRemainIsolatedAndNewestWins(t *testing.T) {
 				defer wait.Done()
 				_, _ = app.ingestDeviceUpdateAt(deviceIngestRequest{
 					DeviceID: deviceID, ProtocolMode: "device_v2",
-					CollectedAt: now,
+					CollectedAt: now.Add(time.Duration(generation) * time.Nanosecond),
 					FlatStats:   []byte(fmt.Sprintf(`{"cpu":%d}`, generation)),
 					Generation:  generation,
 				}, now)
@@ -354,6 +379,48 @@ func TestMultiDeviceConcurrentUpdatesRemainIsolatedAndNewestWins(t *testing.T) {
 		node := app.nodes[deviceID]
 		if node.LastAcceptedGeneration != 64 || node.Stats.CPU != 64 {
 			t.Fatalf("config merge crossed or erased %s: %#v", deviceID, node)
+		}
+	}
+}
+
+func TestSixteenDevicesMaintainIndependentReplayBoundaries(t *testing.T) {
+	devices := make([]contracts.RegistryDevice, 0, contracts.MaxRegisteredDevices)
+	for index := 0; index < contracts.MaxRegisteredDevices; index++ {
+		devices = append(devices, testRegistryDevice(
+			fmt.Sprintf("device-%02d", index),
+			fmt.Sprintf("Device %02d", index),
+			index, true, "device_v2", nil,
+		))
+	}
+	app := newMultiDeviceTestApp(
+		t, minimalTestConfig(), testRegistry(devices...),
+		contracts.LegacyMappingDocument{Version: 1},
+	)
+	now := time.Now().UTC()
+	for index, device := range devices {
+		collectedAt := now.Add(-time.Duration(index) * time.Second)
+		digest := sha256.Sum256([]byte(device.ID))
+		if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
+			DeviceID: device.ID, ProtocolMode: "device_v2",
+			CollectedAt:   collectedAt,
+			FlatStats:     []byte(fmt.Sprintf(`{"cpu":%d}`, index+1)),
+			Generation:    uint64(index + 1),
+			RequestDigest: digest, HasRequestDigest: true,
+		}, now); err != nil {
+			t.Fatalf("%s initial boundary failed: %v", device.ID, err)
+		}
+		if _, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
+			DeviceID: device.ID, ProtocolMode: "device_v2",
+			CollectedAt:      collectedAt.Add(-time.Second),
+			FlatStats:        []byte(`{"cpu":99}`),
+			Generation:       uint64(100 + index),
+			RequestDigest:    sha256.Sum256([]byte("stale-" + device.ID)),
+			HasRequestDigest: true,
+		}, now); !errors.Is(err, errStaleReport) {
+			t.Fatalf("%s stale boundary was not isolated: %v", device.ID, err)
+		}
+		if app.nodes[device.ID].Stats.CPU != float64(index+1) {
+			t.Fatalf("%s state crossed replay boundary: %#v", device.ID, app.nodes[device.ID])
 		}
 	}
 }
@@ -503,21 +570,29 @@ func TestCutoverOwnershipAcceptsOnlyActiveProtocolAndExpiresFailClosed(t *testin
 			Mode: "cutover", ActiveProtocol: &active, CutoverNotAfter: &expired,
 		},
 	})
-	app := newMultiDeviceTestApp(t, minimalTestConfig(), expiredRegistry, contracts.LegacyMappingDocument{
+	directory := t.TempDir()
+	configPath := filepath.Join(directory, "config.json")
+	registryPath := filepath.Join(directory, "registry.json")
+	mappingPath := filepath.Join(directory, "legacy-mapping.json")
+	writeJSONTestFile(t, configPath, minimalTestConfig())
+	writeJSONTestFile(t, registryPath, expiredRegistry)
+	writeJSONTestFile(t, mappingPath, contracts.LegacyMappingDocument{
 		Version: 1,
 		Mappings: []contracts.LegacyDeviceMapping{{
 			Username: "s01", DeviceID: "device-alpha",
 		}},
 	})
-	if !app.ownershipFailClosed {
-		t.Fatal("expired cutover did not enter fail-closed ownership mode")
-	}
-	server, client := net.Pipe()
-	defer server.Close()
-	defer client.Close()
-	if _, _, _, apiErr := app.connectAgent("s01", "secret", server, 4); apiErr == nil ||
-		apiErr.Status != 409 {
-		t.Fatalf("expired cutover relaxed to legacy ingestion: %v", apiErr)
+	app, err := NewApp(Options{
+		ConfigPath:   configPath,
+		StatsPath:    filepath.Join(directory, "stats.json"),
+		RegistryPath: registryPath, LegacyMappingPath: mappingPath,
+		WebDir: directory, HTTPAddr: "127.0.0.1:0", AgentAddr: "127.0.0.1:0",
+	})
+	if err == nil || app != nil {
+		if app != nil {
+			app.Close()
+		}
+		t.Fatalf("expired cutover did not fail startup: app=%#v err=%v", app, err)
 	}
 }
 

@@ -12,6 +12,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from secure_file import SecureFileError, secure_read_bounded_regular_file
+
 
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_ITEMS = 256
@@ -202,9 +204,9 @@ class LuckyClient(object):
         if not self.token_file:
             return None
         try:
-            with open(self.token_file, "r", encoding="utf-8", errors="replace") as handle:
-                return handle.read(4096).strip() or None
-        except OSError:
+            data = secure_read_bounded_regular_file(self.token_file, 4096)
+            return data.decode("utf-8", errors="replace").strip() or None
+        except SecureFileError:
             return None
 
     def get(self, endpoint):

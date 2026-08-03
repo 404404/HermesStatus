@@ -103,6 +103,19 @@ class RegistryTests(unittest.TestCase):
         module = load_exporter(self.config)
         self.assertEqual(module.PROFILES, ["daily", "renamed.profile"])
 
+    def test_export_config_rejects_symlinked_parent(self):
+        real = self.root / "real"
+        real.mkdir()
+        config = real / "exporter.json"
+        config.write_text(
+            json.dumps({"profiles": ["attacker-profile"]}),
+            encoding="utf-8",
+        )
+        linked = self.root / "linked"
+        linked.symlink_to(real, target_is_directory=True)
+        module = load_exporter(linked / "exporter.json")
+        self.assertEqual(module.load_export_config(), {})
+
     def test_api_cli_snapshot_fallback_order(self):
         self.write_registry(["daily"])
         module = load_exporter(self.config)

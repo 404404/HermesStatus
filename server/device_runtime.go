@@ -3,15 +3,11 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/cppla/serverstatus/server/contracts"
-	"golang.org/x/sys/unix"
 )
 
 const maxRuntimeConfigBytes = 1 << 20
@@ -19,19 +15,22 @@ const maxRuntimeConfigBytes = 1 << 20
 // loadMultiDeviceRuntime is deliberately startup-only for the first 2.2
 // implementation. Both read-only documents must validate atomically before
 // any multi-device behavior is enabled.
-func (a *App) loadMultiDeviceRuntime(runtime RuntimeConfig) {
+func (a *App) loadMultiDeviceRuntime(runtime RuntimeConfig) error {
 	a.registry = nil
 	a.ownershipFailClosed = false
 	a.legacyMap = make(map[string]string)
 	a.deviceUsers = make(map[string]string)
 	if a.opts.RegistryPath == "" {
-		return
+		return nil
 	}
 
-	registryData, err := readBoundedFile(a.opts.RegistryPath, maxRuntimeConfigBytes)
+	registryData, err := secureReadBoundedDocument(
+		a.opts.RegistryPath,
+		maxRuntimeConfigBytes,
+	)
 	if err != nil {
 		a.logger.Printf("multi-device configuration: registry_unavailable")
-		return
+		return errors.New("multi-device registry configuration is unavailable")
 	}
 	registry, err := contracts.DecodeRegistry(registryData, time.Now())
 	if err != nil {
@@ -39,21 +38,24 @@ func (a *App) loadMultiDeviceRuntime(runtime RuntimeConfig) {
 			a.ownershipFailClosed = true
 		}
 		a.logger.Printf("multi-device configuration: registry_invalid")
-		return
+		return errors.New("multi-device registry configuration is invalid")
 	}
 	if a.opts.LegacyMappingPath == "" {
 		a.logger.Printf("multi-device configuration: legacy_mapping_unavailable")
-		return
+		return errors.New("multi-device legacy mapping is unavailable")
 	}
-	mappingData, err := readBoundedFile(a.opts.LegacyMappingPath, maxRuntimeConfigBytes)
+	mappingData, err := secureReadBoundedDocument(
+		a.opts.LegacyMappingPath,
+		maxRuntimeConfigBytes,
+	)
 	if err != nil {
 		a.logger.Printf("multi-device configuration: legacy_mapping_unavailable")
-		return
+		return errors.New("multi-device legacy mapping is unavailable")
 	}
 	mappings, err := contracts.DecodeLegacyMappings(mappingData, registry, time.Now())
 	if err != nil || !legacyMappingsMatchRuntime(mappings, runtime) {
 		a.logger.Printf("multi-device configuration: legacy_mapping_invalid")
-		return
+		return errors.New("multi-device legacy mapping is invalid")
 	}
 
 	legacyMap := make(map[string]string, len(mappings.Mappings))
@@ -65,41 +67,7 @@ func (a *App) loadMultiDeviceRuntime(runtime RuntimeConfig) {
 	a.registry = registry
 	a.legacyMap = legacyMap
 	a.deviceUsers = deviceUsers
-	if a.opts.PersistencePath == "" {
-		a.opts.PersistencePath = a.opts.StatsPath + ".state-v2"
-	}
-}
-
-func readBoundedFile(path string, limit int64) ([]byte, error) {
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-		return nil, errors.New("document unavailable")
-	}
-	fileFD, err := unix.Open(
-		path,
-		unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW,
-		0,
-	)
-	if err != nil {
-		return nil, errors.New("document unavailable")
-	}
-	file := os.NewFile(uintptr(fileFD), "multi-device-document")
-	if file == nil {
-		_ = unix.Close(fileFD)
-		return nil, errors.New("document unavailable")
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !info.Mode().IsRegular() || info.Size() > limit {
-		return nil, errors.New("document unavailable")
-	}
-	data, err := io.ReadAll(io.LimitReader(file, limit+1))
-	if err != nil || int64(len(data)) > limit {
-		return nil, errors.New("document unavailable")
-	}
-	return data, nil
+	return nil
 }
 
 func legacyMappingsMatchRuntime(mappings *contracts.LegacyMappingDocument, runtime RuntimeConfig) bool {
@@ -220,6 +188,8 @@ func copyNodeRuntime(target, source *NodeState, disconnect bool) {
 	target.LastSeen = source.LastSeen
 	target.CollectedAt = source.CollectedAt
 	target.LastAcceptedGeneration = source.LastAcceptedGeneration
+	target.LastRequestDigest = source.LastRequestDigest
+	target.HasLastRequestDigest = source.HasLastRequestDigest
 	target.Restored = source.Restored
 	target.IdentityError = source.IdentityError
 	target.Degraded = source.Degraded

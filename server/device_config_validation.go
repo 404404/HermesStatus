@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,12 +29,43 @@ func validateDeviceConfiguration(
 	opts Options,
 	now time.Time,
 ) (deviceConfigValidationSummary, *deviceConfigValidationError) {
+	if opts.ConfigPath != "" {
+		configPath, err := filepath.Abs(opts.ConfigPath)
+		if err != nil {
+			return deviceConfigValidationSummary{}, configValidationError(
+				"config_unavailable", "config",
+			)
+		}
+		configData, err := secureReadBoundedDocument(
+			configPath,
+			maxRuntimeConfigBytes,
+		)
+		if err != nil {
+			return deviceConfigValidationSummary{}, configValidationError(
+				"config_unavailable", "config",
+			)
+		}
+		configDocument, err := decodeDocument(configData)
+		if err != nil {
+			return deviceConfigValidationSummary{}, configValidationError(
+				"config_invalid", "config",
+			)
+		}
+		if _, _, apiErr := normalizeConfig(configDocument); apiErr != nil {
+			return deviceConfigValidationSummary{}, configValidationError(
+				"config_invalid", "config",
+			)
+		}
+	}
 	if opts.RegistryPath == "" {
 		return deviceConfigValidationSummary{}, configValidationError(
 			"registry_missing", "registry",
 		)
 	}
-	registryData, err := readBoundedFile(opts.RegistryPath, maxRuntimeConfigBytes)
+	registryData, err := secureReadBoundedDocument(
+		opts.RegistryPath,
+		maxRuntimeConfigBytes,
+	)
 	if err != nil {
 		return deviceConfigValidationSummary{}, configValidationError(
 			"registry_unavailable", "registry",
@@ -71,7 +103,7 @@ func validateDeviceConfiguration(
 			"legacy_mapping_missing", "legacy_mapping",
 		)
 	}
-	mappingData, err := readBoundedFile(
+	mappingData, err := secureReadBoundedDocument(
 		opts.LegacyMappingPath,
 		maxRuntimeConfigBytes,
 	)

@@ -23,6 +23,25 @@ non-symlink directory containing only `<device_id>.json` ordinary files.
 Mount the three configuration inputs read-only. Persistence is separate and
 writable.
 
+The Server does not secure these files by checking with `lstat` and reopening a
+full pathname. It walks from `/` through held directory fds, opens every
+intermediate component with `openat` plus `O_DIRECTORY|O_NOFOLLOW`, and opens
+and `fstat`s the final regular file relative to the held parent. Parent rename
+or symlink replacement therefore cannot redirect the final open. Credential
+enumeration and record reads retain the opened credential-directory fd.
+
+Production configuration belongs in a root- or operator-managed directory
+that is not group/world writable, with files not writable by unauthorized
+users. Mount it read-only. The no-symlink traversal is a pathname safety
+boundary, not a substitute for directory ownership and permissions.
+
+An explicit relative `PERSISTENCE_PATH`/`--state` is resolved against the
+configuration document directory; parent traversal components are rejected.
+If the state path is omitted, the Server first canonicalizes the Stats path
+against that same directory and derives `<stats-path>.state-v2`. Primary and
+backup then use that fixed absolute directory. Existing symlink components are
+rejected.
+
 The registry is authoritative for device ID, display name, expected FQDN,
 enabled state, ordering, groups, tags, time thresholds, default device and
 ingestion ownership. Client-reported name, hostname and FQDN are observations
@@ -46,6 +65,11 @@ rules, credential directory, current/next slots, required active credentials,
 legacy mappings and their cross-file relationships. It does not create
 listeners, nodes, stats or persistence; it performs no writes and no network
 access.
+
+The normal Server uses the same reader. If any configured Server document,
+Registry, Mapping or Credential input cannot be securely opened and validated,
+application construction fails; listeners, NodeState, Stats and Persistence
+are not created.
 
 Success prints only counts and the safe default `device_id`. Failure exits 2
 and prints only a fixed error code and non-sensitive field location. It never

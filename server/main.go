@@ -65,6 +65,11 @@ func main() {
 	if opts.StatsPath == "" {
 		opts.StatsPath = filepath.Join(opts.WebDir, "json", "stats.json")
 	}
+	var pathErr error
+	opts, pathErr = resolveOptionsPaths(opts)
+	if pathErr != nil {
+		fatalf("runtime path is invalid")
+	}
 	if legacyPort != 0 || legacyBind != "" {
 		if legacyPort == 0 {
 			legacyPort = 35601

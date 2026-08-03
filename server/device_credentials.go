@@ -94,15 +94,22 @@ func loadDeviceCredentialDirectory(
 	directoryPath string,
 	registry *contracts.DeviceRegistry,
 ) (map[string]deviceCredentialSet, error) {
+	return loadDeviceCredentialDirectoryWithHooks(directoryPath, registry, nil)
+}
+
+func loadDeviceCredentialDirectoryWithHooks(
+	directoryPath string,
+	registry *contracts.DeviceRegistry,
+	hooks *securePathTraversalHooks,
+) (map[string]deviceCredentialSet, error) {
 	if registry == nil || !filepath.IsAbs(directoryPath) ||
 		filepath.Clean(directoryPath) != directoryPath {
 		return nil, errors.New("credential directory is invalid")
 	}
-	info, err := os.Lstat(directoryPath)
-	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return nil, errors.New("credential directory is invalid")
-	}
-	directoryFD, err := openCredentialDirectory(directoryPath)
+	directoryFD, err := openDirectoryWithoutSymlinksWithHooks(
+		directoryPath,
+		hooks,
+	)
 	if err != nil {
 		return nil, errors.New("credential directory is unavailable")
 	}
@@ -161,31 +168,11 @@ func loadDeviceCredentialDirectory(
 	return loaded, nil
 }
 
-func openCredentialDirectory(directoryPath string) (int, error) {
-	flags := unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC | unix.O_NOFOLLOW
-	currentFD, err := unix.Open("/", flags, 0)
-	if err != nil {
-		return -1, err
-	}
-	for _, component := range strings.Split(strings.TrimPrefix(directoryPath, "/"), "/") {
-		if component == "" {
-			continue
-		}
-		nextFD, openErr := unix.Openat(currentFD, component, flags, 0)
-		_ = unix.Close(currentFD)
-		if openErr != nil {
-			return -1, openErr
-		}
-		currentFD = nextFD
-	}
-	return currentFD, nil
-}
-
 func readCredentialAt(directoryFD int, name string) ([]byte, error) {
 	fileFD, err := unix.Openat(
 		directoryFD,
 		name,
-		unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW,
+		unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK,
 		0,
 	)
 	if err != nil {
@@ -198,7 +185,9 @@ func readCredentialAt(directoryFD int, name string) ([]byte, error) {
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() > maxCredentialFileBytes {
+	if err != nil || !info.Mode().IsRegular() ||
+		info.Mode().Perm()&0o022 != 0 ||
+		info.Size() > maxCredentialFileBytes {
 		return nil, errors.New("credential file is invalid")
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maxCredentialFileBytes+1))

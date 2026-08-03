@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/cppla/serverstatus/server/contracts"
@@ -15,20 +16,53 @@ var (
 	errInactiveOwner       = errors.New("protocol is not the active ingestion owner")
 	errStaleGeneration     = errors.New("generation is not newer")
 	errDeviceClockSkew     = errors.New("collected_at exceeds clock-skew limit")
+	errStaleReport         = errors.New("collected_at is older than the last accepted report")
+	errReportConflict      = errors.New("collected_at conflicts with the last accepted report")
+	errIdempotentReplay    = errors.New("report was already accepted")
 	errDeviceIdentity      = errors.New("device identity evidence was rejected")
 	errInactiveConnection  = errors.New("connection generation is inactive")
 )
 
 type deviceIngestRequest struct {
-	DeviceID         string
-	ProtocolMode     string
-	CollectedAt      time.Time
-	FlatStats        []byte
-	Generation       uint64
-	ConnectionID     uint64
-	ReportedName     *string
-	ReportedFQDN     *string
-	ReportedHostname *string
+	DeviceID           string
+	ProtocolMode       string
+	CollectedAt        time.Time
+	FlatStats          []byte
+	Generation         uint64
+	ConnectionID       uint64
+	ReportedName       *string
+	ReportedFQDN       *string
+	ReportedHostname   *string
+	RequestDigest      [32]byte
+	HasRequestDigest   bool
+	IdentityClass      string
+	IdentityRejected   bool
+	IdentityClassified bool
+	AssignGeneration   bool
+	PersistBeforeAck   bool
+}
+
+type deviceReplayClass string
+
+const (
+	replayNoBoundary    deviceReplayClass = "no_boundary"
+	replayStrictlyNewer deviceReplayClass = "strictly_newer"
+	replayStale         deviceReplayClass = "stale"
+	replayIdempotent    deviceReplayClass = "idempotent"
+	replayConflict      deviceReplayClass = "conflict"
+)
+
+// DeviceUpdateDecision is the mutation-free result of applying ownership,
+// replay, identity, generation, and connection policy to one device update.
+// Only ShouldIngest authorizes the commit phase to change NodeState.
+type DeviceUpdateDecision struct {
+	Outcome                     string
+	ReplayClass                 deviceReplayClass
+	IdentityClass               string
+	ShouldIngest                bool
+	ShouldRecordIdentityFailure bool
+	IsIdempotent                bool
+	Err                         error
 }
 
 // ingestDeviceUpdate is the single decoder-and-state entry point shared by
@@ -56,25 +90,8 @@ func (a *App) ingestDeviceUpdateAt(
 	if request.CollectedAt.IsZero() {
 		request.CollectedAt = now
 	}
-	if request.CollectedAt.Sub(now) > MaxDeviceClockSkew {
+	if err := validateDeviceCollectedAt(request.CollectedAt, now); err != nil {
 		return nil, errDeviceClockSkew
-	}
-
-	a.nodeMu.RLock()
-	node := a.nodes[request.DeviceID]
-	if err := a.validateIngestLocked(node, request, now); err != nil {
-		a.nodeMu.RUnlock()
-		return nil, err
-	}
-	expectedFQDN := cloneStringPointer(node.ExpectedFQDN)
-	a.nodeMu.RUnlock()
-
-	identityStatus, identityErr := evaluateIdentity(
-		expectedFQDN, request.ReportedFQDN, request.ProtocolMode,
-	)
-	if identityErr != nil {
-		a.markIdentityError(request, identityStatus, now)
-		return nil, identityErr
 	}
 
 	stats, extension, issues, err := decodeAgentUpdate(request.FlatStats)
@@ -82,12 +99,47 @@ func (a *App) ingestDeviceUpdateAt(
 		return nil, err
 	}
 
-	a.nodeMu.Lock()
-	node = a.nodes[request.DeviceID]
-	if err := a.validateIngestLocked(node, request, now); err != nil {
-		a.nodeMu.Unlock()
-		return nil, err
+	deviceLock := a.deviceIngestLock(request.DeviceID)
+	deviceLock.Lock()
+	defer deviceLock.Unlock()
+	if request.PersistBeforeAck {
+		a.persistMu.Lock()
+		defer a.persistMu.Unlock()
 	}
+
+	a.nodeMu.Lock()
+	node := a.nodes[request.DeviceID]
+	decision := a.decideDeviceUpdateLocked(node, request, now)
+	if decision.Err != nil {
+		a.nodeMu.Unlock()
+		return nil, decision.Err
+	}
+	if !decision.ShouldIngest {
+		a.nodeMu.Unlock()
+		return nil, errors.New("device update decision did not authorize ingestion")
+	}
+	if request.PersistBeforeAck {
+		paths, pathErr := openPersistencePaths(
+			a.opts.PersistencePath,
+			a.opts.PersistencePath+"~",
+			true,
+		)
+		if pathErr != nil {
+			a.nodeMu.Unlock()
+			return nil, errors.New("device update persistence failed")
+		}
+		paths.close()
+	}
+	previousUpdateID := uint64(0)
+	if request.AssignGeneration {
+		request.Generation = a.updateID.Add(1)
+		previousUpdateID = request.Generation - 1
+	}
+	if request.Generation == 0 || request.Generation <= node.LastAcceptedGeneration {
+		a.nodeMu.Unlock()
+		return nil, errStaleGeneration
+	}
+	before := *node
 	if stats.Online4 != nil {
 		node.Online4 = *stats.Online4
 	}
@@ -101,17 +153,138 @@ func (a *App) ingestDeviceUpdateAt(
 	node.LastSeen = now
 	node.CollectedAt = request.CollectedAt
 	node.LastAcceptedGeneration = request.Generation
+	if request.HasRequestDigest {
+		node.LastRequestDigest = request.RequestDigest
+		node.HasLastRequestDigest = true
+	}
 	node.ProtocolMode = request.ProtocolMode
-	node.IdentityStatus = identityStatus
+	node.IdentityStatus = decision.IdentityClass
 	node.ReportedName = cloneStringPointer(request.ReportedName)
 	node.ReportedFQDN = cloneStringPointer(request.ReportedFQDN)
 	node.ReportedHostname = cloneStringPointer(request.ReportedHostname)
 	node.Restored = false
 	node.IdentityError = false
 	node.Degraded = len(issues) > 0 || extensionHasBusinessError(extension)
+	if request.PersistBeforeAck {
+		snapshot, snapshotErr := a.snapshotPersistenceV2Locked(now)
+		if snapshotErr == nil {
+			snapshotErr = writePersistenceV2(a.opts.PersistencePath, snapshot)
+		}
+		if snapshotErr != nil {
+			*node = before
+			if request.AssignGeneration {
+				a.updateID.CompareAndSwap(request.Generation, previousUpdateID)
+			}
+			a.nodeMu.Unlock()
+			return nil, errors.New("device update persistence failed")
+		}
+	}
 	a.nodeMu.Unlock()
 	a.wakeStatsWriter()
 	return issues, nil
+}
+
+func (a *App) deviceIngestLock(deviceID string) *sync.Mutex {
+	value, _ := a.deviceIngestLocks.LoadOrStore(deviceID, &sync.Mutex{})
+	return value.(*sync.Mutex)
+}
+
+func (a *App) decideDeviceUpdateLocked(
+	node *NodeState,
+	request deviceIngestRequest,
+	now time.Time,
+) DeviceUpdateDecision {
+	decision := DeviceUpdateDecision{
+		Outcome:       "rejected",
+		ReplayClass:   replayNoBoundary,
+		IdentityClass: "unknown",
+	}
+	if request.IdentityClassified {
+		decision.IdentityClass = request.IdentityClass
+	}
+	if node == nil {
+		decision.Err = errDeviceNotRegistered
+		return decision
+	}
+	if !node.Enabled {
+		decision.Err = errDeviceDisabled
+		return decision
+	}
+	if a.ownershipFailClosed {
+		decision.Err = errInactiveOwner
+		return decision
+	}
+	if a.registry != nil && !contracts.OwnershipAllows(node.Ownership, request.ProtocolMode, now) {
+		decision.Err = errInactiveOwner
+		return decision
+	}
+	if a.registry == nil && request.ProtocolMode != "legacy_single_device" {
+		decision.Err = errInactiveOwner
+		return decision
+	}
+
+	if request.ProtocolMode == "device_v2" {
+		decision.ReplayClass = replayStrictlyNewer
+		if !node.CollectedAt.IsZero() {
+			switch {
+			case request.CollectedAt.Before(node.CollectedAt):
+				decision.Outcome = "stale_report"
+				decision.ReplayClass = replayStale
+				decision.Err = errStaleReport
+				return decision
+			case request.CollectedAt.Equal(node.CollectedAt):
+				if request.HasRequestDigest && node.HasLastRequestDigest &&
+					request.RequestDigest == node.LastRequestDigest {
+					decision.Outcome = "idempotent"
+					decision.ReplayClass = replayIdempotent
+					decision.IsIdempotent = true
+					decision.Err = errIdempotentReplay
+					return decision
+				}
+				decision.Outcome = "report_conflict"
+				decision.ReplayClass = replayConflict
+				decision.Err = errReportConflict
+				return decision
+			}
+		}
+	}
+
+	identityRejected := request.IdentityRejected
+	if !request.IdentityClassified {
+		identityStatus, identityErr := evaluateIdentity(
+			node.ExpectedFQDN, request.ReportedFQDN, request.ProtocolMode,
+		)
+		decision.IdentityClass = identityStatus
+		identityRejected = identityErr != nil
+	}
+	if identityRejected {
+		decision.Outcome = "identity_mismatch"
+		decision.ShouldRecordIdentityFailure = false
+		decision.Err = errDeviceIdentity
+		return decision
+	}
+	if !request.AssignGeneration &&
+		(request.Generation == 0 || request.Generation <= node.LastAcceptedGeneration) {
+		decision.Err = errStaleGeneration
+		return decision
+	}
+	if request.ConnectionID != 0 &&
+		(!node.Connected || node.ConnectionID != request.ConnectionID) {
+		decision.Err = errInactiveConnection
+		return decision
+	}
+	decision.Outcome = "accepted"
+	decision.ShouldIngest = true
+	return decision
+}
+
+func validateDeviceCollectedAt(collectedAt, now time.Time) error {
+	if collectedAt.IsZero() ||
+		collectedAt.Before(now.Add(-MaxDeviceClockSkew)) ||
+		collectedAt.After(now.Add(MaxDeviceClockSkew)) {
+		return errDeviceClockSkew
+	}
+	return nil
 }
 
 func (a *App) validateIngestLocked(
@@ -119,29 +292,7 @@ func (a *App) validateIngestLocked(
 	request deviceIngestRequest,
 	now time.Time,
 ) error {
-	if node == nil {
-		return errDeviceNotRegistered
-	}
-	if !node.Enabled {
-		return errDeviceDisabled
-	}
-	if a.ownershipFailClosed {
-		return errInactiveOwner
-	}
-	if a.registry != nil && !contracts.OwnershipAllows(node.Ownership, request.ProtocolMode, now) {
-		return errInactiveOwner
-	}
-	if a.registry == nil && request.ProtocolMode != "legacy_single_device" {
-		return errInactiveOwner
-	}
-	if request.Generation == 0 || request.Generation <= node.LastAcceptedGeneration {
-		return errStaleGeneration
-	}
-	if request.ConnectionID != 0 &&
-		(!node.Connected || node.ConnectionID != request.ConnectionID) {
-		return errInactiveConnection
-	}
-	return nil
+	return a.decideDeviceUpdateLocked(node, request, now).Err
 }
 
 func evaluateIdentity(
@@ -163,28 +314,6 @@ func evaluateIdentity(
 		return "fqdn_mismatch", errDeviceIdentity
 	}
 	return "matched", nil
-}
-
-func (a *App) markIdentityError(
-	request deviceIngestRequest,
-	identityStatus string,
-	now time.Time,
-) {
-	a.nodeMu.Lock()
-	node := a.nodes[request.DeviceID]
-	if node == nil || !node.Enabled ||
-		(request.Generation != 0 && request.Generation <= node.LastAcceptedGeneration) {
-		a.nodeMu.Unlock()
-		return
-	}
-	if a.registry != nil && !contracts.OwnershipAllows(node.Ownership, request.ProtocolMode, now) {
-		a.nodeMu.Unlock()
-		return
-	}
-	node.IdentityStatus = identityStatus
-	node.IdentityError = true
-	a.nodeMu.Unlock()
-	a.wakeStatsWriter()
 }
 
 func extensionHasBusinessError(extension ExtensionStats) bool {

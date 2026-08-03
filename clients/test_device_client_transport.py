@@ -219,6 +219,31 @@ class DeviceTransportTests(unittest.TestCase):
                 )
                 self.assertNotIn("secret-response", str(captured.exception))
 
+    def test_conflict_codes_are_bounded_and_redacted(self):
+        for code in ("stale_report", "report_conflict"):
+            response = FakeResponse(
+                status=409,
+                body=json.dumps(
+                    {
+                        "error": {
+                            "code": code,
+                            "request_id": "req-synthetic",
+                        }
+                    }
+                ).encode(),
+            )
+            with self.assertRaises(DeviceTransportError) as captured:
+                self.client_for(FakeConnection(response)).send(self.envelope)
+            self.assertEqual(captured.exception.code, code)
+        hostile = FakeResponse(
+            status=409,
+            body=b'{"error":{"code":"secret-value","request_id":"req"}}',
+        )
+        with self.assertRaises(DeviceTransportError) as captured:
+            self.client_for(FakeConnection(hostile)).send(self.envelope)
+        self.assertEqual(captured.exception.code, "report_conflict")
+        self.assertNotIn("secret-value", str(captured.exception))
+
     def test_malformed_202_responses_are_rejected(self):
         cases = [
             FakeResponse(body=b"{}"),
@@ -367,6 +392,29 @@ class ResponseAndCacheTests(unittest.TestCase):
             ):
                 validate_success_response(response)
 
+    def test_monitor_validation_fixture_matches_client_boundary(self):
+        fixture_path = (
+            CLIENT_DIR.parent
+            / "testdata"
+            / "multi_device"
+            / "monitor_validation.json"
+        )
+        cases = json.loads(fixture_path.read_text(encoding="utf-8"))
+        for case in cases:
+            monitor = {
+                "name": case["name"],
+                "host": case["host"],
+                "interval": 60,
+                "type": case["type"],
+            }
+            with self.subTest(case=case["name"]):
+                if case["accepted"]:
+                    validated = validate_success_response(success_document([monitor]))
+                    self.assertEqual(validated["monitors"], [monitor])
+                else:
+                    with self.assertRaises(ClientContractError):
+                        validate_success_response(success_document([monitor]))
+
     def test_monitor_cache_only_replaces_after_valid_response(self):
         cache = MonitorCache()
         valid = validate_success_response(
@@ -513,6 +561,27 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(runner.run_once(), 30.0)
         self.assertEqual(runner.cache.snapshot(), before)
         self.assertEqual(applied, [[monitor]])
+
+    def test_stale_and_conflict_reports_wait_for_normal_collection(self):
+        logs = []
+        runner = self.runner(
+            [
+                DeviceTransportError("stale_report"),
+                DeviceTransportError("report_conflict"),
+            ],
+            [],
+            logs,
+            random_value=lambda: 0.0,
+        )
+        runner.attempt = 9
+        self.assertEqual(runner.run_once(), 60.0)
+        self.assertEqual(runner.attempt, 0)
+        self.assertEqual(runner.run_once(), 60.0)
+        self.assertEqual(runner.attempt, 0)
+        self.assertEqual(logs, [
+            "device_v2 transport: stale_report",
+            "device_v2 transport: report_conflict",
+        ])
 
     def test_full_jitter_cap_no_busy_loop_and_throttled_logs(self):
         outcomes = [DeviceTransportError("server_unavailable")] * 12

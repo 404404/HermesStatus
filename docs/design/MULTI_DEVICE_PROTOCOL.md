@@ -87,7 +87,17 @@ pipeline.
   characters respectively, with control characters rejected;
 - `reported_fqdn` is optional, lower-case-normalized for comparison, at most
   253 characters, and must be a DNS name rather than a URL/IP literal;
-- `collected_at` is required RFC3339 UTC and subject to clock-skew limits;
+- `collected_at` is required RFC3339 UTC and must be within five minutes of
+  Server receipt time in either direction;
+- each v2 device advances `collected_at` monotonically: older reports are
+  rejected, an equal timestamp with the same canonical request digest is an
+  idempotent `202`, and an equal timestamp with different content is rejected;
+  if a state restored from an earlier persistence-v2 writer has no stored
+  digest, every equal-time report fails closed as a conflict;
+- replay classification is performed under the device's ingestion lock before
+  FQDN policy can authorize or reject a commit. Stale and equal-time requests
+  never change identity, business domains, `last_seen`, generation, the
+  accepted boundary, or persistence;
 - request size, including headers/envelope, is bounded; body remains at most
   1 MiB;
 - strict decoding rejects unknown properties at new envelope/device levels;
@@ -100,6 +110,23 @@ token, cookie, password, or authorization material.
 No `device_json` compatibility field is introduced. Existing
 `hardware_json`, `docker_json`, `hermes_json`, and retained compatibility
 parsers remain. `lucky_json` is not added.
+
+The Device HTTP adapter follows one parse/decision/commit pipeline. Transport,
+authentication, enabled state, and active ownership are checked first. Strict
+Envelope, UTC clock-skew, stats, Monitor Snapshot, canonical digest, and FQDN
+classification are mutation-free. Under the per-device ingestion lock, replay
+is classified before identity policy. Only a strictly newer, identity-valid
+decision may commit. That commit updates business state and the accepted
+boundary atomically and durably writes persistence before returning `202`;
+write failure rolls the in-memory candidate back and returns `5xx`.
+
+| decision | response | public or persisted state change |
+|---|---:|---|
+| stale timestamp | `409 stale_report` | none |
+| equal timestamp, same digest | `202` idempotent | none |
+| equal timestamp, different/missing digest | `409 report_conflict` | none |
+| strictly newer, missing/mismatched FQDN | `403` | none |
+| strictly newer, identity valid | `202` | one durable commit |
 
 ## 5. Domain failure isolation
 
@@ -133,9 +160,17 @@ this capability without adding a control channel. A successful response is:
 
 Monitor definitions use the current sanitized, bounded schema. They contain no
 command, credentials, registry authority, or arbitrary executable
-configuration. The Client caches only validated definitions and keeps the last
-known-good definitions if a response is malformed. `202 Accepted` is used
-because publication/persistence may complete after validation.
+configuration. HTTP and HTTPS monitor targets may contain a bounded safe path,
+but query and fragment components are forbidden, including an empty trailing
+`?`; TCP targets remain a host and port only. Configuration load, Management
+API updates/reload, Device HTTPS responses, and the Python Client are checked
+against the same acceptance fixture and fail closed on any difference. The
+Server obtains an immutable validated Monitor snapshot and a writable
+persistence preflight before ingestion, so either validation cannot fail after
+a device mutation. The Client caches only validated definitions and keeps the
+last known-good definitions if a response is malformed. `202 Accepted` is used
+because publication may complete after these validation and durability
+preconditions.
 
 ## 7. Client configuration
 
@@ -257,12 +292,15 @@ configured.
 
 ## 11. Accepted residual risk
 
-A valid bearer token can be replayed during its validity window. This protocol
-does not claim cryptographic replay prevention. Verified HTTPS, no TLS 0-RTT,
-per-device fixed-format high-entropy tokens, current/next rotation, rapid
-revocation, secret-free logs, proxy path isolation, layered rate limiting, and
-the default-disabled endpoint reduce the risk. Sender-constrained credentials
-such as proxy mTLS are future work, not part of 2.2.
+A valid bearer token is not sender-constrained during its validity window.
+Exact accepted report replays are idempotent, older reports cannot replace
+newer state, and same-time different content is rejected. A stolen token can
+still submit a new current report, so this is bounded application replay
+protection rather than cryptographic proof of sender identity. Verified HTTPS,
+no TLS 0-RTT, per-device fixed-format high-entropy tokens, current/next
+rotation, rapid revocation, secret-free logs, proxy path isolation, layered
+rate limiting, and the default-disabled endpoint reduce the residual risk.
+Sender-constrained credentials such as proxy mTLS are future work.
 
 ## 12. Frozen Stage A boundary
 

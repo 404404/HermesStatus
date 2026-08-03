@@ -93,6 +93,8 @@ nohup python3 client-linux.py SERVER=127.0.0.1 USER=s01 PASSWORD=USER_DEFAULT_PA
 HermesStatus 2.2 的手工设备注册、离线凭据生成、只读配置校验和
 Compose/HTTPS 代理示例见
 [多设备手工注册指南](docs/operations/MULTI_DEVICE_REGISTRATION.md)。
+生产配置编写、认证架构以及通过专用域名接入其他网段客户端的完整说明见
+[2.2 生产配置与远程接入指南](docs/operations/MULTI_DEVICE_PRODUCTION_CONFIGURATION.md)。
 完整的合成环境与边界验证记录见
 [2.2 多设备资格报告](docs/testing/MULTI_DEVICE_QUALIFICATION.md)。
 

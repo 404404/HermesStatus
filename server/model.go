@@ -235,6 +235,11 @@ func normalizeConfig(input ConfigDocument) (ConfigDocument, RuntimeConfig, *APIE
 	if apiErr != nil {
 		return nil, RuntimeConfig{}, apiErr
 	}
+	if _, err := sanitizedMonitorSnapshot(runtime.Monitors); err != nil {
+		return nil, RuntimeConfig{}, &APIError{
+			Status: 400, Message: "monitor configuration is invalid",
+		}
+	}
 	return doc, runtime, nil
 }
 

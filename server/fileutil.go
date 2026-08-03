@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,13 +12,13 @@ import (
 )
 
 func readConfig(path string) (ConfigDocument, RuntimeConfig, error) {
-	data, err := os.ReadFile(path)
+	data, err := secureReadBoundedDocument(path, maxRuntimeConfigBytes)
 	if err != nil {
 		return nil, RuntimeConfig{}, err
 	}
 	doc, err := decodeDocument(data)
 	if err != nil {
-		return nil, RuntimeConfig{}, fmt.Errorf("parse %s: %w", path, err)
+		return nil, RuntimeConfig{}, fmt.Errorf("configuration is invalid: %w", err)
 	}
 	normalized, runtime, apiErr := normalizeConfig(doc)
 	if apiErr != nil {
@@ -121,16 +120,15 @@ func atomicWrite(path string, data []byte, mode os.FileMode, allowBusyFallback b
 }
 
 func copyFile(source, destination string, mode os.FileMode) error {
-	in, err := os.Open(source)
+	data, err := secureReadBoundedDocument(source, maxRuntimeConfigBytes)
 	if err != nil {
 		return err
 	}
-	defer in.Close()
 	out, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 	if err != nil {
 		return err
 	}
-	if _, err = io.Copy(out, in); err == nil {
+	if _, err = out.Write(data); err == nil {
 		err = out.Sync()
 	}
 	closeErr := out.Close()

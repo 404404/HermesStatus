@@ -11,10 +11,21 @@ import stat
 import sys
 import tempfile
 
+CLIENT_DIRECTORY = pathlib.Path(__file__).resolve().parents[1] / "clients"
+if str(CLIENT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(CLIENT_DIRECTORY))
+
+from secure_file import (  # noqa: E402
+    SecureFileError,
+    secure_open_regular_file,
+    secure_read_bounded_descriptor,
+)
+
 
 SECRET_KEY = re.compile(
     r"(?i)^(authorization|api[_-]?key|password|secret|token[_-]?secret|access[_-]?token|refresh[_-]?token|cookie)$"
 )
+MAX_SOURCE_BYTES = 64 << 20
 
 
 class MigrationError(RuntimeError):
@@ -79,12 +90,18 @@ def validate_document(value, path="$") -> None:
 
 
 def read_source(source: pathlib.Path) -> tuple[bytes, tuple, str]:
-    reject_symlink_components(source, "source")
-    if not source.is_file():
+    try:
+        descriptor = secure_open_regular_file(str(source.absolute()))
+    except SecureFileError:
         raise MigrationError("source must be a regular file", 3)
-    before = source.stat()
-    data = source.read_bytes()
-    after = source.stat()
+    try:
+        before = os.fstat(descriptor)
+        data = secure_read_bounded_descriptor(descriptor, MAX_SOURCE_BYTES)
+        after = os.fstat(descriptor)
+    except (OSError, SecureFileError) as exc:
+        raise MigrationError("source could not be read", 3) from exc
+    finally:
+        os.close(descriptor)
     fingerprint = file_fingerprint(before)
     if fingerprint != file_fingerprint(after):
         raise MigrationError("source changed while it was being read", 3)
@@ -101,13 +118,18 @@ def read_source(source: pathlib.Path) -> tuple[bytes, tuple, str]:
 def verify_source_unchanged(
     source: pathlib.Path, expected_fingerprint: tuple, expected_digest: str
 ) -> None:
-    reject_symlink_components(source, "source")
     try:
-        before = source.stat()
-        data = source.read_bytes()
-        after = source.stat()
-    except OSError as exc:
+        descriptor = secure_open_regular_file(str(source.absolute()))
+    except SecureFileError as exc:
         raise MigrationError("source could not be rechecked", 3) from exc
+    try:
+        before = os.fstat(descriptor)
+        data = secure_read_bounded_descriptor(descriptor, MAX_SOURCE_BYTES)
+        after = os.fstat(descriptor)
+    except (OSError, SecureFileError) as exc:
+        raise MigrationError("source could not be rechecked", 3) from exc
+    finally:
+        os.close(descriptor)
     if (
         file_fingerprint(before) != expected_fingerprint
         or file_fingerprint(after) != expected_fingerprint

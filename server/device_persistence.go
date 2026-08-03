@@ -3,21 +3,27 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"time"
 
 	"github.com/cppla/serverstatus/server/contracts"
+	"golang.org/x/sys/unix"
 )
 
 const maxPersistenceBytes = 8 << 20
 
+var errOrphanLimitExceeded = errors.New("orphan_limit_exceeded")
+
 func writePersistenceV2(path string, snapshot contracts.PersistenceV2) error {
+	if err := contracts.ValidatePersistenceV2(&snapshot); err != nil {
+		return errors.New("multi-device state is invalid")
+	}
 	data, err := marshalIndented(snapshot)
 	if err != nil {
 		return err
@@ -25,28 +31,51 @@ func writePersistenceV2(path string, snapshot contracts.PersistenceV2) error {
 	if len(data) > maxPersistenceBytes {
 		return errors.New("multi-device state exceeds size limit")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	paths, err := openPersistencePaths(path, path+"~", true)
+	if err != nil {
 		return err
 	}
-	if previous, err := readBoundedFile(path, maxPersistenceBytes); err == nil {
-		if _, decodeErr := contracts.DecodePersistenceV2(previous); decodeErr == nil {
-			if err := atomicWrite(path+"~", previous, 0o600, false); err != nil {
+	defer paths.close()
+	if previous, err := paths.readBounded(paths.primaryName, maxPersistenceBytes); err == nil {
+		if previousSnapshot, decodeErr := contracts.DecodePersistenceV2(previous); decodeErr == nil {
+			if _, err := paths.validateEntry(paths.backupName); err != nil {
 				return err
+			}
+			if err := paths.atomicWrite(paths.backupName, previous, 0o600); err != nil {
+				return err
+			}
+			comparison := snapshot
+			comparison.GeneratedAt = previousSnapshot.GeneratedAt
+			previousCanonical, previousErr := marshalIndented(previousSnapshot)
+			comparisonCanonical, comparisonErr := marshalIndented(comparison)
+			if previousErr == nil && comparisonErr == nil &&
+				bytes.Equal(previousCanonical, comparisonCanonical) {
+				return nil
 			}
 		}
 	}
-	return atomicWrite(path, data, 0o600, false)
+	if _, err := paths.validateEntry(paths.primaryName); err != nil {
+		return err
+	}
+	return paths.atomicWrite(paths.primaryName, data, 0o600)
 }
 
 func (a *App) snapshotPersistenceV2(now time.Time) (contracts.PersistenceV2, error) {
+	a.nodeMu.RLock()
+	defer a.nodeMu.RUnlock()
+	return a.snapshotPersistenceV2Locked(now)
+}
+
+// snapshotPersistenceV2Locked requires nodeMu to be held. Device HTTP commits
+// use it to build the durable snapshot in the same critical section as replay
+// classification and NodeState mutation.
+func (a *App) snapshotPersistenceV2Locked(now time.Time) (contracts.PersistenceV2, error) {
 	snapshot := contracts.PersistenceV2{
 		Version:         2,
 		GeneratedAt:     now.UTC().Format(time.RFC3339),
 		Devices:         make([]contracts.PersistedDevice, 0, len(a.nodes)),
 		OrphanedDevices: nil,
 	}
-	a.nodeMu.RLock()
-	defer a.nodeMu.RUnlock()
 	for _, device := range sortedRegistryDevices(a.registry) {
 		node := a.nodes[device.ID]
 		if node == nil {
@@ -61,6 +90,9 @@ func (a *App) snapshotPersistenceV2(now time.Time) (contracts.PersistenceV2, err
 	snapshot.OrphanedDevices = append(
 		[]contracts.OrphanedDevice(nil), a.orphans...,
 	)
+	if err := contracts.ValidatePersistenceV2(&snapshot); err != nil {
+		return contracts.PersistenceV2{}, errors.New("multi-device state is invalid")
+	}
 	return snapshot, nil
 }
 
@@ -94,6 +126,13 @@ func persistedDeviceFromNode(
 		}
 		observations[key] = raw
 	}
+	if node.HasLastRequestDigest {
+		raw, err := rawJSON(hex.EncodeToString(node.LastRequestDigest[:]))
+		if err != nil {
+			return contracts.PersistedDevice{}, err
+		}
+		observations["last_request_digest"] = raw
+	}
 	domains := make(map[string]json.RawMessage, 4)
 	for key, value := range map[string]any{
 		"hardware": node.Extension.Hardware,
@@ -123,34 +162,40 @@ func timeStringPointer(value time.Time) *string {
 	if value.IsZero() {
 		return nil
 	}
-	formatted := value.UTC().Format(time.RFC3339)
+	formatted := value.UTC().Format(time.RFC3339Nano)
 	return &formatted
 }
 
-func (a *App) restorePersistenceV2() {
+func (a *App) restorePersistenceV2() error {
 	data, err := readPersistenceWithBackup(a.opts.PersistencePath)
 	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			a.logger.Printf("read multi-device state: %s", persistenceReadErrorCode(err))
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
 		}
-		return
+		a.logger.Printf("read multi-device state: %s", persistenceReadErrorCode(err))
+		return errors.New("multi-device state is unavailable")
 	}
 	snapshot, err := contracts.DecodePersistenceV2(data)
 	if err != nil {
-		backup, backupErr := readBoundedFile(a.opts.PersistencePath+"~", maxPersistenceBytes)
+		backup, backupErr := readPersistenceBackup(a.opts.PersistencePath)
 		if backupErr != nil {
 			a.logger.Printf("read multi-device state: invalid_json")
-			return
+			return errors.New("multi-device state is invalid")
 		}
 		snapshot, err = contracts.DecodePersistenceV2(backup)
 		if err != nil {
 			a.logger.Printf("read multi-device state: invalid_json")
-			return
+			return errors.New("multi-device state is invalid")
 		}
 	}
 
 	a.nodeMu.Lock()
 	defer a.nodeMu.Unlock()
+	candidates := make(map[string]*NodeState, len(a.nodes))
+	for deviceID, node := range a.nodes {
+		candidate := *node
+		candidates[deviceID] = &candidate
+	}
 	registered := make(map[string]bool, len(a.nodes))
 	for deviceID := range a.nodes {
 		registered[deviceID] = true
@@ -159,7 +204,7 @@ func (a *App) restorePersistenceV2() {
 	orphans := make([]contracts.OrphanedDevice, 0, len(snapshot.OrphanedDevices))
 	maxGeneration := uint64(0)
 	for _, persisted := range snapshot.Devices {
-		node := a.nodes[persisted.DeviceID]
+		node := candidates[persisted.DeviceID]
 		if node == nil {
 			orphans = append(orphans, orphanFromPersisted(
 				persisted, "unknown_v2", orphans,
@@ -183,7 +228,7 @@ func (a *App) restorePersistenceV2() {
 			var persisted contracts.PersistedDevice
 			if decodeStrictRuntime(orphan.Snapshot, &persisted) == nil &&
 				persisted.DeviceID == *orphan.DeviceID &&
-				restorePersistedDevice(a.nodes[persisted.DeviceID], persisted) == nil {
+				restorePersistedDevice(candidates[persisted.DeviceID], persisted) == nil {
 				restored[persisted.DeviceID] = true
 				if persisted.LastAcceptedGeneration > maxGeneration {
 					maxGeneration = persisted.LastAcceptedGeneration
@@ -193,8 +238,16 @@ func (a *App) restorePersistenceV2() {
 		}
 		orphans = append(orphans, orphan)
 	}
-	a.orphans = deduplicateOrphans(orphans)
+	orphans = deduplicateOrphans(orphans)
+	if len(orphans) > contracts.MaxOrphanedDevices {
+		return errOrphanLimitExceeded
+	}
+	for deviceID, candidate := range candidates {
+		*a.nodes[deviceID] = *candidate
+	}
+	a.orphans = orphans
 	a.updateID.Store(maxGeneration)
+	return nil
 }
 
 func sanitizedCorruptOrphan(
@@ -267,6 +320,18 @@ func restorePersistedDeviceFields(node *NodeState, persisted contracts.Persisted
 		persisted.RuntimeObservations, "last_network_out", &node.LastNetworkOut,
 	); err != nil {
 		return err
+	}
+	if raw, exists := persisted.RuntimeObservations["last_request_digest"]; exists {
+		var value string
+		if err := decodeStrictRuntime(raw, &value); err != nil || len(value) != 64 {
+			return errors.New("last request digest is invalid")
+		}
+		decoded, err := hex.DecodeString(value)
+		if err != nil || len(decoded) != sha256.Size {
+			return errors.New("last request digest is invalid")
+		}
+		copy(node.LastRequestDigest[:], decoded)
+		node.HasLastRequestDigest = true
 	}
 	_ = decodeOptionalObservation(
 		persisted.RuntimeObservations, "identity_status", &node.IdentityStatus,
@@ -347,12 +412,17 @@ func decodeStrictRuntime(data []byte, target any) error {
 }
 
 func readPersistenceWithBackup(path string) ([]byte, error) {
-	data, err := readBoundedFile(path, maxPersistenceBytes)
+	paths, err := openPersistencePaths(path, path+"~", true)
+	if err != nil {
+		return nil, err
+	}
+	defer paths.close()
+	data, err := paths.readBounded(paths.primaryName, maxPersistenceBytes)
 	if err == nil {
 		return data, nil
 	}
 	primaryErr := err
-	data, err = readBoundedFile(path+"~", maxPersistenceBytes)
+	data, err = paths.readBounded(paths.backupName, maxPersistenceBytes)
 	if err == nil {
 		return data, nil
 	}
@@ -360,6 +430,110 @@ func readPersistenceWithBackup(path string) ([]byte, error) {
 		return nil, os.ErrNotExist
 	}
 	return nil, primaryErr
+}
+
+func readPersistenceBackup(path string) ([]byte, error) {
+	paths, err := openPersistencePaths(path, path+"~", true)
+	if err != nil {
+		return nil, err
+	}
+	defer paths.close()
+	return paths.readBounded(paths.backupName, maxPersistenceBytes)
+}
+
+func (paths *openedPersistencePaths) readBounded(
+	name string,
+	limit int64,
+) ([]byte, error) {
+	if _, err := paths.validateEntry(name); err != nil {
+		return nil, err
+	}
+	fileFD, err := unix.Openat(
+		paths.directoryFD,
+		name,
+		unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK,
+		0,
+	)
+	if err != nil {
+		if errors.Is(err, unix.ENOENT) {
+			return nil, os.ErrNotExist
+		}
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fileFD), "multi-device-state")
+	if file == nil {
+		_ = unix.Close(fileFD)
+		return nil, errors.New("multi-device state is unavailable")
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, errors.New("multi-device state is unavailable")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil || int64(len(data)) > limit {
+		return nil, errors.New("multi-device state is unavailable")
+	}
+	return data, nil
+}
+
+func (paths *openedPersistencePaths) atomicWrite(
+	name string,
+	data []byte,
+	mode os.FileMode,
+) error {
+	tmpName, err := randomPersistenceName(".hermesstatus-state-", ".tmp")
+	if err != nil {
+		return err
+	}
+	fileFD, err := unix.Openat(
+		paths.directoryFD,
+		tmpName,
+		unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_CLOEXEC|unix.O_NOFOLLOW,
+		uint32(mode.Perm()),
+	)
+	if err != nil {
+		return err
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = unix.Unlinkat(paths.directoryFD, tmpName, 0)
+		}
+	}()
+	file := os.NewFile(uintptr(fileFD), "multi-device-state-temporary")
+	if file == nil {
+		_ = unix.Close(fileFD)
+		return errors.New("multi-device state is unavailable")
+	}
+	if err := file.Chmod(mode); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	if err := unix.Renameat(
+		paths.directoryFD,
+		tmpName,
+		paths.directoryFD,
+		name,
+	); err != nil {
+		return err
+	}
+	cleanup = false
+	return unix.Fsync(paths.directoryFD)
 }
 
 func persistenceReadErrorCode(err error) string {

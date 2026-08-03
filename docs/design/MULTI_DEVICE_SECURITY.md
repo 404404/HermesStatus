@@ -42,9 +42,22 @@ in-flight request from overwriting a newer one.
 Use independent CSPRNG-generated 32-byte tokens encoded as exactly 43
 unpadded-base64url characters, read-only Client files, server-side digests,
 verified HTTPS, bounded rotation windows, rate limiting, and secret-free logs.
-Bearer tokens are replayable within their validity window, so exposure response
-is immediate per-device rotation. Compromise of one token does not authorize
-another device.
+Application replay is bounded by bidirectional clock skew, per-device
+monotonic timestamps, and canonical request-digest idempotency. Tokens remain
+bearer credentials rather than sender-constrained credentials, so exposure
+response is immediate per-device rotation. Compromise of one token does not
+authorize another device.
+
+An equal-time v2 report is idempotent only when both the incoming and persisted
+canonical digests exist and match. State written before digest persistence was
+introduced rejects equal-time reports as conflicts rather than guessing.
+Replay classification is authoritative before FQDN policy: stale reports and
+equal-time conflicts return `409`, even when their reported FQDN is missing or
+mismatched. They cannot change identity, freshness, generation, accepted
+boundary, business domains, or persistence. An exact equal-time replay returns
+`202` without a second logical commit. Only a strictly newer request can reach
+identity policy, and a rejected identity report does not advance the replay
+boundary.
 
 ### Identity spoofing
 
@@ -69,7 +82,44 @@ credential mappings, full internal addresses, raw responses, and raw configs.
 
 Use versioned strict decoding, atomic writes, size limits, validated IDs, and
 registry-authoritative merge. Never promote unknown persisted entries into the
-registry or mark restored data fresh.
+registry or mark restored data fresh. Before listeners start, validate the
+canonical primary path and its derived `~` backup unconditionally: the parent
+must already exist, contain no symlink component, and be writable; both entries
+must be missing or readable/writable regular non-symlink files with one link;
+and the two entries must not alias the same inode. Repeat the same preflight
+before accepting a device update and before every write. Persistence writes use
+a held parent-directory file descriptor, `openat`/`renameat`, non-following
+exclusive temporary files, file and directory sync, and explicit error
+propagation.
+
+### Secure configuration document opening
+
+Server configuration, Device Registry, Legacy Mapping and validation-command
+documents use one bounded reader. Starting at an opened root directory, it
+opens every intermediate component relative to the currently held directory
+fd with `O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC`. It then opens the final file with
+`openat`, `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`, requires a regular file by
+`fstat`, and reads size plus one byte from that same fd. A pathname is never
+re-resolved after component validation. This closes the parent-replacement
+race that remains when `lstat` is followed by a full-path `open` whose
+`O_NOFOLLOW` protects only the final component.
+
+Credential directory enumeration and record reads share the same directory
+traversal contract and retain a held directory fd between enumeration and
+record opening. Persistence keeps its specialized primary/backup reader but
+uses the same no-symlink directory traversal. Unsafe configured documents fail
+application construction before listeners, nodes or persistence writes.
+
+Namespace safety does not make an attacker-writable directory trustworthy.
+Production configuration lives in a root- or operator-managed directory that
+is not group/world writable; files are not writable by unauthorized users and
+are mounted read-only into the Server. Preview paths under `/tmp` are test
+locations, not production permission examples.
+
+HTTP and HTTPS monitor URLs never carry a query or fragment. This is a
+structural deny-all rule, not a sensitive-parameter-name denylist, and applies
+equally at configuration, Management API, reload, Device response, Fixture,
+and Client boundaries.
 
 ## 4. FQDN and address exposure
 
@@ -179,13 +229,14 @@ Tests must prove:
 
 ## 11. Accepted residual risk
 
-A valid bearer token can be replayed during its validity window. HermesStatus
-2.2 does not provide cryptographic replay prevention. Current mitigations are
-verified HTTPS, disabled TLS 0-RTT, per-device fixed-format high-entropy tokens,
-bounded current/next rotation, rapid revocation, no secret logs, isolated proxy
-location, three-layer limiting, and a default-disabled endpoint. Future mTLS at
-the reverse proxy or another sender-constrained credential is recommended but
-is outside 2.2.
+A valid bearer token is not sender-constrained during its validity window.
+HermesStatus rejects reports outside the bidirectional five-minute clock
+window, rejects timestamps older than the device's last accepted report,
+treats an equal timestamp and canonical digest as idempotent, and rejects an
+equal timestamp with different content. The digest is persistence-only and is
+never emitted to Stats, logs, errors, fixtures, or the browser. A stolen token
+can still submit a new current report, so future proxy mTLS or another
+sender-constrained credential remains recommended and outside 2.2.
 
 ## 12. Non-goals and deferred decisions
 

@@ -22,12 +22,14 @@ func TestDeviceConfigValidationIsReadOnlyAndUsesProductionValidators(t *testing.
 	registry.Defaults.DefaultDeviceID = "device-alpha"
 
 	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
 	registryPath := filepath.Join(root, "devices.json")
 	mappingPath := filepath.Join(root, "legacy-device-mapping.json")
 	credentialsPath := filepath.Join(root, "credentials.d")
 	if err := os.Mkdir(credentialsPath, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	writeJSONTestFile(t, configPath, minimalTestConfig())
 	writeJSONTestFile(t, registryPath, registry)
 	writeJSONTestFile(t, mappingPath, contracts.LegacyMappingDocument{
 		Version: 1,
@@ -49,6 +51,7 @@ func TestDeviceConfigValidationIsReadOnlyAndUsesProductionValidators(t *testing.
 		),
 	)
 	opts := Options{
+		ConfigPath:           configPath,
 		RegistryPath:         registryPath,
 		LegacyMappingPath:    mappingPath,
 		DeviceCredentialsDir: credentialsPath,
@@ -80,6 +83,30 @@ func TestDeviceConfigValidationIsReadOnlyAndUsesProductionValidators(t *testing.
 	}, "\n")
 	if stdout.String() != wantOutput || stderr.Len() != 0 {
 		t.Fatalf("unexpected safe validation output: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+
+	invalidConfig := minimalTestConfig()
+	invalidConfig["monitors"] = []any{map[string]any{
+		"name": "query-not-allowed", "host": "https://example.invalid/?check=health",
+		"interval": 60, "type": "https",
+	}}
+	writeJSONTestFile(t, configPath, invalidConfig)
+	stdout.Reset()
+	stderr.Reset()
+	if exitCode := runDeviceConfigValidation(
+		opts,
+		&stdout,
+		&stderr,
+		now,
+	); exitCode != 2 ||
+		stdout.Len() != 0 ||
+		stderr.String() != "validation failed code=config_invalid field=config\n" {
+		t.Fatalf(
+			"query monitor bypassed operational validation: code=%d stdout=%q stderr=%q",
+			exitCode,
+			stdout.String(),
+			stderr.String(),
+		)
 	}
 }
 
@@ -215,7 +242,10 @@ func TestDeviceConfigValidationRejectsMissingAndUnsafeInputs(t *testing.T) {
 		stderr.String() != "validation failed code=registry_unavailable field=registry\n" {
 		t.Fatalf("symlink input did not fail safely: code=%d stderr=%q", exitCode, stderr.String())
 	}
-	if data, err := readBoundedFile("relative.json", maxRuntimeConfigBytes); err == nil || data != nil {
+	if data, err := secureReadBoundedDocument(
+		"relative.json",
+		maxRuntimeConfigBytes,
+	); err == nil || data != nil {
 		t.Fatal("relative multi-device document was accepted")
 	}
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import ipaddress
 import itertools
+import json
 import random
 import socket
 import ssl
@@ -37,6 +38,7 @@ SLOW_RETRY_CODES = {
     "redirect_rejected",
     "invalid_server_response",
 }
+DISCARDED_REPORT_CODES = {"stale_report", "report_conflict"}
 _MONITOR_GENERATIONS = itertools.count(1)
 
 
@@ -237,6 +239,8 @@ def _classify_response(response: Any, data: bytes) -> dict[str, Any]:
         raise DeviceTransportError("payload_too_large")
     if status == 415:
         raise DeviceTransportError("protocol_incompatible")
+    if status == 409:
+        raise DeviceTransportError(_conflict_error_code(data))
     if status == 429:
         raise DeviceTransportError(
             "rate_limited",
@@ -245,6 +249,22 @@ def _classify_response(response: Any, data: bytes) -> dict[str, Any]:
     if 500 <= status <= 599:
         raise DeviceTransportError("server_unavailable")
     raise DeviceTransportError("unexpected_server_status")
+
+
+def _conflict_error_code(data: bytes) -> str:
+    try:
+        document = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return "report_conflict"
+    if not isinstance(document, dict) or set(document) != {"error"}:
+        return "report_conflict"
+    error = document["error"]
+    if not isinstance(error, dict) or set(error) != {"code", "request_id"}:
+        return "report_conflict"
+    code = error["code"]
+    if code in DISCARDED_REPORT_CODES:
+        return code
+    return "report_conflict"
 
 
 def _valid_json_content_type(value: str | None) -> bool:
@@ -318,6 +338,9 @@ class DeviceV2Runner:
             return float(self.config.collection_interval_seconds)
         except DeviceTransportError as exc:
             self._log_throttled(exc.code)
+            if exc.code in DISCARDED_REPORT_CODES:
+                self.attempt = 0
+                return float(self.config.collection_interval_seconds)
             delay = self._failure_delay(exc)
             self.attempt = min(self.attempt + 1, 31)
             return delay
