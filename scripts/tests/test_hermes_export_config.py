@@ -216,6 +216,49 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["usage_mode"], "api")
         self.assertEqual(payload["auth_refreshed_at"], "2026-07-15T09:30:00Z")
 
+    def test_api_and_profile_config_fill_cli_only_runtime_fields(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root),
+            "status_dir": str(self.status),
+            "profiles": [{
+                "name": "daily",
+                "profile_dir": str(profile_dir),
+                "manager_mode": "docker (foreground)",
+                "provider_label": "OpenCode Go",
+                "api": {"enabled": True, "port": 18000},
+            }],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("unknown", "")
+            module.hermes_cli_status = lambda _profile: ""
+            module.hermes_agent_version = lambda: ""
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True,
+                "main_model": {"provider": "opencode-go", "model": "deepseek-v4-pro"},
+                "docker_volumes": [],
+            })
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {
+                "status": "ok",
+                "health": {"status": "ok", "version": "0.19.0"},
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({}),
+            }
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["agent_version"], "0.19.0")
+        self.assertEqual(payload["gateway_service"], "running")
+        self.assertEqual(payload["manager_mode"], "docker (foreground)")
+        self.assertEqual(payload["usage_mode"], "api")
+        self.assertEqual(payload["provider"], "OpenCode Go")
+
     def test_local_usage_preserves_recursive_1_0_window(self):
         self.write_registry(["daily"])
         module = load_exporter(self.config)
