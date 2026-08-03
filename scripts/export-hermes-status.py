@@ -953,7 +953,7 @@ def collect_api(profile):
         api["errors"].append(err)
     else:
         status = bounded_text(first_string(health, ("status", "state", "health")).lower(), 32)
-        api["status"] = status if status in ("ok", "healthy") else "ok"
+        api["status"] = status if status in ("ok", "healthy") else "unknown"
         api["health"] = health
 
     detailed, err = http_json(profile, "/health/detailed")
@@ -1149,7 +1149,11 @@ def profile_stats(profile, profile_dir, previous=None):
         service_value = state
     gateway_value = cli.get("gateway_service") or profile_configuration.get("gateway_service")
     if not gateway_value and api_ok:
-        gateway_value = "running"
+        health_status = bounded_text(first_string(health, ("status", "state", "health")).lower(), 32)
+        if health_status in ("ok", "healthy"):
+            gateway_value = "running"
+        elif health_status:
+            gateway_value = health_status
     elif not gateway_value and state and state != "unknown":
         gateway_value = state
     manager_value = cli.get("manager_mode") or profile_configuration.get("manager_mode")

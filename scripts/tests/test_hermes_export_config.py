@@ -250,6 +250,22 @@ class RegistryTests(unittest.TestCase):
                 "mixture_of_agents": module.sanitize_mixture_of_agents({}),
             }
             payload = module.profile_stats("daily", profile_dir)
+
+            module.collect_api = lambda _profile: {
+                "status": "unknown",
+                "health": {"status": "degraded", "version": "0.19.0"},
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({}),
+            }
+            degraded_payload = module.profile_stats("daily", profile_dir)
+
+            module.collect_api = lambda _profile: {
+                "status": "unknown",
+                "health": {},
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({}),
+            }
+            empty_payload = module.profile_stats("daily", profile_dir)
         finally:
             (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
 
@@ -258,6 +274,8 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["manager_mode"], "docker (foreground)")
         self.assertEqual(payload["usage_mode"], "api")
         self.assertEqual(payload["provider"], "OpenCode Go")
+        self.assertEqual(degraded_payload["gateway_service"], "degraded")
+        self.assertIsNone(empty_payload["gateway_service"])
 
     def test_local_usage_preserves_recursive_1_0_window(self):
         self.write_registry(["daily"])
