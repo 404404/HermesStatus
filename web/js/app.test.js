@@ -83,6 +83,8 @@ async function run(){
   assert.match(appSource, /function expectationBadge\(value\)/);
   assert.match(appSource, /expectationBadge\(expectation\.result/);
   assert.match(appSource, /const peerSummary = !commandAvailable\('peer_list'\)/);
+	assert.match(appSource, /const tcpConnectorText = commandAvailable\('connector_list'\)/);
+	assert.match(appSource, /const trafficText = commandAvailable\('stats_show'\)/);
   assert.match(appSource, /escapeHtml\(textOrDash\(peer\.peer_id\)\)/);
   assert.doesNotMatch(appSource, /CPU温度\/硬盘温度/);
   assert.doesNotMatch(appSource, /已运行时间\/操作系统/);

@@ -37,6 +37,12 @@ STATUS_VALUES = {
 }
 TRANSPORTS = {"udp", "tcp", "quic", "wg", "wss", "unknown"}
 FAMILIES = {"ipv4", "ipv6", "unknown"}
+INTERNAL_IPV4_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+INTERNAL_CIDR_NETWORKS = INTERNAL_IPV4_NETWORKS + (ipaddress.ip_network("fc00::/7"),)
 
 
 def _now():
@@ -98,7 +104,7 @@ def _internal_ip(value):
         address = ipaddress.ip_interface(text).ip if "/" in text else ipaddress.ip_address(text)
     except ValueError:
         return None
-    return str(address) if address.is_private else None
+    return str(address) if address.version == 4 and any(address in network for network in INTERNAL_IPV4_NETWORKS) else None
 
 
 def _internal_cidrs(value):
@@ -112,7 +118,7 @@ def _internal_cidrs(value):
             network = ipaddress.ip_network(text, strict=False)
         except ValueError:
             continue
-        if network.is_private and str(network) not in result:
+        if any(network.version == allowed.version and network.subnet_of(allowed) for allowed in INTERNAL_CIDR_NETWORKS) and str(network) not in result:
             result.append(str(network))
     return result
 
@@ -261,6 +267,36 @@ def _json_object(output):
     return value
 
 
+def _list_payload(value, keys):
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        for key in keys:
+            if isinstance(value.get(key), list):
+                return value[key]
+    return None
+
+
+def _valid_command_payload(name, value):
+    if name == "node_info":
+        return isinstance(value, dict) and _safe_text(_deep_lookup(value, "peer_id", "virtual_peer_id"), 32) is not None and _safe_text(_deep_lookup(value, "version")) is not None
+    if name == "peer_list":
+        items = _list_payload(value, ("peers", "data", "items"))
+        return items is not None and len(items) <= MAX_ITEMS and all(isinstance(item, dict) and _safe_text(_lookup(item, "peer_id", "virtual_peer_id", "id"), 32) is not None for item in items)
+    if name == "route_list":
+        items = _list_payload(value, ("routes", "data", "items"))
+        return items is not None and len(items) <= MAX_ITEMS and all(isinstance(item, dict) and _safe_text(_lookup(item, "peer_id", "virtual_peer_id", "id"), 32) is not None for item in items)
+    if name == "connector_list":
+        items = _list_payload(value, ("connectors", "data", "items"))
+        return items is not None and len(items) <= MAX_ITEMS and all(isinstance(item, dict) for item in items)
+    if name == "stats_show":
+        return isinstance(value, dict) and all(
+            isinstance(_lookup(value, *keys), (int, float)) and not isinstance(_lookup(value, *keys), bool) and math.isfinite(_lookup(value, *keys)) and 0 <= _lookup(value, *keys) <= 9007199254740991
+            for keys in (("traffic_bytes_rx", "bytes_rx"), ("traffic_bytes_tx", "bytes_tx"), ("traffic_bytes_forwarded", "bytes_forwarded"))
+        )
+    return False
+
+
 def _as_list(value):
     if isinstance(value, list):
         return value[:MAX_ITEMS]
@@ -323,6 +359,8 @@ class EasyTierCollector(object):
             collected_at = _now()
             try:
                 values[name] = self._run(command)
+                if not _valid_command_payload(name, values[name]):
+                    raise ValueError("invalid command payload")
                 command_status = _empty_command("healthy", None)
                 command_status["last_success_at"] = collected_at
                 command_status["collected_at"] = collected_at

@@ -418,6 +418,7 @@ func NormalizeRegistry(registry *DeviceRegistry) {
 			prefix, _ := canonicalInternalCIDR(value)
 			canonical = append(canonical, prefix)
 		}
+		expectation.NetworkName = strings.TrimSpace(expectation.NetworkName)
 		sort.Strings(canonical)
 		expectation.ProxyCIDRs = canonical
 	}

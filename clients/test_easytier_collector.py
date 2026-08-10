@@ -124,6 +124,25 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertEqual(payload["command_status"]["peer_list"]["status"], "invalid_data")
         self.assertEqual(payload["peers"]["items"], [])
 
+    def test_rejects_wrong_command_shapes_and_non_rfc1918_overlay_addresses(self):
+        class MalformedRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                command = tuple(argv[-2:])
+                if command == ("node", "info"):
+                    return Result([])
+                if command == ("peer", "list"):
+                    return Result({"unexpected": []})
+                if command == ("route", "list"):
+                    return Result([{"id": 12345, "ipv4": "fd00::1"}])
+                if command == ("stats", "show"):
+                    return Result({"unexpected": 1})
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=MalformedRunner()).collect()
+        for name in ("node_info", "peer_list", "stats_show"):
+            self.assertEqual(payload["command_status"][name]["status"], "invalid_data")
+        self.assertIsNone(payload["routes"]["items"][0]["overlay_ipv4"])
+
     def test_unsupported_version_and_malicious_fields_are_safe(self):
         class FutureRunner(Runner):
             def __call__(self, argv, **kwargs):

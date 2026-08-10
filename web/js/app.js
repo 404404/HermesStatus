@@ -588,6 +588,18 @@ function renderEasyTier(view){
 	const traffic = safeObject(easytier.traffic);
 	const commands = safeObject(easytier.command_status);
 	const commandAvailable = name => safeObject(commands[name]).status === 'healthy';
+	const tcpListenerText = commandAvailable('node_info') || commandAvailable('stats_show')
+		? booleanText(connectors.tcp_listener_available)
+		: '数据不可用';
+	const tcpConnectorText = commandAvailable('connector_list')
+		? booleanText(connectors.tcp_configured)
+		: '数据不可用';
+	const tcpActiveText = commandAvailable('connector_list')
+		? booleanText(connectors.tcp_active)
+		: '数据不可用';
+	const trafficText = commandAvailable('stats_show')
+		? `${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`
+		: '数据不可用';
 	const peerSummary = !commandAvailable('peer_list')
 		? '数据不可用'
 		: peers.total === 0
@@ -601,8 +613,8 @@ function renderEasyTier(view){
 		['远端节点', escapeHtml(peerSummary)],
 		['IPv6 UDP Direct', escapeHtml(ipv6UdpDirectText(peers, commandAvailable('peer_list')))],
 		['路由数', escapeHtml(commandAvailable('route_list') ? formatInteger(routes.total) : '数据不可用')],
-		['TCP Listener / Connector / Active', escapeHtml(`${booleanText(connectors.tcp_listener_available)} / ${booleanText(connectors.tcp_configured)} / ${booleanText(connectors.tcp_active)}`)],
-		['接收 / 发送 / 转发', escapeHtml(`${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`)]
+		['TCP Listener / Connector / Active', escapeHtml(`${tcpListenerText} / ${tcpConnectorText} / ${tcpActiveText}`)],
+		['接收 / 发送 / 转发', escapeHtml(trafficText)]
 	];
 	byId('easytierSummary').innerHTML = details.map(([label, value]) => detailRow(label, value)).join('');
 	byId('easytierMeta').textContent = `更新时间：${formatDateTime(easytier.updated_at)}${easytier.error ? ` · ${textOrDash(easytier.error.message || easytier.error.code)}` : ''}`;
