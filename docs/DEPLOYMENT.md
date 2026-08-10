@@ -35,7 +35,9 @@ internet.
 
 Keep an EasyTier-enabled candidate in a separate Compose project with a
 separate registry, credential directory, state directory, client status
-directory, and loopback-only web port. Mount only the EasyTier CLI binary into
+directory, and HTTPS host port. Bind that host port to the explicit private
+interface used by the overlay or LAN (for example, the EasyTier interface),
+never to `0.0.0.0` or a public address. Mount only the EasyTier CLI binary into
 the Client, read-only; do not mount its configuration or secrets. If Device v2
 uses a TLS proxy, set the Server's trusted-proxy CIDR to that proxy only and
 keep backend HTTP private to the Compose network. Confirm `easytier.status`,
