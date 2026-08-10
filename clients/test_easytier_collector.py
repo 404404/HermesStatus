@@ -82,6 +82,19 @@ class EasyTierCollectorTests(unittest.TestCase):
             self.assertFalse(kwargs["shell"])
             self.assertIsNotNone(kwargs["stderr"])
 
+    def test_preserves_node_network_name_and_only_marks_tcp_as_active(self):
+        class NonTCPRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                result = super().__call__(argv, **kwargs)
+                if tuple(argv[-2:]) == ("connector", "list"):
+                    return Result([{"protocol": "udp", "connected": True}])
+                return result
+
+        payload = EasyTierCollector(environ=self.environ, runner=NonTCPRunner()).collect()
+        self.assertEqual(payload["node"]["network_name"], "fixture-net")
+        self.assertFalse(payload["connectors"]["tcp_configured"])
+        self.assertFalse(payload["connectors"]["tcp_active"])
+
     def test_partial_failure_is_degraded_and_does_not_leak_stderr(self):
         payload = EasyTierCollector(environ=self.environ, runner=Runner({("peer", "list")})).collect()
         self.assertEqual(payload["status"], "degraded")

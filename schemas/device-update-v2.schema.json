@@ -89,6 +89,9 @@
         "lucky": {
           "$ref": "../docs/migration/schema/lucky-extension.schema.json"
         },
+        "easytier": {
+          "$ref": "../docs/migration/schema/easytier-extension.schema.json"
+        },
         "hardware_json": {"type": "string", "maxLength": 262144},
         "docker_json": {"type": "string", "maxLength": 262144},
         "hermes_json": {"type": "string", "maxLength": 262144}

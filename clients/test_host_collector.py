@@ -28,6 +28,7 @@ from host_collector import (
     smart_candidates,
 )
 from lucky_collector import not_configured_lucky
+from easytier_collector import not_configured_easytier
 
 
 CLIENT_DIR = Path(__file__).resolve().parent
@@ -72,6 +73,22 @@ class SmartRunner(object):
 
 
 class HostCollectorTests(unittest.TestCase):
+    def test_easytier_uses_resolved_collector_interval(self):
+        class EasyTierFixture(object):
+            config = {"interval_seconds": 75}
+
+            def collect(self):
+                return {}
+
+        collector = HostExtensionCollector(
+            host_os_release_file=str(FIXTURES / "os-release"),
+            status_dir="",
+            command_runner=lambda command, timeout: (0, ""),
+            docker_request=lambda path: [],
+            easytier_collector=EasyTierFixture(),
+        )
+        self.assertEqual(collector.easytier_interval, 75)
+
     def test_host_os_uses_mounted_pretty_name(self):
         name, error = collect_host_os(str(FIXTURES / "os-release"))
         self.assertEqual(name, "Example Linux 24.04 LTS")
@@ -344,6 +361,7 @@ class HostCollectorTests(unittest.TestCase):
             "docker": docker_stats,
             "hermes": not_reported_hermes(),
             "lucky": not_configured_lucky(),
+            "easytier": not_configured_easytier(),
         }
         self.assertFalse(any(key.endswith("_json") for key in payload))
         serialized = json.dumps(payload)

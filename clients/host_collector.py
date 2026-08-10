@@ -921,7 +921,13 @@ class HostExtensionCollector(object):
         self.lucky_collector = lucky_collector or collector_from_environment()
         self.lucky_interval = lucky_interval or _env_int("LUCKY_INTERVAL", 600)
         self.easytier_collector = easytier_collector or easytier_collector_from_environment(easytier_args)
-        self.easytier_interval = easytier_interval or _env_int("EASYTIER_INTERVAL_SECONDS", 30)
+        if easytier_interval is None:
+            resolved_config = getattr(self.easytier_collector, "config", {})
+            self.easytier_interval = resolved_config.get(
+                "interval_seconds", _env_int("EASYTIER_INTERVAL_SECONDS", 30)
+            )
+        else:
+            self.easytier_interval = easytier_interval
         self.host_os, os_error = collect_host_os(self.host_os_release_file)
         self.cpu_model, cpu_error = collect_cpu_model(command_runner)
         self.identity_errors = [item for item in (os_error, cpu_error) if item]

@@ -326,17 +326,20 @@ class EasyTierCollector(object):
         result["total"] = len(connectors)
         for connector in connectors:
             text = str(_lookup(connector, "protocol", "type", "url") or "").lower()
-            if text.startswith("tcp") or "tcp://" in text:
+            is_tcp = text.startswith("tcp") or "tcp://" in text
+            if is_tcp:
                 result["tcp_configured"] = True
-            if bool(_lookup(connector, "connected", "active", "is_connected")):
-                result["tcp_active"] = True
+                if bool(_lookup(connector, "connected", "active", "is_connected")):
+                    result["tcp_active"] = True
 
     @staticmethod
     def _apply_stats(payload, value):
         if not isinstance(value, dict):
             return
         traffic = payload["traffic"]
-        payload["node"]["network_name"] = _safe_text(_deep_lookup(value, "network_name"))
+        network_name = _safe_text(_deep_lookup(value, "network_name"))
+        if network_name is not None:
+            payload["node"]["network_name"] = network_name
         traffic["bytes_rx"] = _counter(_lookup(value, "traffic_bytes_rx", "bytes_rx"))
         traffic["bytes_tx"] = _counter(_lookup(value, "traffic_bytes_tx", "bytes_tx"))
         traffic["bytes_forwarded"] = _counter(_lookup(value, "traffic_bytes_forwarded", "bytes_forwarded"))
