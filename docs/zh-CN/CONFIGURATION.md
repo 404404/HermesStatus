@@ -64,3 +64,21 @@ serverstatus --validate-device-config \
   --device-credentials /absolute/path/credentials.d \
   --legacy-device-mapping /absolute/path/legacy-device-mapping.json
 ```
+
+## 可选 EasyTier expectation
+
+仅当运维人员需要比较诊断时，才在现有 Registry 的设备记录中添加 expectation。
+它是可选项，不能创建设备、认证 Client 或选择凭据：
+
+```json
+"easytier_expectation": {
+  "administrative_role": "site_router",
+  "network_name": "home-404",
+  "overlay_ipv4": "10.250.250.1",
+  "proxy_cidrs": ["192.168.68.0/24"]
+}
+```
+
+允许的角色为 `site_router`、`endpoint`、`bootstrap_listener`、
+`relay_capable` 与 `observer`；Overlay 和 Proxy 值必须是内部地址。只填写
+经确认的期望值；尚未观察到数据不是故障，会显示为 `not_observable`。

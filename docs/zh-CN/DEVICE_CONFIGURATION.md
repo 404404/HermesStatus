@@ -97,3 +97,26 @@ serverstatus --validate-device-config \
 ```
 
 不得提交生产配置、token、digest 文件、私有 CA 或私有地址。
+
+## EasyTier expectation 示例
+
+可选 expectation 与权威展示名称保存在 Registry 文件中（例如宿主机
+`/etc/hermesstatus/device-v2/devices.json`），Server Compose 将它只读挂载为
+`/etc/hermesstatus/devices.json`。它不应写入 `client-v2.json`，也不会改变 Client
+的 Server URL、端口、认证或 device ID。
+
+```json
+{
+  "id": "gk50",
+  "display_name": "GK50",
+  "easytier_expectation": {
+    "administrative_role": "site_router",
+    "network_name": "home-404",
+    "overlay_ipv4": "10.250.250.1",
+    "proxy_cidrs": ["192.168.68.0/24"]
+  }
+}
+```
+
+真实记录仍须保留既有必填 Registry 字段；上例只说明新增的可选块。Client EasyTier
+配置独立挂载，只允许本地 CLI 路径、loopback RPC portal、timeout、interval 和 enabled。

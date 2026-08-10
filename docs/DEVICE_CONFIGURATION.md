@@ -112,3 +112,29 @@ serverstatus --validate-device-config \
 
 Never commit the production configuration, token, digest documents, private CA,
 or private endpoint addresses.
+
+## EasyTier expectation example
+
+The optional expectation is stored alongside the authoritative display name in
+the Registry file (for example `/etc/hermesstatus/device-v2/devices.json`),
+which the Server Compose file mounts read-only at
+`/etc/hermesstatus/devices.json`. It does not belong in `client-v2.json` and
+does not alter the Client's Server URL, port, authentication, or device ID.
+
+```json
+{
+  "id": "gk50",
+  "display_name": "GK50",
+  "easytier_expectation": {
+    "administrative_role": "site_router",
+    "network_name": "home-404",
+    "overlay_ipv4": "10.250.250.1",
+    "proxy_cidrs": ["192.168.68.0/24"]
+  }
+}
+```
+
+Keep the existing required Registry fields in the real record; this abbreviated
+example only documents the additional optional block. The Client EasyTier
+configuration remains separately mounted and permits only its local CLI path,
+loopback RPC portal, timeout, interval, and enabled flag.

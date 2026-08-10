@@ -90,3 +90,23 @@ serverstatus --validate-device-config \
   --device-credentials /absolute/path/credentials.d \
   --legacy-device-mapping /absolute/path/legacy-device-mapping.json
 ```
+
+## Optional EasyTier expectation
+
+Place an expectation only in the existing Registry device record when an
+operator wants comparison diagnostics. It is optional and does not create a
+device, authenticate a Client, or select credentials:
+
+```json
+"easytier_expectation": {
+  "administrative_role": "site_router",
+  "network_name": "home-404",
+  "overlay_ipv4": "10.250.250.1",
+  "proxy_cidrs": ["192.168.68.0/24"]
+}
+```
+
+Allowed roles are `site_router`, `endpoint`, `bootstrap_listener`,
+`relay_capable`, and `observer`; overlay and proxy values must be internal.
+Only configure values deliberately. Missing observations are not failures by
+themselves and display `not_observable`.

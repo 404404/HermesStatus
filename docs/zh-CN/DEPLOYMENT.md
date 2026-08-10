@@ -52,3 +52,15 @@ docker compose -p <project> ps
 ```
 
 检查 Client 健康状态和重启次数，再确认 `stats.json` 中目标设备 SMART 状态不为 `unknown`。
+
+## 2.3 Preview staging
+
+`2.3-preview` 必须使用独立的 Compose 项目、状态目录、Registry、凭据、网络
+和候选镜像。当前 Preview 主机端口为 21443，升级时沿用既有 staging 绑定策略，
+不得擅自放宽。变更前记录 2.2 的容器 ID、镜像、OCI label、端口、挂载、网络和
+重启次数；2.3 Preview 不得停止、重建或修改 2.2。
+
+只从干净的候选 commit 构建，并使 Server 和 Client 的 OCI revision 精确等于
+该 commit。备份 Preview 配置和状态，安全升级现有 Preview 项目，再验证 health、
+stats、Device v2 上报、服务端重启及 down/up 后的持久化，以及重启次数为零的
+观察窗口。

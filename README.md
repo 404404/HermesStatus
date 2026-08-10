@@ -1,4 +1,4 @@
-# HermesStatus 2.0
+# HermesStatus 2.3 Preview
 
 [English](README_EN.md) · [中文文档](docs/zh-CN/README.md) · [English docs](docs/README.md)
 
@@ -11,7 +11,7 @@ HermesStatus 是自托管的当前状态面板。Go Server 接收 Client 上报�
 - Docker 页面展示容器数量、名称、镜像、状态与端口摘要。
 - 主页同时展示已配置 Hermes Profile 的网关、运行状态、模型/提供商与用量快照；Profile 表头显示统一 Agent 版本与配置数量（例如 `Agent版本: 0.19.0，3个配置`）。
 - Lucky 页面在显式启用后展示版本、DDNS、Web 服务、端口转发和证书摘要。
-- EasyTier 页面在显式启用后先以独立状态模块显示每项只读采集命令，再展示严格只读投影中的网络、节点状态、远端节点/路由计数、TCP connector 状态与流量；更新时间位于状态表头，零远端节点仍表示健康。
+- EasyTier 页面在显式启用后先以独立状态模块显示每项只读采集命令，再展示节点、Configured vs Observed、Peer、Route、Connector 与流量的严格白名单投影。零远端节点是健康的“未观察到”状态：直连、中继和 IPv6 UDP Direct 不会被误报为 0 或 false。
 - 支持 Legacy TCP Agent；可选 Device v2 使用 Registry、digest credential 与受 HTTPS 代理保护的上报端点。
 
 网络流量、网络吞吐、三网/运营商延迟探测不是 HermesStatus 面板功能。
@@ -100,6 +100,8 @@ serverstatus --validate-device-config \
 (cd clients && python3 -m unittest discover)
 (cd scripts/tests && python3 -m unittest discover)
 ```
+
+`2.3-preview` 是 2.3 的唯一集成与 21443 staging 分支；它不会自动推进到 `2.0`。当前仅以 GK50 的 zero-peer 数据完成真实采集验证；双站点 Synology、IPv6 UDP Direct、TCP fallback、192.168.88.0/24 与真实 Direct/Relay 行为仍待真实资格验证。Synthetic fixtures 只用于预览状态验证，绝不表示真实网络已验证。
 
 不得提交真实 token、密码、credential、私有地址或生产配置。
 

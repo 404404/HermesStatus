@@ -70,3 +70,12 @@ definitions.
 The registry supports at most 16 devices. Device discovery, browser-side
 registration, remote control, RBAC, multi-tenancy, database history, WebSocket,
 and SSE are outside the product boundary.
+
+## 2.3 Preview EasyTier boundary
+
+`2.3-preview` integrates 2.3 work and runs independent staging on 21443; it is
+not a promotion to `2.0`. EasyTier reaches the Server only as a validated,
+secret-free extension in the existing stats document. The browser uses the same
+`/json/stats.json` fetch and selected device as the other views—no EasyTier
+endpoint, timer, management channel, or identity mapping exists. Registry
+expectations are comparison-only diagnostics, never authentication or identity.

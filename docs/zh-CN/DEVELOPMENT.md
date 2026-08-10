@@ -22,4 +22,11 @@ docker compose -f docker-compose-client.yml config --quiet
 
 ## Pull Request
 
-创建聚焦分支并提交，然后向 `2.0` 创建 PR。等待必需 CI 和 Review 反馈；在同一分支修复可操作问题，运行行为改变后重新部署候选验证，并只在操作员确认后合并。
+创建聚焦的 `codex/2.3-*` 分支并提交，然后向 `2.3-preview` 创建 Draft PR。等待
+必需 CI 和 Review 反馈；在同一分支修复可操作问题，运行行为改变后重新部署最终候选，
+并保持 Draft，直到操作员手动合并。不得自动 Mark Ready、Merge 或将 Preview 推进到
+`2.0`。
+
+EasyTier 改动除常规 Python、Go、race、vet、build、Node、Compose、contract 与 secret
+门禁外，还需要 synthetic 状态 Fixture 和真实 loopback GK50 采集检查。Synthetic 拓扑
+状态必须始终明确标记。
