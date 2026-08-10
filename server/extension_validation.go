@@ -85,12 +85,14 @@ func DecodeExtensionSnapshotJSON(data []byte) (*ExtensionSnapshot, error) {
 		Docker:           snapshot.Docker,
 		Hermes:           snapshot.Hermes,
 		Lucky:            snapshot.Lucky,
+		EasyTier:         snapshot.EasyTier,
 	})
 	snapshot.ExtensionVersion = stats.ExtensionVersion
 	snapshot.Hardware = stats.Hardware
 	snapshot.Docker = stats.Docker
 	snapshot.Hermes = stats.Hermes
 	snapshot.Lucky = stats.Lucky
+	snapshot.EasyTier = stats.EasyTier
 	if ContainsSecretLikeText(snapshot.ReceivedAt) {
 		snapshot.ReceivedAt = RedactedValue
 	}
@@ -194,6 +196,11 @@ func ValidateExtensionStats(stats *ExtensionStats) error {
 			return err
 		}
 	}
+	if stats.EasyTier != nil {
+		if err := ValidateEasyTierStats(stats.EasyTier); err != nil {
+			return err
+		}
+	}
 	return validatePayloadSize("extension", stats, MaxExtensionPayloadBytes)
 }
 
@@ -210,6 +217,7 @@ func ValidateExtensionSnapshot(snapshot *ExtensionSnapshot) error {
 		Docker:           snapshot.Docker,
 		Hermes:           snapshot.Hermes,
 		Lucky:            snapshot.Lucky,
+		EasyTier:         snapshot.EasyTier,
 	}
 	if err := ValidateExtensionStats(stats); err != nil {
 		return err
@@ -789,6 +797,10 @@ func SanitizeExtensionStats(input ExtensionStats) ExtensionStats {
 		lucky := SanitizeLuckyStats(*input.Lucky)
 		result.Lucky = &lucky
 	}
+	if input.EasyTier != nil {
+		easytier := SanitizeEasyTierStats(*input.EasyTier)
+		result.EasyTier = &easytier
+	}
 	return result
 }
 
@@ -857,6 +869,14 @@ func safeErrorMessage(code string) string {
 		return "Hermes profile is unavailable"
 	case "partial_failure":
 		return "One or more extension sources are unavailable"
+	case "easytier_cli_unavailable":
+		return "EasyTier CLI is unavailable"
+	case "rpc_unavailable":
+		return "EasyTier loopback RPC is unavailable"
+	case "command_failed":
+		return "EasyTier command is unavailable"
+	case "invalid_configuration":
+		return "EasyTier monitoring configuration is invalid"
 	case "clock_skew":
 		return "Extension timestamp is too far in the future"
 	default:
@@ -886,7 +906,12 @@ func validateRequiredExtensionFields(data []byte, snapshot bool) error {
 		return err
 	}
 	if raw, ok := root["lucky"]; ok {
-		return validateRequiredLucky(raw)
+		if err := validateRequiredLucky(raw); err != nil {
+			return err
+		}
+	}
+	if raw, ok := root["easytier"]; ok {
+		return validateRequiredEasyTier(raw)
 	}
 	return nil
 }

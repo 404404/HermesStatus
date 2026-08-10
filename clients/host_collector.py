@@ -15,6 +15,8 @@ import threading
 import time
 
 from lucky_collector import collector_from_environment, not_configured_lucky
+from easytier_collector import collector_from_environment as easytier_collector_from_environment
+from easytier_collector import not_configured_easytier
 
 
 EXTENSION_VERSION = "1.0-draft"
@@ -888,6 +890,9 @@ class HostExtensionCollector(object):
         docker_request=None,
         lucky_collector=None,
         lucky_interval=None,
+        easytier_collector=None,
+        easytier_interval=None,
+        easytier_args=None,
     ):
         self.host_os_release_file = host_os_release_file or os.getenv(
             "HOST_OS_RELEASE_FILE", "/host/etc/os-release"
@@ -915,6 +920,8 @@ class HostExtensionCollector(object):
         self.docker_request = docker_request
         self.lucky_collector = lucky_collector or collector_from_environment()
         self.lucky_interval = lucky_interval or _env_int("LUCKY_INTERVAL", 600)
+        self.easytier_collector = easytier_collector or easytier_collector_from_environment(easytier_args)
+        self.easytier_interval = easytier_interval or _env_int("EASYTIER_INTERVAL_SECONDS", 30)
         self.host_os, os_error = collect_host_os(self.host_os_release_file)
         self.cpu_model, cpu_error = collect_cpu_model(command_runner)
         self.identity_errors = [item for item in (os_error, cpu_error) if item]
@@ -922,6 +929,7 @@ class HostExtensionCollector(object):
         self._docker = not_reported_docker()
         self._hermes = not_reported_hermes()
         self._lucky = not_configured_lucky()
+        self._easytier = not_configured_easytier()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._started = False
@@ -993,6 +1001,21 @@ class HostExtensionCollector(object):
         self._store("lucky", payload)
         return payload
 
+    def collect_easytier_once(self):
+        try:
+            payload = self.easytier_collector.collect()
+        except Exception:
+            payload = not_configured_easytier()
+            payload["status"] = "unavailable"
+            payload["error"] = _error(
+                "source_error",
+                "EasyTier data is unavailable",
+                "easytier-collector",
+                True,
+            )
+        self._store("easytier", payload)
+        return payload
+
     def _run_periodically(self, function, interval):
         while not self._stop.is_set():
             try:
@@ -1010,6 +1033,7 @@ class HostExtensionCollector(object):
             (self.collect_docker_once, self.docker_interval, "docker-collector"),
             (self.collect_hermes_once, self.hermes_snapshot_interval, "hermes-snapshot-reader"),
             (self.collect_lucky_once, self.lucky_interval, "lucky-collector"),
+            (self.collect_easytier_once, self.easytier_interval, "easytier-collector"),
         ):
             thread = threading.Thread(
                 target=self._run_periodically,
@@ -1028,12 +1052,14 @@ class HostExtensionCollector(object):
             docker_stats = copy.deepcopy(self._docker)
             hermes = copy.deepcopy(self._hermes)
             lucky = copy.deepcopy(self._lucky)
+            easytier = copy.deepcopy(self._easytier)
         return {
             "extension_version": EXTENSION_VERSION,
             "hardware": hardware,
             "docker": docker_stats,
             "hermes": hermes,
             "lucky": lucky,
+            "easytier": easytier,
         }
 
 
@@ -1048,6 +1074,7 @@ def add_extension_payload(update, collector):
                 "docker": not_reported_docker(),
                 "hermes": not_reported_hermes(),
                 "lucky": not_configured_lucky(),
+                "easytier": not_configured_easytier(),
             }
         )
     return update

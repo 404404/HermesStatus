@@ -330,6 +330,9 @@ func extensionHasBusinessError(extension ExtensionStats) bool {
 	if extension.Lucky != nil {
 		extensionErrors = append(extensionErrors, extension.Lucky.Error)
 	}
+	if extension.EasyTier != nil {
+		extensionErrors = append(extensionErrors, extension.EasyTier.Error)
+	}
 	for _, extensionError := range extensionErrors {
 		if extensionError != nil &&
 			extensionError.Code != "not_reported" &&

@@ -68,6 +68,7 @@ ALLOWED_STATS_FIELDS = {
     "docker",
     "hermes",
     "lucky",
+    "easytier",
     "hardware_json",
     "docker_json",
     "hermes_json",

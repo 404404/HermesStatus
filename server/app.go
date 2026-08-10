@@ -366,6 +366,7 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 		base["docker"] = extension.Docker
 		base["hermes"] = extension.Hermes
 		base["lucky"] = extension.Lucky
+		base["easytier"] = extension.EasyTier
 		if a.registry != nil {
 			status := a.deviceStatusAt(node, now)
 			identityStatus := node.IdentityStatus

@@ -22,6 +22,7 @@
             <button id="homeTab" type="button" class="active" role="tab" aria-selected="true" aria-controls="homePage" aria-current="page" data-page-target="home">主页</button>
             <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
             <button id="luckyTab" type="button" role="tab" aria-selected="false" aria-controls="luckyPage" tabindex="-1" data-page-target="lucky">Lucky</button>
+            <button id="easytierTab" type="button" role="tab" aria-selected="false" aria-controls="easytierPage" tabindex="-1" data-page-target="easytier">EasyTier</button>
         </nav>
         <div class="actions">
             <span id="lastUpdate" class="last-update">上次刷新 -</span>
@@ -135,6 +136,17 @@
                 <section class="data-section" aria-labelledby="luckyCertificateTitle">
                     <div class="section-head"><h2 id="luckyCertificateTitle">SSL 证书</h2></div>
                     <div class="table-wrap"><table class="data lucky-certificate-table"><thead><tr><th>名称</th><th>签发者</th><th>生效时间</th><th>失效时间</th><th>剩余天数</th><th>自动续期</th><th>状态</th></tr></thead><tbody id="luckyCertificateBody"></tbody></table></div>
+                </section>
+            </div>
+
+            <div id="easytierPage" class="page-panel" role="tabpanel" aria-labelledby="easytierTab" data-page="easytier" hidden>
+                <section class="data-section" aria-labelledby="easytierSummaryTitle">
+                    <div class="section-head"><h2 id="easytierSummaryTitle">EasyTier 状态</h2><span id="easytierMeta" class="section-meta"></span></div>
+                    <dl id="easytierSummary" class="detail-list easytier-summary"></dl>
+                </section>
+                <section class="data-section" aria-labelledby="easytierCommandsTitle">
+                    <div class="section-head"><h2 id="easytierCommandsTitle">采集状态</h2></div>
+                    <div class="table-wrap"><table class="data easytier-table"><thead><tr><th>数据源</th><th>状态</th><th>说明</th></tr></thead><tbody id="easytierCommandsBody"></tbody></table></div>
                 </section>
             </div>
         </div>

@@ -139,7 +139,7 @@ function modelBreakdown(profile){
 }
 
 function normalizePageName(value){
-	return ['docker', 'lucky'].includes(value) ? value : 'home';
+	return ['docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
 }
 
 function validDeviceId(value){
@@ -262,12 +262,13 @@ function buildViewModel(documentValue, selectedDeviceId = null){
   const host = devices.find(device => device.device_id === selectedDeviceId) ||
     (selectedDeviceId === null ? devices[0] : null) ||
     (!hasV2Devices ? selectSingleHost(documentObject.servers) : null);
-	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, profiles: [], containers: [] };
+	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, profiles: [], containers: [] };
 
   const hardware = safeObject(host.hardware);
   const docker = safeObject(host.docker);
 	const hermes = safeObject(host.hermes);
 	const lucky = safeObject(host.lucky);
+	const easytier = safeObject(host.easytier);
   const memoryPercent = percentage(host.memory_used, host.memory_total);
   const diskPercent = percentage(host.hdd_used, host.hdd_total);
   const cpuPercent = finiteNumber(host.cpu) === null ? null : clamp(host.cpu, 0, 100);
@@ -280,6 +281,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
     docker,
 		hermes,
 		lucky,
+		easytier,
     profiles: Array.isArray(hermes.profiles) ? hermes.profiles : [],
     containers: Array.isArray(docker.containers) ? docker.containers : [],
     resources: {
@@ -301,6 +303,7 @@ function collectWarnings(view){
 	if(!view.host) return [];
 	const domains = [view.hardware, view.docker, view.hermes, ...view.profiles];
 	if(luckyIsConfigured(view.lucky)) domains.push(view.lucky);
+	if(easytierIsConfigured(view.easytier)) domains.push(view.easytier);
 	return domains
     .map(domain => domain?.error)
     .filter(error => error && typeof error === 'object')
@@ -347,6 +350,10 @@ function luckyIsConfigured(lucky){
 	return !domainIsUnknown(lucky) && lucky.status !== 'not_configured' && lucky.error?.code !== 'not_reported';
 }
 
+function easytierIsConfigured(easytier){
+	return !domainIsUnknown(easytier) && easytier.status !== 'not_configured' && easytier.error?.code !== 'not_reported';
+}
+
 function dashboardCondition(view, refreshError = null){
   if(refreshError) return {kind: 'error', title: '刷新失败', message: textOrDash(refreshError.message || refreshError)};
   if(!view.host) return {kind: 'empty', title: '暂无主机数据', message: 'stats.json 暂无可显示的主机。'};
@@ -377,6 +384,7 @@ function dashboardCondition(view, refreshError = null){
 		['硬件', view.hardware], ['Docker', view.docker], ['Hermes', view.hermes]
 	].filter(([, domain]) => domain?.stale === true).map(([name]) => name);
 	if(luckyIsConfigured(view.lucky) && view.lucky?.stale === true) staleDomains.push('Lucky');
+	if(easytierIsConfigured(view.easytier) && view.easytier?.stale === true) staleDomains.push('EasyTier');
   if(view.profiles.some(profile => profile?.stale === true)) staleDomains.push('Profile');
   if(staleDomains.length){
     return {kind: 'stale', title: '数据已陈旧', message: `${[...new Set(staleDomains)].join('、')} 数据超过刷新时限。`};
@@ -517,6 +525,36 @@ function renderLucky(view){
 	renderLuckyTables(view);
 }
 
+function renderEasyTier(view){
+	const easytier = view.easytier;
+	const node = safeObject(easytier.node);
+	const peers = safeObject(easytier.peers);
+	const routes = safeObject(easytier.routes);
+	const connectors = safeObject(easytier.connectors);
+	const traffic = safeObject(easytier.traffic);
+	const details = [
+		['总体状态', badge(easytier.status)],
+		['实例', escapeHtml(textOrDash(node.instance_name))],
+		['网络', escapeHtml(textOrDash(node.network_name))],
+		['版本', escapeHtml(textOrDash(node.version))],
+		['节点 ID', escapeHtml(textOrDash(node.peer_id))],
+		['节点状态', badge(node.state)],
+		['远端节点（直连/中继/未知）', escapeHtml(`${formatInteger(peers.total)} (${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)})`)],
+		['路由数', escapeHtml(formatInteger(routes.total))],
+		['连接器（TCP 已配置/活动）', escapeHtml(`${formatInteger(connectors.total)} (${booleanText(connectors.tcp_configured)} / ${booleanText(connectors.tcp_active)})`)],
+		['接收 / 发送 / 转发', escapeHtml(`${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`)],
+		['更新时间', escapeHtml(formatDateTime(easytier.updated_at))]
+	];
+	byId('easytierSummary').innerHTML = details.map(([label, value]) => detailRow(label, value)).join('');
+	byId('easytierMeta').textContent = easytier.error ? textOrDash(easytier.error.message || easytier.error.code) : '';
+	const names = {node_info: '节点信息', peer_list: '节点列表', route_list: '路由列表', connector_list: '连接器列表', stats_show: '流量统计'};
+	const commands = safeObject(easytier.command_status);
+	byId('easytierCommandsBody').innerHTML = Object.keys(names).map(key => {
+		const command = safeObject(commands[key]);
+		return `<tr><td class="strong-cell">${escapeHtml(names[key])}</td><td>${badge(command.status)}</td><td class="wide-cell">${escapeHtml(textOrDash(command.error?.message || command.error?.code))}</td></tr>`;
+	}).join('');
+}
+
 function renderProfiles(view){
   byId('profilesMeta').textContent = view.profiles.length ? `${view.profiles.length} 个配置` : '';
   byId('profilesBody').innerHTML = view.profiles.length ? view.profiles.map((profile, index) => `
@@ -611,6 +649,7 @@ function renderDashboard(view){
   renderProfiles(view);
 	renderContainers(view);
 	renderLucky(view);
+	renderEasyTier(view);
   applyPageVisibility();
   setPageState(dashboardCondition(view));
   if(dashboardState.selectedProfileIndex !== null){
@@ -645,7 +684,7 @@ function selectDevice(deviceId, options = {}){
 function applyPageVisibility(){
   const activePage = normalizePageName(dashboardState.activePage);
   dashboardState.activePage = activePage;
-	for(const page of ['home', 'docker', 'lucky']){
+	for(const page of ['home', 'docker', 'lucky', 'easytier']){
     const active = page === activePage;
     const tab = byId(`${page}Tab`);
     const panel = byId(`${page}Page`);
@@ -929,7 +968,7 @@ function bindInteractions(){
     tab.addEventListener('keydown', event => {
       if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-			const pages = ['home', 'docker', 'lucky'];
+			const pages = ['home', 'docker', 'lucky', 'easytier'];
 			const current = pages.indexOf(dashboardState.activePage);
 			const nextPage = event.key === 'Home' ? pages[0] : event.key === 'End' ? pages[pages.length - 1] : event.key === 'ArrowLeft' ? pages[(current - 1 + pages.length) % pages.length] : pages[(current + 1) % pages.length];
       setActivePage(nextPage);
@@ -1036,6 +1075,7 @@ const exported = {
   dashboardCondition,
   deviceDisplayName,
 	luckyIsConfigured,
+	easytierIsConfigured,
   fittedFontSize,
   formatBytes,
   formatPair,

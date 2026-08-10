@@ -635,7 +635,7 @@ if __name__ == '__main__':
         sys.exit(2)
     if client_selection.mode is ClientMode.DEVICE_V2:
         try:
-            _run_device_v2(client_selection.device_v2, HostExtensionCollector())
+            _run_device_v2(client_selection.device_v2, HostExtensionCollector(easytier_args=sys.argv[1:]))
         except ClientContractError:
             print("Client configuration error: invalid_device_v2_configuration", file=sys.stderr)
             sys.exit(2)
@@ -648,7 +648,7 @@ if __name__ == '__main__':
     PASSWORD = cli_args.get('PASSWORD', PASSWORD)
     INTERVAL = int(cli_args.get('INTERVAL', INTERVAL))
     socket.setdefaulttimeout(30)
-    extension_collector = HostExtensionCollector()
+    extension_collector = HostExtensionCollector(easytier_args=sys.argv[1:])
     extension_collector.start()
     get_realtime_data()
     while True:
