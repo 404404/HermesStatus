@@ -78,6 +78,9 @@ async function run(){
   assert.match(appSource, /EasyTier远端节点数/);
   assert.match(appSource, /EasyTier流量统计/);
   assert.match(appSource, /easytier-command-card/);
+  assert.match(appSource, /easytierPeersBody/);
+  assert.match(appSource, /easytierExpectationBody/);
+  assert.match(appSource, /escapeHtml\(textOrDash\(peer\.peer_id\)\)/);
   assert.doesNotMatch(appSource, /CPU温度\/硬盘温度/);
   assert.doesNotMatch(appSource, /已运行时间\/操作系统/);
   assert.match(indexMarkup, /<h2 id="easytierCommandsTitle">采集状态<\/h2>/);

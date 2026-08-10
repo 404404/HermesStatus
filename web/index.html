@@ -148,6 +148,22 @@
                     <div class="section-head"><h2 id="easytierSummaryTitle">EasyTier 状态</h2><span id="easytierMeta" class="section-meta"></span></div>
                     <dl id="easytierSummary" class="detail-list easytier-summary"></dl>
                 </section>
+                <section class="data-section" aria-labelledby="easytierExpectationTitle">
+                    <div class="section-head"><h2 id="easytierExpectationTitle">Expected / Observed</h2></div>
+                    <div class="table-wrap"><table class="data easytier-table"><thead><tr><th>项目</th><th>Expected</th><th>Observed</th><th>结果</th></tr></thead><tbody id="easytierExpectationBody"></tbody></table></div>
+                </section>
+                <section class="data-section" aria-labelledby="easytierPeersTitle">
+                    <div class="section-head"><h2 id="easytierPeersTitle">EasyTier 节点</h2></div>
+                    <div class="table-wrap"><table class="data easytier-peer-table"><thead><tr><th>Peer</th><th>Overlay IP</th><th>路径</th><th>传输</th><th>地址族</th><th>延迟</th><th>丢包</th><th>RX</th><th>TX</th><th>版本</th></tr></thead><tbody id="easytierPeersBody"></tbody></table></div>
+                </section>
+                <section class="data-section" aria-labelledby="easytierRoutesTitle">
+                    <div class="section-head"><h2 id="easytierRoutesTitle">EasyTier 路由</h2></div>
+                    <div class="table-wrap"><table class="data easytier-route-table"><thead><tr><th>目标</th><th>Overlay IP</th><th>Proxy CIDRs</th><th>Next Hop</th><th>路径</th><th>延迟</th><th>Cost</th></tr></thead><tbody id="easytierRoutesBody"></tbody></table></div>
+                </section>
+                <section class="data-section" aria-labelledby="easytierConnectorsTitle">
+                    <div class="section-head"><h2 id="easytierConnectorsTitle">EasyTier 连接器</h2></div>
+                    <div class="table-wrap"><table class="data easytier-connector-table"><thead><tr><th>传输</th><th>地址族</th><th>端口</th><th>状态</th></tr></thead><tbody id="easytierConnectorsBody"></tbody></table></div>
+                </section>
             </div>
         </div>
     </main>
@@ -167,6 +183,6 @@
         <a href="https://github.com/404404/HermesStatus" target="_blank" rel="noopener">HermesStatus</a>
     </footer>
 
-    <script src="js/app.js?v=20260810-2" defer></script>
+    <script src="js/app.js?v=20260810-3" defer></script>
 </body>
 </html>

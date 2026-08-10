@@ -161,6 +161,9 @@ body.light .health-card{background:#fff}
 .easytier-command-card h2{color:var(--text);font-size:23px;font-weight:750;letter-spacing:0;text-transform:none}
 .easytier-command-card .card-value{margin-top:auto}
 .easytier-table{min-width:760px!important}
+.easytier-peer-table{min-width:1120px!important}
+.easytier-route-table{min-width:960px!important}
+.easytier-connector-table{min-width:620px!important}
 
 .data-section{overflow:hidden}
 .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;min-width:0;padding:1.25rem 1.35rem;border-bottom:1px solid var(--border);overflow-wrap:anywhere;word-break:break-word}
