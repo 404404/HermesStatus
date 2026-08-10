@@ -31,18 +31,19 @@ func projectEasyTierExpectation(expectation *contracts.EasyTierExpectation, stat
 			}
 		}
 	}
-	observed := make([]string, 0, len(observedCIDRs))
+	observedAll := make([]string, 0, len(observedCIDRs))
 	for cidr := range observedCIDRs {
-		observed = append(observed, cidr)
+		observedAll = append(observedAll, cidr)
 	}
-	sort.Strings(observed)
+	sort.Strings(observedAll)
+	observed := observedAll
 	if len(observed) > 16 {
 		observed = observed[:16]
 	}
 	result := "not_observable"
 	if nodeObserved && routesObserved && stats.Node.NetworkName != nil && stats.Node.OverlayIPv4 != nil && stats.Node.AdministrativeRole != nil {
 		result = "matched"
-		if *stats.Node.NetworkName != expectation.NetworkName || *stats.Node.OverlayIPv4 != expectation.OverlayIPv4 || *stats.Node.AdministrativeRole != expectation.AdministrativeRole || !sameStringSet(observed, expectation.ProxyCIDRs) {
+		if *stats.Node.NetworkName != expectation.NetworkName || *stats.Node.OverlayIPv4 != expectation.OverlayIPv4 || *stats.Node.AdministrativeRole != expectation.AdministrativeRole || !sameStringSet(observedAll, expectation.ProxyCIDRs) {
 			result = "mismatch"
 		}
 	}

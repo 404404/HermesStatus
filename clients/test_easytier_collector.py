@@ -158,6 +158,16 @@ class EasyTierCollectorTests(unittest.TestCase):
         payload = EasyTierCollector(environ=self.environ, runner=OversizedPeerListRunner()).collect()
         self.assertEqual(payload["command_status"]["peer_list"]["status"], "invalid_data")
 
+    def test_unknown_peer_classification_keeps_ipv6_direct_unobserved(self):
+        class UnknownPeerRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                if tuple(argv[-2:]) == ("peer", "list"):
+                    return Result([{"id": 54321}])
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=UnknownPeerRunner()).collect()
+        self.assertIsNone(payload["peers"]["ipv6_udp_direct"])
+
     def test_unsupported_version_and_malicious_fields_are_safe(self):
         class FutureRunner(Runner):
             def __call__(self, argv, **kwargs):

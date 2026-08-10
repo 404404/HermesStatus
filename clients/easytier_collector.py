@@ -361,9 +361,10 @@ class EasyTierCollector(object):
             started = time.monotonic()
             collected_at = _now()
             try:
-                values[name] = self._run(command)
-                if not _valid_command_payload(name, values[name]):
+                value = self._run(command)
+                if not _valid_command_payload(name, value):
                     raise ValueError("invalid command payload")
+                values[name] = value
                 command_status = _empty_command("healthy", None)
                 command_status["last_success_at"] = collected_at
                 command_status["collected_at"] = collected_at
@@ -465,7 +466,7 @@ class EasyTierCollector(object):
                 result["direct"] += 1
             else:
                 result["unknown_path"] += 1
-        if result["total"]:
+        if result["total"] and all(item["path_state"] != "unknown" and item["transport"] != "unknown" and item["address_family"] != "unknown" for item in result["items"]):
             result["ipv6_udp_direct"] = any(
                 item["path_state"] == "direct" and item["transport"] == "udp" and item["address_family"] == "ipv6"
                 for item in result["items"]
