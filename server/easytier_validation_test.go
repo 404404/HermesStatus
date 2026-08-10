@@ -127,6 +127,7 @@ func TestEasyTierExpectationIsDiagnosticOnlyAndRequiresObservedRole(t *testing.T
 	expectation := &contracts.EasyTierExpectation{AdministrativeRole: "site_router", NetworkName: "home-404", OverlayIPv4: "10.250.250.1", ProxyCIDRs: []string{"192.168.68.0/24"}}
 	overlay, network, role := "10.250.250.1", "home-404", "site_router"
 	stats := validEasyTierFixture()
+	stats.Stale = false
 	stats.Node.OverlayIPv4, stats.Node.NetworkName, stats.Node.AdministrativeRole = &overlay, &network, &role
 	stats.Node.ProxyCIDRs = []string{"192.168.68.0/24"}
 	projection := projectEasyTierExpectation(expectation, &stats).(map[string]any)
@@ -144,6 +145,7 @@ func TestEasyTierExpectationRequiresSuccessfulSourcesAndUsesOnlyLocalRoutes(t *t
 	expectation := &contracts.EasyTierExpectation{AdministrativeRole: "site_router", NetworkName: "home-404", OverlayIPv4: "10.250.250.1", ProxyCIDRs: []string{"192.168.68.0/24"}}
 	overlay, network, role := "10.250.250.1", "home-404", "site_router"
 	stats := validEasyTierFixture()
+	stats.Stale = false
 	stats.Node.OverlayIPv4, stats.Node.NetworkName, stats.Node.AdministrativeRole = &overlay, &network, &role
 	stats.Node.ProxyCIDRs = []string{"192.168.68.0/24"}
 	stats.Routes.Items = []EasyTierRoute{
