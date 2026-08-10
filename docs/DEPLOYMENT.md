@@ -63,8 +63,10 @@ environment:
 This block replaces, rather than supplements, the legacy broad entries in
 `docker-compose-client.yml`: set `CLIENT_PRIVILEGED=false` and remove its
 `/dev:/dev:ro` volume before adding the capability and single-device mapping.
-The supplied Compose file retains those legacy defaults for compatibility, so
-leaving them in place would not be a minimum-permission deployment.
+The complete Device v2 minimum-permission override is available at
+`config/examples/docker-compose-client.override.example.yml`. The supplied
+base Compose file retains the legacy defaults for compatibility, so leaving
+them in place would not be a minimum-permission deployment.
 
 Keep the root filesystem read-only and retain `no-new-privileges`. If a host
 uses another disk path or a RAID/NVMe controller, select and validate that

@@ -75,6 +75,15 @@ class ManualDeviceExampleTests(unittest.TestCase):
         for key in ("SERVER", "SERVERSTATUS_USER", "USER", "PORT", "PASSWORD"):
             self.assertNotIn(f"{key}:", environment)
         self.assertIn("environment: !override", source)
+        self.assertIn("privileged: false", source)
+        self.assertIn("cap_add:\n      - SYS_RAWIO", source)
+        self.assertIn(
+            "- ${SMART_DEVICE_HOST:-/dev/sda}:${SMART_DEVICE_CONTAINER:-/dev/sda}:r",
+            source,
+        )
+        self.assertIn("SMART_DEVICE: ${SMART_DEVICE_CONTAINER:-/dev/sda}", source)
+        self.assertIn("volumes: !override", source)
+        self.assertNotIn("/dev:/dev:ro", source)
         for required in (
             "./client-v2.example.json:/etc/hermesstatus/client-v2.json:ro",
             "./compute-01.token:/run/secrets/hermesstatus-device-token:ro",

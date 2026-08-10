@@ -39,7 +39,7 @@ environment:
   SMART_DEVICE: /dev/sda
 ```
 
-这段配置应替换而非叠加在 `docker-compose-client.yml` 中遗留的宽泛设置上：添加 capability 和单设备映射前，设置 `CLIENT_PRIVILEGED=false`，并删除 `/dev:/dev:ro` 卷挂载。仓库 Compose 文件为兼容性保留这些旧默认值；若仍保留它们，就不是最小权限部署。
+这段配置应替换而非叠加在 `docker-compose-client.yml` 中遗留的宽泛设置上：添加 capability 和单设备映射前，设置 `CLIENT_PRIVILEGED=false`，并删除 `/dev:/dev:ro` 卷挂载。完整的 Device v2 最小权限覆盖示例见 `config/examples/docker-compose-client.override.example.yml`。仓库基础 Compose 文件为兼容性保留这些旧默认值；若仍保留它们，就不是最小权限部署。
 
 保留只读根文件系统和 `no-new-privileges`。如果主机使用其他磁盘路径、RAID 或 NVMe 控制器，先确认并验证该具体设备，不能仅为自动发现而扩大设备权限。
 
