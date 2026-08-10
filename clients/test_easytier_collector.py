@@ -148,6 +148,16 @@ class EasyTierCollectorTests(unittest.TestCase):
         EasyTierCollector._apply_routes(payload, [{"proxy_cidrs": ["192.168.68.0/24"]}], None)
         self.assertFalse(payload["routes"]["items"][0]["is_local"])
 
+    def test_rejects_detailed_lists_over_the_payload_budget(self):
+        class OversizedPeerListRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                if tuple(argv[-2:]) == ("peer", "list"):
+                    return Result([{"id": index} for index in range(17)])
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=OversizedPeerListRunner()).collect()
+        self.assertEqual(payload["command_status"]["peer_list"]["status"], "invalid_data")
+
     def test_unsupported_version_and_malicious_fields_are_safe(self):
         class FutureRunner(Runner):
             def __call__(self, argv, **kwargs):

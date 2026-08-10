@@ -36,6 +36,9 @@ func projectEasyTierExpectation(expectation *contracts.EasyTierExpectation, stat
 		observed = append(observed, cidr)
 	}
 	sort.Strings(observed)
+	if len(observed) > 16 {
+		observed = observed[:16]
+	}
 	result := "not_observable"
 	if nodeObserved && routesObserved && stats.Node.NetworkName != nil && stats.Node.OverlayIPv4 != nil && stats.Node.AdministrativeRole != nil {
 		result = "matched"

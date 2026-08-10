@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -193,5 +194,22 @@ func TestEasyTierCIDRsRejectPrefixesThatEscapePrivateRanges(t *testing.T) {
 	}
 	if got := decoded.Node.ProxyCIDRs[0]; got != "192.168.68.0/24" {
 		t.Fatalf("CIDR was not canonicalized: %q", got)
+	}
+}
+
+func TestEasyTierExpectationBoundsObservedCIDRProjection(t *testing.T) {
+	expectation := &contracts.EasyTierExpectation{AdministrativeRole: "site_router", NetworkName: "home-404", OverlayIPv4: "10.250.250.1"}
+	overlay, network, role := "10.250.250.1", "home-404", "site_router"
+	stats := validEasyTierFixture()
+	stats.Stale = false
+	stats.Node.OverlayIPv4, stats.Node.NetworkName, stats.Node.AdministrativeRole = &overlay, &network, &role
+	for index := 0; index < 16; index++ {
+		stats.Node.ProxyCIDRs = append(stats.Node.ProxyCIDRs, fmt.Sprintf("192.168.%d.0/24", index))
+	}
+	stats.Routes.Items = []EasyTierRoute{{ProxyCIDRs: []string{"10.0.0.0/8"}, IsLocal: true}}
+	projection := projectEasyTierExpectation(expectation, &stats).(map[string]any)
+	observed := projection["observed"].(map[string]any)["proxy_cidrs"].([]string)
+	if len(observed) != 16 {
+		t.Fatalf("observed CIDR projection exceeds its contract bound: %#v", observed)
 	}
 }

@@ -20,7 +20,10 @@ import time
 DEFAULT_CLI_PATH = "/usr/local/bin/easytier-cli"
 DEFAULT_RPC_PORTAL = "127.0.0.1:15888"
 MAX_OUTPUT_BYTES = 512 * 1024
-MAX_ITEMS = 256
+# The server's strict EasyTier projection cap is 64 KiB.  Each of the three
+# detailed tables can contain long but allowlisted strings and CIDRs, so a
+# conservative per-table budget keeps their combined JSON below that cap.
+MAX_ITEMS = 16
 SAFE_TEXT_LIMIT = 128
 MAX_COMMAND_DURATION_MS = 30000
 COMMANDS = (
