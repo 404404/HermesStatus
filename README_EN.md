@@ -4,7 +4,8 @@
 
 HermesStatus is a self-hosted current-state dashboard. The Go Server receives
 Client updates and serves the WebUI and status API. The Python Client collects
-host, hardware/SMART, Docker, Hermes, and optional Lucky data.
+host, hardware/SMART, Docker, Hermes, optional Lucky data, and an optional
+EasyTier health projection.
 
 ## Current capabilities
 
@@ -15,6 +16,9 @@ host, hardware/SMART, Docker, Hermes, and optional Lucky data.
   model/provider, and usage snapshots.
 - Lucky: version, DDNS, web service, forwarding, and certificate summaries when
   explicitly enabled.
+- EasyTier: an opt-in, strict read-only loopback-RPC projection with node state,
+  remote peer/route counts, TCP connector state, traffic counters, and
+  per-command collection status. Zero remote peers is healthy.
 - Legacy TCP Agents and optional Device v2 ingestion.
 
 Network traffic, network throughput, and carrier-specific or three-network
@@ -23,7 +27,7 @@ latency probes are not HermesStatus dashboard features.
 ## Architecture
 
 ```text
-Host / hwmon / SMART / Docker / Hermes / Lucky
+Host / hwmon / SMART / Docker / Hermes / Lucky / EasyTier
                        ↓
                   Python Client
                        ↓
@@ -36,6 +40,8 @@ Host / hwmon / SMART / Docker / Hermes / Lucky
 
 The browser reads only `/json/stats.json`. The Server does not mount the Docker
 socket or read Hermes/Lucky secrets; that high-trust work belongs to the Client.
+EasyTier CLI is likewise Client-only; neither the Server nor browser sees its
+configuration, credentials, RPC portal, or raw CLI output.
 
 ## Local start
 
@@ -95,6 +101,7 @@ serverstatus --validate-device-config \
 - [Security](docs/SECURITY.md)
 - [Operations](docs/OPERATIONS.md)
 - [Development and testing](docs/DEVELOPMENT.md)
+- [EasyTier 2.3 design](docs/design/EASYTIER_MONITORING.md)
 
 ```bash
 (cd server && go test ./...)

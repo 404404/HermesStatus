@@ -22,6 +22,10 @@ docker compose --env-file /secure/path/client.env \
 
 服务端提供 WebUI/API，按需提供 Legacy TCP 监听。启用 Device v2 时，只将 v2 POST 路径放在 HTTPS 反向代理后；不得把设备更新后端直接暴露到互联网。
 
+## EasyTier Preview 与发布
+
+启用 EasyTier 的候选版本必须使用独立 Compose 项目、Registry、credential 目录、状态目录、Client 状态目录以及仅回环的 Web 端口。只读挂载 EasyTier CLI 二进制到 Client；不要挂载其配置或秘密。若 Device v2 使用 TLS 代理，Server 的受信代理 CIDR 只能包含该代理，后端 HTTP 必须保持在 Compose 网络内。提升前，在 `/json/stats.json` 中确认选定设备、`easytier.status` 与五个命令状态；单节点 overlay 的远端节点数为零是有效状态。
+
 ## SMART 设备访问
 
 SMART 采集需要访问真实块设备的 ioctl。单盘监控时，不要把 Client 改为 privileged，也不要挂载完整 `/dev`。对于 `/dev/sda`，最小 Compose 配置为：
