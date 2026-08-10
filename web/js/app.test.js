@@ -90,6 +90,9 @@ async function run(){
   assert.equal(app.formatUptimeHours(90061), '25 h (约1.04天)');
   assert.equal(app.formatTrafficBytes(0), '0.0B');
   assert.equal(app.formatTrafficBytes(1000000), '1.0MB');
+	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: null}, true), '未观察到');
+	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: true}, true), '是');
+	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: null}, false), '数据不可用');
   assert.equal(app.profileSummary([{agent_version: '0.19.0'}, {agent_version: '0.19.0'}, {agent_version: '0.19.0'}]), 'Agent版本: 0.19.0，3个配置');
   assert.equal(
     app.modelBreakdown({model: 'example-model', usage_mode: 'api', provider: 'OpenCode Go'}),

@@ -112,6 +112,18 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertEqual(_command_duration_ms(0, 30.001), 30000)
         self.assertEqual(_command_duration_ms(2, 1), 0)
 
+    def test_rejects_non_finite_cli_metrics_as_invalid_data(self):
+        class NonFiniteRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                if tuple(argv[-2:]) == ("peer", "list"):
+                    return Result([{"id": 54321, "latency_ms": float("nan")}])
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=NonFiniteRunner()).collect()
+        self.assertEqual(payload["status"], "degraded")
+        self.assertEqual(payload["command_status"]["peer_list"]["status"], "invalid_data")
+        self.assertEqual(payload["peers"]["items"], [])
+
     def test_unsupported_version_and_malicious_fields_are_safe(self):
         class FutureRunner(Runner):
             def __call__(self, argv, **kwargs):

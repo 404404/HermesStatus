@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import json
+import math
 import os
 import stat
 import subprocess
@@ -78,13 +79,13 @@ def _safe_text(value, limit=SAFE_TEXT_LIMIT):
 def _counter(value):
     if isinstance(value, bool):
         return 0
-    if isinstance(value, (int, float)) and 0 <= value <= 9007199254740991:
+    if isinstance(value, (int, float)) and math.isfinite(value) and 0 <= value <= 9007199254740991:
         return int(value)
     return 0
 
 
 def _bounded_number(value, maximum, decimals=False):
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0 or value > maximum:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0 or value > maximum:
         return None
     return float(value) if decimals else int(value)
 
@@ -254,7 +255,7 @@ def _safe_cli_path(path):
 def _json_object(output):
     if len(output) > MAX_OUTPUT_BYTES:
         raise ValueError("output too large")
-    value = json.loads(output.decode("utf-8"))
+    value = json.loads(output.decode("utf-8"), parse_constant=lambda _: (_ for _ in ()).throw(ValueError("non-finite JSON number")))
     if not isinstance(value, (dict, list)):
         raise ValueError("output is not JSON")
     return value

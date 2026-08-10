@@ -572,6 +572,13 @@ function renderLucky(view){
 	renderLuckyTables(view);
 }
 
+function ipv6UdpDirectText(peers, peerListAvailable){
+	if(!peerListAvailable) return '数据不可用';
+	return peers.ipv6_udp_direct === null || peers.ipv6_udp_direct === undefined
+		? '未观察到'
+		: peers.ipv6_udp_direct ? '是' : '否';
+}
+
 function renderEasyTier(view){
 	const easytier = view.easytier;
 	const node = safeObject(easytier.node);
@@ -590,7 +597,7 @@ function renderEasyTier(view){
 		['节点状态', badge(node.state)],
 		['版本兼容性', escapeHtml(easyTierCompatibilityText(node.schema_compatibility))],
 		['远端节点', escapeHtml(peerSummary)],
-		['IPv6 UDP Direct', escapeHtml(peers.ipv6_udp_direct === null || peers.ipv6_udp_direct === undefined ? '未观察到' : peers.ipv6_udp_direct ? '是' : '否')],
+		['IPv6 UDP Direct', escapeHtml(ipv6UdpDirectText(peers, commandAvailable('peer_list')))],
 		['路由数', escapeHtml(commandAvailable('route_list') ? formatInteger(routes.total) : '数据不可用')],
 		['TCP Listener / Connector / Active', escapeHtml(`${booleanText(connectors.tcp_listener_available)} / ${booleanText(connectors.tcp_configured)} / ${booleanText(connectors.tcp_active)}`)],
 		['接收 / 发送 / 转发', escapeHtml(`${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`)]
@@ -1160,6 +1167,7 @@ const exported = {
   formatBytes,
   formatTrafficBytes,
   formatUptimeHours,
+	ipv6UdpDirectText,
   formatPair,
   profileSummary,
   modelBreakdown,
