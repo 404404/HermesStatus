@@ -6,12 +6,12 @@ HermesStatus 是自托管的当前状态面板。Go Server 接收 Client 上报�
 
 ## 当前功能
 
-- 设备名称由 Device Registry 配置文件维护，不会被 Client 主机名覆盖；每台 Client 的接入 IP 和端口由独立 Client 配置文件维护。
-- 主页展示 CPU、内存、磁盘容量、Lucky 与 EasyTier 运行状态/版本，以及 SMART、读写量、通电时间、系统运行时间、物理机操作系统、Docker 与 EasyTier 节点/流量摘要。
+- 设备名称由 Device Registry 配置文件维护，不会被 Client 主机名覆盖；生产环境应使用稳定名称（如 `GK50`），不要将 Preview、临时环境等字样写入展示名称。每台 Client 的接入 IP 和端口由独立 Client 配置文件维护。
+- 主页首行展示 CPU、内存、磁盘容量、EasyTier 远端节点数与 EasyTier 流量统计；硬件状态区域展示 SMART、读写量、通电时间、系统运行时间、物理机操作系统、Docker、Lucky 与 EasyTier 运行状态/版本。状态与版本采用“正常（版本）”的紧凑展示；EasyTier 流量会按 B、KB、MB、GB 等单位自动换算并保持单行。
 - Docker 页面展示容器数量、名称、镜像、状态与端口摘要。
 - 主页同时展示已配置 Hermes Profile 的网关、运行状态、模型/提供商与用量快照。
 - Lucky 页面在显式启用后展示版本、DDNS、Web 服务、端口转发和证书摘要。
-- EasyTier 页面在显式启用后先显示逐命令采集状态，再展示严格只读投影中的网络、节点状态、远端节点/路由计数、TCP connector 状态与流量；更新时间位于状态表头，零远端节点仍表示健康。
+- EasyTier 页面在显式启用后先以独立状态模块显示每项只读采集命令，再展示严格只读投影中的网络、节点状态、远端节点/路由计数、TCP connector 状态与流量；更新时间位于状态表头，零远端节点仍表示健康。
 - 支持 Legacy TCP Agent；可选 Device v2 使用 Registry、digest credential 与受 HTTPS 代理保护的上报端点。
 
 网络流量、网络吞吐、三网/运营商延迟探测不是 HermesStatus 面板功能。

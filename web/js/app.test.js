@@ -76,12 +76,15 @@ async function run(){
   assert.match(appSource, /<h2>运行中\/容器总数<\/h2>/);
   assert.match(appSource, /<h2>Lucky运行状态\/版本<\/h2>/);
   assert.match(appSource, /EasyTier远端节点数/);
-  assert.match(appSource, /EasyTier接收\/发送\/转发流量/);
+  assert.match(appSource, /EasyTier流量统计/);
+  assert.match(appSource, /easytier-command-card/);
   assert.doesNotMatch(appSource, /CPU温度\/硬盘温度/);
   assert.doesNotMatch(appSource, /已运行时间\/操作系统/);
   assert.match(indexMarkup, /<h2 id="easytierCommandsTitle">采集状态<\/h2>/);
   assert.doesNotMatch(indexMarkup, /<th>说明<\/th>/);
   assert.equal(app.formatUptimeHours(90061), '25 h (约1.04天)');
+  assert.equal(app.formatTrafficBytes(0), '0.00B');
+  assert.equal(app.formatTrafficBytes(1000000), '1.00MB');
   assert.equal(
     app.modelBreakdown({model: 'example-model', usage_mode: 'api', provider: 'OpenCode Go'}),
     'example-model / api / OpenCode Go'
@@ -299,7 +302,8 @@ async function run(){
 
   assert.equal(app.dashboardCondition(normal).kind, 'ready');
   assert.equal(app.dashboardCondition(app.buildViewModel({servers: []})).kind, 'empty');
-  assert.equal(app.dashboardCondition(app.buildViewModel(statsDocument('normal', {online4: false, online6: false}))).kind, 'offline');
+  assert.equal(app.dashboardCondition(app.buildViewModel(statsDocument('normal', {online4: false, online6: false}))).kind, 'ready');
+  assert.equal(app.dashboardCondition(app.buildViewModel({servers: [{name: 'legacy-offline', online4: false, online6: false}]})).kind, 'offline');
   assert.equal(app.dashboardCondition(degraded).kind, 'error');
   assert.equal(app.dashboardCondition(empty).kind, 'stale');
   const staleDocument = statsDocument('normal');

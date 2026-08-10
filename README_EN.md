@@ -10,20 +10,24 @@ EasyTier health projection.
 ## Current capabilities
 
 - Device names are configuration-driven by the Device Registry and never
-  accept a Client hostname override; each Client keeps its endpoint IP and port
-  in a separate Client configuration file.
-- Home: CPU, memory, disk capacity, Lucky and EasyTier state/version, plus
-  SMART, read/write volume, power-on hours, system uptime, physical-host OS,
-  Docker, and EasyTier peer/traffic summaries.
+  accept a Client hostname override. Production names should be stable (for
+  example, `GK50`) and must not include Preview or temporary-environment text;
+  each Client keeps its endpoint IP and port in a separate Client configuration
+  file.
+- Home first shows CPU, memory, disk capacity, EasyTier remote-peer counts, and
+  EasyTier traffic. The hardware area shows SMART, read/write volume, power-on
+  hours, system uptime, physical-host OS, Docker, Lucky, and EasyTier
+  state/version. State and version use a compact “Normal (version)” form, and
+  EasyTier traffic uses a single line with automatic B/KB/MB/GB unit scaling.
 - Docker: container counts, names, images, state, and port summaries.
 - Home also includes configured Hermes profiles with gateway, runtime,
   model/provider, and usage snapshots.
 - Lucky: version, DDNS, web service, forwarding, and certificate summaries when
   explicitly enabled.
-- EasyTier: an opt-in, strict read-only loopback-RPC projection. Per-command
-  collection status appears first; network, node state, peer/route counts, TCP
-  connector state, traffic, and a header update time follow. Zero remote peers
-  is healthy.
+- EasyTier: an opt-in, strict read-only loopback-RPC projection. Each
+  collection command is shown first as an individual status card; network, node
+  state, peer/route counts, TCP connector state, traffic, and a header update
+  time follow. Zero remote peers is healthy.
 - Legacy TCP Agents and optional Device v2 ingestion.
 
 Network traffic, network throughput, and carrier-specific or three-network

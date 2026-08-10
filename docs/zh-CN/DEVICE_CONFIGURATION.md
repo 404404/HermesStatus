@@ -6,7 +6,7 @@ Device v2 将传输凭据与设备展示信息分离。运维人员通过配置�
 
 ## 名称与地址的权威来源
 
-设备选择器和首页名称以 Device Registry 的 `devices[].display_name` 为准，Client 上报的名称不能覆盖该值。每台 Client 在 `client-v2.json` 中独立维护服务端局域网 IP 与 HTTPS 端口，例如 `https://192.168.68.11:21443`。
+设备选择器和首页名称以 Device Registry 的 `devices[].display_name` 为准，Client 上报的名称不能覆盖该值。生产环境请使用稳定名称（如 `GK50`），不要在展示名称中保留 `Preview` 等临时部署后缀。每台 Client 在 `client-v2.json` 中独立维护服务端局域网 IP 与 HTTPS 端口，例如 `https://192.168.68.11:21443`。
 
 生产路径示例（不是仓库内文件）：
 
@@ -25,7 +25,7 @@ Device v2 将传输凭据与设备展示信息分离。运维人员通过配置�
 ```json
 {
   "id": "gk50",
-  "display_name": "GK50 后备名称",
+  "display_name": "GK50",
   "enabled": true,
   "order": 10,
   "ingestion": {"mode": "device_v2", "active_protocol": "device_v2", "cutover_not_after": null}

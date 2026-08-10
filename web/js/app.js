@@ -64,6 +64,19 @@ function formatBytes(value){
   return `${size.toFixed(digits)} ${units[unit]}`;
 }
 
+function formatTrafficBytes(value){
+  const number = finiteNumber(value);
+  if(number === null || number < 0) return '-';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let size = number;
+  let unit = 0;
+  while(size >= 1000 && unit < units.length - 1){
+    size /= 1000;
+    unit += 1;
+  }
+  return `${size.toFixed(2)}${units[unit]}`;
+}
+
 function percentage(used, total){
   const usedNumber = finiteNumber(used);
   const totalNumber = finiteNumber(total);
@@ -115,6 +128,13 @@ function formatUptimeHours(seconds){
   if(number === null || number < 0) return '-';
   const hours = number / 3600;
   return `${formatInteger(Math.floor(hours))} h (约${(hours / 24).toFixed(2)}天)`;
+}
+
+function uptimeHoursMetric(seconds){
+  const number = finiteNumber(seconds);
+  if(number === null || number < 0) return null;
+  const hours = number / 3600;
+  return {hours: Math.floor(hours), days: (hours / 24).toFixed(2)};
 }
 
 function formatDateTime(value){
@@ -380,7 +400,11 @@ function dashboardCondition(view, refreshError = null){
   if(deviceStatus === 'degraded'){
     return {kind: 'error', title: '设备部分数据不可用', message: '该设备仍在线，但至少一个业务域异常。'};
   }
-  if(view.host.online4 === false && view.host.online6 === false){
+  // Device v2 has an authoritative server-side lifecycle status. Its legacy
+  // IPv4/IPv6 probe fields are informational and must not mark an online
+  // authenticated device as offline.
+  const isDeviceV2 = String(view.host.protocol_mode ?? '').toLowerCase() === 'device_v2';
+  if(!isDeviceV2 && view.host.online4 === false && view.host.online6 === false){
     return {kind: 'offline', title: '主机离线', message: '当前显示最后一次可用的状态数据。'};
   }
   const warnings = collectWarnings(view);
@@ -426,11 +450,9 @@ function fittedFontSize(preferredSize, minimumSize, availableWidth, naturalWidth
   return Math.max(minimumSize, Math.floor(preferredSize * availableWidth / naturalWidth * 10) / 10);
 }
 
-function fitCpuModelToSingleLine(){
-  const element = document.querySelector('[data-fit-single-line="cpu-model"]');
+function fitSingleLineValue(selector, preferredSize = 23, minimumSize = 10){
+  const element = document.querySelector(selector);
   if(!element || element.clientWidth <= 0) return;
-  const preferredSize = 23;
-  const minimumSize = 11;
   element.style.fontSize = `${preferredSize}px`;
   if(element.scrollWidth <= element.clientWidth) return;
   let size = fittedFontSize(preferredSize, minimumSize, element.clientWidth, element.scrollWidth);
@@ -441,9 +463,17 @@ function fitCpuModelToSingleLine(){
   }
 }
 
+function fitOverviewSingleLineValues(){
+  fitSingleLineValue('[data-fit-single-line="cpu-model"]', 23, 11);
+  fitSingleLineValue('[data-fit-single-line="easytier-traffic"]', 23, 10);
+}
+
 function renderOverview(view){
   const resources = view.resources;
-  const hardware = view.hardware;
+  const peers = safeObject(view.easytier.peers);
+  const traffic = safeObject(view.easytier.traffic);
+  const peerText = `${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)}`;
+  const trafficText = `${formatTrafficBytes(traffic.bytes_rx)}/${formatTrafficBytes(traffic.bytes_tx)}/${formatTrafficBytes(traffic.bytes_forwarded)}`;
   byId('overviewCards').innerHTML = `
     <article class="summary-card resource-card">
       <h2>CPU</h2>
@@ -460,42 +490,38 @@ function renderOverview(view){
       <div class="card-detail resource-value">${escapeHtml(resources.diskText)}</div>
       ${resourceBar(resources.diskPercent, '硬盘使用率')}
     </article>
-    <article class="summary-card stacked-card temperature-card">
-      <h2>Lucky运行状态/版本</h2>
-      <div class="card-value">${escapeHtml(statusText(view.lucky.status))}</div>
-      <div class="card-subvalue">${escapeHtml(textOrDash(view.lucky.version?.current))}</div>
+    <article class="summary-card metric-card">
+      <h2>EasyTier远端节点数</h2>
+      <div class="card-value">${escapeHtml(peerText)}</div>
+      <div class="card-mini-meta">直连 / 中继 / 未知</div>
     </article>
-    <article class="summary-card stacked-card uptime-system-card">
-      <h2>EasyTier运行状态/版本</h2>
-      <div class="card-value">${escapeHtml(statusText(view.easytier.status))}</div>
-      <div class="card-subvalue">${escapeHtml(textOrDash(view.easytier.node?.version))}</div>
+    <article class="summary-card metric-card">
+      <h2>EasyTier流量统计</h2>
+      <div class="card-value traffic-value" data-fit-single-line="easytier-traffic" title="${escapeHtml(trafficText)}">${escapeHtml(trafficText)}</div>
+      <div class="card-mini-meta">接收 / 发送 / 转发</div>
     </article>`;
-  requestAnimationFrame(fitCpuModelToSingleLine);
+  requestAnimationFrame(fitOverviewSingleLineValues);
 }
 
 function renderHardware(view){
   const hardware = view.hardware;
   const docker = view.docker;
-  const easytier = view.easytier;
   const smartStatus = hardware.disk_smart_status ?? 'unknown';
   const powerOnHours = finiteNumber(hardware.disk_power_on_hours);
   const powerOnDays = approximateDays(powerOnHours);
   const readWrite = finiteNumber(hardware.disk_written_bytes) === null && finiteNumber(hardware.disk_read_bytes) === null
     ? '-'
     : `${formatBytes(hardware.disk_written_bytes)} / ${formatBytes(hardware.disk_read_bytes)}`;
-  const peers = safeObject(easytier.peers);
-  const traffic = safeObject(easytier.traffic);
-  const peerText = `${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)}`;
-  const trafficText = `${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`;
+  const uptime = uptimeHoursMetric(view.host.uptime_seconds);
   byId('hardwareHealth').innerHTML = `
     <article class="health-card"><h2>硬盘 SMART 状态</h2><div class="health-value">${badge(smartStatus)}</div></article>
     <article class="health-card"><h2>硬盘写入/读取量</h2><div class="health-value">${escapeHtml(readWrite)}</div></article>
     <article class="health-card"><h2>硬盘通电时间</h2><div class="health-value power-on-value">${powerOnHours === null ? '-' : `${formatInteger(powerOnHours)} h <span class="power-on-days">(约${formatInteger(powerOnDays)}天)</span>`}</div></article>
-    <article class="health-card"><h2>系统已运行时间</h2><div class="health-value power-on-value">${escapeHtml(formatUptimeHours(view.host.uptime_seconds))}</div></article>
+    <article class="health-card"><h2>系统已运行时间</h2><div class="health-value power-on-value">${uptime === null ? '-' : `${formatInteger(uptime.hours)} h <span class="power-on-days">(约${uptime.days}天)</span>`}</div></article>
     <article class="health-card"><h2>操作系统</h2><div class="health-value health-text" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div></article>
     <article class="health-card"><h2>运行中/容器总数</h2><div class="health-value">${escapeHtml(formatPair(docker.running, docker.total))}</div></article>
-    <article class="health-card"><h2>EasyTier远端节点数</h2><div class="health-value">${escapeHtml(peerText)}</div><div class="health-inline-meta">直连 / 中继 / 未知</div></article>
-    <article class="health-card"><h2>EasyTier接收/发送/转发流量</h2><div class="health-value">${escapeHtml(trafficText)}</div><div class="health-inline-meta">接收 / 发送 / 转发</div></article>`;
+    <article class="health-card"><h2>Lucky运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.lucky.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.lucky.version?.current))})</span></div></article>
+    <article class="health-card"><h2>EasyTier运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.easytier.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.easytier.node?.version))})</span></div></article>`;
 }
 
 function renderLuckyTables(view){
@@ -560,7 +586,7 @@ function renderEasyTier(view){
 	const commands = safeObject(easytier.command_status);
 	byId('easytierCommandsBody').innerHTML = Object.keys(names).map(key => {
 		const command = safeObject(commands[key]);
-		return detailRow(names[key], badge(command.status));
+		return `<article class="summary-card easytier-command-card"><h2>${escapeHtml(names[key])}</h2><div class="card-value">${badge(command.status)}</div></article>`;
 	}).join('');
 }
 
@@ -716,7 +742,7 @@ function setActivePage(page, options = {}){
   if(options.updateHash !== false && typeof window !== 'undefined'){
     replaceDashboardHash();
   }
-  if(nextPage === 'home') requestAnimationFrame(fitCpuModelToSingleLine);
+  if(nextPage === 'home') requestAnimationFrame(fitOverviewSingleLineValues);
   return nextPage;
 }
 
@@ -1031,7 +1057,7 @@ function initDashboard(){
     if(dashboardState.resizeFrame !== null) cancelAnimationFrame(dashboardState.resizeFrame);
     dashboardState.resizeFrame = requestAnimationFrame(() => {
       dashboardState.resizeFrame = null;
-      fitCpuModelToSingleLine();
+      fitOverviewSingleLineValues();
     });
   };
   window.addEventListener('resize', dashboardState.resizeHandler);
@@ -1087,6 +1113,7 @@ const exported = {
 	easytierIsConfigured,
   fittedFontSize,
   formatBytes,
+  formatTrafficBytes,
   formatUptimeHours,
   formatPair,
   modelBreakdown,

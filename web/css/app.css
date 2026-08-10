@@ -128,6 +128,9 @@ body.light .summary-card,body.light .health-card,body.light .data-section{backgr
 .stacked-card .card-value{margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card-subvalue{max-width:100%;margin-top:.45rem;color:var(--text-dim);font-size:13px;font-weight:650;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .stacked-card .card-subvalue{margin-top:.7rem;color:var(--text);font-size:23px;font-weight:750;line-height:1.14}
+.metric-card .card-value{margin-top:.1rem;white-space:nowrap;overflow:hidden}
+.card-mini-meta{margin-top:auto;padding-top:.65rem;color:var(--text-dim);font-size:12px;font-weight:700;letter-spacing:.08em;white-space:nowrap}
+.traffic-value{letter-spacing:-.035em;font-variant-numeric:tabular-nums}
 
 .usage-bar{position:relative;height:24px;flex:0 0 24px;margin-top:.7rem;border-radius:999px;background:var(--border);overflow:hidden;font-variant-numeric:tabular-nums}
 .usage-bar i{position:absolute;inset:0 auto 0 0;display:block;min-width:0;border-radius:inherit;background:var(--ok);transition:width .45s ease}
@@ -153,6 +156,9 @@ body.light .health-card{background:#fff}
 .lucky-sync-cell span+span{margin-top:.2rem;color:var(--text-dim)}
 .lucky-certificate-table{min-width:1120px!important}
 .easytier-summary{padding:0 1.35rem 1.1rem}
+.easytier-command-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1rem;padding:0 1.35rem 1.35rem}
+.easytier-command-card{min-height:104px;padding:1rem}
+.easytier-command-card .card-value{margin-top:auto}
 .easytier-table{min-width:760px!important}
 
 .data-section{overflow:hidden}
@@ -234,6 +240,7 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
 
 @media (max-width:1180px){
     .overview-grid,.health-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .easytier-command-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     .overview-grid .summary-card:last-child,.health-grid .health-card:last-child{grid-column:span 2}
     .profile-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     .modal-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -249,7 +256,7 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
     .device-selection-notice{text-align:left}
     .device-buttons{display:none}
     .device-select-label{display:block}
-    .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list{grid-template-columns:1fr}
+    .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list,.easytier-command-grid{grid-template-columns:1fr}
     .overview-grid .summary-card:last-child,.health-grid .health-card:last-child{grid-column:auto}
     .section-head{display:block}
     .section-meta{display:block;margin:.45rem 0 0;text-align:left}

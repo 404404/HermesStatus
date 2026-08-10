@@ -9,9 +9,10 @@ Client.
 
 ## Authoritative name and endpoint
 
-The Device Registry `devices[].display_name` is the display name shown in the
-device selector and dashboard. The Client-reported name is never allowed to
-replace it. Each Client keeps its own Server LAN IP and HTTPS port in
+The Device Registry `devices[].display_name` is the production name shown in
+the device selector and dashboard. The Client-reported name is never allowed to
+replace it. Use a stable operational name such as `GK50`, not a deployment
+suffix such as `Preview`. Each Client keeps its own Server LAN IP and HTTPS port in
 `client-v2.json`, for example `https://192.168.68.11:21443`.
 
 Use these files (production paths are examples, not repository files):
@@ -34,7 +35,7 @@ The mapping is not used to name or authorize Device v2 updates.
 ```json
 {
   "id": "gk50",
-  "display_name": "GK50 fallback name",
+  "display_name": "GK50",
   "enabled": true,
   "order": 10,
   "ingestion": {"mode": "device_v2", "active_protocol": "device_v2", "cutover_not_after": null}
