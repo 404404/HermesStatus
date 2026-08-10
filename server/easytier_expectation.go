@@ -13,8 +13,8 @@ func projectEasyTierExpectation(expectation *contracts.EasyTierExpectation, stat
 	if expectation == nil {
 		return map[string]any{"configured": false, "result": "not_configured"}
 	}
-	nodeObserved := stats != nil && stats.CommandStatus.NodeInfo.Status == EasyTierHealthy
-	routesObserved := stats != nil && stats.CommandStatus.RouteList.Status == EasyTierHealthy
+	nodeObserved := stats != nil && !stats.Stale && stats.CommandStatus.NodeInfo.Status == EasyTierHealthy
+	routesObserved := stats != nil && !stats.Stale && stats.CommandStatus.RouteList.Status == EasyTierHealthy
 	observedCIDRs := map[string]bool{}
 	if nodeObserved {
 		for _, cidr := range stats.Node.ProxyCIDRs {

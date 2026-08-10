@@ -165,6 +165,12 @@ func TestEasyTierExpectationRequiresSuccessfulSourcesAndUsesOnlyLocalRoutes(t *t
 	if projection["result"] != "not_observable" {
 		t.Fatalf("failed node source became a comparison result: %#v", projection)
 	}
+	stats.CommandStatus.NodeInfo.Status = EasyTierHealthy
+	stats.Stale = true
+	projection = projectEasyTierExpectation(expectation, &stats).(map[string]any)
+	if projection["result"] != "not_observable" {
+		t.Fatalf("stale EasyTier state became a comparison result: %#v", projection)
+	}
 }
 
 func TestEasyTierCIDRsRejectPrefixesThatEscapePrivateRanges(t *testing.T) {

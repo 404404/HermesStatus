@@ -588,7 +588,9 @@ function renderEasyTier(view){
 	const traffic = safeObject(easytier.traffic);
 	const commands = safeObject(easytier.command_status);
 	const commandAvailable = name => safeObject(commands[name]).status === 'healthy';
-	const peerSummary = peers.total === 0
+	const peerSummary = !commandAvailable('peer_list')
+		? '数据不可用'
+		: peers.total === 0
 		? '0（直连：— / 中继：— / 未知：—）'
 		: `${formatInteger(peers.total)}（直连：${formatInteger(peers.direct)} / 中继：${formatInteger(peers.relay)} / 未知：${formatInteger(peers.unknown_path)}）`;
 	const details = [
