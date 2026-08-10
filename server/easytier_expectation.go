@@ -13,12 +13,19 @@ func projectEasyTierExpectation(expectation *contracts.EasyTierExpectation, stat
 	if expectation == nil {
 		return map[string]any{"configured": false, "result": "not_configured"}
 	}
+	nodeObserved := stats != nil && stats.CommandStatus.NodeInfo.Status == EasyTierHealthy
+	routesObserved := stats != nil && stats.CommandStatus.RouteList.Status == EasyTierHealthy
 	observedCIDRs := map[string]bool{}
-	if stats != nil {
+	if nodeObserved {
 		for _, cidr := range stats.Node.ProxyCIDRs {
 			observedCIDRs[cidr] = true
 		}
+	}
+	if routesObserved {
 		for _, route := range stats.Routes.Items {
+			if !route.IsLocal {
+				continue
+			}
 			for _, cidr := range route.ProxyCIDRs {
 				observedCIDRs[cidr] = true
 			}
@@ -30,30 +37,29 @@ func projectEasyTierExpectation(expectation *contracts.EasyTierExpectation, stat
 	}
 	sort.Strings(observed)
 	result := "not_observable"
-	if stats != nil && stats.Node.NetworkName != nil && stats.Node.OverlayIPv4 != nil && stats.Node.AdministrativeRole != nil {
+	if nodeObserved && routesObserved && stats.Node.NetworkName != nil && stats.Node.OverlayIPv4 != nil && stats.Node.AdministrativeRole != nil {
 		result = "matched"
 		if *stats.Node.NetworkName != expectation.NetworkName || *stats.Node.OverlayIPv4 != expectation.OverlayIPv4 || *stats.Node.AdministrativeRole != expectation.AdministrativeRole || !sameStringSet(observed, expectation.ProxyCIDRs) {
 			result = "mismatch"
 		}
 	}
+	var administrativeRole, networkName, overlayIPv4 any
+	if nodeObserved {
+		administrativeRole = stats.Node.AdministrativeRole
+		networkName = stats.Node.NetworkName
+		overlayIPv4 = stats.Node.OverlayIPv4
+	}
 	return map[string]any{
 		"configured": true,
 		"expected":   expectation,
 		"observed": map[string]any{
-			"administrative_role": valueOrNil(stats, func(value *EasyTierStats) *string { return value.Node.AdministrativeRole }),
-			"network_name":        valueOrNil(stats, func(value *EasyTierStats) *string { return value.Node.NetworkName }),
-			"overlay_ipv4":        valueOrNil(stats, func(value *EasyTierStats) *string { return value.Node.OverlayIPv4 }),
+			"administrative_role": administrativeRole,
+			"network_name":        networkName,
+			"overlay_ipv4":        overlayIPv4,
 			"proxy_cidrs":         observed,
 		},
 		"result": result,
 	}
-}
-
-func valueOrNil(stats *EasyTierStats, getter func(*EasyTierStats) *string) any {
-	if stats == nil {
-		return nil
-	}
-	return getter(stats)
 }
 
 func sameStringSet(left, right []string) bool {

@@ -371,6 +371,11 @@ function badge(value){
   return `<span class="badge ${statusTone(value)}">${escapeHtml(statusText(value))}</span>`;
 }
 
+function expectationBadge(value){
+  const labels = {matched: '匹配', mismatch: '不匹配', not_observable: '未观察到', not_configured: '未配置'};
+  return `<span class="badge ${statusTone(value)}">${escapeHtml(labels[value] || textOrDash(value))}</span>`;
+}
+
 function domainIsUnknown(value){
   return !value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length === 0;
 }
@@ -606,7 +611,7 @@ function renderEasyTier(view){
 		['Proxy CIDRs', listText(expected.proxy_cidrs), listText(observed.proxy_cidrs)],
 		['Administrative Role', textOrDash(expected.administrative_role), textOrDash(observed.administrative_role)]
 	] : [['EasyTier expectation', '未配置', '—']];
-	byId('easytierExpectationBody').innerHTML = expectationRows.map(([label, expectedValue, observedValue], index) => `<tr><td class="strong-cell">${escapeHtml(label)}</td><td>${escapeHtml(expectedValue)}</td><td>${escapeHtml(observedValue)}</td>${index === 0 ? `<td rowspan="${expectationRows.length}">${badge(expectation.result || 'not_configured')}</td>` : ''}</tr>`).join('');
+	byId('easytierExpectationBody').innerHTML = expectationRows.map(([label, expectedValue, observedValue], index) => `<tr><td class="strong-cell">${escapeHtml(label)}</td><td>${escapeHtml(expectedValue)}</td><td>${escapeHtml(observedValue)}</td>${index === 0 ? `<td rowspan="${expectationRows.length}">${expectationBadge(expectation.result || 'not_configured')}</td>` : ''}</tr>`).join('');
 	const peerItems = Array.isArray(peers.items) ? peers.items : [];
 	byId('easytierPeersBody').innerHTML = !commandAvailable('peer_list') ? '<tr><td colspan="10" class="table-empty">节点数据当前不可用。</td></tr>' : peerItems.length ? peerItems.map(peer => `<tr><td class="mono">${escapeHtml(textOrDash(peer.peer_id))}</td><td>${escapeHtml(textOrDash(peer.overlay_ipv4))}</td><td>${escapeHtml(easyTierPathText(peer.path_state))}</td><td>${escapeHtml(textOrDash(peer.transport))}</td><td>${escapeHtml(textOrDash(peer.address_family))}</td><td>${escapeHtml(formatLatency(peer.latency_ms))}</td><td>${escapeHtml(formatLoss(peer.loss_rate))}</td><td>${escapeHtml(formatBytes(peer.rx_bytes))}</td><td>${escapeHtml(formatBytes(peer.tx_bytes))}</td><td>${escapeHtml(textOrDash(peer.version))}</td></tr>`).join('') : '<tr><td colspan="10" class="table-empty">当前未观察到远端 EasyTier 节点。</td></tr>';
 	const routeItems = Array.isArray(routes.items) ? routes.items : [];

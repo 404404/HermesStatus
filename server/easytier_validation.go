@@ -5,6 +5,13 @@ import (
 	"net/netip"
 )
 
+var internalEasyTierCIDRPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("10.0.0.0/8"),
+	netip.MustParsePrefix("172.16.0.0/12"),
+	netip.MustParsePrefix("192.168.0.0/16"),
+	netip.MustParsePrefix("fc00::/7"),
+}
+
 func DecodeEasyTierStatsJSON(data []byte) (*EasyTierStats, error) {
 	if len(data) > MaxEasyTierPayloadBytes {
 		return nil, validationError(validationCodePayloadTooLarge, "easytier", "object exceeds the allowed size")
@@ -218,11 +225,29 @@ func validateInternalCIDRs(field string, values []string) error {
 	}
 	for _, cidr := range values {
 		prefix, err := netip.ParsePrefix(cidr)
-		if err != nil || !prefix.Addr().IsPrivate() {
+		if err != nil || !isInternalEasyTierCIDR(prefix) {
 			return validationError(validationCodeInvalidValue, field, "must be an internal CIDR")
 		}
 	}
 	return nil
+}
+
+func isInternalEasyTierCIDR(prefix netip.Prefix) bool {
+	prefix = prefix.Masked()
+	for _, allowed := range internalEasyTierCIDRPrefixes {
+		if prefix.Addr().BitLen() == allowed.Addr().BitLen() && allowed.Bits() <= prefix.Bits() && allowed.Contains(prefix.Addr()) {
+			return true
+		}
+	}
+	return false
+}
+
+func canonicalEasyTierCIDR(value string) string {
+	prefix, err := netip.ParsePrefix(value)
+	if err != nil {
+		return SanitizeText(value)
+	}
+	return prefix.Masked().String()
 }
 
 func validEasyTierPathState(value string) bool {
@@ -288,7 +313,7 @@ func SanitizeEasyTierStats(input EasyTierStats) EasyTierStats {
 	result.Node.PeerID = sanitizeStringPointer(result.Node.PeerID)
 	result.Node.OverlayIPv4 = sanitizeStringPointer(result.Node.OverlayIPv4)
 	for index := range result.Node.ProxyCIDRs {
-		result.Node.ProxyCIDRs[index] = SanitizeText(result.Node.ProxyCIDRs[index])
+		result.Node.ProxyCIDRs[index] = canonicalEasyTierCIDR(result.Node.ProxyCIDRs[index])
 	}
 	result.UpdatedAt = sanitizeStringPointer(result.UpdatedAt)
 	result.Error = sanitizeExtensionError(result.Error)
@@ -314,7 +339,7 @@ func SanitizeEasyTierStats(input EasyTierStats) EasyTierStats {
 		route.NextHopPeerID = sanitizeStringPointer(route.NextHopPeerID)
 		cleanCIDRs := make([]string, 0, len(route.ProxyCIDRs))
 		for _, cidr := range route.ProxyCIDRs {
-			cleanCIDRs = append(cleanCIDRs, SanitizeText(cidr))
+			cleanCIDRs = append(cleanCIDRs, canonicalEasyTierCIDR(cidr))
 		}
 		route.ProxyCIDRs = cleanCIDRs
 	}

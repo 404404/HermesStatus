@@ -139,3 +139,51 @@ func TestEasyTierExpectationIsDiagnosticOnlyAndRequiresObservedRole(t *testing.T
 		t.Fatalf("missing observed role must not become a match: %#v", projection)
 	}
 }
+
+func TestEasyTierExpectationRequiresSuccessfulSourcesAndUsesOnlyLocalRoutes(t *testing.T) {
+	expectation := &contracts.EasyTierExpectation{AdministrativeRole: "site_router", NetworkName: "home-404", OverlayIPv4: "10.250.250.1", ProxyCIDRs: []string{"192.168.68.0/24"}}
+	overlay, network, role := "10.250.250.1", "home-404", "site_router"
+	stats := validEasyTierFixture()
+	stats.Node.OverlayIPv4, stats.Node.NetworkName, stats.Node.AdministrativeRole = &overlay, &network, &role
+	stats.Node.ProxyCIDRs = []string{"192.168.68.0/24"}
+	stats.Routes.Items = []EasyTierRoute{
+		{ProxyCIDRs: []string{"192.168.68.0/24"}, IsLocal: true},
+		{ProxyCIDRs: []string{"192.168.88.0/24"}, IsLocal: false},
+	}
+	projection := projectEasyTierExpectation(expectation, &stats).(map[string]any)
+	if projection["result"] != "matched" {
+		t.Fatalf("remote route contaminated local expectation: %#v", projection)
+	}
+	stats.CommandStatus.RouteList.Status = EasyTierUnavailable
+	projection = projectEasyTierExpectation(expectation, &stats).(map[string]any)
+	if projection["result"] != "not_observable" {
+		t.Fatalf("failed route source became a comparison result: %#v", projection)
+	}
+	stats.CommandStatus.RouteList.Status = EasyTierHealthy
+	stats.CommandStatus.NodeInfo.Status = EasyTierUnavailable
+	projection = projectEasyTierExpectation(expectation, &stats).(map[string]any)
+	if projection["result"] != "not_observable" {
+		t.Fatalf("failed node source became a comparison result: %#v", projection)
+	}
+}
+
+func TestEasyTierCIDRsRejectPrefixesThatEscapePrivateRanges(t *testing.T) {
+	stats := validEasyTierFixture()
+	stats.Node.ProxyCIDRs = []string{"10.0.0.1/0"}
+	if err := ValidateEasyTierStats(&stats); err == nil {
+		t.Fatal("CIDR spanning public address space was accepted")
+	}
+	stats = validEasyTierFixture()
+	stats.Node.ProxyCIDRs = []string{"192.168.68.1/24"}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeEasyTierStatsJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := decoded.Node.ProxyCIDRs[0]; got != "192.168.68.0/24" {
+		t.Fatalf("CIDR was not canonicalized: %q", got)
+	}
+}

@@ -80,6 +80,8 @@ async function run(){
   assert.match(appSource, /easytier-command-card/);
   assert.match(appSource, /easytierPeersBody/);
   assert.match(appSource, /easytierExpectationBody/);
+  assert.match(appSource, /function expectationBadge\(value\)/);
+  assert.match(appSource, /expectationBadge\(expectation\.result/);
   assert.match(appSource, /escapeHtml\(textOrDash\(peer\.peer_id\)\)/);
   assert.doesNotMatch(appSource, /CPU温度\/硬盘温度/);
   assert.doesNotMatch(appSource, /已运行时间\/操作系统/);

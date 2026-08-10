@@ -120,7 +120,19 @@
           "maxLength": 64,
           "pattern": "^[a-z0-9][a-z0-9._-]*$"
         },
-        "ingestion": {"$ref": "#/$defs/ingestion"}
+        "ingestion": {"$ref": "#/$defs/ingestion"},
+        "easytier_expectation": {"$ref": "#/$defs/easytierExpectation"}
+      },
+      "additionalProperties": false
+    },
+    "easytierExpectation": {
+      "type": "object",
+      "required": ["administrative_role", "network_name", "overlay_ipv4", "proxy_cidrs"],
+      "properties": {
+        "administrative_role": {"enum": ["site_router", "endpoint", "bootstrap_listener", "relay_capable", "observer"]},
+        "network_name": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F]+$"},
+        "overlay_ipv4": {"type": "string", "maxLength": 15},
+        "proxy_cidrs": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 64}}
       },
       "additionalProperties": false
     }

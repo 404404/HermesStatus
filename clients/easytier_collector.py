@@ -21,6 +21,7 @@ DEFAULT_RPC_PORTAL = "127.0.0.1:15888"
 MAX_OUTPUT_BYTES = 512 * 1024
 MAX_ITEMS = 256
 SAFE_TEXT_LIMIT = 128
+MAX_COMMAND_DURATION_MS = 30000
 COMMANDS = (
     ("node_info", ("node", "info")),
     ("peer_list", ("peer", "list")),
@@ -137,6 +138,12 @@ def _family(value, address=None):
 
 def _empty_command(status="not_configured", error=None):
     return {"status": status, "last_success_at": None, "collected_at": None, "duration_ms": None, "error": error}
+
+
+def _command_duration_ms(started, ended=None):
+    if ended is None:
+        ended = time.monotonic()
+    return min(MAX_COMMAND_DURATION_MS, max(0, int((ended - started) * 1000)))
 
 
 def _empty_payload(status="not_configured", error=None):
@@ -318,18 +325,18 @@ class EasyTierCollector(object):
                 command_status = _empty_command("healthy", None)
                 command_status["last_success_at"] = collected_at
                 command_status["collected_at"] = collected_at
-                command_status["duration_ms"] = int((time.monotonic() - started) * 1000)
+                command_status["duration_ms"] = _command_duration_ms(started)
                 payload["command_status"][name] = command_status
                 successful += 1
             except (OSError, subprocess.TimeoutExpired, RuntimeError):
                 command_status = _empty_command("unavailable", _error("command_failed", "easytier." + name))
                 command_status["collected_at"] = collected_at
-                command_status["duration_ms"] = int((time.monotonic() - started) * 1000)
+                command_status["duration_ms"] = _command_duration_ms(started)
                 payload["command_status"][name] = command_status
             except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
                 command_status = _empty_command("invalid_data", _error("invalid_data", "easytier." + name))
                 command_status["collected_at"] = collected_at
-                command_status["duration_ms"] = int((time.monotonic() - started) * 1000)
+                command_status["duration_ms"] = _command_duration_ms(started)
                 payload["command_status"][name] = command_status
 
         if successful == 0:

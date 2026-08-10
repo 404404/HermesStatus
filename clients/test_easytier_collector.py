@@ -4,7 +4,7 @@ import stat
 import tempfile
 import unittest
 
-from easytier_collector import EasyTierCollector, load_easytier_config, not_configured_easytier
+from easytier_collector import EasyTierCollector, _command_duration_ms, load_easytier_config, not_configured_easytier
 
 
 class Result(object):
@@ -107,6 +107,10 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertIsNotNone(payload["command_status"]["route_list"]["collected_at"])
         self.assertEqual(payload["error"]["code"], "partial_failure")
         self.assertNotIn("stderr", json.dumps(payload))
+
+    def test_command_duration_is_clamped_to_server_contract_limit(self):
+        self.assertEqual(_command_duration_ms(0, 30.001), 30000)
+        self.assertEqual(_command_duration_ms(2, 1), 0)
 
     def test_unsupported_version_and_malicious_fields_are_safe(self):
         class FutureRunner(Runner):

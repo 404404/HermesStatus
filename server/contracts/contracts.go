@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"sort"
@@ -30,12 +31,18 @@ const (
 )
 
 var (
-	deviceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
-	labelPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
-	digestPattern   = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	safeTextPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	credentialIDSet = map[string]bool{"current": true, "next": true}
-	statsKeys       = map[string]bool{
+	deviceIDPattern      = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
+	labelPattern         = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+	digestPattern        = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	safeTextPattern      = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	credentialIDSet      = map[string]bool{"current": true, "next": true}
+	internalCIDRPrefixes = []netip.Prefix{
+		netip.MustParsePrefix("10.0.0.0/8"),
+		netip.MustParsePrefix("172.16.0.0/12"),
+		netip.MustParsePrefix("192.168.0.0/16"),
+		netip.MustParsePrefix("fc00::/7"),
+	}
+	statsKeys = map[string]bool{
 		"uptime": true, "load_1": true, "load_5": true, "load_15": true,
 		"ping_10010": true, "ping_189": true, "ping_10086": true,
 		"time_10010": true, "time_189": true, "time_10086": true,
@@ -377,16 +384,43 @@ func ValidateEasyTierExpectation(expectation *EasyTierExpectation) error {
 	}
 	seen := map[string]bool{}
 	for _, value := range expectation.ProxyCIDRs {
-		ip, _, err := net.ParseCIDR(value)
-		if err != nil || !ip.IsPrivate() || seen[value] {
+		canonical, err := canonicalInternalCIDR(value)
+		if err != nil || seen[canonical] {
 			return errors.New("proxy_cidrs contains an invalid internal CIDR")
 		}
-		seen[value] = true
+		seen[canonical] = true
 	}
 	return nil
 }
 
+func canonicalInternalCIDR(value string) (string, error) {
+	prefix, err := netip.ParsePrefix(value)
+	if err != nil {
+		return "", err
+	}
+	prefix = prefix.Masked()
+	for _, allowed := range internalCIDRPrefixes {
+		if prefix.Addr().BitLen() == allowed.Addr().BitLen() && allowed.Bits() <= prefix.Bits() && allowed.Contains(prefix.Addr()) {
+			return prefix.String(), nil
+		}
+	}
+	return "", errors.New("not an internal CIDR")
+}
+
 func NormalizeRegistry(registry *DeviceRegistry) {
+	for index := range registry.Devices {
+		expectation := registry.Devices[index].EasyTierExpectation
+		if expectation == nil {
+			continue
+		}
+		canonical := make([]string, 0, len(expectation.ProxyCIDRs))
+		for _, value := range expectation.ProxyCIDRs {
+			prefix, _ := canonicalInternalCIDR(value)
+			canonical = append(canonical, prefix)
+		}
+		sort.Strings(canonical)
+		expectation.ProxyCIDRs = canonical
+	}
 	sort.SliceStable(registry.Devices, func(i, j int) bool {
 		if registry.Devices[i].Order == registry.Devices[j].Order {
 			return registry.Devices[i].ID < registry.Devices[j].ID
