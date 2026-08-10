@@ -113,6 +113,16 @@ func TestEasyTierZeroPeerKeepsIPv6UDPDirectNotObservable(t *testing.T) {
 	}
 }
 
+func TestRestoredEasyTierProjectionIsExplicitlyStale(t *testing.T) {
+	stats := validEasyTierFixture()
+	stats.Stale = false
+	extension := ExtensionSnapshot{EasyTier: &stats}
+	forceExtensionStale(&extension)
+	if !extension.EasyTier.Stale || extension.EasyTier.Status != EasyTierStale {
+		t.Fatalf("restored EasyTier state became fresh: %#v", extension.EasyTier)
+	}
+}
+
 func TestEasyTierExpectationIsDiagnosticOnlyAndRequiresObservedRole(t *testing.T) {
 	expectation := &contracts.EasyTierExpectation{AdministrativeRole: "site_router", NetworkName: "home-404", OverlayIPv4: "10.250.250.1", ProxyCIDRs: []string{"192.168.68.0/24"}}
 	overlay, network, role := "10.250.250.1", "home-404", "site_router"
