@@ -143,6 +143,11 @@ class EasyTierCollectorTests(unittest.TestCase):
             self.assertEqual(payload["command_status"][name]["status"], "invalid_data")
         self.assertIsNone(payload["routes"]["items"][0]["overlay_ipv4"])
 
+    def test_route_without_known_peer_ids_is_not_local(self):
+        payload = {"routes": {"total": 0, "items": []}}
+        EasyTierCollector._apply_routes(payload, [{"proxy_cidrs": ["192.168.68.0/24"]}], None)
+        self.assertFalse(payload["routes"]["items"][0]["is_local"])
+
     def test_unsupported_version_and_malicious_fields_are_safe(self):
         class FutureRunner(Runner):
             def __call__(self, argv, **kwargs):

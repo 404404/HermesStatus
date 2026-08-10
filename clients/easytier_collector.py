@@ -479,8 +479,7 @@ class EasyTierCollector(object):
                 path_state = "direct"
             elif peer_id and next_hop and peer_id != next_hop:
                 path_state = "relayed"
-            path_len = _lookup(route, "path_len", "path_length")
-            own_route = peer_id == own_peer_id or (isinstance(path_len, (int, float)) and not isinstance(path_len, bool) and path_len <= 0)
+            own_route = peer_id is not None and own_peer_id is not None and peer_id == own_peer_id
             payload["routes"]["total"] += 1
             payload["routes"]["items"].append({
                     "peer_id": peer_id,
