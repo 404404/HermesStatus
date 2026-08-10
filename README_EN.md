@@ -18,10 +18,12 @@ EasyTier health projection.
   EasyTier traffic. The hardware area shows SMART, read/write volume, power-on
   hours, system uptime, physical-host OS, Docker, Lucky, and EasyTier
   state/version. State and version use a compact “Normal (version)” form, and
-  EasyTier traffic uses a single line with automatic B/KB/MB/GB unit scaling.
+  EasyTier traffic uses one decimal place in a single-line receive / transmit /
+  forwarded layout with automatic B/KB/MB/GB unit scaling.
 - Docker: container counts, names, images, state, and port summaries.
 - Home also includes configured Hermes profiles with gateway, runtime,
-  model/provider, and usage snapshots.
+  model/provider, and usage snapshots. Its section header shows the shared
+  Agent version and profile count (for example, `Agent version: 0.19.0, 3 profiles`).
 - Lucky: version, DDNS, web service, forwarding, and certificate summaries when
   explicitly enabled.
 - EasyTier: an opt-in, strict read-only loopback-RPC projection. Each

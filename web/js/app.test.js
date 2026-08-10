@@ -83,8 +83,9 @@ async function run(){
   assert.match(indexMarkup, /<h2 id="easytierCommandsTitle">采集状态<\/h2>/);
   assert.doesNotMatch(indexMarkup, /<th>说明<\/th>/);
   assert.equal(app.formatUptimeHours(90061), '25 h (约1.04天)');
-  assert.equal(app.formatTrafficBytes(0), '0.00B');
-  assert.equal(app.formatTrafficBytes(1000000), '1.00MB');
+  assert.equal(app.formatTrafficBytes(0), '0.0B');
+  assert.equal(app.formatTrafficBytes(1000000), '1.0MB');
+  assert.equal(app.profileSummary([{agent_version: '0.19.0'}, {agent_version: '0.19.0'}, {agent_version: '0.19.0'}]), 'Agent版本: 0.19.0，3个配置');
   assert.equal(
     app.modelBreakdown({model: 'example-model', usage_mode: 'api', provider: 'OpenCode Go'}),
     'example-model / api / OpenCode Go'

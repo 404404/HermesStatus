@@ -4,12 +4,12 @@
 
 ## 目标
 
-HermesStatus 是面向显式配置主机的当前状态面板，不提供对主机、容器、Hermes 或 Lucky 的控制能力。主要页面为主页、Docker 和 Lucky。
+HermesStatus 是面向显式配置主机的当前状态面板，不提供对主机、容器、Hermes、Lucky 或 EasyTier 的控制能力。主要页面为主页、Docker、Lucky 和 EasyTier。
 
 ## 组件与数据流
 
 ```text
-主机系统 / hwmon / SMART / Docker / Hermes / Lucky
+主机系统 / hwmon / SMART / Docker / Hermes / Lucky / EasyTier
                          ↓
                     Python Client
                          ↓
@@ -20,15 +20,15 @@ HermesStatus 是面向显式配置主机的当前状态面板，不提供对主�
           /json/stats.json · /api/health · WebUI
 ```
 
-Client 采集主机数据并形成 `hardware`、`docker`、`hermes`、`lucky` 四个结构化域。单个域可陈旧或不可用，不会阻止其余数据域上报。
+Client 采集主机数据并形成 `hardware`、`docker`、`hermes`、`lucky`、`easytier` 五个结构化域。单个域可陈旧或不可用，不会阻止其余数据域上报。
 
-Go Server 校验上报、保留最近一次接受的状态、持久化指定状态，并投影为 `/json/stats.json`。浏览器只读取这一份文档；主页、Docker 与 Lucky 页面切换不会额外请求数据。
+Go Server 校验上报、保留最近一次接受的状态、持久化指定状态，并投影为 `/json/stats.json`。浏览器只读取这一份文档；页面切换不会额外请求数据。
 
 ## 页面范围
 
-主页展示设备状态、CPU、内存、磁盘容量、主机与 CPU 身份、硬件温度/SMART、Hermes Profile，以及已配置 Lucky 的摘要。Docker 页面展示容器表格；Lucky 页面展示其配置与服务摘要。
+主页展示设备状态、CPU、内存、磁盘容量、EasyTier 远端节点与流量摘要、硬件温度/SMART、Hermes Profile，以及已配置 Lucky/EasyTier 的状态与版本摘要。EasyTier 流量以一位小数、自动单位和单行的接收 / 发送 / 转发格式显示；Hermes Profile 表头显示 Agent 版本和配置数量。Docker 页面展示容器表格；Lucky 页面展示其配置与服务摘要；EasyTier 页面先展示逐命令采集状态卡片，再展示只读网络摘要。
 
-网络吞吐、累计网络流量、运营商或三网延迟探测不是 HermesStatus 面板功能，文档不得将其描述为产品能力；即使 Legacy Agent 协议为兼容目的仍包含相关字段。
+常规主机网络吞吐、累计主机网络流量、运营商或三网延迟探测不是 HermesStatus 面板功能，文档不得将其描述为产品能力；即使 Legacy Agent 协议为兼容目的仍包含相关字段。此限制不包括独立的 EasyTier 接收 / 发送 / 转发计数器。
 
 ## 上报模式
 

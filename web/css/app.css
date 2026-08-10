@@ -158,6 +158,7 @@ body.light .health-card{background:#fff}
 .easytier-summary{padding:0 1.35rem 1.1rem}
 .easytier-command-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1rem;padding:0 1.35rem 1.35rem}
 .easytier-command-card{min-height:104px;padding:1rem}
+.easytier-command-card h2{color:var(--text);font-size:23px;font-weight:750;letter-spacing:0;text-transform:none}
 .easytier-command-card .card-value{margin-top:auto}
 .easytier-table{min-width:760px!important}
 

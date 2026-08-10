@@ -74,7 +74,7 @@ function formatTrafficBytes(value){
     size /= 1000;
     unit += 1;
   }
-  return `${size.toFixed(2)}${units[unit]}`;
+  return `${size.toFixed(1)}${units[unit]}`;
 }
 
 function percentage(used, total){
@@ -473,7 +473,7 @@ function renderOverview(view){
   const peers = safeObject(view.easytier.peers);
   const traffic = safeObject(view.easytier.traffic);
   const peerText = `${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)}`;
-  const trafficText = `${formatTrafficBytes(traffic.bytes_rx)}/${formatTrafficBytes(traffic.bytes_tx)}/${formatTrafficBytes(traffic.bytes_forwarded)}`;
+  const trafficText = `${formatTrafficBytes(traffic.bytes_rx)} / ${formatTrafficBytes(traffic.bytes_tx)} / ${formatTrafficBytes(traffic.bytes_forwarded)}`;
   byId('overviewCards').innerHTML = `
     <article class="summary-card resource-card">
       <h2>CPU</h2>
@@ -590,8 +590,17 @@ function renderEasyTier(view){
 	}).join('');
 }
 
+function profileSummary(profiles){
+  if(!profiles.length) return '';
+  const versions = [...new Set(profiles
+    .map(profile => textOrDash(profile.agent_version))
+    .filter(version => version !== '-'))];
+  const version = versions.length === 1 ? versions[0] : versions.length > 1 ? '多个版本' : '-';
+  return `Agent版本: ${version}，${profiles.length}个配置`;
+}
+
 function renderProfiles(view){
-  byId('profilesMeta').textContent = view.profiles.length ? `${view.profiles.length} 个配置` : '';
+  byId('profilesMeta').textContent = profileSummary(view.profiles);
   byId('profilesBody').innerHTML = view.profiles.length ? view.profiles.map((profile, index) => `
     <tr class="profile-row" data-profile-index="${index}" tabindex="0" role="button" aria-label="查看 ${escapeHtml(textOrDash(profile.profile))} 详情">
       <td class="strong-cell">${escapeHtml(textOrDash(profile.profile))}</td>
@@ -1116,6 +1125,7 @@ const exported = {
   formatTrafficBytes,
   formatUptimeHours,
   formatPair,
+  profileSummary,
   modelBreakdown,
   normalizeStatsPayload,
   normalizedDeviceStatus,

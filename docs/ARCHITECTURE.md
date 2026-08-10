@@ -5,13 +5,13 @@
 ## Purpose
 
 HermesStatus is a current-state dashboard for explicitly configured hosts. It
-does not control hosts, containers, Hermes, or Lucky. The primary UI has three
-views: Home, Docker, and Lucky.
+does not control hosts, containers, Hermes, Lucky, or EasyTier. The primary UI
+has four views: Home, Docker, Lucky, and EasyTier.
 
 ## Components and data flow
 
 ```text
-Host OS / hwmon / SMART / Docker / Hermes / Lucky
+Host OS / hwmon / SMART / Docker / Hermes / Lucky / EasyTier
                          ↓
                     Python Client
                          ↓
@@ -23,25 +23,31 @@ Host OS / hwmon / SMART / Docker / Hermes / Lucky
 ```
 
 The Client collects host data and produces a structured extension with four
-domains: `hardware`, `docker`, `hermes`, and `lucky`. Each domain can be stale
-or unavailable without preventing the remaining domains from being reported.
+domains: `hardware`, `docker`, `hermes`, `lucky`, and `easytier`. Each domain
+can be stale or unavailable without preventing the remaining domains from being
+reported.
 
 The Go Server validates the incoming update, keeps the latest accepted state,
 persists selected state, and projects it as `/json/stats.json`. The browser
-fetches that one document; switching between Home, Docker, and Lucky does not
-create a separate data request.
+fetches that one document; switching between views does not create a separate
+data request.
 
 ## Dashboard scope
 
-The Home view presents device status, CPU, memory, disk capacity, host and CPU
-identity, hardware temperature/SMART information, Hermes profiles, and a Lucky
-summary when Lucky is configured. Docker has a separate container table. Lucky
-has its own configuration and service summaries.
+The Home view presents device status, CPU, memory, disk capacity, EasyTier
+remote-peer and traffic summaries, hardware temperature/SMART information,
+Hermes profiles, and Lucky/EasyTier state and version summaries when configured.
+EasyTier traffic uses one decimal place with automatic units and a single-line
+receive / transmit / forwarded presentation. The Hermes Profile section header
+shows the Agent version and profile count. Docker has a separate container
+table; Lucky has its own configuration and service summaries; EasyTier presents
+per-command collection-status cards followed by its read-only network summary.
 
-Network throughput, cumulative network traffic, and carrier-specific or
-three-network latency probes are not HermesStatus dashboard features and must
-not be documented as such, even though compatibility fields may still exist in
-the legacy Agent protocol.
+General host network throughput, cumulative host network traffic, and
+carrier-specific or three-network latency probes are not HermesStatus dashboard
+features and must not be documented as such, even though compatibility fields
+may still exist in the legacy Agent protocol. This does not apply to the
+separate EasyTier receive / transmit / forwarded counters.
 
 ## Ingestion modes
 
