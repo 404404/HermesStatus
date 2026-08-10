@@ -31,10 +31,10 @@ class Runner(object):
             },
             ("peer", "list"): [
                 {"id": 12345, "connection_type": "direct"},
-                {"id": 54321, "connection_type": "direct"},
-                {"id": 67890, "connection_type": "relay"}
+                {"id": 54321, "connection_type": "direct", "next_hop_peer_id": 54321, "transport": "udp", "address_family": "ipv6", "ipv4": "10.250.250.2"},
+                {"id": 67890, "connection_type": "relay", "next_hop_peer_id": 54321, "transport": "tcp", "address_family": "ipv4", "ipv4": "10.250.250.3"}
             ],
-            ("route", "list"): [{"id": 12345}, {"id": 54321}],
+            ("route", "list"): [{"id": 12345, "proxy_cidrs": ["192.168.68.0/24"]}, {"id": 54321, "next_hop_peer_id": 54321, "proxy_cidrs": ["192.168.88.0/24"]}],
             ("connector", "list"): [{"protocol": "tcp", "connected": True}],
             ("stats", "show"): {
                 "traffic_bytes_rx": 101, "traffic_bytes_tx": 202,
@@ -71,8 +71,12 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertEqual(payload["status"], "healthy")
         self.assertEqual(payload["node"]["instance_name"], "fixture-node")
         self.assertIsNone(payload["node"].get("public_endpoint"))
-        self.assertEqual(payload["peers"], {"total": 2, "direct": 1, "relay": 1, "unknown_path": 0})
-        self.assertEqual(payload["routes"]["total"], 1)
+        self.assertEqual({key: payload["peers"][key] for key in ("total", "direct", "relay", "unknown_path")}, {"total": 2, "direct": 1, "relay": 1, "unknown_path": 0})
+        self.assertEqual(payload["peers"]["items"][0]["transport"], "udp")
+        self.assertEqual(payload["peers"]["items"][1]["path_state"], "relayed")
+        self.assertTrue(payload["peers"]["ipv6_udp_direct"])
+        self.assertEqual(payload["routes"]["total"], 2)
+        self.assertEqual(payload["routes"]["items"][0]["proxy_cidrs"], ["192.168.68.0/24"])
         self.assertTrue(payload["connectors"]["tcp_configured"])
         self.assertEqual(payload["traffic"]["bytes_forwarded"], 303)
         self.assertNotIn("secret", json.dumps(payload))
@@ -96,11 +100,28 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertFalse(payload["connectors"]["tcp_active"])
 
     def test_partial_failure_is_degraded_and_does_not_leak_stderr(self):
-        payload = EasyTierCollector(environ=self.environ, runner=Runner({("peer", "list")})).collect()
+        payload = EasyTierCollector(environ=self.environ, runner=Runner({("route", "list")})).collect()
         self.assertEqual(payload["status"], "degraded")
-        self.assertEqual(payload["command_status"]["peer_list"]["status"], "unavailable")
+        self.assertEqual(payload["command_status"]["route_list"]["status"], "unavailable")
+        self.assertEqual(payload["routes"]["total"], 0)
+        self.assertIsNotNone(payload["command_status"]["route_list"]["collected_at"])
         self.assertEqual(payload["error"]["code"], "partial_failure")
         self.assertNotIn("stderr", json.dumps(payload))
+
+    def test_unsupported_version_and_malicious_fields_are_safe(self):
+        class FutureRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                result = super().__call__(argv, **kwargs)
+                if tuple(argv[-2:]) == ("node", "info"):
+                    return Result({"version": "3.0.0-synthetic", "peer_id": 12345, "instance_name": "<script>alert(1)</script>"})
+                if tuple(argv[-2:]) == ("peer", "list"):
+                    return Result([{"id": 54321, "hostname": "<img src=x onerror=alert(1)>", "next_hop_peer_id": 54321, "connection_type": "direct", "transport": "udp", "address_family": "ipv6"}])
+                return result
+
+        payload = EasyTierCollector(environ=self.environ, runner=FutureRunner()).collect()
+        self.assertEqual(payload["status"], "unsupported_version")
+        self.assertEqual(payload["node"]["schema_compatibility"], "unsupported")
+        self.assertEqual(payload["peers"]["items"][0]["hostname"], "<img src=x onerror=alert(1)>")
 
     def test_rejects_non_loopback_and_symlink_cli(self):
         invalid = dict(self.environ, EASYTIER_RPC_PORTAL="10.250.250.1:15888")

@@ -76,14 +76,24 @@ type RegistryDefaults struct {
 }
 
 type RegistryDevice struct {
-	ID           string             `json:"id"`
-	DisplayName  string             `json:"display_name"`
-	ExpectedFQDN *string            `json:"expected_fqdn"`
-	Enabled      *bool              `json:"enabled"`
-	Order        int                `json:"order"`
-	Tags         []string           `json:"tags"`
-	Group        *string            `json:"group"`
-	Ingestion    IngestionOwnership `json:"ingestion"`
+	ID                  string               `json:"id"`
+	DisplayName         string               `json:"display_name"`
+	ExpectedFQDN        *string              `json:"expected_fqdn"`
+	Enabled             *bool                `json:"enabled"`
+	Order               int                  `json:"order"`
+	Tags                []string             `json:"tags"`
+	Group               *string              `json:"group"`
+	Ingestion           IngestionOwnership   `json:"ingestion"`
+	EasyTierExpectation *EasyTierExpectation `json:"easytier_expectation,omitempty"`
+}
+
+// EasyTierExpectation is an operator-authored comparison target. It is never
+// used for device identity, authentication, registration, or credential lookup.
+type EasyTierExpectation struct {
+	AdministrativeRole string   `json:"administrative_role"`
+	NetworkName        string   `json:"network_name"`
+	OverlayIPv4        string   `json:"overlay_ipv4"`
+	ProxyCIDRs         []string `json:"proxy_cidrs"`
 }
 
 type DeviceRegistry struct {
@@ -329,6 +339,9 @@ func ValidateRegistry(registry *DeviceRegistry, now time.Time) error {
 		if err := ValidateIngestionOwnership(device.Ingestion, now); err != nil {
 			return contractError(prefix+".ingestion", err.Error())
 		}
+		if err := ValidateEasyTierExpectation(device.EasyTierExpectation); err != nil {
+			return contractError(prefix+".easytier_expectation", err.Error())
+		}
 		if device.ID == registry.Defaults.DefaultDeviceID {
 			defaultFound = true
 			defaultEnabled = *device.Enabled
@@ -339,6 +352,36 @@ func ValidateRegistry(registry *DeviceRegistry, now time.Time) error {
 	}
 	if !defaultEnabled {
 		return contractError("defaults.default_device_id", "must identify an enabled device")
+	}
+	return nil
+}
+
+func ValidateEasyTierExpectation(expectation *EasyTierExpectation) error {
+	if expectation == nil {
+		return nil
+	}
+	switch expectation.AdministrativeRole {
+	case "site_router", "endpoint", "bootstrap_listener", "relay_capable", "observer":
+	default:
+		return errors.New("administrative_role is invalid")
+	}
+	if !validHumanText(strings.TrimSpace(expectation.NetworkName), 128) {
+		return errors.New("network_name is invalid")
+	}
+	ip := net.ParseIP(expectation.OverlayIPv4)
+	if ip == nil || ip.To4() == nil || !ip.IsPrivate() {
+		return errors.New("overlay_ipv4 must be an internal IPv4 address")
+	}
+	if len(expectation.ProxyCIDRs) > 16 {
+		return errors.New("proxy_cidrs is too large")
+	}
+	seen := map[string]bool{}
+	for _, value := range expectation.ProxyCIDRs {
+		ip, _, err := net.ParseCIDR(value)
+		if err != nil || !ip.IsPrivate() || seen[value] {
+			return errors.New("proxy_cidrs contains an invalid internal CIDR")
+		}
+		seen[value] = true
 	}
 	return nil
 }

@@ -37,28 +37,75 @@ type EasyTierStats struct {
 }
 
 type EasyTierNodeStats struct {
-	State        string  `json:"state"`
-	InstanceName *string `json:"instance_name"`
-	NetworkName  *string `json:"network_name"`
-	Version      *string `json:"version"`
-	PeerID       *string `json:"peer_id"`
+	State               string   `json:"state"`
+	InstanceName        *string  `json:"instance_name"`
+	NetworkName         *string  `json:"network_name"`
+	Version             *string  `json:"version"`
+	PeerID              *string  `json:"peer_id"`
+	OverlayIPv4         *string  `json:"overlay_ipv4,omitempty"`
+	ProxyCIDRs          []string `json:"proxy_cidrs,omitempty"`
+	AdministrativeRole  *string  `json:"administrative_role,omitempty"`
+	SchemaCompatibility string   `json:"schema_compatibility,omitempty"`
 }
 
 type EasyTierPeerStats struct {
-	Total       int `json:"total"`
-	Direct      int `json:"direct"`
-	Relay       int `json:"relay"`
-	UnknownPath int `json:"unknown_path"`
+	Total         int            `json:"total"`
+	Direct        int            `json:"direct"`
+	Relay         int            `json:"relay"`
+	UnknownPath   int            `json:"unknown_path"`
+	IPv6UDPDirect *bool          `json:"ipv6_udp_direct,omitempty"`
+	Items         []EasyTierPeer `json:"items,omitempty"`
+}
+
+type EasyTierPeer struct {
+	PeerID           *string  `json:"peer_id"`
+	OverlayIPv4      *string  `json:"overlay_ipv4"`
+	Hostname         *string  `json:"hostname"`
+	Version          *string  `json:"version"`
+	PathState        string   `json:"path_state"`
+	Transport        string   `json:"transport"`
+	AddressFamily    string   `json:"address_family"`
+	LocallyInitiated bool     `json:"locally_initiated"`
+	LatencyMS        *float64 `json:"latency_ms"`
+	LossRate         *float64 `json:"loss_rate"`
+	RXBytes          int64    `json:"rx_bytes"`
+	TXBytes          int64    `json:"tx_bytes"`
+	RXPackets        int64    `json:"rx_packets"`
+	TXPackets        int64    `json:"tx_packets"`
+	Closed           bool     `json:"closed"`
 }
 
 type EasyTierRouteStats struct {
-	Total int `json:"total"`
+	Total int             `json:"total"`
+	Items []EasyTierRoute `json:"items,omitempty"`
+}
+
+type EasyTierRoute struct {
+	PeerID        *string  `json:"peer_id"`
+	OverlayIPv4   *string  `json:"overlay_ipv4"`
+	Hostname      *string  `json:"hostname"`
+	Version       *string  `json:"version"`
+	NextHopPeerID *string  `json:"next_hop_peer_id"`
+	Cost          *int     `json:"cost"`
+	PathLatencyMS *float64 `json:"path_latency_ms"`
+	ProxyCIDRs    []string `json:"proxy_cidrs"`
+	PathState     string   `json:"path_state"`
+	IsLocal       bool     `json:"is_local"`
 }
 
 type EasyTierConnectorStats struct {
-	Total         int  `json:"total"`
-	TCPConfigured bool `json:"tcp_configured"`
-	TCPActive     bool `json:"tcp_active"`
+	Total                int                 `json:"total"`
+	TCPConfigured        bool                `json:"tcp_configured"`
+	TCPActive            bool                `json:"tcp_active"`
+	TCPListenerAvailable *bool               `json:"tcp_listener_available,omitempty"`
+	Items                []EasyTierConnector `json:"items,omitempty"`
+}
+
+type EasyTierConnector struct {
+	Transport     string `json:"transport"`
+	AddressFamily string `json:"address_family"`
+	Port          *int   `json:"port"`
+	Status        string `json:"status"`
 }
 
 type EasyTierTrafficStats struct {
@@ -68,8 +115,11 @@ type EasyTierTrafficStats struct {
 }
 
 type EasyTierCommandStatus struct {
-	Status EasyTierStatus  `json:"status"`
-	Error  *ExtensionError `json:"error"`
+	Status        EasyTierStatus  `json:"status"`
+	LastSuccessAt *string         `json:"last_success_at,omitempty"`
+	CollectedAt   *string         `json:"collected_at,omitempty"`
+	DurationMS    *int            `json:"duration_ms,omitempty"`
+	Error         *ExtensionError `json:"error"`
 }
 
 type EasyTierCommandStatuses struct {

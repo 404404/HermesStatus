@@ -8,6 +8,7 @@ STUN data, or public endpoints, and it never returns command stderr.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import stat
@@ -32,6 +33,8 @@ STATUS_VALUES = {
     "healthy", "degraded", "unavailable", "stale", "not_configured",
     "unsupported_version", "invalid_data",
 }
+TRANSPORTS = {"udp", "tcp", "quic", "wg", "wss", "unknown"}
+FAMILIES = {"ipv4", "ipv6", "unknown"}
 
 
 def _now():
@@ -79,8 +82,61 @@ def _counter(value):
     return 0
 
 
+def _bounded_number(value, maximum, decimals=False):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0 or value > maximum:
+        return None
+    return float(value) if decimals else int(value)
+
+
+def _internal_ip(value):
+    text = _safe_text(value, 64)
+    if text is None:
+        return None
+    try:
+        address = ipaddress.ip_interface(text).ip if "/" in text else ipaddress.ip_address(text)
+    except ValueError:
+        return None
+    return str(address) if address.is_private else None
+
+
+def _internal_cidrs(value):
+    raw = value if isinstance(value, list) else [value]
+    result = []
+    for item in raw[:16]:
+        text = _safe_text(item, 64)
+        if text is None:
+            continue
+        try:
+            network = ipaddress.ip_network(text, strict=False)
+        except ValueError:
+            continue
+        if network.is_private and str(network) not in result:
+            result.append(str(network))
+    return result
+
+
+def _transport(value):
+    text = str(value or "").strip().lower()
+    for candidate in ("udp", "tcp", "quic", "wg", "wss"):
+        if text == candidate or text.startswith(candidate + ":") or text.startswith(candidate + "//"):
+            return candidate
+    return "unknown"
+
+
+def _family(value, address=None):
+    text = str(value or "").strip().lower()
+    if text in FAMILIES:
+        return text
+    if address:
+        try:
+            return "ipv6" if ipaddress.ip_address(address).version == 6 else "ipv4"
+        except ValueError:
+            pass
+    return "unknown"
+
+
 def _empty_command(status="not_configured", error=None):
-    return {"status": status, "error": error}
+    return {"status": status, "last_success_at": None, "collected_at": None, "duration_ms": None, "error": error}
 
 
 def _empty_payload(status="not_configured", error=None):
@@ -89,11 +145,12 @@ def _empty_payload(status="not_configured", error=None):
         "source": "easytier_cli" if status != "not_configured" else "unavailable",
         "node": {
             "state": "unknown", "instance_name": None, "network_name": None,
-            "version": None, "peer_id": None,
+            "version": None, "peer_id": None, "overlay_ipv4": None, "proxy_cidrs": [], "administrative_role": None,
+            "schema_compatibility": "unknown",
         },
-        "peers": {"total": 0, "direct": 0, "relay": 0, "unknown_path": 0},
-        "routes": {"total": 0},
-        "connectors": {"total": 0, "tcp_configured": False, "tcp_active": False},
+        "peers": {"total": 0, "direct": 0, "relay": 0, "unknown_path": 0, "ipv6_udp_direct": None, "items": []},
+        "routes": {"total": 0, "items": []},
+        "connectors": {"total": 0, "tcp_configured": False, "tcp_active": False, "tcp_listener_available": None, "items": []},
         "traffic": {"bytes_rx": 0, "bytes_tx": 0, "bytes_forwarded": 0},
         "command_status": {name: _empty_command(status, error) for name, _ in COMMANDS},
         "updated_at": None,
@@ -254,14 +311,26 @@ class EasyTierCollector(object):
         successful = 0
         values = {}
         for name, command in COMMANDS:
+            started = time.monotonic()
+            collected_at = _now()
             try:
                 values[name] = self._run(command)
-                payload["command_status"][name] = _empty_command("healthy", None)
+                command_status = _empty_command("healthy", None)
+                command_status["last_success_at"] = collected_at
+                command_status["collected_at"] = collected_at
+                command_status["duration_ms"] = int((time.monotonic() - started) * 1000)
+                payload["command_status"][name] = command_status
                 successful += 1
             except (OSError, subprocess.TimeoutExpired, RuntimeError):
-                payload["command_status"][name] = _empty_command("unavailable", _error("command_failed", "easytier." + name))
+                command_status = _empty_command("unavailable", _error("command_failed", "easytier." + name))
+                command_status["collected_at"] = collected_at
+                command_status["duration_ms"] = int((time.monotonic() - started) * 1000)
+                payload["command_status"][name] = command_status
             except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
-                payload["command_status"][name] = _empty_command("invalid_data", _error("invalid_data", "easytier." + name))
+                command_status = _empty_command("invalid_data", _error("invalid_data", "easytier." + name))
+                command_status["collected_at"] = collected_at
+                command_status["duration_ms"] = int((time.monotonic() - started) * 1000)
+                payload["command_status"][name] = command_status
 
         if successful == 0:
             return _empty_payload("unavailable", _error("rpc_unavailable"))
@@ -273,7 +342,9 @@ class EasyTierCollector(object):
         payload["updated_at"] = _now()
         payload["stale"] = False
         version = payload["node"]["version"]
+        payload["node"]["schema_compatibility"] = "supported" if version and version.startswith("2.6.") else "unknown"
         if version and not version.startswith("2.6."):
+            payload["node"]["schema_compatibility"] = "unsupported"
             payload["status"] = "unsupported_version"
             payload["error"] = _error("unsupported_version")
         elif successful != len(COMMANDS):
@@ -292,6 +363,15 @@ class EasyTierCollector(object):
         node["version"] = _safe_text(_deep_lookup(value, "version"))
         peer_id = _deep_lookup(value, "peer_id", "virtual_peer_id")
         node["peer_id"] = _safe_text(peer_id, 32)
+        node["overlay_ipv4"] = _internal_ip(_deep_lookup(value, "overlay_ipv4", "virtual_ipv4", "ipv4", "ipv4_addr"))
+        node["proxy_cidrs"] = _internal_cidrs(_lookup(value, "proxy_cidrs", "proxy_cidr"))
+        role = _safe_text(_lookup(value, "administrative_role"))
+        node["administrative_role"] = role if role in {"site_router", "endpoint", "bootstrap_listener", "relay_capable", "observer"} else None
+        listener_values = _as_list(_lookup(value, "listeners"))
+        for listener in listener_values:
+            text = str(_lookup(listener, "protocol", "transport", "type") if isinstance(listener, dict) else listener).lower()
+            if "tcp" in text:
+                payload["connectors"]["tcp_listener_available"] = True
 
     @staticmethod
     def _apply_peers(payload, value, own_peer_id):
@@ -301,23 +381,73 @@ class EasyTierCollector(object):
             peer_id = _safe_text(_lookup(peer, "peer_id", "virtual_peer_id", "id"), 32)
             if own_peer_id and peer_id == own_peer_id:
                 continue
+            overlay_ipv4 = _internal_ip(_lookup(peer, "overlay_ipv4", "virtual_ipv4", "ipv4"))
+            next_hop = _safe_text(_lookup(peer, "next_hop_peer_id", "next_hop"), 32)
+            evidence = str(_lookup(peer, "connection_type", "path", "route_type") or "").lower()
+            path_state = "unknown"
+            if peer_id and next_hop and peer_id == next_hop and ("direct" in evidence or "p2p" in evidence):
+                path_state = "direct"
+            elif peer_id and next_hop and peer_id != next_hop:
+                path_state = "relayed"
+            transport = _transport(_lookup(peer, "transport", "protocol"))
+            family = _family(_lookup(peer, "address_family", "family"), _lookup(peer, "address", "remote_addr"))
+            item = {
+                "peer_id": peer_id,
+                "overlay_ipv4": overlay_ipv4,
+                "hostname": _safe_text(_lookup(peer, "hostname", "name")),
+                "version": _safe_text(_lookup(peer, "version")),
+                "path_state": path_state,
+                "transport": transport,
+                "address_family": family,
+                "locally_initiated": bool(_lookup(peer, "is_client", "locally_initiated")),
+                "latency_ms": _bounded_number(_lookup(peer, "latency_ms", "latency"), 600000, True),
+                "loss_rate": _bounded_number(_lookup(peer, "loss_rate", "loss"), 100, True),
+                "rx_bytes": _counter(_lookup(peer, "rx_bytes", "bytes_rx")),
+                "tx_bytes": _counter(_lookup(peer, "tx_bytes", "bytes_tx")),
+                "rx_packets": _counter(_lookup(peer, "rx_packets")),
+                "tx_packets": _counter(_lookup(peer, "tx_packets")),
+                "closed": bool(_lookup(peer, "closed", "is_closed")),
+            }
+            result["items"].append(item)
             result["total"] += 1
-            path = str(_lookup(peer, "connection_type", "path", "route_type", "transport") or "").lower()
-            if "relay" in path:
+            if path_state == "relayed":
                 result["relay"] += 1
-            elif "direct" in path or "p2p" in path:
+            elif path_state == "direct":
                 result["direct"] += 1
             else:
                 result["unknown_path"] += 1
+        if result["total"]:
+            result["ipv6_udp_direct"] = any(
+                item["path_state"] == "direct" and item["transport"] == "udp" and item["address_family"] == "ipv6"
+                for item in result["items"]
+            )
 
     @staticmethod
     def _apply_routes(payload, value, own_peer_id):
         for route in _as_list(value):
             peer_id = _safe_text(_lookup(route, "peer_id", "virtual_peer_id", "id"), 32)
+            next_hop = _safe_text(_lookup(route, "next_hop_peer_id", "next_hop"), 32)
+            evidence = str(_lookup(route, "connection_type", "path", "route_type") or "").lower()
+            path_state = "unknown"
+            if peer_id and next_hop and peer_id == next_hop and ("direct" in evidence or "p2p" in evidence):
+                path_state = "direct"
+            elif peer_id and next_hop and peer_id != next_hop:
+                path_state = "relayed"
             path_len = _lookup(route, "path_len", "path_length")
             own_route = peer_id == own_peer_id or (isinstance(path_len, (int, float)) and not isinstance(path_len, bool) and path_len <= 0)
-            if not own_route:
-                payload["routes"]["total"] += 1
+            payload["routes"]["total"] += 1
+            payload["routes"]["items"].append({
+                    "peer_id": peer_id,
+                    "overlay_ipv4": _internal_ip(_lookup(route, "overlay_ipv4", "virtual_ipv4", "ipv4")),
+                    "hostname": _safe_text(_lookup(route, "hostname", "name")),
+                    "version": _safe_text(_lookup(route, "version")),
+                    "next_hop_peer_id": next_hop,
+                    "cost": _bounded_number(_lookup(route, "cost"), 1000000),
+                    "path_latency_ms": _bounded_number(_lookup(route, "path_latency_ms", "latency_ms"), 600000, True),
+                    "proxy_cidrs": _internal_cidrs(_lookup(route, "proxy_cidrs", "proxy_cidr", "cidrs")),
+                    "path_state": path_state,
+                    "is_local": own_route,
+                })
 
     @staticmethod
     def _apply_connectors(payload, value):
@@ -325,11 +455,21 @@ class EasyTierCollector(object):
         result = payload["connectors"]
         result["total"] = len(connectors)
         for connector in connectors:
-            text = str(_lookup(connector, "protocol", "type", "url") or "").lower()
-            is_tcp = text.startswith("tcp") or "tcp://" in text
+            transport = _transport(_lookup(connector, "protocol", "type"))
+            is_tcp = transport == "tcp"
+            port = _bounded_number(_lookup(connector, "port", "listen_port"), 65535)
+            if port == 0:
+                port = None
+            active = bool(_lookup(connector, "connected", "active", "is_connected"))
+            result["items"].append({
+                "transport": transport,
+                "address_family": _family(_lookup(connector, "address_family", "family")),
+                "port": port,
+                "status": "connected" if active else "connecting" if bool(_lookup(connector, "connecting")) else "disconnected" if is_tcp else "unknown",
+            })
             if is_tcp:
                 result["tcp_configured"] = True
-                if bool(_lookup(connector, "connected", "active", "is_connected")):
+                if active:
                     result["tcp_active"] = True
 
     @staticmethod
@@ -340,6 +480,9 @@ class EasyTierCollector(object):
         network_name = _safe_text(_deep_lookup(value, "network_name"))
         if network_name is not None:
             payload["node"]["network_name"] = network_name
+        listener = _lookup(value, "tcp_listener_available", "tcp_listener")
+        if isinstance(listener, bool):
+            payload["connectors"]["tcp_listener_available"] = listener
         traffic["bytes_rx"] = _counter(_lookup(value, "traffic_bytes_rx", "bytes_rx"))
         traffic["bytes_tx"] = _counter(_lookup(value, "traffic_bytes_tx", "bytes_tx"))
         traffic["bytes_forwarded"] = _counter(_lookup(value, "traffic_bytes_forwarded", "bytes_forwarded"))

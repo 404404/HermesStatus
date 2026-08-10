@@ -334,21 +334,34 @@ func extensionOpenAPISchemas() map[string]any {
 	})
 	easyTierStatus := map[string]any{"type": "string", "enum": []string{"healthy", "degraded", "unavailable", "stale", "not_configured", "unsupported_version", "invalid_data"}}
 	easyTierCommand := requiredObject([]string{"status", "error"}, map[string]any{
-		"status": easyTierStatus, "error": nullableRef("ExtensionError"),
+		"status": easyTierStatus, "last_success_at": nullableString(MaxTimestampLength, "Last successful command collection time"), "collected_at": nullableString(MaxTimestampLength, "Command collection time"), "duration_ms": nullableInteger(30000, "Command duration in milliseconds"), "error": nullableRef("ExtensionError"),
 	})
 	easyTierNode := requiredObject([]string{"state", "instance_name", "network_name", "version", "peer_id"}, map[string]any{
-		"state":         map[string]any{"type": "string", "maxLength": MaxEasyTierTextLength},
-		"instance_name": nullableString(MaxEasyTierTextLength, "Sanitized EasyTier instance name"),
-		"network_name":  nullableString(MaxEasyTierTextLength, "Sanitized EasyTier network name"),
-		"version":       nullableString(MaxEasyTierTextLength, "EasyTier version"),
-		"peer_id":       nullableString(MaxEasyTierTextLength, "EasyTier peer identifier"),
+		"state":                map[string]any{"type": "string", "maxLength": MaxEasyTierTextLength},
+		"instance_name":        nullableString(MaxEasyTierTextLength, "Sanitized EasyTier instance name"),
+		"network_name":         nullableString(MaxEasyTierTextLength, "Sanitized EasyTier network name"),
+		"version":              nullableString(MaxEasyTierTextLength, "EasyTier version"),
+		"peer_id":              nullableString(MaxEasyTierTextLength, "EasyTier peer identifier"),
+		"overlay_ipv4":         nullableString(64, "Internal EasyTier overlay IPv4 only"),
+		"proxy_cidrs":          map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string", "maxLength": 64}},
+		"administrative_role":  map[string]any{"type": []string{"string", "null"}, "enum": []any{"site_router", "endpoint", "bootstrap_listener", "relay_capable", "observer", nil}},
+		"schema_compatibility": map[string]any{"type": "string", "enum": []string{"supported", "unsupported", "unknown"}},
+	})
+	easyTierPeer := requiredObject([]string{"peer_id", "overlay_ipv4", "hostname", "version", "path_state", "transport", "address_family", "locally_initiated", "latency_ms", "loss_rate", "rx_bytes", "tx_bytes", "rx_packets", "tx_packets", "closed"}, map[string]any{
+		"peer_id": nullableString(MaxEasyTierTextLength, "Peer identifier"), "overlay_ipv4": nullableString(64, "Internal overlay IPv4"), "hostname": nullableString(MaxEasyTierTextLength, "Sanitized peer hostname"), "version": nullableString(MaxEasyTierTextLength, "Peer version"), "path_state": map[string]any{"type": "string", "enum": []string{"direct", "relayed", "unknown"}}, "transport": map[string]any{"type": "string", "enum": []string{"udp", "tcp", "quic", "wg", "wss", "unknown"}}, "address_family": map[string]any{"type": "string", "enum": []string{"ipv4", "ipv6", "unknown"}}, "locally_initiated": map[string]any{"type": "boolean"}, "latency_ms": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 600000}, "loss_rate": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100}, "rx_bytes": integerOpenAPISchema(), "tx_bytes": integerOpenAPISchema(), "rx_packets": integerOpenAPISchema(), "tx_packets": integerOpenAPISchema(), "closed": map[string]any{"type": "boolean"},
+	})
+	easyTierRoute := requiredObject([]string{"peer_id", "overlay_ipv4", "hostname", "version", "next_hop_peer_id", "cost", "path_latency_ms", "proxy_cidrs", "path_state", "is_local"}, map[string]any{
+		"peer_id": nullableString(MaxEasyTierTextLength, "Peer identifier"), "overlay_ipv4": nullableString(64, "Internal overlay IPv4"), "hostname": nullableString(MaxEasyTierTextLength, "Sanitized route hostname"), "version": nullableString(MaxEasyTierTextLength, "Route version"), "next_hop_peer_id": nullableString(MaxEasyTierTextLength, "Next hop peer identifier"), "cost": map[string]any{"type": []string{"integer", "null"}, "minimum": 0, "maximum": 1000000}, "path_latency_ms": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 600000}, "proxy_cidrs": map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string", "maxLength": 64}}, "path_state": map[string]any{"type": "string", "enum": []string{"direct", "relayed", "unknown"}}, "is_local": map[string]any{"type": "boolean"},
+	})
+	easyTierConnector := requiredObject([]string{"transport", "address_family", "port", "status"}, map[string]any{
+		"transport": map[string]any{"type": "string", "enum": []string{"udp", "tcp", "quic", "wg", "wss", "unknown"}}, "address_family": map[string]any{"type": "string", "enum": []string{"ipv4", "ipv6", "unknown"}}, "port": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 65535}, "status": map[string]any{"type": "string", "enum": []string{"connected", "connecting", "disconnected", "unknown"}},
 	})
 	easyTierStats := requiredObject([]string{"status", "source", "node", "peers", "routes", "connectors", "traffic", "command_status", "updated_at", "stale", "error"}, map[string]any{
 		"status": easyTierStatus, "source": map[string]any{"type": "string", "enum": []string{"easytier_cli", "unavailable"}},
 		"node":           schemaRef("EasyTierNodeStats"),
-		"peers":          requiredObject([]string{"total", "direct", "relay", "unknown_path"}, map[string]any{"total": integerOpenAPISchema(), "direct": integerOpenAPISchema(), "relay": integerOpenAPISchema(), "unknown_path": integerOpenAPISchema()}),
-		"routes":         requiredObject([]string{"total"}, map[string]any{"total": integerOpenAPISchema()}),
-		"connectors":     requiredObject([]string{"total", "tcp_configured", "tcp_active"}, map[string]any{"total": integerOpenAPISchema(), "tcp_configured": map[string]any{"type": "boolean"}, "tcp_active": map[string]any{"type": "boolean"}}),
+		"peers":          requiredObject([]string{"total", "direct", "relay", "unknown_path"}, map[string]any{"total": integerOpenAPISchema(), "direct": integerOpenAPISchema(), "relay": integerOpenAPISchema(), "unknown_path": integerOpenAPISchema(), "ipv6_udp_direct": map[string]any{"type": []string{"boolean", "null"}}, "items": map[string]any{"type": "array", "maxItems": MaxDockerCount, "items": easyTierPeer}}),
+		"routes":         requiredObject([]string{"total"}, map[string]any{"total": integerOpenAPISchema(), "items": map[string]any{"type": "array", "maxItems": MaxDockerCount, "items": easyTierRoute}}),
+		"connectors":     requiredObject([]string{"total", "tcp_configured", "tcp_active"}, map[string]any{"total": integerOpenAPISchema(), "tcp_configured": map[string]any{"type": "boolean"}, "tcp_active": map[string]any{"type": "boolean"}, "tcp_listener_available": map[string]any{"type": []string{"boolean", "null"}}, "items": map[string]any{"type": "array", "maxItems": MaxDockerCount, "items": easyTierConnector}}),
 		"traffic":        requiredObject([]string{"bytes_rx", "bytes_tx", "bytes_forwarded"}, map[string]any{"bytes_rx": integerOpenAPISchema(), "bytes_tx": integerOpenAPISchema(), "bytes_forwarded": integerOpenAPISchema()}),
 		"command_status": requiredObject([]string{"node_info", "peer_list", "route_list", "connector_list", "stats_show"}, map[string]any{"node_info": schemaRef("EasyTierCommandStatus"), "peer_list": schemaRef("EasyTierCommandStatus"), "route_list": schemaRef("EasyTierCommandStatus"), "connector_list": schemaRef("EasyTierCommandStatus"), "stats_show": schemaRef("EasyTierCommandStatus")}),
 		"updated_at":     nullableString(MaxTimestampLength, "Client collection time in RFC3339"), "stale": map[string]any{"type": "boolean"}, "error": nullableRef("ExtensionError"),

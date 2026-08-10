@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/cppla/serverstatus/server/contracts"
 )
 
 func validEasyTierFixture() EasyTierStats {
@@ -74,5 +76,39 @@ func TestEasyTierDomainIsOptionalForBackwardCompatibility(t *testing.T) {
 	}
 	if len(issues) != 0 || extension.EasyTier == nil || extension.EasyTier.Status != EasyTierNotConfigured {
 		t.Fatalf("missing EasyTier must be safe not_configured: issues=%#v stats=%#v", issues, extension.EasyTier)
+	}
+}
+
+func TestEasyTierDetailedProjectionRejectsPublicAndInvalidValues(t *testing.T) {
+	stats := validEasyTierFixture()
+	peerID, overlay, hostname := "54321", "10.250.250.2", "<script>alert(1)</script>"
+	latency, loss := 12.5, 0.1
+	stats.Peers = EasyTierPeerStats{Total: 1, Direct: 1, Items: []EasyTierPeer{{PeerID: &peerID, OverlayIPv4: &overlay, Hostname: &hostname, PathState: "direct", Transport: "udp", AddressFamily: "ipv6", LatencyMS: &latency, LossRate: &loss}}}
+	stats.Routes = EasyTierRouteStats{Total: 1, Items: []EasyTierRoute{{PeerID: &peerID, OverlayIPv4: &overlay, ProxyCIDRs: []string{"192.168.88.0/24"}, PathState: "direct"}}}
+	stats.Connectors = EasyTierConnectorStats{Total: 1, Items: []EasyTierConnector{{Transport: "tcp", AddressFamily: "ipv6", Status: "connected"}}}
+	if err := ValidateEasyTierStats(&stats); err != nil {
+		t.Fatalf("valid detailed projection rejected: %v", err)
+	}
+	public := "8.8.8.8"
+	stats.Peers.Items[0].OverlayIPv4 = &public
+	if err := ValidateEasyTierStats(&stats); err == nil {
+		t.Fatal("public peer overlay was accepted")
+	}
+}
+
+func TestEasyTierExpectationIsDiagnosticOnlyAndRequiresObservedRole(t *testing.T) {
+	expectation := &contracts.EasyTierExpectation{AdministrativeRole: "site_router", NetworkName: "home-404", OverlayIPv4: "10.250.250.1", ProxyCIDRs: []string{"192.168.68.0/24"}}
+	overlay, network, role := "10.250.250.1", "home-404", "site_router"
+	stats := validEasyTierFixture()
+	stats.Node.OverlayIPv4, stats.Node.NetworkName, stats.Node.AdministrativeRole = &overlay, &network, &role
+	stats.Node.ProxyCIDRs = []string{"192.168.68.0/24"}
+	projection := projectEasyTierExpectation(expectation, &stats).(map[string]any)
+	if projection["result"] != "matched" {
+		t.Fatalf("expected match, got %#v", projection)
+	}
+	stats.Node.AdministrativeRole = nil
+	projection = projectEasyTierExpectation(expectation, &stats).(map[string]any)
+	if projection["result"] != "not_observable" {
+		t.Fatalf("missing observed role must not become a match: %#v", projection)
 	}
 }
