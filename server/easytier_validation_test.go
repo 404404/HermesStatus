@@ -96,6 +96,23 @@ func TestEasyTierDetailedProjectionRejectsPublicAndInvalidValues(t *testing.T) {
 	}
 }
 
+func TestEasyTierZeroPeerKeepsIPv6UDPDirectNotObservable(t *testing.T) {
+	stats := validEasyTierFixture()
+	stats.Peers = EasyTierPeerStats{}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var projection map[string]any
+	if err := json.Unmarshal(raw, &projection); err != nil {
+		t.Fatal(err)
+	}
+	peers := projection["peers"].(map[string]any)
+	if value, exists := peers["ipv6_udp_direct"]; !exists || value != nil {
+		t.Fatalf("zero-peer IPv6 UDP Direct must remain explicit null, got %#v", peers)
+	}
+}
+
 func TestEasyTierExpectationIsDiagnosticOnlyAndRequiresObservedRole(t *testing.T) {
 	expectation := &contracts.EasyTierExpectation{AdministrativeRole: "site_router", NetworkName: "home-404", OverlayIPv4: "10.250.250.1", ProxyCIDRs: []string{"192.168.68.0/24"}}
 	overlay, network, role := "10.250.250.1", "home-404", "site_router"

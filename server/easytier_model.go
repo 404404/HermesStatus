@@ -53,7 +53,7 @@ type EasyTierPeerStats struct {
 	Direct        int            `json:"direct"`
 	Relay         int            `json:"relay"`
 	UnknownPath   int            `json:"unknown_path"`
-	IPv6UDPDirect *bool          `json:"ipv6_udp_direct,omitempty"`
+	IPv6UDPDirect *bool          `json:"ipv6_udp_direct"`
 	Items         []EasyTierPeer `json:"items,omitempty"`
 }
 
