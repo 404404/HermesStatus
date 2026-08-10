@@ -66,6 +66,11 @@ Client. Do not mount EasyTier configuration, keys, or a non-loopback RPC portal.
 
 ## Device v2 configuration
 
+For the complete name/IP/port, file-path, and Compose-mount procedure, see the
+[Device configuration guide](DEVICE_CONFIGURATION.md). Device Registry
+`display_name` is the browser display-name authority; keep the Client URL under
+operator control.
+
 Device v2 needs four operator-managed paths:
 
 | Variable | Contents |

@@ -71,11 +71,17 @@ async function run(){
   assert.equal(app.validDeviceId('DEVICE-ALPHA'), false);
   assert.equal(app.validDeviceId('<script>'), false);
   assert.doesNotMatch(indexMarkup, /Lucky Monitoring|luckyHomeSummary|luckyHomeMeta/);
-  assert.match(appSource, /<h2>CPU温度\/硬盘温度<\/h2>/);
-  assert.match(appSource, /<h2>已运行时间\/操作系统<\/h2>/);
+  assert.match(appSource, /<h2>EasyTier运行状态\/版本<\/h2>/);
+  assert.match(appSource, /<h2>系统已运行时间<\/h2>/);
   assert.match(appSource, /<h2>运行中\/容器总数<\/h2>/);
   assert.match(appSource, /<h2>Lucky运行状态\/版本<\/h2>/);
-  assert.doesNotMatch(appSource, /硬盘当前\/最高\/最低温度/);
+  assert.match(appSource, /EasyTier远端节点数/);
+  assert.match(appSource, /EasyTier接收\/发送\/转发流量/);
+  assert.doesNotMatch(appSource, /CPU温度\/硬盘温度/);
+  assert.doesNotMatch(appSource, /已运行时间\/操作系统/);
+  assert.match(indexMarkup, /<h2 id="easytierCommandsTitle">采集状态<\/h2>/);
+  assert.doesNotMatch(indexMarkup, /<th>说明<\/th>/);
+  assert.equal(app.formatUptimeHours(90061), '25 h (约1.04天)');
   assert.equal(
     app.modelBreakdown({model: 'example-model', usage_mode: 'api', provider: 'OpenCode Go'}),
     'example-model / api / OpenCode Go'

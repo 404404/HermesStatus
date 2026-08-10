@@ -103,6 +103,7 @@
         "online4": {"type": "boolean"},
         "online6": {"type": "boolean"},
         "uptime": {"type": "string", "maxLength": 64},
+        "uptime_seconds": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
         "load_1": {"type": "number"},
         "load_5": {"type": "number"},
         "load_15": {"type": "number"},

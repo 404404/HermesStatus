@@ -110,6 +110,13 @@ function formatUptime(value){
   return `${days} 天 ${hours} 小时 ${minutes} 分`;
 }
 
+function formatUptimeHours(seconds){
+  const number = finiteNumber(seconds);
+  if(number === null || number < 0) return '-';
+  const hours = number / 3600;
+  return `${formatInteger(Math.floor(hours))} h (约${(hours / 24).toFixed(2)}天)`;
+}
+
 function formatDateTime(value){
   if(!value) return '-';
   const date = value instanceof Date ? value : new Date(value);
@@ -454,14 +461,14 @@ function renderOverview(view){
       ${resourceBar(resources.diskPercent, '硬盘使用率')}
     </article>
     <article class="summary-card stacked-card temperature-card">
-      <h2>CPU温度/硬盘温度</h2>
-      <div class="card-value">${escapeHtml(formatTemperature(hardware.cpu_temperature?.value))}</div>
-      <div class="card-subvalue">${escapeHtml(formatTemperature(hardware.disk_temperature?.current))}</div>
+      <h2>Lucky运行状态/版本</h2>
+      <div class="card-value">${escapeHtml(statusText(view.lucky.status))}</div>
+      <div class="card-subvalue">${escapeHtml(textOrDash(view.lucky.version?.current))}</div>
     </article>
     <article class="summary-card stacked-card uptime-system-card">
-      <h2>已运行时间/操作系统</h2>
-      <div class="card-value">${escapeHtml(formatUptime(view.host.uptime))}</div>
-      <div class="card-subvalue" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div>
+      <h2>EasyTier运行状态/版本</h2>
+      <div class="card-value">${escapeHtml(statusText(view.easytier.status))}</div>
+      <div class="card-subvalue">${escapeHtml(textOrDash(view.easytier.node?.version))}</div>
     </article>`;
   requestAnimationFrame(fitCpuModelToSingleLine);
 }
@@ -469,19 +476,26 @@ function renderOverview(view){
 function renderHardware(view){
   const hardware = view.hardware;
   const docker = view.docker;
-  const lucky = view.lucky;
+  const easytier = view.easytier;
   const smartStatus = hardware.disk_smart_status ?? 'unknown';
   const powerOnHours = finiteNumber(hardware.disk_power_on_hours);
   const powerOnDays = approximateDays(powerOnHours);
   const readWrite = finiteNumber(hardware.disk_written_bytes) === null && finiteNumber(hardware.disk_read_bytes) === null
     ? '-'
     : `${formatBytes(hardware.disk_written_bytes)} / ${formatBytes(hardware.disk_read_bytes)}`;
+  const peers = safeObject(easytier.peers);
+  const traffic = safeObject(easytier.traffic);
+  const peerText = `${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)}`;
+  const trafficText = `${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`;
   byId('hardwareHealth').innerHTML = `
-    <article class="health-card"><h2>运行中/容器总数</h2><div class="health-value">${escapeHtml(formatPair(docker.running, docker.total))}</div></article>
-    <article class="health-card"><h2>Lucky运行状态/版本</h2><div class="health-value lucky-home-value">${escapeHtml(statusText(lucky.status))}<span class="health-inline-meta">(${escapeHtml(textOrDash(lucky.version?.current))})</span></div></article>
     <article class="health-card"><h2>硬盘 SMART 状态</h2><div class="health-value">${badge(smartStatus)}</div></article>
+    <article class="health-card"><h2>硬盘写入/读取量</h2><div class="health-value">${escapeHtml(readWrite)}</div></article>
     <article class="health-card"><h2>硬盘通电时间</h2><div class="health-value power-on-value">${powerOnHours === null ? '-' : `${formatInteger(powerOnHours)} h <span class="power-on-days">(约${formatInteger(powerOnDays)}天)</span>`}</div></article>
-    <article class="health-card"><h2>硬盘写入/读取量</h2><div class="health-value">${escapeHtml(readWrite)}</div></article>`;
+    <article class="health-card"><h2>系统已运行时间</h2><div class="health-value power-on-value">${escapeHtml(formatUptimeHours(view.host.uptime_seconds))}</div></article>
+    <article class="health-card"><h2>操作系统</h2><div class="health-value health-text" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div></article>
+    <article class="health-card"><h2>运行中/容器总数</h2><div class="health-value">${escapeHtml(formatPair(docker.running, docker.total))}</div></article>
+    <article class="health-card"><h2>EasyTier远端节点数</h2><div class="health-value">${escapeHtml(peerText)}</div><div class="health-inline-meta">直连 / 中继 / 未知</div></article>
+    <article class="health-card"><h2>EasyTier接收/发送/转发流量</h2><div class="health-value">${escapeHtml(trafficText)}</div><div class="health-inline-meta">接收 / 发送 / 转发</div></article>`;
 }
 
 function renderLuckyTables(view){
@@ -533,25 +547,20 @@ function renderEasyTier(view){
 	const connectors = safeObject(easytier.connectors);
 	const traffic = safeObject(easytier.traffic);
 	const details = [
-		['总体状态', badge(easytier.status)],
-		['实例', escapeHtml(textOrDash(node.instance_name))],
 		['网络', escapeHtml(textOrDash(node.network_name))],
-		['版本', escapeHtml(textOrDash(node.version))],
-		['节点 ID', escapeHtml(textOrDash(node.peer_id))],
 		['节点状态', badge(node.state)],
 		['远端节点（直连/中继/未知）', escapeHtml(`${formatInteger(peers.total)} (${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)})`)],
 		['路由数', escapeHtml(formatInteger(routes.total))],
 		['连接器（TCP 已配置/活动）', escapeHtml(`${formatInteger(connectors.total)} (${booleanText(connectors.tcp_configured)} / ${booleanText(connectors.tcp_active)})`)],
-		['接收 / 发送 / 转发', escapeHtml(`${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`)],
-		['更新时间', escapeHtml(formatDateTime(easytier.updated_at))]
+		['接收 / 发送 / 转发', escapeHtml(`${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`)]
 	];
 	byId('easytierSummary').innerHTML = details.map(([label, value]) => detailRow(label, value)).join('');
-	byId('easytierMeta').textContent = easytier.error ? textOrDash(easytier.error.message || easytier.error.code) : '';
+	byId('easytierMeta').textContent = `更新时间：${formatDateTime(easytier.updated_at)}${easytier.error ? ` · ${textOrDash(easytier.error.message || easytier.error.code)}` : ''}`;
 	const names = {node_info: '节点信息', peer_list: '节点列表', route_list: '路由列表', connector_list: '连接器列表', stats_show: '流量统计'};
 	const commands = safeObject(easytier.command_status);
 	byId('easytierCommandsBody').innerHTML = Object.keys(names).map(key => {
 		const command = safeObject(commands[key]);
-		return `<tr><td class="strong-cell">${escapeHtml(names[key])}</td><td>${badge(command.status)}</td><td class="wide-cell">${escapeHtml(textOrDash(command.error?.message || command.error?.code))}</td></tr>`;
+		return detailRow(names[key], badge(command.status));
 	}).join('');
 }
 
@@ -1078,6 +1087,7 @@ const exported = {
 	easytierIsConfigured,
   fittedFontSize,
   formatBytes,
+  formatUptimeHours,
   formatPair,
   modelBreakdown,
   normalizeStatsPayload,

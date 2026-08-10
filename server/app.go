@@ -392,6 +392,7 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 			base["online4"] = node.Online4
 			base["online6"] = node.Online6
 			base["uptime"] = formatUptime(s.Uptime)
+			base["uptime_seconds"] = s.Uptime
 			base["load_1"], base["load_5"], base["load_15"] = round2(s.Load1), round2(s.Load5), round2(s.Load15)
 			base["ping_10010"], base["ping_189"], base["ping_10086"] = round2(s.Ping10010), round2(s.Ping189), round2(s.Ping10086)
 			base["time_10010"], base["time_189"], base["time_10086"] = s.Time10010, s.Time189, s.Time10086

@@ -10,6 +10,7 @@ topologies from earlier iterations of the project.
 | --- | --- |
 | [Architecture](ARCHITECTURE.md) | Components, data flow, dashboard scope, and non-goals. |
 | [Configuration](CONFIGURATION.md) | Server, Client, Hermes, Lucky, and multi-device configuration. |
+| [Device configuration guide](DEVICE_CONFIGURATION.md) | Device name authority, LAN endpoint fields, file paths, Compose mounts, and examples. |
 | [Deployment](DEPLOYMENT.md) | Local Compose, production deployment, and the SMART device boundary. |
 | [Security](SECURITY.md) | Trust boundaries, credentials, and safe exposure rules. |
 | [Operations](OPERATIONS.md) | Health checks, stale data, backup, upgrade, and troubleshooting. |

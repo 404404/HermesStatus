@@ -9,16 +9,21 @@ EasyTier health projection.
 
 ## Current capabilities
 
-- Home: device state, CPU, memory, disk capacity, host/CPU identity,
-  temperature, and SMART.
+- Device names are configuration-driven by the Device Registry and never
+  accept a Client hostname override; each Client keeps its endpoint IP and port
+  in a separate Client configuration file.
+- Home: CPU, memory, disk capacity, Lucky and EasyTier state/version, plus
+  SMART, read/write volume, power-on hours, system uptime, physical-host OS,
+  Docker, and EasyTier peer/traffic summaries.
 - Docker: container counts, names, images, state, and port summaries.
 - Home also includes configured Hermes profiles with gateway, runtime,
   model/provider, and usage snapshots.
 - Lucky: version, DDNS, web service, forwarding, and certificate summaries when
   explicitly enabled.
-- EasyTier: an opt-in, strict read-only loopback-RPC projection with node state,
-  remote peer/route counts, TCP connector state, traffic counters, and
-  per-command collection status. Zero remote peers is healthy.
+- EasyTier: an opt-in, strict read-only loopback-RPC projection. Per-command
+  collection status appears first; network, node state, peer/route counts, TCP
+  connector state, traffic, and a header update time follow. Zero remote peers
+  is healthy.
 - Legacy TCP Agents and optional Device v2 ingestion.
 
 Network traffic, network throughput, and carrier-specific or three-network
@@ -102,6 +107,7 @@ serverstatus --validate-device-config \
 - [Operations](docs/OPERATIONS.md)
 - [Development and testing](docs/DEVELOPMENT.md)
 - [EasyTier 2.3 design](docs/design/EASYTIER_MONITORING.md)
+- [Device configuration guide](docs/DEVICE_CONFIGURATION.md)
 
 ```bash
 (cd server && go test ./...)

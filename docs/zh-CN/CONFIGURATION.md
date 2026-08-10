@@ -45,6 +45,8 @@ JSON 文件只允许 `enabled`、`cli_path`、`rpc_portal`、`timeout_seconds` �
 
 ## Device v2 配置
 
+设备名称、IP/端口、文件路径与 Compose 挂载的完整操作见[设备配置编写指南](DEVICE_CONFIGURATION.md)。浏览器显示名称以 Device Registry 的 `display_name` 为准；Client URL 由运维配置维护。
+
 Device v2 需要四个由操作员管理的路径：
 
 | 变量 | 内容 |
