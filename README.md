@@ -2,7 +2,7 @@
 
 [English](README_EN.md) · [中文文档](docs/zh-CN/README.md) · [English docs](docs/README.md)
 
-HermesStatus 是自托管的当前状态面板。Go Server 接收 Client 上报并提供 WebUI 与状态 API；Python Client 采集主机、硬件/SMART、Docker、Hermes 与可选 Lucky 数据。
+HermesStatus 是自托管的当前状态面板。Go Server 接收 Client 上报并提供 WebUI 与状态 API；Python Client 采集主机、硬件/SMART、Docker、Hermes、可选 Lucky 与可选 EasyTier 健康摘要。
 
 ## 当前功能
 
@@ -10,6 +10,7 @@ HermesStatus 是自托管的当前状态面板。Go Server 接收 Client 上报�
 - Docker 页面展示容器数量、名称、镜像、状态与端口摘要。
 - 主页同时展示已配置 Hermes Profile 的网关、运行状态、模型/提供商与用量快照。
 - Lucky 页面在显式启用后展示版本、DDNS、Web 服务、端口转发和证书摘要。
+- EasyTier 页面在显式启用后展示回环 RPC 的严格只读投影：节点状态、远端节点/路由计数、TCP connector 状态、流量计数和逐命令采集结果；零远端节点仍表示健康。
 - 支持 Legacy TCP Agent；可选 Device v2 使用 Registry、digest credential 与受 HTTPS 代理保护的上报端点。
 
 网络流量、网络吞吐、三网/运营商延迟探测不是 HermesStatus 面板功能。
@@ -17,7 +18,7 @@ HermesStatus 是自托管的当前状态面板。Go Server 接收 Client 上报�
 ## 架构
 
 ```text
-主机 / hwmon / SMART / Docker / Hermes / Lucky
+主机 / hwmon / SMART / Docker / Hermes / Lucky / EasyTier
                      ↓
                 Python Client
                      ↓
@@ -28,7 +29,7 @@ HermesStatus 是自托管的当前状态面板。Go Server 接收 Client 上报�
       /json/stats.json · /api/health · WebUI
 ```
 
-浏览器只读取 `/json/stats.json`。Server 不挂载 Docker socket，也不读取 Hermes 或 Lucky 秘密；这些高信任采集工作仅存在于 Client。
+浏览器只读取 `/json/stats.json`。Server 不挂载 Docker socket，也不读取 Hermes 或 Lucky 秘密；这些高信任采集工作仅存在于 Client。EasyTier CLI 同样仅挂载到 Client；Server 与浏览器都不会接触 EasyTier 配置、凭据、RPC 地址或原始 CLI 输出。
 
 ## 本地启动
 
@@ -88,6 +89,7 @@ serverstatus --validate-device-config \
 - [安全](docs/zh-CN/SECURITY.md)
 - [运维](docs/zh-CN/OPERATIONS.md)
 - [开发与测试](docs/zh-CN/DEVELOPMENT.md)
+- [EasyTier 2.3 设计](docs/design/EASYTIER_MONITORING.md)
 
 常用验证：
 

@@ -31,7 +31,7 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := stats["servers"].([]any)[0].(map[string]any)
-	for _, field := range []string{"extension_version", "received_at", "hardware", "docker", "hermes", "lucky"} {
+	for _, field := range []string{"extension_version", "received_at", "hardware", "docker", "hermes", "lucky", "easytier"} {
 		if _, ok := server[field]; !ok {
 			t.Fatalf("stats server is missing %s: %#v", field, server)
 		}

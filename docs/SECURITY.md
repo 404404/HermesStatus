@@ -24,6 +24,15 @@ The Server stores v2 device credential digests, not raw tokens. Credential
 records support current and next slots for rotation. A Client sends its raw
 Bearer token only to the trusted HTTPS ingress route.
 
+## EasyTier collector boundary
+
+EasyTier monitoring permits exactly `node info`, `peer list`, `route list`,
+`connector list`, and `stats show`, through a loopback-only RPC portal. It uses
+an absolute executable and argv-based subprocess invocation with no shell. The
+projection excludes configuration, keys, credentials, RPC addresses, STUN data,
+public/listener endpoints, raw JSON, and stderr. Unknown payload fields are
+rejected by the Server before persistence and UI projection.
+
 ## Device v2 ingress
 
 The endpoint is disabled by default. When enabled, require HTTPS at the proxy,

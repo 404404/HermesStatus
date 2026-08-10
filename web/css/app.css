@@ -152,6 +152,8 @@ body.light .health-card{background:#fff}
 .lucky-sync-cell span{display:block}
 .lucky-sync-cell span+span{margin-top:.2rem;color:var(--text-dim)}
 .lucky-certificate-table{min-width:1120px!important}
+.easytier-summary{padding:0 1.35rem 1.1rem}
+.easytier-table{min-width:760px!important}
 
 .data-section{overflow:hidden}
 .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;min-width:0;padding:1.25rem 1.35rem;border-bottom:1px solid var(--border);overflow-wrap:anywhere;word-break:break-word}

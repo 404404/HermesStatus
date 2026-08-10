@@ -55,6 +55,8 @@ const (
 	MaxHardwarePayloadBytes  = 8 * 1024
 	MaxDockerPayloadBytes    = 512 * 1024
 	MaxHermesPayloadBytes    = 1 << 20
+	MaxEasyTierPayloadBytes  = 64 * 1024
+	MaxEasyTierTextLength    = 128
 )
 
 type DiskSMARTStatus string
@@ -100,6 +102,7 @@ type ExtensionStats struct {
 	Docker           *DockerStats   `json:"docker"`
 	Hermes           *HermesStats   `json:"hermes"`
 	Lucky            *LuckyStats    `json:"lucky,omitempty"`
+	EasyTier         *EasyTierStats `json:"easytier,omitempty"`
 }
 
 type ExtensionSnapshot struct {
@@ -109,6 +112,7 @@ type ExtensionSnapshot struct {
 	Docker           *DockerStats   `json:"docker"`
 	Hermes           *HermesStats   `json:"hermes"`
 	Lucky            *LuckyStats    `json:"lucky"`
+	EasyTier         *EasyTierStats `json:"easytier"`
 }
 
 type HardwareStats struct {

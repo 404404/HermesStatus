@@ -29,6 +29,20 @@ Legacy TCP Client 需要 `SERVER`、`SERVERSTATUS_USER`、`PASSWORD` 与 `PORT`�
 
 Lucky 采集为显式启用：设置 `LUCKY_ENABLED=true`、提供 `LUCKY_BASE_URL`，并通过 `LUCKY_TOKEN_FILE` 读取 token，不要将 token 写入 Compose 文件。HTTPS Lucky API 应保持 `LUCKY_VERIFY_TLS=true`。
 
+## EasyTier 监控
+
+EasyTier 监控默认关闭，必须显式启用。配置优先级从高到低为 EasyTier CLI 参数、环境变量、由 `EASYTIER_CONFIG_FILE` 指定的只读 JSON 文件、默认值。
+
+| 配置 | 默认值 | 约束 |
+| --- | --- | --- |
+| `EASYTIER_ENABLED` | `false` | 必须显式启用。 |
+| `EASYTIER_CLI_PATH` | `/usr/local/bin/easytier-cli` | 必须是绝对路径、可执行普通文件；拒绝符号链接。 |
+| `EASYTIER_RPC_PORTAL` | `127.0.0.1:15888` | 仅接受 `127.0.0.1:15888` 或 `[::1]:15888`。 |
+| `EASYTIER_TIMEOUT_SECONDS` | `5` | 1 到 30 的整数。 |
+| `EASYTIER_INTERVAL_SECONDS` | `30` | 5 到 3600 的整数。 |
+
+JSON 文件只允许 `enabled`、`cli_path`、`rpc_portal`、`timeout_seconds` 与 `interval_seconds`，且必须为组和其他用户不可写的普通文件。只读挂载 CLI 二进制到 Client；不要挂载 EasyTier 配置、密钥，或配置非回环 RPC portal。
+
 ## Device v2 配置
 
 Device v2 需要四个由操作员管理的路径：

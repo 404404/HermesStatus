@@ -44,6 +44,26 @@ Lucky collection is opt-in. Set `LUCKY_ENABLED=true`, provide
 Compose file. Keep `LUCKY_VERIFY_TLS=true` for HTTPS endpoints unless an
 explicit, temporary compatibility decision requires otherwise.
 
+## EasyTier monitoring
+
+EasyTier monitoring is opt-in and disabled by default. The client accepts these
+non-secret settings, in descending precedence: EasyTier CLI options,
+environment, a read-only JSON config file selected by `EASYTIER_CONFIG_FILE`,
+then defaults.
+
+| Setting | Default | Constraint |
+| --- | --- | --- |
+| `EASYTIER_ENABLED` | `false` | Explicit opt-in. |
+| `EASYTIER_CLI_PATH` | `/usr/local/bin/easytier-cli` | Absolute executable regular file; symlinks are rejected. |
+| `EASYTIER_RPC_PORTAL` | `127.0.0.1:15888` | Only `127.0.0.1:15888` or `[::1]:15888` is accepted. |
+| `EASYTIER_TIMEOUT_SECONDS` | `5` | Integer from 1 to 30. |
+| `EASYTIER_INTERVAL_SECONDS` | `30` | Integer from 5 to 3600. |
+
+The JSON file may contain only `enabled`, `cli_path`, `rpc_portal`,
+`timeout_seconds`, and `interval_seconds`; it must be a regular file not
+writable by group or other users. Mount the CLI binary read-only into the
+Client. Do not mount EasyTier configuration, keys, or a non-loopback RPC portal.
+
 ## Device v2 configuration
 
 Device v2 needs four operator-managed paths:

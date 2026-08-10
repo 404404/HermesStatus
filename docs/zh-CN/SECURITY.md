@@ -14,6 +14,10 @@ Client 只能部署在经过审查的主机。Docker socket 即使以只读方�
 
 Server 保存 v2 设备 credential digest，而非原始 token。credential 文件支持 current/next 两个轮换槽位。Client 仅向受信任 HTTPS 入口发送原始 Bearer token。
 
+## EasyTier 采集边界
+
+EasyTier 监控只允许通过仅回环 RPC 执行 `node info`、`peer list`、`route list`、`connector list` 与 `stats show`。采集器使用绝对可执行路径和 argv 子进程调用，不使用 shell。投影不包含配置、密钥、credential、RPC 地址、STUN 数据、公网或监听端点、原始 JSON 和 stderr。服务端会在持久化和 UI 投影前拒绝未知字段。
+
 ## Device v2 入口
 
 该端点默认关闭。启用后，代理必须提供 HTTPS，只信任显式配置的代理地址转发头，并替换不可信外部转发头。代理只开放指定 POST 路径。服务端会拒绝非法 content type、超大请求体、重复身份头、无效 credential、禁用设备、非活动协议归属、重放冲突与超限请求。

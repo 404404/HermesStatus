@@ -133,12 +133,13 @@ func persistedDeviceFromNode(
 		}
 		observations["last_request_digest"] = raw
 	}
-	domains := make(map[string]json.RawMessage, 4)
+	domains := make(map[string]json.RawMessage, 5)
 	for key, value := range map[string]any{
 		"hardware": node.Extension.Hardware,
 		"docker":   node.Extension.Docker,
 		"hermes":   node.Extension.Hermes,
 		"lucky":    node.Extension.Lucky,
+		"easytier": node.Extension.EasyTier,
 	} {
 		raw, err := rawJSON(value)
 		if err != nil {
@@ -382,6 +383,13 @@ func restorePersistedDeviceFields(node *NodeState, persisted contracts.Persisted
 			return err
 		}
 		node.Extension.Lucky = &value
+	}
+	if raw, exists := persisted.Domains["easytier"]; exists {
+		var value EasyTierStats
+		if err := decodeStrictRuntime(raw, &value); err != nil {
+			return err
+		}
+		node.Extension.EasyTier = &value
 	}
 	return nil
 }

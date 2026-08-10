@@ -332,9 +332,30 @@ func extensionOpenAPISchemas() map[string]any {
 		"port_forwards": schemaRef("LuckyPortForwardsStats"), "certificates": schemaRef("LuckyCertificatesStats"),
 		"updated_at": nullableString(MaxTimestampLength, "Client collection time in RFC3339"), "stale": map[string]any{"type": "boolean", "description": "Recomputed by the Go server using a 900 second threshold"}, "error": nullableRef("ExtensionError"),
 	})
+	easyTierStatus := map[string]any{"type": "string", "enum": []string{"healthy", "degraded", "unavailable", "stale", "not_configured", "unsupported_version", "invalid_data"}}
+	easyTierCommand := requiredObject([]string{"status", "error"}, map[string]any{
+		"status": easyTierStatus, "error": nullableRef("ExtensionError"),
+	})
+	easyTierNode := requiredObject([]string{"state", "instance_name", "network_name", "version", "peer_id"}, map[string]any{
+		"state":         map[string]any{"type": "string", "maxLength": MaxEasyTierTextLength},
+		"instance_name": nullableString(MaxEasyTierTextLength, "Sanitized EasyTier instance name"),
+		"network_name":  nullableString(MaxEasyTierTextLength, "Sanitized EasyTier network name"),
+		"version":       nullableString(MaxEasyTierTextLength, "EasyTier version"),
+		"peer_id":       nullableString(MaxEasyTierTextLength, "EasyTier peer identifier"),
+	})
+	easyTierStats := requiredObject([]string{"status", "source", "node", "peers", "routes", "connectors", "traffic", "command_status", "updated_at", "stale", "error"}, map[string]any{
+		"status": easyTierStatus, "source": map[string]any{"type": "string", "enum": []string{"easytier_cli", "unavailable"}},
+		"node":           schemaRef("EasyTierNodeStats"),
+		"peers":          requiredObject([]string{"total", "direct", "relay", "unknown_path"}, map[string]any{"total": integerOpenAPISchema(), "direct": integerOpenAPISchema(), "relay": integerOpenAPISchema(), "unknown_path": integerOpenAPISchema()}),
+		"routes":         requiredObject([]string{"total"}, map[string]any{"total": integerOpenAPISchema()}),
+		"connectors":     requiredObject([]string{"total", "tcp_configured", "tcp_active"}, map[string]any{"total": integerOpenAPISchema(), "tcp_configured": map[string]any{"type": "boolean"}, "tcp_active": map[string]any{"type": "boolean"}}),
+		"traffic":        requiredObject([]string{"bytes_rx", "bytes_tx", "bytes_forwarded"}, map[string]any{"bytes_rx": integerOpenAPISchema(), "bytes_tx": integerOpenAPISchema(), "bytes_forwarded": integerOpenAPISchema()}),
+		"command_status": requiredObject([]string{"node_info", "peer_list", "route_list", "connector_list", "stats_show"}, map[string]any{"node_info": schemaRef("EasyTierCommandStatus"), "peer_list": schemaRef("EasyTierCommandStatus"), "route_list": schemaRef("EasyTierCommandStatus"), "connector_list": schemaRef("EasyTierCommandStatus"), "stats_show": schemaRef("EasyTierCommandStatus")}),
+		"updated_at":     nullableString(MaxTimestampLength, "Client collection time in RFC3339"), "stale": map[string]any{"type": "boolean"}, "error": nullableRef("ExtensionError"),
+	})
 
 	statsServer := requiredObject(
-		[]string{"name", "type", "host", "location", "online4", "online6", "extension_version", "received_at", "hardware", "docker", "hermes", "lucky"},
+		[]string{"name", "type", "host", "location", "online4", "online6", "extension_version", "received_at", "hardware", "docker", "hermes", "lucky", "easytier"},
 		map[string]any{
 			"name": stringOpenAPISchema(), "type": stringOpenAPISchema(), "host": stringOpenAPISchema(), "location": stringOpenAPISchema(),
 			"online4": map[string]any{"type": "boolean"}, "online6": map[string]any{"type": "boolean"},
@@ -353,6 +374,7 @@ func extensionOpenAPISchemas() map[string]any {
 			"docker":            schemaRef("DockerStats"),
 			"hermes":            schemaRef("HermesStats"),
 			"lucky":             schemaRef("LuckyStats"),
+			"easytier":          schemaRef("EasyTierStats"),
 		},
 	)
 	statsDocument := requiredObject(
@@ -392,6 +414,9 @@ func extensionOpenAPISchemas() map[string]any {
 		"LuckyPortForwardsStats": requiredObject([]string{"total", "enabled", "disabled", "healthy", "error_count", "rules", "status", "updated_at", "stale", "error"}, luckyModuleProperties("rules", "LuckyPortForward")),
 		"LuckyCertificatesStats": luckyCertificates,
 		"LuckyStats":             luckyStats,
+		"EasyTierCommandStatus":  easyTierCommand,
+		"EasyTierNodeStats":      easyTierNode,
+		"EasyTierStats":          easyTierStats,
 		"StatsServer":            statsServer,
 		"StatsDocument":          statsDocument,
 	}

@@ -31,6 +31,19 @@ listener. If Device v2 is enabled, put only the v2 POST route behind an HTTPS
 reverse proxy. Do not expose the backend device-update listener directly to the
 internet.
 
+## EasyTier preview and rollout
+
+Keep an EasyTier-enabled candidate in a separate Compose project with a
+separate registry, credential directory, state directory, client status
+directory, and HTTPS host port. Bind that host port to the explicit private
+interface used by the overlay or LAN (for example, the EasyTier interface),
+never to `0.0.0.0` or a public address. Mount only the EasyTier CLI binary into
+the Client, read-only; do not mount its configuration or secrets. If Device v2
+uses a TLS proxy, set the Server's trusted-proxy CIDR to that proxy only and
+keep backend HTTP private to the Compose network. Confirm `easytier.status`,
+all five command statuses, and the selected device in `/json/stats.json` before
+any promotion. A zero remote-peer count is valid for a single-node overlay.
+
 ## SMART device access
 
 SMART collection needs a real block-device ioctl. Do not solve this by making

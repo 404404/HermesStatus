@@ -1,0 +1,80 @@
+# EasyTier Monitoring Design (2.3)
+
+## Scope
+
+HermesStatus 2.3 adds an opt-in, read-only EasyTier health projection to a
+device's existing extension payload. It does not configure EasyTier, change
+routes, add connectors, restart services, or expose an EasyTier management API.
+
+The implementation is deliberately independent from the 2.2 deployment. A 2.3
+preview uses its own Compose project, state, registry, credentials, and host
+port.
+
+## Trust boundary
+
+```text
+easytier-core loopback RPC
+        ↓
+easytier-cli JSON (five fixed read-only commands)
+        ↓
+strict Python projection
+        ↓ authenticated Device v2 update
+Go validation → atomic persistence v2 → /json/stats.json → WebUI
+```
+
+The browser never contacts EasyTier. The Go Server never mounts the EasyTier
+binary, RPC socket, or host configuration.
+
+## Collector contract
+
+The collector uses an absolute executable path and `subprocess.run` with an
+argv list and `shell=False`. Its command allowlist is exactly:
+
+```text
+node info
+peer list
+route list
+connector list
+stats show
+```
+
+The RPC portal is restricted to `127.0.0.1:15888` or `[::1]:15888`; LAN,
+overlay, wildcard, public, and hostname portals are rejected. The executable
+must be an absolute, executable regular file and may not be a symlink.
+
+Configuration precedence is CLI option, environment, read-only JSON file,
+then defaults. Monitoring is disabled by default.
+
+## Data minimization
+
+Only a bounded projection is emitted: sanitized node identity/version, remote
+peer and route counts, connector state, three traffic counters, and one status
+per allowlisted command. A local node's own peer/route record is excluded from
+remote counts, so zero remote peers is healthy.
+
+The payload never contains EasyTier config, credentials, keys, RPC portal,
+STUN results, public endpoints, listener addresses, arbitrary CLI JSON, command
+text, or stderr. The Server rejects unknown fields and sanitizes secret-like
+strings before persistence and UI projection.
+
+## Failure semantics
+
+Domain statuses are `healthy`, `degraded`, `unavailable`, `stale`,
+`not_configured`, `unsupported_version`, and `invalid_data`. Command status is
+recorded independently. A partial command failure preserves successful domains
+and reports `degraded`; total RPC/CLI failure is `unavailable`.
+
+## Compatibility
+
+`easytier` is optional in the extension schema. Older clients and persisted v2
+state that do not contain it are represented as `not_configured`; their updates
+remain valid. Persistence writes the extra domain atomically when present.
+
+## Verification targets
+
+- Unit fixtures cover zero peer, direct/relay peers, TCP connector, partial
+  command failure, configuration precedence, and secret/unknown-field rejection.
+- The real-host qualification uses only the five commands above and records a
+  sanitized projection.
+- Preview must bind only its independent loopback host port and must prove the
+  2.2 containers, configuration, and state were not changed.

@@ -28,6 +28,9 @@
     },
     "lucky": {
       "$ref": "lucky-extension.schema.json"
+    },
+    "easytier": {
+      "$ref": "easytier-extension.schema.json"
     }
   },
   "additionalProperties": false,
