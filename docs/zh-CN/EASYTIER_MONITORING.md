@@ -34,7 +34,7 @@ Registry 可选的 `easytier_expectation` 比较管理角色、网络名、Overl
 ## 资格验证
 
 当前仅完成 GK50 的真实 zero-peer 采集资格验证。Direct IPv6 UDP、Relay、
-TCP active、远端 `192.168.88.0/24`、Expectation mismatch 与部分失败均由明确
+TCP active、未来远端私网 CIDR、Expectation mismatch 与部分失败均由明确
 标记为 synthetic 的 Fixture 验证，不能描述为真实网络已验证。Synology 加入后
 仍需完成真实双站点验证。2.3 staging 独立使用 21443，不修改 2.2 容器、镜像、
 配置、状态或网络。

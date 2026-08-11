@@ -6,12 +6,12 @@
 
 HermesStatus is a current-state dashboard for explicitly configured hosts. It
 does not control hosts, containers, Hermes, Lucky, or EasyTier. The primary UI
-has four views: Home, Docker, Lucky, and EasyTier.
+has five views: Home, Hardware, Docker, Lucky, and EasyTier.
 
 ## Components and data flow
 
 ```text
-Host OS / hwmon / SMART / Docker / Hermes / Lucky / EasyTier
+Host OS / hwmon / SMART / explicit filesystem probes / Docker / Hermes / Lucky / EasyTier
                          ↓
                     Python Client
                          ↓
@@ -22,7 +22,7 @@ Host OS / hwmon / SMART / Docker / Hermes / Lucky / EasyTier
           /json/stats.json · /api/health · WebUI
 ```
 
-The Client collects host data and produces a structured extension with four
+The Client collects host data and produces a structured extension with five
 domains: `hardware`, `docker`, `hermes`, `lucky`, and `easytier`. Each domain
 can be stale or unavailable without preventing the remaining domains from being
 reported.
@@ -35,13 +35,29 @@ data request.
 ## Dashboard scope
 
 The Home view presents device status, CPU, memory, disk capacity, EasyTier
-remote-peer and traffic summaries, hardware temperature/SMART information,
+remote-peer and traffic summaries, physical-disk temperature/SMART information,
 Hermes profiles, and Lucky/EasyTier state and version summaries when configured.
 EasyTier traffic uses one decimal place with automatic units and a single-line
 receive / transmit / forwarded presentation. The Hermes Profile section header
-shows the Agent version and profile count. Docker has a separate container
-table; Lucky has its own configuration and service summaries; EasyTier presents
-per-command collection-status cards followed by its read-only network summary.
+shows the Agent version and profile count. Hardware follows Home and separates
+system information, filesystems/volumes, and physical disks. Docker has a
+separate container table; Lucky has its own configuration and service summaries;
+EasyTier presents per-command collection-status cards followed by its read-only
+network summary.
+
+`hardware.storage.physical_disks` and `hardware.storage.filesystems` are
+separate bounded collections. The Client builds a read-only block-device graph
+to resolve ordinary partitions and generic LVM, MD RAID, device-mapper, and
+Btrfs/EXT4 stacks to zero or more physical disk IDs. A filesystem never gains a
+made-up temperature or SMART value. Only operator-configured physical SMART
+devices and explicit read-only filesystem probe mounts are collected.
+
+System identity reports sanitized distribution/release, kernel, architecture,
+and source provenance. Build provenance is similarly read-only: the Server
+reports build metadata and the selected Device may report Client build metadata.
+Revision data is injected at build time and is expected to agree with the OCI
+revision; no production image invokes Git at runtime. Environment is an
+operator-supplied deployment label, not a conclusion drawn from a host port.
 
 General host network throughput, cumulative host network traffic, and
 carrier-specific or three-network latency probes are not HermesStatus dashboard
