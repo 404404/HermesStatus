@@ -368,6 +368,7 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 		base["lucky"] = extension.Lucky
 		base["easytier"] = extension.EasyTier
 		if a.registry != nil {
+			device, _ := a.registryDevice(deviceID)
 			status := a.deviceStatusAt(node, now)
 			identityStatus := node.IdentityStatus
 			protocolMode := node.ProtocolMode
@@ -385,6 +386,7 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 			base["stale"] = a.deviceIsStaleAt(node, now)
 			base["expected_fqdn"] = nil
 			base["reported_fqdn"] = nil
+			base["easytier_expectation"] = projectEasyTierExpectation(device.EasyTierExpectation, extension.EasyTier)
 		}
 		if node.HasUpdate && (a.registry != nil || node.Connected) {
 			s := node.Stats

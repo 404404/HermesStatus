@@ -102,6 +102,30 @@ func TestRegistryNormalizesFQDNAndDisplayName(t *testing.T) {
 	}
 }
 
+func TestRegistryNormalizesAndBoundsEasyTierExpectationCIDRs(t *testing.T) {
+	data := fixture(t, "valid", "registry-v2-only.json")
+	data = []byte(strings.Replace(
+		string(data),
+		`"ingestion": {`,
+		`"easytier_expectation":{"administrative_role":"site_router","network_name":" synthetic-network ","overlay_ipv4":"10.250.250.1","proxy_cidrs":["192.168.68.1/24"]},"ingestion": {`,
+		1,
+	))
+	registry, err := DecodeRegistry(data, fixtureNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := registry.Devices[0].EasyTierExpectation.ProxyCIDRs; len(got) != 1 || got[0] != "192.168.68.0/24" {
+		t.Fatalf("EasyTier expectation CIDR was not canonicalized: %#v", got)
+	}
+	if got := registry.Devices[0].EasyTierExpectation.NetworkName; got != "synthetic-network" {
+		t.Fatalf("EasyTier expectation network name was not normalized: %q", got)
+	}
+	data = []byte(strings.Replace(string(data), "192.168.68.1/24", "10.0.0.1/0", 1))
+	if _, err := DecodeRegistry(data, fixtureNow); err == nil {
+		t.Fatal("EasyTier expectation accepted a prefix spanning public space")
+	}
+}
+
 func TestCredentialContractAndValidityWindows(t *testing.T) {
 	record, err := DecodeCredentialRecord(fixture(t, "valid", "credential-rotation.json"))
 	if err != nil {

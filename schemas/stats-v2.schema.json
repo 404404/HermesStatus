@@ -149,9 +149,32 @@
         },
         "lucky": {"$ref": "../docs/migration/schema/lucky-extension.schema.json"},
         "easytier": {"$ref": "../docs/migration/schema/easytier-extension.schema.json"},
+        "easytier_expectation": {"$ref": "#/$defs/easytierExpectation"},
         "hardware_json": {"type": "string", "maxLength": 262144},
         "docker_json": {"type": "string", "maxLength": 262144},
         "hermes_json": {"type": "string", "maxLength": 262144}
+      },
+      "additionalProperties": false
+    },
+    "easytierExpectationValues": {
+      "type": "object",
+      "required": ["administrative_role", "network_name", "overlay_ipv4", "proxy_cidrs"],
+      "properties": {
+        "administrative_role": {"type": ["string", "null"], "maxLength": 128},
+        "network_name": {"type": ["string", "null"], "maxLength": 128},
+        "overlay_ipv4": {"type": ["string", "null"], "maxLength": 64},
+        "proxy_cidrs": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"type": "string", "maxLength": 64}}
+      },
+      "additionalProperties": false
+    },
+    "easytierExpectation": {
+      "type": "object",
+      "required": ["configured", "result"],
+      "properties": {
+        "configured": {"type": "boolean"},
+        "expected": {"$ref": "#/$defs/easytierExpectationValues"},
+        "observed": {"$ref": "#/$defs/easytierExpectationValues"},
+        "result": {"enum": ["matched", "mismatch", "not_observable", "not_configured"]}
       },
       "additionalProperties": false
     }

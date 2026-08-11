@@ -1,4 +1,4 @@
-# HermesStatus 2.0
+# HermesStatus 2.3 Preview
 
 [中文](README.md) · [English docs](docs/README.md) · [中文文档](docs/zh-CN/README.md)
 
@@ -27,9 +27,10 @@ EasyTier health projection.
 - Lucky: version, DDNS, web service, forwarding, and certificate summaries when
   explicitly enabled.
 - EasyTier: an opt-in, strict read-only loopback-RPC projection. Each
-  collection command is shown first as an individual status card; network, node
-  state, peer/route counts, TCP connector state, traffic, and a header update
-  time follow. Zero remote peers is healthy.
+  collection command is shown first as an individual status card, followed by
+  Node, Configured vs Observed, Peer, Route, Connector, and traffic views.
+  With zero remote peers, direct, relay, and IPv6 UDP Direct are
+  not-observable—not misleading zero or false values.
 - Legacy TCP Agents and optional Device v2 ingestion.
 
 Network traffic, network throughput, and carrier-specific or three-network
@@ -85,7 +86,9 @@ environment:
 This block replaces, rather than supplements, the legacy broad entries in
 `docker-compose-client.yml`: set `CLIENT_PRIVILEGED=false` and remove its
 `/dev:/dev:ro` volume before adding the capability and single-device mapping.
-Keeping those defaults is not a minimum-permission deployment.
+`config/examples/docker-compose-client.override.example.yml` contains a
+complete minimum-permission Device v2 override. Keeping those defaults is not
+a minimum-permission deployment.
 
 Keep the read-only root filesystem and `no-new-privileges`. Other disks, RAID,
 or NVMe controllers need an explicit, validated device grant.
@@ -120,6 +123,12 @@ serverstatus --validate-device-config \
 (cd clients && python3 -m unittest discover)
 (cd scripts/tests && python3 -m unittest discover)
 ```
+
+`2.3-preview` is the sole 2.3 integration and 21443 staging branch; it is not
+automatically promoted to `2.0`. Only real GK50 zero-peer collection is
+currently qualified. Real Synology dual-site, IPv6 UDP Direct, TCP fallback,
+192.168.88.0/24, and real Direct/Relay behavior remain pending. Synthetic
+fixtures qualify preview states only and are never real-network verification.
 
 Never commit real tokens, passwords, credentials, private addresses, or
 production configuration.

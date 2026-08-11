@@ -4,7 +4,7 @@ import stat
 import tempfile
 import unittest
 
-from easytier_collector import EasyTierCollector, load_easytier_config, not_configured_easytier
+from easytier_collector import EasyTierCollector, _command_duration_ms, load_easytier_config, not_configured_easytier
 
 
 class Result(object):
@@ -31,10 +31,10 @@ class Runner(object):
             },
             ("peer", "list"): [
                 {"id": 12345, "connection_type": "direct"},
-                {"id": 54321, "connection_type": "direct"},
-                {"id": 67890, "connection_type": "relay"}
+                {"id": 54321, "connection_type": "direct", "next_hop_peer_id": 54321, "transport": "udp", "address_family": "ipv6", "ipv4": "10.250.250.2"},
+                {"id": 67890, "connection_type": "relay", "next_hop_peer_id": 54321, "transport": "tcp", "address_family": "ipv4", "ipv4": "10.250.250.3"}
             ],
-            ("route", "list"): [{"id": 12345}, {"id": 54321}],
+            ("route", "list"): [{"id": 12345, "proxy_cidrs": ["192.168.68.0/24"]}, {"id": 54321, "next_hop_peer_id": 54321, "proxy_cidrs": ["192.168.88.0/24"]}],
             ("connector", "list"): [{"protocol": "tcp", "connected": True}],
             ("stats", "show"): {
                 "traffic_bytes_rx": 101, "traffic_bytes_tx": 202,
@@ -71,8 +71,12 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertEqual(payload["status"], "healthy")
         self.assertEqual(payload["node"]["instance_name"], "fixture-node")
         self.assertIsNone(payload["node"].get("public_endpoint"))
-        self.assertEqual(payload["peers"], {"total": 2, "direct": 1, "relay": 1, "unknown_path": 0})
-        self.assertEqual(payload["routes"]["total"], 1)
+        self.assertEqual({key: payload["peers"][key] for key in ("total", "direct", "relay", "unknown_path")}, {"total": 2, "direct": 1, "relay": 1, "unknown_path": 0})
+        self.assertEqual(payload["peers"]["items"][0]["transport"], "udp")
+        self.assertEqual(payload["peers"]["items"][1]["path_state"], "relayed")
+        self.assertTrue(payload["peers"]["ipv6_udp_direct"])
+        self.assertEqual(payload["routes"]["total"], 2)
+        self.assertEqual(payload["routes"]["items"][0]["proxy_cidrs"], ["192.168.68.0/24"])
         self.assertTrue(payload["connectors"]["tcp_configured"])
         self.assertEqual(payload["traffic"]["bytes_forwarded"], 303)
         self.assertNotIn("secret", json.dumps(payload))
@@ -96,11 +100,88 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertFalse(payload["connectors"]["tcp_active"])
 
     def test_partial_failure_is_degraded_and_does_not_leak_stderr(self):
-        payload = EasyTierCollector(environ=self.environ, runner=Runner({("peer", "list")})).collect()
+        payload = EasyTierCollector(environ=self.environ, runner=Runner({("route", "list")})).collect()
         self.assertEqual(payload["status"], "degraded")
-        self.assertEqual(payload["command_status"]["peer_list"]["status"], "unavailable")
+        self.assertEqual(payload["command_status"]["route_list"]["status"], "unavailable")
+        self.assertEqual(payload["routes"]["total"], 0)
+        self.assertIsNotNone(payload["command_status"]["route_list"]["collected_at"])
         self.assertEqual(payload["error"]["code"], "partial_failure")
         self.assertNotIn("stderr", json.dumps(payload))
+
+    def test_command_duration_is_clamped_to_server_contract_limit(self):
+        self.assertEqual(_command_duration_ms(0, 30.001), 30000)
+        self.assertEqual(_command_duration_ms(2, 1), 0)
+
+    def test_rejects_non_finite_cli_metrics_as_invalid_data(self):
+        class NonFiniteRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                if tuple(argv[-2:]) == ("peer", "list"):
+                    return Result([{"id": 54321, "latency_ms": float("nan")}])
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=NonFiniteRunner()).collect()
+        self.assertEqual(payload["status"], "degraded")
+        self.assertEqual(payload["command_status"]["peer_list"]["status"], "invalid_data")
+        self.assertEqual(payload["peers"]["items"], [])
+
+    def test_rejects_wrong_command_shapes_and_non_rfc1918_overlay_addresses(self):
+        class MalformedRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                command = tuple(argv[-2:])
+                if command == ("node", "info"):
+                    return Result([])
+                if command == ("peer", "list"):
+                    return Result({"unexpected": []})
+                if command == ("route", "list"):
+                    return Result([{"id": 12345, "ipv4": "fd00::1"}])
+                if command == ("stats", "show"):
+                    return Result({"unexpected": 1})
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=MalformedRunner()).collect()
+        for name in ("node_info", "peer_list", "stats_show"):
+            self.assertEqual(payload["command_status"][name]["status"], "invalid_data")
+        self.assertIsNone(payload["routes"]["items"][0]["overlay_ipv4"])
+
+    def test_route_without_known_peer_ids_is_not_local(self):
+        payload = {"routes": {"total": 0, "items": []}}
+        EasyTierCollector._apply_routes(payload, [{"proxy_cidrs": ["192.168.68.0/24"]}], None)
+        self.assertFalse(payload["routes"]["items"][0]["is_local"])
+
+    def test_rejects_detailed_lists_over_the_payload_budget(self):
+        class OversizedPeerListRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                if tuple(argv[-2:]) == ("peer", "list"):
+                    return Result([{"id": index} for index in range(17)])
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=OversizedPeerListRunner()).collect()
+        self.assertEqual(payload["command_status"]["peer_list"]["status"], "invalid_data")
+
+    def test_unknown_peer_classification_keeps_ipv6_direct_unobserved(self):
+        class UnknownPeerRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                if tuple(argv[-2:]) == ("peer", "list"):
+                    return Result([{"id": 54321}])
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=UnknownPeerRunner()).collect()
+        self.assertIsNone(payload["peers"]["ipv6_udp_direct"])
+
+    def test_unsupported_version_and_malicious_fields_are_safe(self):
+        class FutureRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                result = super().__call__(argv, **kwargs)
+                if tuple(argv[-2:]) == ("node", "info"):
+                    return Result({"version": "3.0.0-synthetic", "peer_id": 12345, "instance_name": "<script>alert(1)</script>"})
+                if tuple(argv[-2:]) == ("peer", "list"):
+                    return Result([{"id": 54321, "hostname": "<img src=x onerror=alert(1)>", "next_hop_peer_id": 54321, "connection_type": "direct", "transport": "udp", "address_family": "ipv6"}])
+                return result
+
+        payload = EasyTierCollector(environ=self.environ, runner=FutureRunner()).collect()
+        self.assertEqual(payload["status"], "unsupported_version")
+        self.assertEqual(payload["node"]["schema_compatibility"], "unsupported")
+        self.assertEqual(payload["peers"]["items"][0]["hostname"], "<img src=x onerror=alert(1)>")
 
     def test_rejects_non_loopback_and_symlink_cli(self):
         invalid = dict(self.environ, EASYTIER_RPC_PORTAL="10.250.250.1:15888")

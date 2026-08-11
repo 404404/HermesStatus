@@ -33,3 +33,15 @@ then recreate only the affected service.
 Rollback restores the recorded image reference and deployment configuration
 while keeping the established Server data directory. Do not create a second
 active writer or overwrite live state blindly.
+
+## EasyTier interpretation
+
+Read Collection Status before interpreting a detailed table. A command error or
+timeout means that table is unavailable; it is not a genuine empty result.
+`fresh` is assigned only after a new accepted report using the Server clock;
+restored persistence begins stale until a new report. Zero remote peers is
+healthy and makes Direct, Relay, and IPv6 UDP Direct `not_observable`.
+
+The validated GK50 baseline is `2.6.4-8428a89d` with zero remote peers. Real
+Synology dual-site, IPv6 UDP Direct, TCP fallback, remote 192.168.88.0/24, and
+Direct/Relay behavior remain qualification work, not operational failures.

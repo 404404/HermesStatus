@@ -25,3 +25,14 @@ EasyTier 监控只允许通过仅回环 RPC 执行 `node info`、`peer list`、`
 ## 安全观测
 
 使用 `/api/health` 与已脱敏的 `/json/stats.json` 排障。不得暴露原始 SMART 输出、Docker API 响应、Hermes 配置、`.env` 或认证头。宁可显示陈旧或不可用状态，也不能伪造健康值。
+
+## EasyTier 监控
+
+EasyTier 只使用 loopback RPC 的只读监控。运行时命令白名单仅包含 `node info`、
+`peer list`、`route list`、`connector list` 和 `stats show`；没有 connector/route/
+credential/whitelist/port-forward/logger 或 restart 操作。原始配置、端点、凭据、
+network secret、Noise key、STUN 地址与命令 stderr 都不会被持久化或渲染。
+
+所有详细字段都由 Server 验证并作为转义文本显示；公网 IP/CIDR 会被拒绝。格式错误、
+部分失败或不支持的响应显示为 unavailable/degraded/unsupported，不能伪造成空数据
+或健康状态。

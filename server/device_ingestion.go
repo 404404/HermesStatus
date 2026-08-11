@@ -420,6 +420,12 @@ func forceExtensionStale(extension *ExtensionSnapshot) {
 		extension.Lucky.Certificates.Stale = true
 		extension.Lucky.Version.Stale = true
 	}
+	if extension.EasyTier != nil {
+		value := *extension.EasyTier
+		extension.EasyTier = &value
+		extension.EasyTier.Stale = true
+		extension.EasyTier.Status = EasyTierStale
+	}
 }
 
 func (a *App) updateAgent(

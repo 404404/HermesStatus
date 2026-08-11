@@ -41,3 +41,11 @@ Go Server 校验上报、保留最近一次接受的状态、持久化指定状�
 Device v2 默认关闭。启用后仅通过受配置安全代理保护的 `POST /api/v2/device-updates` 接收请求。设备提交唯一的 `X-HermesStatus-Device-ID`、Bearer 凭据和有大小限制的 JSON envelope。服务端按启动时 Registry 验证设备、credential digest 与身份，执行重放和限流检查，持久化接受的更新，并返回已脱敏的监控定义。
 
 Registry 最多支持 16 台设备。自动发现、浏览器注册、远程控制、RBAC、多租户、数据库历史、WebSocket 与 SSE 均不在产品范围内。
+
+## 2.3 Preview EasyTier 边界
+
+`2.3-preview` 用于集成 2.3 工作并运行独立的 21443 staging，不代表推进到
+`2.0`。EasyTier 只能通过现有 stats document 中经过验证、无秘密的扩展到达
+Server。浏览器与其他页面共享 `/json/stats.json` 请求和已选择设备；不存在
+独立 EasyTier 接口、计时器、管理通道或身份映射。Registry expectation 仅用于
+比较诊断，绝不用于认证或设备身份。

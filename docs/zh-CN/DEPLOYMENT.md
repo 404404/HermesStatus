@@ -39,7 +39,7 @@ environment:
   SMART_DEVICE: /dev/sda
 ```
 
-这段配置应替换而非叠加在 `docker-compose-client.yml` 中遗留的宽泛设置上：添加 capability 和单设备映射前，设置 `CLIENT_PRIVILEGED=false`，并删除 `/dev:/dev:ro` 卷挂载。仓库 Compose 文件为兼容性保留这些旧默认值；若仍保留它们，就不是最小权限部署。
+这段配置应替换而非叠加在 `docker-compose-client.yml` 中遗留的宽泛设置上：添加 capability 和单设备映射前，设置 `CLIENT_PRIVILEGED=false`，并删除 `/dev:/dev:ro` 卷挂载。完整的 Device v2 最小权限覆盖示例见 `config/examples/docker-compose-client.override.example.yml`。仓库基础 Compose 文件为兼容性保留这些旧默认值；若仍保留它们，就不是最小权限部署。
 
 保留只读根文件系统和 `no-new-privileges`。如果主机使用其他磁盘路径、RAID 或 NVMe 控制器，先确认并验证该具体设备，不能仅为自动发现而扩大设备权限。
 
@@ -52,3 +52,15 @@ docker compose -p <project> ps
 ```
 
 检查 Client 健康状态和重启次数，再确认 `stats.json` 中目标设备 SMART 状态不为 `unknown`。
+
+## 2.3 Preview staging
+
+`2.3-preview` 必须使用独立的 Compose 项目、状态目录、Registry、凭据、网络
+和候选镜像。当前 Preview 主机端口为 21443，升级时沿用既有 staging 绑定策略，
+不得擅自放宽。变更前记录 2.2 的容器 ID、镜像、OCI label、端口、挂载、网络和
+重启次数；2.3 Preview 不得停止、重建或修改 2.2。
+
+只从干净的候选 commit 构建，并使 Server 和 Client 的 OCI revision 精确等于
+该 commit。备份 Preview 配置和状态，安全升级现有 Preview 项目，再验证 health、
+stats、Device v2 上报、服务端重启及 down/up 后的持久化，以及重启次数为零的
+观察窗口。

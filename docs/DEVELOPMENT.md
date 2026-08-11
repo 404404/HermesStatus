@@ -27,7 +27,12 @@ revision and image provenance.
 
 ## Pull requests
 
-Create a focused branch and commit, then open a pull request against `2.0`.
-Wait for required CI and review feedback. Fix actionable findings on the same
-branch, redeploy a candidate when runtime behavior changes, and merge only with
-operator confirmation.
+Create a focused `codex/2.3-*` branch and commit, then open a Draft pull request
+against `2.3-preview`. Wait for required CI and review feedback. Fix actionable
+findings on the same branch, redeploy a final candidate when runtime behavior
+changes, and leave the PR Draft until the operator merges it manually. Do not
+mark ready, merge, or promote Preview work to `2.0` automatically.
+
+EasyTier changes require the normal Python, Go, race, vet, build, Node, Compose,
+contract, and secret gates, plus synthetic state fixtures and a real loopback
+GK50 collection check. Synthetic topology states must remain clearly labelled.

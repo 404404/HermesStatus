@@ -78,3 +78,29 @@ remain valid. Persistence writes the extra domain atomically when present.
   sanitized projection.
 - Preview must bind only its independent loopback host port and must prove the
   2.2 containers, configuration, and state were not changed.
+
+## Detailed preview projection
+
+The detailed view is still monitoring only. It projects bounded Peer, Route,
+and Connector records from the five permitted loopback-RPC CLI commands:
+`node info`, `peer list`, `route list`, `connector list`, and `stats show`.
+Only internal overlay IPv4 and RFC1918/RFC4193 proxy CIDRs may be retained.
+Public endpoints, DDNS names, URL queries, STUN data, credentials, raw command
+output, and raw configuration are deliberately rejected.
+
+`direct` needs matching target and next-hop peer IDs plus direct-connection
+evidence. A different next hop is `relayed`; insufficient evidence is
+`unknown`. With zero remote peers all three path results, including IPv6 UDP
+Direct, are `not_observable`. TCP Listener Available, TCP Connector Configured,
+and TCP Active are separate fields. The supported baseline is
+`2.6.4-8428a89d`; compatibility is schema-family based for compatible 2.6.x,
+while incompatible structures become `unsupported_version` rather than raw
+JSON passthrough.
+
+An optional Registry `easytier_expectation` compares configured administrative
+role, network name, overlay IPv4, and internal proxy CIDRs with observations.
+It is operator diagnostics only: it is never device identity, authentication,
+registration, or credential selection. Missing observation is
+`not_observable`; a command failure is not an empty list and leaves that view
+unavailable. Synthetic fixtures cover future direct/relay/TCP/remote-CIDR and
+failure states, and must never be described as real-network verification.

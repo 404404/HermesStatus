@@ -289,7 +289,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
   const host = devices.find(device => device.device_id === selectedDeviceId) ||
     (selectedDeviceId === null ? devices[0] : null) ||
     (!hasV2Devices ? selectSingleHost(documentObject.servers) : null);
-	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, profiles: [], containers: [] };
+	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, easytierExpectation: {}, profiles: [], containers: [] };
 
   const hardware = safeObject(host.hardware);
   const docker = safeObject(host.docker);
@@ -309,6 +309,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
 		hermes,
 		lucky,
 		easytier,
+		easytierExpectation: safeObject(host.easytier_expectation),
     profiles: Array.isArray(hermes.profiles) ? hermes.profiles : [],
     containers: Array.isArray(docker.containers) ? docker.containers : [],
     resources: {
@@ -344,7 +345,7 @@ function statusTone(value){
   if(status.startsWith('exited') || status.startsWith('dead')) return 'err';
   if(status.startsWith('created') || status.startsWith('paused') || status.startsWith('restarting') || status.startsWith('removing')) return 'warn';
 	if(['passed', 'running', 'ok', 'healthy', 'up', 'active', 'valid'].includes(status)) return 'ok';
-	if(['degraded', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error'].includes(status)) return 'warn';
+	if(['degraded', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error', 'mismatch', 'unsupported', 'unsupported_version'].includes(status)) return 'warn';
 	if(['failed', 'down', 'offline', 'disabled', 'stopped', 'unauthorized', 'timeout', 'dead', 'exited', 'error', 'expired', 'invalid', 'unavailable'].includes(status)) return 'err';
   return 'neutral';
 }
@@ -358,6 +359,7 @@ function statusText(value){
 		exited: '已退出', dead: '异常', degraded: '部分异常', stale: '已陈旧',
 		not_configured: '未配置', error: '异常', valid: '有效', expiring: '即将到期',
 		expired: '已过期', not_yet_valid: '尚未生效', invalid: '无效',
+		supported: '支持', unsupported: '不支持', matched: '匹配', mismatch: '不匹配', not_observable: '未观察到',
     online: '在线', offline: '离线', never_seen: '从未上线', disabled: '已禁用',
     identity_error: '身份异常', matched: '身份匹配', missing_fqdn: '缺少身份信息',
     fqdn_mismatch: '身份不匹配'
@@ -367,6 +369,11 @@ function statusText(value){
 
 function badge(value){
   return `<span class="badge ${statusTone(value)}">${escapeHtml(statusText(value))}</span>`;
+}
+
+function expectationBadge(value){
+  const labels = {matched: '匹配', mismatch: '不匹配', not_observable: '未观察到', not_configured: '未配置'};
+  return `<span class="badge ${statusTone(value)}">${escapeHtml(labels[value] || textOrDash(value))}</span>`;
 }
 
 function domainIsUnknown(value){
@@ -565,6 +572,13 @@ function renderLucky(view){
 	renderLuckyTables(view);
 }
 
+function ipv6UdpDirectText(peers, peerListAvailable){
+	if(!peerListAvailable) return '数据不可用';
+	return peers.ipv6_udp_direct === null || peers.ipv6_udp_direct === undefined
+		? '未观察到'
+		: peers.ipv6_udp_direct ? '是' : '否';
+}
+
 function renderEasyTier(view){
 	const easytier = view.easytier;
 	const node = safeObject(easytier.node);
@@ -572,23 +586,66 @@ function renderEasyTier(view){
 	const routes = safeObject(easytier.routes);
 	const connectors = safeObject(easytier.connectors);
 	const traffic = safeObject(easytier.traffic);
+	const commands = safeObject(easytier.command_status);
+	const commandAvailable = name => safeObject(commands[name]).status === 'healthy';
+	const tcpListenerText = commandAvailable('node_info') || commandAvailable('stats_show')
+		? booleanText(connectors.tcp_listener_available)
+		: '数据不可用';
+	const tcpConnectorText = commandAvailable('connector_list')
+		? booleanText(connectors.tcp_configured)
+		: '数据不可用';
+	const tcpActiveText = commandAvailable('connector_list')
+		? booleanText(connectors.tcp_active)
+		: '数据不可用';
+	const trafficText = commandAvailable('stats_show')
+		? `${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`
+		: '数据不可用';
+	const peerSummary = !commandAvailable('peer_list')
+		? '数据不可用'
+		: peers.total === 0
+		? '0（直连：— / 中继：— / 未知：—）'
+		: `${formatInteger(peers.total)}（直连：${formatInteger(peers.direct)} / 中继：${formatInteger(peers.relay)} / 未知：${formatInteger(peers.unknown_path)}）`;
 	const details = [
 		['网络', escapeHtml(textOrDash(node.network_name))],
+		['Overlay IPv4', escapeHtml(textOrDash(node.overlay_ipv4))],
 		['节点状态', badge(node.state)],
-		['远端节点（直连/中继/未知）', escapeHtml(`${formatInteger(peers.total)} (${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)})`)],
-		['路由数', escapeHtml(formatInteger(routes.total))],
-		['连接器（TCP 已配置/活动）', escapeHtml(`${formatInteger(connectors.total)} (${booleanText(connectors.tcp_configured)} / ${booleanText(connectors.tcp_active)})`)],
-		['接收 / 发送 / 转发', escapeHtml(`${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`)]
+		['版本兼容性', escapeHtml(easyTierCompatibilityText(node.schema_compatibility))],
+		['远端节点', escapeHtml(peerSummary)],
+		['IPv6 UDP Direct', escapeHtml(ipv6UdpDirectText(peers, commandAvailable('peer_list')))],
+		['路由数', escapeHtml(commandAvailable('route_list') ? formatInteger(routes.total) : '数据不可用')],
+		['TCP Listener / Connector / Active', escapeHtml(`${tcpListenerText} / ${tcpConnectorText} / ${tcpActiveText}`)],
+		['接收 / 发送 / 转发', escapeHtml(trafficText)]
 	];
 	byId('easytierSummary').innerHTML = details.map(([label, value]) => detailRow(label, value)).join('');
 	byId('easytierMeta').textContent = `更新时间：${formatDateTime(easytier.updated_at)}${easytier.error ? ` · ${textOrDash(easytier.error.message || easytier.error.code)}` : ''}`;
 	const names = {node_info: '节点信息', peer_list: '节点列表', route_list: '路由列表', connector_list: '连接器列表', stats_show: '流量统计'};
-	const commands = safeObject(easytier.command_status);
 	byId('easytierCommandsBody').innerHTML = Object.keys(names).map(key => {
 		const command = safeObject(commands[key]);
 		return `<article class="summary-card easytier-command-card"><h2>${escapeHtml(names[key])}</h2><div class="card-value">${badge(command.status)}</div></article>`;
 	}).join('');
+	const expectation = safeObject(view.easytierExpectation);
+	const expected = safeObject(expectation.expected);
+	const observed = safeObject(expectation.observed);
+	const expectationRows = expectation.configured === true ? [
+		['Network', textOrDash(expected.network_name), textOrDash(observed.network_name)],
+		['Overlay IP', textOrDash(expected.overlay_ipv4), textOrDash(observed.overlay_ipv4)],
+		['Proxy CIDRs', listText(expected.proxy_cidrs), listText(observed.proxy_cidrs)],
+		['Administrative Role', textOrDash(expected.administrative_role), textOrDash(observed.administrative_role)]
+	] : [['EasyTier expectation', '未配置', '—']];
+	byId('easytierExpectationBody').innerHTML = expectationRows.map(([label, expectedValue, observedValue], index) => `<tr><td class="strong-cell">${escapeHtml(label)}</td><td>${escapeHtml(expectedValue)}</td><td>${escapeHtml(observedValue)}</td>${index === 0 ? `<td rowspan="${expectationRows.length}">${expectationBadge(expectation.result || 'not_configured')}</td>` : ''}</tr>`).join('');
+	const peerItems = Array.isArray(peers.items) ? peers.items : [];
+	byId('easytierPeersBody').innerHTML = !commandAvailable('peer_list') ? '<tr><td colspan="10" class="table-empty">节点数据当前不可用。</td></tr>' : peerItems.length ? peerItems.map(peer => `<tr><td class="mono">${escapeHtml(textOrDash(peer.peer_id))}</td><td>${escapeHtml(textOrDash(peer.overlay_ipv4))}</td><td>${escapeHtml(easyTierPathText(peer.path_state))}</td><td>${escapeHtml(textOrDash(peer.transport))}</td><td>${escapeHtml(textOrDash(peer.address_family))}</td><td>${escapeHtml(formatLatency(peer.latency_ms))}</td><td>${escapeHtml(formatLoss(peer.loss_rate))}</td><td>${escapeHtml(formatBytes(peer.rx_bytes))}</td><td>${escapeHtml(formatBytes(peer.tx_bytes))}</td><td>${escapeHtml(textOrDash(peer.version))}</td></tr>`).join('') : '<tr><td colspan="10" class="table-empty">当前未观察到远端 EasyTier 节点。</td></tr>';
+	const routeItems = Array.isArray(routes.items) ? routes.items : [];
+	byId('easytierRoutesBody').innerHTML = !commandAvailable('route_list') ? '<tr><td colspan="7" class="table-empty">路由数据当前不可用。</td></tr>' : routeItems.length ? routeItems.map(route => `<tr><td>${escapeHtml(route.is_local ? '本地' : textOrDash(route.hostname || route.peer_id))}</td><td>${escapeHtml(textOrDash(route.overlay_ipv4))}</td><td>${escapeHtml(listText(route.proxy_cidrs))}</td><td class="mono">${escapeHtml(textOrDash(route.next_hop_peer_id))}</td><td>${escapeHtml(easyTierPathText(route.path_state))}</td><td>${escapeHtml(formatLatency(route.path_latency_ms))}</td><td>${escapeHtml(formatInteger(route.cost))}</td></tr>`).join('') : '<tr><td colspan="7" class="table-empty">当前未观察到 EasyTier 路由。</td></tr>';
+	const connectorItems = Array.isArray(connectors.items) ? connectors.items : [];
+	byId('easytierConnectorsBody').innerHTML = !commandAvailable('connector_list') ? '<tr><td colspan="4" class="table-empty">连接器数据当前不可用。</td></tr>' : connectorItems.length ? connectorItems.map(connector => `<tr><td>${escapeHtml(textOrDash(connector.transport))}</td><td>${escapeHtml(textOrDash(connector.address_family))}</td><td>${escapeHtml(formatInteger(connector.port))}</td><td>${badge(connector.status)}</td></tr>`).join('') : '<tr><td colspan="4" class="table-empty">未配置出站连接器。</td></tr>';
 }
+
+function listText(value){ return Array.isArray(value) && value.length ? value.map(textOrDash).join('、') : '-'; }
+function easyTierPathText(value){ return ({direct: '直连', relayed: '中继', unknown: '未观察到'})[String(value || '').toLowerCase()] || '-'; }
+function easyTierCompatibilityText(value){ return ({supported: '支持', unsupported: '不支持', unknown: '未知'})[String(value || '').toLowerCase()] || '未知'; }
+function formatLatency(value){ const number = finiteNumber(value); return number === null ? '-' : `${number.toFixed(1)} ms`; }
+function formatLoss(value){ const number = finiteNumber(value); return number === null ? '-' : `${number.toFixed(2)}%`; }
 
 function profileSummary(profiles){
   if(!profiles.length) return '';
@@ -1124,6 +1181,7 @@ const exported = {
   formatBytes,
   formatTrafficBytes,
   formatUptimeHours,
+	ipv6UdpDirectText,
   formatPair,
   profileSummary,
   modelBreakdown,

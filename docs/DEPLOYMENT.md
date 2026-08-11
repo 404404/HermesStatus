@@ -63,8 +63,10 @@ environment:
 This block replaces, rather than supplements, the legacy broad entries in
 `docker-compose-client.yml`: set `CLIENT_PRIVILEGED=false` and remove its
 `/dev:/dev:ro` volume before adding the capability and single-device mapping.
-The supplied Compose file retains those legacy defaults for compatibility, so
-leaving them in place would not be a minimum-permission deployment.
+The complete Device v2 minimum-permission override is available at
+`config/examples/docker-compose-client.override.example.yml`. The supplied
+base Compose file retains the legacy defaults for compatibility, so leaving
+them in place would not be a minimum-permission deployment.
 
 Keep the root filesystem read-only and retain `no-new-privileges`. If a host
 uses another disk path or a RAID/NVMe controller, select and validate that
@@ -83,3 +85,18 @@ docker compose -p <project> ps
 
 Check the Client's health and restart count, then confirm that the selected
 device has a non-unknown SMART status in `stats.json`.
+
+## 2.3 Preview staging
+
+Use an independent Compose project, state directory, Registry, credentials,
+network, and candidate images for `2.3-preview`. The current Preview host bind
+is 21443 and must follow the existing staging bind policy; do not broaden it
+while upgrading. Before a change, record 2.2 container IDs, images, labels,
+ports, mounts, networks, and restart counts. Never stop, recreate, or alter
+2.2 as part of a 2.3 Preview deployment.
+
+Build only from a clean candidate commit and label both Server and Client images
+with its exact OCI revision. Back up the Preview config and state, upgrade the
+existing Preview project without creating a competing writer, then verify
+health, stats, Device v2 ingestion, persistence after Server restart and
+down/up, and a zero-restart observation interval.

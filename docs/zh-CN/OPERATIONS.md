@@ -23,3 +23,14 @@ docker compose -p <project> ps
 变更前记录 Compose 项目、镜像 ID、源代码 revision、端口、数据路径、健康状态和重启次数。备份服务端状态与非秘密部署配置。在独立候选环境构建并验证后，只重建受影响服务。
 
 回滚时恢复已记录的镜像引用和部署配置，同时保留现有服务端数据目录。不要创建第二个活动写入者，也不要盲目覆盖在线状态。
+
+## EasyTier 解读
+
+先看采集状态，再解读详细表。命令 error 或 timeout 表示该表不可用，不是真实空结果。
+`fresh` 只有在 Server 时钟接受新的报告后才成立；从持久化恢复后必须保持 stale，直到
+收到新报告。远端 Peer 为 0 是健康状态，Direct、Relay 与 IPv6 UDP Direct 都是
+`not_observable`。
+
+已验证的 GK50 基线为 `2.6.4-8428a89d` 且远端 Peer 为 0。真实 Synology 双站点、
+IPv6 UDP Direct、TCP fallback、远端 `192.168.88.0/24` 和 Direct/Relay 行为仍待
+资格验证，不是当前运维故障。

@@ -48,3 +48,16 @@ Use `/api/health` and sanitized `/json/stats.json` for diagnosis. Do not expose
 raw SMART output, Docker API responses, Hermes configuration, `.env` files, or
 authentication headers. The dashboard may report stale or unavailable data;
 that is safer than inventing a healthy value.
+
+## EasyTier monitoring
+
+EasyTier monitoring is loopback-RPC and read-only. The runtime command allowlist
+contains only `node info`, `peer list`, `route list`, `connector list`, and
+`stats show`; it has no connector/route/credential/whitelist/port-forward/logger
+or restart operation. It never persists or renders raw config, endpoint,
+credential, network secret, Noise key, STUN address, or command stderr.
+
+All detailed values are server-validated and rendered as escaped text. Public
+addresses and CIDRs are rejected from the projection. A malformed, partial, or
+unsupported response is safer as unavailable/degraded/unsupported than a false
+empty or healthy view.
