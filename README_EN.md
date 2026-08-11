@@ -91,10 +91,10 @@ environment:
   SMART_DEVICE: /dev/sda
 ```
 
-The repository base `docker-compose-client.yml` already uses a non-privileged,
-single `/dev/sda` read-only mapping and `SYS_RAWIO`. Use an audited override
-that replaces `devices:` and adds one read-only mapping per disk only when
-multiple confirmed physical disks are needed.
+The repository base `docker-compose-client.yml` is non-privileged and maps no
+host block device by default, so it starts on SATA, NVMe, virtio, and similar
+hosts. Use an audited override to add `SYS_RAWIO` and one read-only `devices:`
+mapping per confirmed physical disk when SMART collection is required.
 `config/examples/docker-compose-client.override.example.yml` contains a
 complete minimum-permission Device v2 example.
 

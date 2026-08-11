@@ -488,8 +488,8 @@ func validateFilesystemStats(index int, filesystem *FilesystemStats, diskIDs map
 	if !validStorageStackType(filesystem.StackType) || !validStorageCollectionStatus(filesystem.CollectionStatus) {
 		return validationError(validationCodeInvalidValue, prefix, "contains an unsupported storage status")
 	}
-	if filesystem.CollectionStatus == "healthy" && (filesystem.Source == nil || filesystem.FSType == nil) {
-		return validationError(validationCodeInvalidValue, prefix, "healthy filesystem requires source and fs_type")
+	if filesystem.CollectionStatus == "healthy" && filesystem.FSType == nil {
+		return validationError(validationCodeInvalidValue, prefix, "healthy filesystem requires fs_type")
 	}
 	if err := ValidateExtensionError(prefix+".error", filesystem.Error); err != nil {
 		return err

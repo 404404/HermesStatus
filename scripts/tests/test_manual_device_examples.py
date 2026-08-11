@@ -95,10 +95,9 @@ class ManualDeviceExampleTests(unittest.TestCase):
         self.assertIn("read_only: true", base)
         self.assertIn("no-new-privileges:true", base)
         self.assertIn("/tmp:size=32m,mode=1777,nosuid,nodev,noexec", base)
-        self.assertIn(
-            "- ${SMART_DEVICE_HOST:-/dev/sda}:${SMART_DEVICE_CONTAINER:-/dev/sda}:r",
-            base,
-        )
+        self.assertNotIn("\n    devices:\n", base)
+        self.assertNotIn("\n    cap_add:\n      - SYS_RAWIO", base)
+        self.assertIn('SMART_DEVICE: "${SMART_DEVICE:-auto}"', base)
         self.assertNotIn("/dev:/dev:ro", base)
 
     def test_reverse_proxy_is_an_exact_bounded_tls_ingress(self):

@@ -358,6 +358,42 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(filesystems[0]["used_bytes"], 750 * 1024)
         self.assertEqual(filesystems[0]["usage_percent"], 75.0)
 
+    def test_filesystem_probe_normalizes_bind_mount_source_to_its_block_device(self):
+        graph = build_block_device_graph(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sda", "kname": "sda", "type": "disk", "size": 1000,
+                        "children": [{"name": "sda1", "kname": "sda1", "pkname": "sda", "type": "part"}],
+                    }
+                ]
+            },
+            sys_block_root="/no-sys-block",
+        )
+
+        def runner(command, timeout):
+            self.assertEqual(command[:3], ["findmnt", "--json", "--target"])
+            return 0, json.dumps({
+                "filesystems": [{"source": "/dev/sda1[/srv/data]", "fstype": "ext4"}]
+            })
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+
+        filesystems, error = collect_filesystems(
+            [{"mountpoint": "/data", "probe_path": "/host-storage/data"}],
+            graph,
+            command_runner=runner,
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(filesystems[0]["source"], "/dev/sda1")
+        self.assertEqual(filesystems[0]["backing_disk_ids"], ["sda"])
+        self.assertEqual(filesystems[0]["stack_type"], "plain")
+
     def test_client_build_only_projects_explicit_build_environment(self):
         self.assertIsNone(collect_client_build({}))
         self.assertEqual(

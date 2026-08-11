@@ -101,6 +101,13 @@ func TestHardwareObservabilityRejectsUnsafeOrInconsistentStorage(t *testing.T) {
 
 	storage = validStorageFixture()
 	stats.Hardware.Storage = &storage
+	storage.Filesystems[0].Source = nil
+	if err := ValidateExtensionStats(stats); err != nil {
+		t.Fatalf("healthy filesystem without a forwardable source was rejected: %v", err)
+	}
+
+	storage = validStorageFixture()
+	stats.Hardware.Storage = &storage
 	for len(storage.PhysicalDisks) <= MaxPhysicalDisks {
 		disk := storage.PhysicalDisks[0]
 		disk.ID = "sda" + strings.Repeat("x", len(storage.PhysicalDisks))
@@ -108,6 +115,25 @@ func TestHardwareObservabilityRejectsUnsafeOrInconsistentStorage(t *testing.T) {
 	}
 	if err := ValidateExtensionStats(stats); err == nil {
 		t.Fatal("too many physical disks were accepted")
+	}
+}
+
+func TestTopologyOnlyDiskDoesNotDegradeAnOtherwiseHealthyDevice(t *testing.T) {
+	storage := validStorageFixture()
+	storage.PhysicalDisks = append(storage.PhysicalDisks, PhysicalDiskStats{
+		ID: "sdb", Device: "/dev/sdb", SMARTStatus: DiskSMARTUnknown,
+		CollectionStatus: "unsupported",
+	})
+	if extensionHasBusinessError(ExtensionStats{
+		Hardware: &HardwareStats{Storage: &storage},
+	}) {
+		t.Fatal("topology-only unsupported disk degraded an otherwise healthy device")
+	}
+	storage.PhysicalDisks[1].CollectionStatus = "unavailable"
+	if !extensionHasBusinessError(ExtensionStats{
+		Hardware: &HardwareStats{Storage: &storage},
+	}) {
+		t.Fatal("attempted unavailable SMART disk did not degrade the device")
 	}
 }
 

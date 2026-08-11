@@ -53,7 +53,7 @@ Server 会在投影和持久化之前校验数量、字符串长度、计数器�
 
 ## 最小权限
 
-基础 Client Compose 为非 privileged，仅以只读方式映射 `/dev/sda` 并保留 `SYS_RAWIO`。多块已确认磁盘时，使用受审计的覆盖文件替换 `devices:`，逐盘映射：
+基础 Client Compose 为非 privileged，且不映射宿主机块设备。对一块或多块已确认磁盘，使用受审计的覆盖文件添加 `SYS_RAWIO`、替换 `devices:` 并逐盘映射：
 
 ```yaml
 cap_add:
@@ -83,7 +83,7 @@ volumes:
   - /srv/example-data:/host-storage/data:ro
 ```
 
-展示挂载点与容器 probe 路径必须是绝对路径、长度受限且不含父级遍历。采集器只使用 `findmnt` 和 `statvfs` 获取元数据和容量，不会递归读取目录。伪文件系统、无效元数据和不可访问 probe 都是不可用数据，不能显示为零使用量，也不能因此挂载宿主机根目录、进入 mount namespace、使用 `nsenter` 或增加 `CAP_SYS_ADMIN`。
+展示挂载点与容器 probe 路径必须是绝对路径、长度受限且不含父级遍历。采集器只使用 `findmnt` 和 `statvfs` 获取元数据和容量。bind mount 或 Btrfs source 如 `/dev/sda1[/data]` 会归一化为 `/dev/sda1`；非设备 source 不会上报，以免泄露远端端点。它不会递归读取目录。伪文件系统、无效元数据和不可访问 probe 都是不可用数据，不能显示为零使用量，也不能因此挂载宿主机根目录、进入 mount namespace、使用 `nsenter` 或增加 `CAP_SYS_ADMIN`。
 
 ## 主页与 Hardware 语义
 

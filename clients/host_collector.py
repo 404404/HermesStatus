@@ -987,6 +987,25 @@ def _findmnt_for_probe(probe_path, command_runner):
         return None
 
 
+def _normalized_filesystem_source(value):
+    """Return the safe block-device component of a findmnt source, if any.
+
+    `findmnt` represents a bind mount or Btrfs subvolume as
+    `/dev/sda1[/path]`.  The bracket suffix is local mount metadata, not a
+    block-device identity, so retain only the bounded device component.  Other
+    source forms (for example an NFS export) are intentionally not forwarded:
+    a filesystem can still be healthy without revealing a remote endpoint.
+    """
+    source = _nullable_text(value, MAX_FILESYSTEM_SOURCE_LENGTH)
+    if not source:
+        return None
+    match = re.fullmatch(r"(/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126})(?:\[[^\]\x00-\x1f]{0,384}\])?", source)
+    if not match:
+        return None
+    device = match.group(1)
+    return device if _SAFE_BLOCK_DEVICE_RE.fullmatch(device) else None
+
+
 def collect_filesystems(filesystem_probes, block_graph, command_runner=None, statvfs_func=None):
     """Collect only explicitly configured, read-only filesystem probe mounts."""
     runner = command_runner or _default_command_runner
@@ -1001,7 +1020,7 @@ def collect_filesystems(filesystem_probes, block_graph, command_runner=None, sta
         if not mountpoint or not isinstance(probe_path, str):
             continue
         entry = _findmnt_for_probe(probe_path, runner)
-        source = _nullable_text(entry.get("source"), MAX_FILESYSTEM_SOURCE_LENGTH) if entry else None
+        source = _normalized_filesystem_source(entry.get("source")) if entry else None
         fs_type = _nullable_text(entry.get("fstype"), MAX_FILESYSTEM_TYPE_LENGTH) if entry else None
         item = {
             "source": source,

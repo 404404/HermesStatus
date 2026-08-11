@@ -39,7 +39,7 @@ environment:
   SMART_DEVICE: /dev/sda
 ```
 
-仓库基础 `docker-compose-client.yml` 已使用非 privileged 的单个 `/dev/sda` 只读映射和 `SYS_RAWIO`。完整 Device v2 最小权限示例见 `config/examples/docker-compose-client.override.example.yml`；只有经审核的多盘 allowlist 才通过覆盖文件替换 `devices:`。
+仓库基础 `docker-compose-client.yml` 为非 privileged，且默认不映射宿主机块设备，因此可在 SATA、NVMe、virtio 等主机上启动。完整 Device v2 最小权限示例见 `config/examples/docker-compose-client.override.example.yml`；只有经审核的 allowlist 才通过覆盖文件添加 `SYS_RAWIO` 并替换 `devices:`。
 
 保留只读根文件系统和 `no-new-privileges`。多盘部署是显式、逐项审核的设备授权，例如：
 

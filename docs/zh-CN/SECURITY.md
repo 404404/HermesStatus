@@ -28,7 +28,7 @@ EasyTier 监控只允许通过仅回环 RPC 执行 `node info`、`peer list`、`
 
 ## 硬件边界
 
-硬件观测仅在 Client 上以只读方式进行。基础 Client 部署为非 privileged，且仅只读映射一个 `/dev/sda`。多盘 SMART 需要显式、经审核的 JSON allowlist，并为每块盘单独提供只读 Compose 映射。不得挂载完整 `/dev`、增加 `SYS_ADMIN`、进入宿主机 mount namespace，也不能为了方便自动发现而授予不可见设备。
+硬件观测仅在 Client 上以只读方式进行。基础 Client 部署为非 privileged，且不映射宿主机块设备。SMART 需要显式、经审核的 JSON allowlist，并为每块已确认磁盘单独提供 `SYS_RAWIO` 与只读 Compose 映射。不得挂载完整 `/dev`、增加 `SYS_ADMIN`、进入宿主机 mount namespace，也不能为了方便自动发现而授予不可见设备。
 
 文件系统容量需要由运维人员选择的窄范围只读 probe 挂载。采集器只调用元数据和 `statvfs`，不会枚举文件；不得仅为展示容量而挂载宿主机根目录。存储采集不会保留序列号、WWN、文件系统 UUID、原始 SMART 属性表、原始命令输出或目录清单。
 

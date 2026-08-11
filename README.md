@@ -66,7 +66,7 @@ environment:
   SMART_DEVICE: /dev/sda
 ```
 
-仓库基础 `docker-compose-client.yml` 已使用非 privileged 的单个 `/dev/sda` 只读映射和 `SYS_RAWIO`。仅在需要多个已确认物理盘时，才使用受审计的覆盖文件替换 `devices:` 并逐盘增加只读映射；`config/examples/docker-compose-client.override.example.yml` 提供完整的 Device v2 示例。
+仓库基础 `docker-compose-client.yml` 为非 privileged，且默认不映射任何宿主机块设备，因此可在 SATA、NVMe、virtio 等主机上启动。要读取 SMART 时，使用受审计的覆盖文件显式添加 `SYS_RAWIO` 与每块已确认磁盘的只读 `devices:` 映射；`config/examples/docker-compose-client.override.example.yml` 提供完整的 Device v2 示例。
 
 保留只读根文件系统与 `no-new-privileges`。多盘时在 Client JSON 的 `hardware.smart_devices` 中显式列出每个设备，并在 Compose 中为每个设备单独添加只读 `devices:` 映射；不要恢复 `privileged`、完整 `/dev` 挂载或 `SYS_ADMIN`。`SMART_DEVICE` 仍兼容单盘部署；`SMART_DEVICES` 是可选的 JSON 环境覆盖。仅在 Client 容器中已可见且已授权的设备范围内，`auto` 才会发现设备。
 

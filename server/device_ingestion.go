@@ -323,7 +323,13 @@ func extensionHasBusinessError(extension ExtensionStats) bool {
 		if storage := extension.Hardware.Storage; storage != nil {
 			extensionErrors = append(extensionErrors, storage.Error)
 			for _, disk := range storage.PhysicalDisks {
-				if disk.SMARTStatus == DiskSMARTFailed || disk.CollectionStatus != "healthy" {
+				// A topology-only disk is not necessarily an authorized SMART
+				// target. It is retained for safe physical-disk relationships,
+				// but `unsupported` without a collection error must not make an
+				// otherwise healthy device appear degraded.
+				if disk.SMARTStatus == DiskSMARTFailed ||
+					(disk.CollectionStatus != "healthy" &&
+						!(disk.CollectionStatus == "unsupported" && disk.Error == nil)) {
 					return true
 				}
 			}

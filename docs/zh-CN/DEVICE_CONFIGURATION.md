@@ -103,7 +103,7 @@ services:
       - /srv/example-data:/host-storage/data:ro
 ```
 
-基础 Client Compose 已经是非 privileged，且仅只读映射单个 `/dev/sda`。多盘配置必须在覆盖文件中使用 `devices: !override`，使映射路径与 JSON allowlist 精确一致。不得挂载完整 `/dev`、使用 `privileged`、增加 `SYS_ADMIN`，也不能仅为文件系统容量挂载宿主机根目录。每个文件系统 probe 都需要单独的窄范围只读挂载；它只会经由 `findmnt` 和 `statvfs` 采样，绝不遍历文件。
+基础 Client Compose 为非 privileged，且不映射宿主机块设备，因此不会假设存在 `/dev/sda`。受审计的覆盖文件会添加 `SYS_RAWIO` 并使用 `devices: !override`，使映射路径与 JSON allowlist 精确一致。不得挂载完整 `/dev`、使用 `privileged`、增加 `SYS_ADMIN`，也不能仅为文件系统容量挂载宿主机根目录。每个文件系统 probe 都需要单独的窄范围只读挂载；它只会经由 `findmnt` 和 `statvfs` 采样，绝不遍历文件。
 
 `smart_devices` 中的 `label` 是采集器配置元数据，不承诺持久化或渲染。设备、型号、挂载点和文件系统观测数据同样不能用于标识或认证 Client。
 

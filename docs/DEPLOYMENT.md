@@ -60,11 +60,11 @@ environment:
   SMART_DEVICE: /dev/sda
 ```
 
-The repository base `docker-compose-client.yml` already uses a non-privileged,
-single `/dev/sda` read-only mapping and `SYS_RAWIO`. The complete Device v2
-minimum-permission example at
-`config/examples/docker-compose-client.override.example.yml` replaces
-`devices:` only for an audited multi-disk allowlist.
+The repository base `docker-compose-client.yml` is non-privileged and maps no
+host block device by default, so it starts on SATA, NVMe, virtio, and similar
+hosts. The complete Device v2 minimum-permission example at
+`config/examples/docker-compose-client.override.example.yml` adds `SYS_RAWIO`
+and replaces `devices:` only for an audited allowlist.
 
 Keep the root filesystem read-only and retain `no-new-privileges`. A multi-disk
 deployment is an explicit, individually reviewed device grant, for example:

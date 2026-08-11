@@ -118,12 +118,13 @@ services:
       - /srv/example-data:/host-storage/data:ro
 ```
 
-The base Client Compose file already maps only one read-only `/dev/sda` device
-and is non-privileged. An override with `devices: !override` is required for a
-multi-disk configuration so the paths match the JSON allowlist exactly. Do not
-mount full `/dev`, use `privileged`, add `SYS_ADMIN`, or mount the host root for
-filesystem capacity. Each filesystem probe needs its own narrow read-only
-mount; it is sampled through `findmnt` and `statvfs`, never by walking files.
+The base Client Compose file is non-privileged and maps no host block device,
+so it starts on systems that do not expose `/dev/sda`. An audited override adds
+`SYS_RAWIO` and `devices: !override` so paths match the JSON allowlist exactly.
+Do not mount full `/dev`, use `privileged`, add `SYS_ADMIN`, or mount the host
+root for filesystem capacity. Each filesystem probe needs its own narrow
+read-only mount; it is sampled through `findmnt` and `statvfs`, never by
+walking files.
 
 `label` in `smart_devices` is collector configuration metadata. It is not a
 promise that a label is persisted or rendered. Device, model, mountpoint, and

@@ -15,13 +15,9 @@ services:
       - /tmp:size=32m,mode=1777,nosuid,nodev,noexec
     network_mode: host
     pid: host
-    # SMART access is deliberately limited to the operator-confirmed physical
-    # device.  Add further devices only as separate `devices:` entries in an
-    # audited override; never grant the whole /dev tree or privileged mode.
-    cap_add:
-      - SYS_RAWIO
-    devices:
-      - ${SMART_DEVICE_HOST:-/dev/sda}:${SMART_DEVICE_CONTAINER:-/dev/sda}:r
+    # The base service deliberately maps no host block device. Add SYS_RAWIO
+    # and one confirmed read-only `devices:` entry through an audited override;
+    # never grant the whole /dev tree or privileged mode.
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'python3 /app/client-' >/dev/null"]
       interval: 30s
@@ -45,7 +41,7 @@ services:
       CLIENT: "${CLIENT:-psutil}"
       HOST_OS_RELEASE_FILE: "${HOST_OS_RELEASE_FILE:-/host/etc/os-release}"
       HWMON_ROOT: "${HWMON_ROOT:-/sys/class/hwmon}"
-      SMART_DEVICE: "${SMART_DEVICE:-${SMART_DEVICE_CONTAINER:-/dev/sda}}"
+      SMART_DEVICE: "${SMART_DEVICE:-auto}"
       DOCKER_SOCKET: "${DOCKER_SOCKET:-/var/run/docker.sock}"
       HARDWARE_INTERVAL: "${HARDWARE_INTERVAL:-600}"
       DOCKER_INTERVAL: "${DOCKER_INTERVAL:-60}"

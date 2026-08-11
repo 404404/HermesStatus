@@ -69,7 +69,8 @@ remains authoritative.
 read-only mount of the intended host filesystem. The Client runs `findmnt` and
 `statvfs` only; it never walks or uploads directory contents. Pseudo filesystems
 and unavailable probes are reported as unavailable rather than presented as
-host storage.
+host storage. A bind-mount or Btrfs source is normalized to its safe `/dev/*`
+component; non-device sources are omitted rather than reported as endpoints.
 
 Configuration precedence is CLI, environment, JSON file, then defaults. The
 environment alternatives are `HERMESSTATUS_SMART_DEVICES` / `SMART_DEVICES`,

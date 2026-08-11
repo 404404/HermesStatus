@@ -1,7 +1,7 @@
 services:
   serverstatus-client:
-    # Base Compose already grants only /dev/sda read-only. This audited override
-    # replaces that list for the individually confirmed physical disks below.
+    # Base Compose maps no host block device. This audited override grants only
+    # the individually confirmed physical disks below.
     privileged: false
     cap_add:
       - SYS_RAWIO

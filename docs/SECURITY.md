@@ -52,10 +52,11 @@ that is safer than inventing a healthy value.
 ## Hardware boundary
 
 Hardware observation is Client-only and read-only. The base Client deployment
-is non-privileged with a single `/dev/sda` read-only mapping. Multi-disk SMART
-requires an explicit audited JSON allowlist and one read-only Compose mapping
-per device. Never mount full `/dev`, add `SYS_ADMIN`, use a host mount-namespace
-escape, or grant an unseen device merely to make auto-discovery convenient.
+is non-privileged and maps no host block device. SMART requires an explicit
+audited JSON allowlist plus `SYS_RAWIO` and one read-only Compose mapping per
+confirmed device. Never mount full `/dev`, add `SYS_ADMIN`, use a host
+mount-namespace escape, or grant an unseen device merely to make auto-discovery
+convenient.
 
 Filesystem capacity requires an operator-selected, narrow read-only probe mount.
 The collector calls metadata and `statvfs` only; it does not enumerate files.

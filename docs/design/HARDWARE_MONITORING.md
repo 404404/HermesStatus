@@ -81,9 +81,9 @@ For legacy singular SMART compatibility:
 
 ## Minimum permissions
 
-The base Client Compose file is non-privileged and maps only `/dev/sda`
-read-only with `SYS_RAWIO`. For multiple confirmed disks, use an audited
-override that replaces `devices:` and maps every disk individually:
+The base Client Compose file is non-privileged and maps no host block device.
+For one or more confirmed disks, use an audited override that adds `SYS_RAWIO`,
+replaces `devices:`, and maps every disk individually:
 
 ```yaml
 cap_add:
@@ -120,8 +120,10 @@ volumes:
 
 The display mountpoint and container probe path must be absolute, bounded, and
 free of parent traversal. The collector uses `findmnt` and `statvfs` for
-metadata and capacity only. It does not recursively read directories. Pseudo
-filesystems, invalid metadata, and inaccessible probes are unavailable data,
+metadata and capacity only. A bind-mount or Btrfs source such as
+`/dev/sda1[/data]` is normalized to `/dev/sda1`; non-device sources are omitted
+rather than exposing a remote endpoint. It does not recursively read
+directories. Pseudo filesystems, invalid metadata, and inaccessible probes are unavailable data,
 not zero usage and not a reason to mount the host root, enter a mount namespace,
 use `nsenter`, or add `CAP_SYS_ADMIN`.
 
