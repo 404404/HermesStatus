@@ -450,6 +450,65 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(filesystems[0]["backing_disk_ids"], ["sda"])
         self.assertEqual(filesystems[0]["stack_type"], "lvm")
 
+    def test_filesystem_probe_caps_backing_disks_and_classifies_btrfs(self):
+        graph = {
+            "aliases": {"/dev/md0": "md0", "/dev/sda1": "sda1"},
+            "nodes": {
+                "md0": {"type": "raid", "slaves": ["disk%02d" % index for index in range(17)]},
+                "sda1": {"type": "part", "parent": "sda"},
+                "sda": {"type": "disk"},
+                **{"disk%02d" % index: {"type": "disk"} for index in range(17)},
+            },
+        }
+
+        def runner(command, timeout):
+            source = "/dev/md0" if command[-1].endswith("raid") else "/dev/sda1"
+            fs_type = "ext4" if source == "/dev/md0" else "btrfs"
+            return 0, json.dumps({"filesystems": [{"source": source, "fstype": fs_type}]})
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+
+        filesystems, error = collect_filesystems(
+            [
+                {"mountpoint": "/raid", "probe_path": "/host-storage/raid"},
+                {"mountpoint": "/btrfs", "probe_path": "/host-storage/btrfs"},
+            ],
+            graph,
+            command_runner=runner,
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(len(filesystems[0]["backing_disk_ids"]), 16)
+        self.assertEqual(filesystems[1]["stack_type"], "btrfs")
+
+    def test_nvme_controller_smart_target_reuses_its_namespace_topology_disk(self):
+        smart = fixture_json("smart-normal.json")
+
+        def runner(command, timeout):
+            if command[:1] == ["lsblk"]:
+                return 0, json.dumps({
+                    "blockdevices": [{
+                        "name": "nvme0n1", "kname": "nvme0n1", "type": "disk", "size": 1000,
+                    }]
+                })
+            if "-j" in command:
+                return 0, json.dumps(smart)
+            return 0, "SMART overall-health self-assessment test result: PASSED\n"
+
+        payload = collect_hardware(
+            "Example CPU", smart_devices=[{"path": "/dev/nvme0", "type": "nvme"}],
+            command_runner=runner, sys_block_root="/no-sys-block", now=FIXED_NOW,
+        )
+        disks = payload["storage"]["physical_disks"]
+        self.assertEqual([disk["id"] for disk in disks], ["nvme0n1"])
+        self.assertEqual(disks[0]["device"], "/dev/nvme0n1")
+        self.assertEqual(payload["storage"]["summary"]["physical_disk_count"], 1)
+        self.assertEqual(payload["storage"]["summary"]["smart_passed"], 1)
+
     def test_client_build_only_projects_explicit_build_environment(self):
         self.assertIsNone(collect_client_build({}))
         self.assertEqual(

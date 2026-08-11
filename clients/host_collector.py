@@ -45,6 +45,7 @@ MAX_DOCKER_PORTS_LENGTH = 512
 MAX_HERMES_PROFILES = 64
 MAX_PHYSICAL_DISKS = 64
 MAX_FILESYSTEMS = 128
+MAX_FILESYSTEM_BACKING_DISKS = 16
 MAX_BLOCK_GRAPH_DEPTH = 16
 MAX_BLOCK_GRAPH_NODES = 256
 
@@ -968,7 +969,9 @@ def resolve_backing_physical_disks(block_device, graph):
     return sorted(physical)
 
 
-def _stack_type(source, graph):
+def _stack_type(source, graph, fs_type=None):
+    if isinstance(fs_type, str) and fs_type.lower() == "btrfs":
+        return "btrfs"
     nodes = graph.get("nodes", {}) if isinstance(graph, dict) else {}
     aliases = graph.get("aliases", {}) if isinstance(graph, dict) else {}
     name = aliases.get(source) or _block_name(source)
@@ -1050,8 +1053,12 @@ def collect_filesystems(filesystem_probes, block_graph, command_runner=None, sta
             "used_bytes": None,
             "available_bytes": None,
             "usage_percent": None,
-            "backing_disk_ids": resolve_backing_physical_disks(source, block_graph) if source else [],
-            "stack_type": _stack_type(source, block_graph) if source else "unknown",
+            "backing_disk_ids": (
+                resolve_backing_physical_disks(source, block_graph)[:MAX_FILESYSTEM_BACKING_DISKS]
+                if source
+                else []
+            ),
+            "stack_type": _stack_type(source, block_graph, fs_type) if source else "unknown",
             "collection_status": "healthy",
             "error": None,
         }
@@ -1097,7 +1104,11 @@ def _smart_collection_status(smart, error):
 
 def _physical_disk_record(disk_id, smart=None, smart_error=None, graph_node=None):
     graph_node = graph_node or {}
-    device = smart.get("device") if smart else "/dev/" + disk_id
+    # When a controller SMART target (for example /dev/nvme0) was reconciled
+    # to a namespace disk, render the topology device.  The SMART source is
+    # preserved separately, and the physical record remains joinable with
+    # filesystem backing_disk_ids.
+    device = "/dev/" + disk_id if graph_node else (smart.get("device") if smart else "/dev/" + disk_id)
     return {
         "id": _nullable_text(disk_id, MAX_DISK_DEVICE_LENGTH),
         "device": _nullable_text(device, MAX_DISK_DEVICE_LENGTH),
@@ -1168,6 +1179,25 @@ def _select_error(errors):
     )
 
 
+def _topology_disk_id(candidate, block_graph):
+    """Map a SMART controller target to one unambiguous topology disk."""
+    disk_id = _block_name(candidate)
+    nodes = block_graph.get("nodes", {}) if isinstance(block_graph, dict) else {}
+    if disk_id in nodes:
+        return disk_id
+    # smartctl can target /dev/nvme0 while lsblk exposes nvme0n1.  Only map a
+    # controller to a namespace when there is exactly one; multiple namespaces
+    # are ambiguous and must not inherit one another's SMART observation.
+    if disk_id and re.fullmatch(r"nvme\d+", disk_id):
+        namespaces = sorted(
+            name for name, node in nodes.items()
+            if node.get("type") == "disk" and re.fullmatch(re.escape(disk_id) + r"n\d+", name)
+        )
+        if len(namespaces) == 1:
+            return namespaces[0]
+    return disk_id
+
+
 def collect_hardware(
     cpu_model,
     identity_errors=None,
@@ -1201,8 +1231,8 @@ def collect_hardware(
 
     smart_by_id = {}
     for candidate, smart, record_error in smart_records:
-        disk_id = _block_name(candidate)
-        if disk_id:
+        disk_id = _topology_disk_id(candidate, block_graph)
+        if disk_id and disk_id not in smart_by_id:
             smart_by_id[disk_id] = (smart, record_error)
     physical_ids = list(smart_by_id)
     physical_ids.extend(
