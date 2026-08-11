@@ -15,5 +15,26 @@
   },
   "collection": {
     "interval_seconds": 60
+  },
+  "hardware": {
+    "smart_devices": [
+      {
+        "path": "/dev/sda",
+        "type": null,
+        "label": "data-disk-a"
+      },
+      {
+        "path": "/dev/sdb",
+        "type": null,
+        "label": "data-disk-b"
+      }
+    ],
+    "primary_smart_device": "/dev/sda",
+    "filesystem_probes": [
+      {
+        "mountpoint": "/data",
+        "probe_path": "/host-storage/data"
+      }
+    ]
   }
 }

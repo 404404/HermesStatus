@@ -31,6 +31,9 @@
     },
     "easytier": {
       "$ref": "easytier-extension.schema.json"
+    },
+    "client_build": {
+      "$ref": "#/$defs/clientBuild"
     }
   },
   "additionalProperties": false,
@@ -120,6 +123,13 @@
             "null"
           ],
           "maxLength": 128
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
         }
       },
       "additionalProperties": false
@@ -171,6 +181,102 @@
           ],
           "maxLength": 128
         }
+      },
+      "additionalProperties": false
+    },
+    "physicalDisk": {
+      "type": "object",
+      "required": [
+        "id", "device", "model", "capacity_bytes", "temperature_c",
+        "smart_status", "power_on_hours", "written_bytes", "read_bytes",
+        "smart_source", "collection_status"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"},
+        "device": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^/dev/[A-Za-z0-9._/-]+$"},
+        "model": {"type": ["string", "null"], "maxLength": 256},
+        "capacity_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "temperature_c": {"type": ["number", "null"], "minimum": -100, "maximum": 250},
+        "smart_status": {"enum": ["passed", "failed", "unknown"]},
+        "power_on_hours": {"$ref": "#/$defs/nullableCounter"},
+        "written_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "read_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "smart_source": {"type": ["string", "null"], "maxLength": 64},
+        "collection_status": {"enum": ["healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"]},
+        "error": {"$ref": "#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "filesystem": {
+      "type": "object",
+      "required": [
+        "source", "mountpoint", "fs_type", "total_bytes", "used_bytes",
+        "available_bytes", "usage_percent", "backing_disk_ids", "stack_type",
+        "collection_status"
+      ],
+      "properties": {
+        "source": {"type": ["string", "null"], "maxLength": 256},
+        "mountpoint": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^/[A-Za-z0-9._/-]*$"},
+        "fs_type": {"type": ["string", "null"], "maxLength": 64},
+        "total_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "used_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "available_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "usage_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "backing_disk_ids": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"}},
+        "stack_type": {"enum": ["plain", "lvm", "mdraid", "device_mapper", "btrfs", "unknown"]},
+        "collection_status": {"enum": ["healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"]},
+        "error": {"$ref": "#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "storageSummary": {
+      "type": "object",
+      "required": ["physical_disk_count", "smart_passed", "smart_failed", "smart_unknown", "temperature_min_c", "temperature_max_c", "filesystem_count"],
+      "properties": {
+        "physical_disk_count": {"type": "integer", "minimum": 0, "maximum": 64},
+        "smart_passed": {"type": "integer", "minimum": 0, "maximum": 64},
+        "smart_failed": {"type": "integer", "minimum": 0, "maximum": 64},
+        "smart_unknown": {"type": "integer", "minimum": 0, "maximum": 64},
+        "temperature_min_c": {"type": ["number", "null"], "minimum": -100, "maximum": 250},
+        "temperature_max_c": {"type": ["number", "null"], "minimum": -100, "maximum": 250},
+        "filesystem_count": {"type": "integer", "minimum": 0, "maximum": 128}
+      },
+      "additionalProperties": false
+    },
+    "storage": {
+      "type": ["object", "null"],
+      "required": ["physical_disks", "filesystems", "summary", "updated_at", "stale", "error"],
+      "properties": {
+        "physical_disks": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/physicalDisk"}},
+        "filesystems": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/filesystem"}},
+        "summary": {"$ref": "#/$defs/storageSummary"},
+        "updated_at": {"$ref": "#/$defs/nullableDateTime"},
+        "stale": {"type": "boolean"},
+        "error": {"$ref": "#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "systemIdentity": {
+      "type": ["object", "null"],
+      "required": ["distribution", "release_version", "pretty_name", "kernel_release", "architecture", "source"],
+      "properties": {
+        "distribution": {"type": ["string", "null"], "maxLength": 256},
+        "release_version": {"type": ["string", "null"], "maxLength": 256},
+        "pretty_name": {"type": ["string", "null"], "maxLength": 256},
+        "kernel_release": {"type": ["string", "null"], "maxLength": 256},
+        "architecture": {"type": ["string", "null"], "maxLength": 256},
+        "source": {"enum": ["os-release", "dsm-version", "unavailable", "unknown"]}
+      },
+      "additionalProperties": false
+    },
+    "clientBuild": {
+      "type": ["object", "null"],
+      "required": ["version", "revision", "build_time", "protocol"],
+      "properties": {
+        "version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "build_time": {"$ref": "#/$defs/nullableDateTime"},
+        "protocol": {"const": "device_v2"}
       },
       "additionalProperties": false
     },
@@ -234,6 +340,12 @@
             "null"
           ],
           "maxLength": 64
+        },
+        "storage": {
+          "$ref": "#/$defs/storage"
+        },
+        "system_identity": {
+          "$ref": "#/$defs/systemIdentity"
         },
         "updated_at": {
           "$ref": "#/$defs/nullableDateTime"

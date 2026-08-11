@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,6 +23,41 @@ var (
 	commit    = "none"
 	buildTime = "unknown"
 )
+
+// serverBuildInfo exposes only build-time provenance. It never shells out to
+// Git or reads a repository at runtime, so a production image remains fully
+// self-describing after its source tree has been excluded.
+func serverBuildInfo() ServerBuildInfo {
+	result := ServerBuildInfo{
+		Version:    safeBuildValue(version, MaxBuildVersionLength),
+		Revision:   "unknown",
+		Deployment: deploymentEnvironment(),
+	}
+	if gitRevisionPattern.MatchString(commit) {
+		result.Revision = commit
+	}
+	if parsed, err := time.Parse(time.RFC3339, buildTime); err == nil {
+		formatted := parsed.UTC().Format(time.RFC3339)
+		result.BuildTime = &formatted
+	}
+	return result
+}
+
+func safeBuildValue(value string, maximum int) string {
+	if value == "" || utf8.RuneCountInString(value) > maximum || controlCharacterPattern.MatchString(value) || ContainsSecretLikeText(value) {
+		return "unknown"
+	}
+	return value
+}
+
+func deploymentEnvironment() string {
+	switch os.Getenv("HERMESSTATUS_DEPLOYMENT_ENV") {
+	case "production", "preview", "staging", "development":
+		return os.Getenv("HERMESSTATUS_DEPLOYMENT_ENV")
+	default:
+		return "unknown"
+	}
+}
 
 func (a *App) HTTPServer() *http.Server {
 	if !a.opts.Verbose {

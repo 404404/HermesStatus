@@ -48,6 +48,7 @@ func extensionOpenAPISchemas() map[string]any {
 			"value":  map[string]any{"type": "number", "minimum": MinTemperatureCelsius, "maximum": MaxTemperatureCelsius},
 			"unit":   map[string]any{"type": "string", "const": "C"},
 			"source": nullableString(MaxTemperatureSourceLength, "Sanitized sensor label"),
+			"label":  nullableString(MaxTemperatureSourceLength, "Sanitized CPU sensor label"),
 		},
 	)
 	diskTemperature := requiredObject(
@@ -58,6 +59,86 @@ func extensionOpenAPISchemas() map[string]any {
 			"lowest":  nullableNumber("Lowest observed disk temperature in Celsius"),
 			"unit":    map[string]any{"type": "string", "const": "C"},
 			"source":  nullableString(MaxTemperatureSourceLength, "Sanitized SMART source label"),
+		},
+	)
+	physicalDisk := requiredObject(
+		[]string{"id", "device", "model", "capacity_bytes", "temperature_c", "smart_status", "power_on_hours", "written_bytes", "read_bytes", "smart_source", "collection_status"},
+		map[string]any{
+			"id":                map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"},
+			"device":            map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength, "pattern": "^/dev/[A-Za-z0-9._/-]+$"},
+			"model":             nullableString(MaxDiskModelLength, "Sanitized disk model without serial or WWN"),
+			"capacity_bytes":    nullableInteger(MaxSafeInteger, "Physical device capacity"),
+			"temperature_c":     nullableNumber("Physical disk temperature in Celsius"),
+			"smart_status":      map[string]any{"type": "string", "enum": []string{"passed", "failed", "unknown"}},
+			"power_on_hours":    nullableInteger(MaxSafeInteger, "SMART power-on hours"),
+			"written_bytes":     nullableInteger(MaxSafeInteger, "SMART lifetime bytes written"),
+			"read_bytes":        nullableInteger(MaxSafeInteger, "SMART lifetime bytes read"),
+			"smart_source":      nullableString(MaxDiskSmartSourceLength, "Safe SMART collector source label"),
+			"collection_status": map[string]any{"type": "string", "enum": []string{"healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"}},
+			"error":             nullableRef("ExtensionError"),
+		},
+	)
+	filesystem := requiredObject(
+		[]string{"source", "mountpoint", "fs_type", "total_bytes", "used_bytes", "available_bytes", "usage_percent", "backing_disk_ids", "stack_type", "collection_status"},
+		map[string]any{
+			"source":            nullableString(MaxFilesystemSourceLength, "Sanitized backing block-device path when observed"),
+			"mountpoint":        map[string]any{"type": "string", "maxLength": MaxMountpointLength, "pattern": "^/[A-Za-z0-9._/-]*$"},
+			"fs_type":           nullableString(MaxFilesystemTypeLength, "Filesystem type when observed"),
+			"total_bytes":       nullableInteger(MaxSafeInteger, "Filesystem capacity"),
+			"used_bytes":        nullableInteger(MaxSafeInteger, "Filesystem used bytes"),
+			"available_bytes":   nullableInteger(MaxSafeInteger, "Filesystem available bytes"),
+			"usage_percent":     map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100},
+			"backing_disk_ids":  map[string]any{"type": "array", "maxItems": MaxFilesystemBackingDisks, "items": map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength}, "default": []any{}},
+			"stack_type":        map[string]any{"type": "string", "enum": []string{"plain", "lvm", "mdraid", "device_mapper", "btrfs", "unknown"}},
+			"collection_status": map[string]any{"type": "string", "enum": []string{"healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"}},
+			"error":             nullableRef("ExtensionError"),
+		},
+	)
+	storageSummary := requiredObject(
+		[]string{"physical_disk_count", "smart_passed", "smart_failed", "smart_unknown", "temperature_min_c", "temperature_max_c", "filesystem_count"},
+		map[string]any{
+			"physical_disk_count": integerOpenAPISchema(), "smart_passed": integerOpenAPISchema(), "smart_failed": integerOpenAPISchema(), "smart_unknown": integerOpenAPISchema(),
+			"temperature_min_c": nullableNumber("Lowest observed physical disk temperature"), "temperature_max_c": nullableNumber("Highest observed physical disk temperature"), "filesystem_count": integerOpenAPISchema(),
+		},
+	)
+	storageStats := requiredObject(
+		[]string{"physical_disks", "filesystems", "summary", "updated_at", "stale", "error"},
+		map[string]any{
+			"physical_disks": map[string]any{"type": "array", "maxItems": MaxPhysicalDisks, "items": schemaRef("PhysicalDiskStats"), "default": []any{}},
+			"filesystems":    map[string]any{"type": "array", "maxItems": MaxFilesystems, "items": schemaRef("FilesystemStats"), "default": []any{}},
+			"summary":        schemaRef("StorageSummary"),
+			"updated_at":     nullableString(MaxTimestampLength, "Storage collection time in RFC3339"),
+			"stale":          map[string]any{"type": "boolean"},
+			"error":          nullableRef("ExtensionError"),
+		},
+	)
+	systemIdentity := requiredObject(
+		[]string{"distribution", "release_version", "pretty_name", "kernel_release", "architecture", "source"},
+		map[string]any{
+			"distribution":    nullableString(MaxSystemIdentityLength, "Host distribution"),
+			"release_version": nullableString(MaxSystemIdentityLength, "Host release version"),
+			"pretty_name":     nullableString(MaxSystemIdentityLength, "Host operating system display name"),
+			"kernel_release":  nullableString(MaxSystemIdentityLength, "Host kernel release"),
+			"architecture":    nullableString(MaxSystemIdentityLength, "Host architecture"),
+			"source":          map[string]any{"type": "string", "enum": []string{"os-release", "dsm-version", "unknown", "unavailable"}},
+		},
+	)
+	clientBuild := requiredObject(
+		[]string{"version", "revision", "build_time", "protocol"},
+		map[string]any{
+			"version":    map[string]any{"type": "string", "maxLength": MaxBuildVersionLength},
+			"revision":   map[string]any{"type": "string", "maxLength": MaxBuildRevisionLength, "pattern": "^[0-9a-f]{40}$"},
+			"build_time": nullableString(MaxTimestampLength, "Client build time in RFC3339"),
+			"protocol":   map[string]any{"type": "string", "const": "device_v2"},
+		},
+	)
+	serverBuild := requiredObject(
+		[]string{"version", "revision", "build_time", "deployment"},
+		map[string]any{
+			"version":    map[string]any{"type": "string", "maxLength": MaxBuildVersionLength},
+			"revision":   map[string]any{"type": "string", "maxLength": MaxBuildRevisionLength},
+			"build_time": nullableString(MaxTimestampLength, "Server build time in RFC3339"),
+			"deployment": map[string]any{"type": "string", "enum": []string{"production", "preview", "staging", "development", "unknown"}},
 		},
 	)
 	hardware := requiredObject(
@@ -72,6 +153,8 @@ func extensionOpenAPISchemas() map[string]any {
 			"disk_read_bytes":     nullableInteger(MaxSafeInteger, "Lifetime bytes read"),
 			"disk_device":         nullableString(MaxDiskDeviceLength, "Sanitized device label"),
 			"disk_smart_source":   nullableString(MaxDiskSmartSourceLength, "Fixed SMART collector source label"),
+			"storage":             nullableRef("StorageStats"),
+			"system_identity":     nullableRef("SystemIdentity"),
 			"updated_at":          nullableString(MaxTimestampLength, "Client collection time in RFC3339"),
 			"stale":               map[string]any{"type": "boolean", "description": "Recomputed by the Go server using a 900 second threshold"},
 			"error":               nullableRef("ExtensionError"),
@@ -81,6 +164,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"cpu_model": "Example CPU", "cpu_temperature": nil, "disk_temperature": nil,
 		"disk_smart_status": "unknown", "disk_power_on_hours": nil, "disk_written_bytes": nil,
 		"disk_read_bytes": nil, "disk_device": nil, "disk_smart_source": nil,
+		"storage": nil, "system_identity": nil,
 		"updated_at": nil, "stale": true,
 		"error": map[string]any{"code": "not_reported", "message": "Extension data was not reported", "source": "hardware", "retryable": false, "http_status": nil},
 	}
@@ -384,6 +468,7 @@ func extensionOpenAPISchemas() map[string]any {
 		map[string]any{
 			"name": stringOpenAPISchema(), "type": stringOpenAPISchema(), "host": stringOpenAPISchema(), "location": stringOpenAPISchema(),
 			"online4": map[string]any{"type": "boolean"}, "online6": map[string]any{"type": "boolean"},
+			"enabled": map[string]any{"type": "boolean"}, "ingestion_mode": map[string]any{"type": "string", "enum": []string{"legacy", "device_v2", "cutover"}},
 			"uptime": stringOpenAPISchema(), "load_1": numberOpenAPISchema(), "load_5": numberOpenAPISchema(), "load_15": numberOpenAPISchema(),
 			"ping_10010": numberOpenAPISchema(), "ping_189": numberOpenAPISchema(), "ping_10086": numberOpenAPISchema(),
 			"time_10010": integerOpenAPISchema(), "time_189": integerOpenAPISchema(), "time_10086": integerOpenAPISchema(),
@@ -400,6 +485,7 @@ func extensionOpenAPISchemas() map[string]any {
 			"hermes":               schemaRef("HermesStats"),
 			"lucky":                schemaRef("LuckyStats"),
 			"easytier":             schemaRef("EasyTierStats"),
+			"client_build":         nullableRef("ClientBuildInfo"),
 			"easytier_expectation": schemaRef("EasyTierExpectationProjection"),
 		},
 	)
@@ -409,6 +495,7 @@ func extensionOpenAPISchemas() map[string]any {
 			"servers":  map[string]any{"type": "array", "items": schemaRef("StatsServer")},
 			"sslcerts": map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
 			"updated":  map[string]any{"type": "string"},
+			"build":    schemaRef("ServerBuildInfo"),
 			"reload":   map[string]any{"type": "boolean"},
 		},
 	)
@@ -417,6 +504,13 @@ func extensionOpenAPISchemas() map[string]any {
 		"ExtensionError":                extensionError,
 		"TemperatureReading":            temperature,
 		"DiskTemperature":               diskTemperature,
+		"PhysicalDiskStats":             physicalDisk,
+		"FilesystemStats":               filesystem,
+		"StorageSummary":                storageSummary,
+		"StorageStats":                  storageStats,
+		"SystemIdentity":                systemIdentity,
+		"ClientBuildInfo":               clientBuild,
+		"ServerBuildInfo":               serverBuild,
 		"HardwareStats":                 hardware,
 		"DockerContainerStats":          dockerContainer,
 		"DockerStats":                   dockerStats,

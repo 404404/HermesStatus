@@ -15,9 +15,13 @@ services:
       - /tmp:size=32m,mode=1777,nosuid,nodev,noexec
     network_mode: host
     pid: host
-    # Release A keeps the 1.0 SMART access model. This is intentionally broad
-    # and must be narrowed to a device/capability allowlist in a later release.
-    privileged: ${CLIENT_PRIVILEGED:-true}
+    # SMART access is deliberately limited to the operator-confirmed physical
+    # device.  Add further devices only as separate `devices:` entries in an
+    # audited override; never grant the whole /dev tree or privileged mode.
+    cap_add:
+      - SYS_RAWIO
+    devices:
+      - ${SMART_DEVICE_HOST:-/dev/sda}:${SMART_DEVICE_CONTAINER:-/dev/sda}:r
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'python3 /app/client-' >/dev/null"]
       interval: 30s
@@ -41,7 +45,7 @@ services:
       CLIENT: "${CLIENT:-psutil}"
       HOST_OS_RELEASE_FILE: "${HOST_OS_RELEASE_FILE:-/host/etc/os-release}"
       HWMON_ROOT: "${HWMON_ROOT:-/sys/class/hwmon}"
-      SMART_DEVICE: "${SMART_DEVICE:-auto}"
+      SMART_DEVICE: "${SMART_DEVICE:-${SMART_DEVICE_CONTAINER:-/dev/sda}}"
       DOCKER_SOCKET: "${DOCKER_SOCKET:-/var/run/docker.sock}"
       HARDWARE_INTERVAL: "${HARDWARE_INTERVAL:-600}"
       DOCKER_INTERVAL: "${DOCKER_INTERVAL:-60}"
@@ -80,7 +84,6 @@ services:
       # A read-only bind does not make the Docker API read-only. The collector
       # is constrained in code to GET /containers/json?all=1 only.
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /dev:/dev:ro
       - ${HERMES_EXPORT_CONFIG_HOST:-./hermes-exporter.json}:${HERMES_EXPORT_CONFIG:-/app/hermes-exporter.json}:ro
       - ${HERMES_ROOT_HOST:-/home/hermes}:${HERMES_ROOT:-/home/hermes}:ro
       - ${CLIENT_STATUS_DIR_HOST:-./client-status}:${CLIENT_STATUS_DIR:-/var/lib/serverstatus-client}

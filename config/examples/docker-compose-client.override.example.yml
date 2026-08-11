@@ -1,15 +1,19 @@
 services:
   serverstatus-client:
-    # Device v2 keeps SMART access to the single confirmed disk only.  This
-    # replaces the legacy privileged/full-/dev defaults in the base Compose.
+    # Base Compose already grants only /dev/sda read-only. This audited override
+    # replaces that list for the individually confirmed physical disks below.
     privileged: false
     cap_add:
       - SYS_RAWIO
-    devices:
-      - ${SMART_DEVICE_HOST:-/dev/sda}:${SMART_DEVICE_CONTAINER:-/dev/sda}:r
+    devices: !override
+      - ${SMART_DEVICE_A_HOST:-/dev/sda}:${SMART_DEVICE_A_CONTAINER:-/dev/sda}:r
+      - ${SMART_DEVICE_B_HOST:-/dev/sdb}:${SMART_DEVICE_B_CONTAINER:-/dev/sdb}:r
     environment: !override
       HERMESSTATUS_CONFIG_FILE: /etc/hermesstatus/client-v2.json
-      SMART_DEVICE: ${SMART_DEVICE_CONTAINER:-/dev/sda}
+      # Client JSON is authoritative for the explicit multi-disk allowlist.
+      # Keep the legacy single-disk environment variable empty so it cannot
+      # override `hardware.smart_devices` from the mounted JSON document.
+      SMART_DEVICE: ""
     volumes: !override
       - /etc/localtime:/etc/localtime:ro
       - /etc/os-release:/host/etc/os-release:ro
@@ -19,6 +23,9 @@ services:
       - ${HERMES_EXPORT_CONFIG_HOST:-./hermes-exporter.json}:${HERMES_EXPORT_CONFIG:-/app/hermes-exporter.json}:ro
       - ${HERMES_ROOT_HOST:-/home/hermes}:${HERMES_ROOT:-/home/hermes}:ro
       - ${CLIENT_STATUS_DIR_HOST:-./client-status}:${CLIENT_STATUS_DIR:-/var/lib/serverstatus-client}
+      # Every filesystem probe requires its own explicit read-only mount. Do
+      # not mount the host root or use a privileged mount-namespace escape.
+      - ${FILESYSTEM_DATA_HOST:-/srv/example-data}:/host-storage/data:ro
       - ${LUCKY_TOKEN_FILE_HOST:-/dev/null}:${LUCKY_TOKEN_FILE:-/run/secrets/lucky-open-token}:ro
       - ./client-v2.example.json:/etc/hermesstatus/client-v2.json:ro
       - ./compute-01.token:/run/secrets/hermesstatus-device-token:ro

@@ -15,16 +15,21 @@ from host_collector import (
     _docker_request,
     add_extension_payload,
     atomic_write_json,
+    build_block_device_graph,
+    collect_client_build,
     collect_cpu_model,
     collect_docker,
+    collect_filesystems,
     collect_hardware,
     collect_host_os,
     collect_hwmon_temperatures,
     collect_smart,
+    collect_smart_devices,
     not_reported_docker,
     not_reported_hardware,
     not_reported_hermes,
     read_hermes_snapshot,
+    resolve_backing_physical_disks,
     smart_candidates,
 )
 from lucky_collector import not_configured_lucky
@@ -43,6 +48,17 @@ def fixture_text(name):
 
 def fixture_json(name):
     return json.loads(fixture_text(name))
+
+
+def set_smart_temperature(payload, value):
+    for page in payload.get("ata_device_statistics", {}).get("pages", []):
+        if page.get("number") != 5:
+            continue
+        for item in page.get("table", []):
+            if item.get("offset") == 8:
+                item["value"] = value
+                return
+    raise AssertionError("fixture has no current temperature")
 
 
 class SmartRunner(object):
@@ -70,6 +86,32 @@ class SmartRunner(object):
         if "-j" in command:
             return self.json_returncode, self.json_output or ""
         return self.text_returncode, self.text_output or ""
+
+
+class MultiSmartRunner(object):
+    def __init__(self, payloads, unavailable=()):
+        self.payloads = dict(payloads)
+        self.unavailable = set(unavailable)
+        self.commands = []
+
+    def __call__(self, command, timeout):
+        self.commands.append(list(command))
+        if command[:2] == ["smartctl", "--scan"]:
+            return 0, ""
+        if command[:1] == ["lsblk"]:
+            return 0, json.dumps(
+                {
+                    "blockdevices": [
+                        {"name": "sda", "kname": "sda", "type": "disk", "size": 1000},
+                        {"name": "sdb", "kname": "sdb", "type": "disk", "size": 2000},
+                    ]
+                }
+            )
+        candidate = command[-1]
+        if candidate in self.unavailable:
+            raise OSError("synthetic unavailable")
+        payload = self.payloads[candidate]
+        return 0, payload if "-j" in command else "SMART overall-health self-assessment test result: PASSED\n"
 
 
 class HostCollectorTests(unittest.TestCase):
@@ -213,6 +255,145 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(payload["updated_at"], "2026-07-15T00:00:00Z")
         self.assertFalse(payload["stale"])
         self.assertIsNone(payload["error"])
+
+    def test_multiple_smart_devices_are_independent_and_do_not_pick_legacy_first(self):
+        first = fixture_json("smart-normal.json")
+        second = fixture_json("smart-normal.json")
+        set_smart_temperature(second, 44)
+        runner = MultiSmartRunner({
+            "/dev/sda": json.dumps(first),
+            "/dev/sdb": json.dumps(second),
+        })
+        records, error = collect_smart_devices(
+            [{"path": "/dev/sda", "type": "sat"}, {"path": "/dev/sdb"}], runner
+        )
+        self.assertEqual(len(records), 2)
+        self.assertIsNone(error)
+        self.assertEqual([record[1]["device"] for record in records], ["/dev/sda", "/dev/sdb"])
+
+        payload = collect_hardware(
+            "Example CPU", smart_devices=[{"path": "/dev/sda"}, {"path": "/dev/sdb"}],
+            command_runner=runner, sys_block_root="/no-sys-block", now=FIXED_NOW,
+        )
+        self.assertEqual(payload["disk_smart_status"], "passed")
+        self.assertIsNone(payload["disk_device"])
+        self.assertIsNone(payload["disk_temperature"])
+        self.assertEqual(payload["storage"]["summary"]["physical_disk_count"], 2)
+        self.assertEqual(payload["storage"]["summary"]["smart_passed"], 2)
+
+    def test_explicit_primary_smart_device_restores_legacy_projection(self):
+        first = fixture_json("smart-normal.json")
+        second = fixture_json("smart-normal.json")
+        set_smart_temperature(second, 44)
+        runner = MultiSmartRunner({
+            "/dev/sda": json.dumps(first),
+            "/dev/sdb": json.dumps(second),
+        })
+        payload = collect_hardware(
+            "Example CPU", smart_devices=[{"path": "/dev/sda"}, {"path": "/dev/sdb"}],
+            primary_smart_device="/dev/sdb", command_runner=runner,
+            sys_block_root="/no-sys-block", now=FIXED_NOW,
+        )
+        self.assertEqual(payload["disk_device"], "/dev/sdb")
+        self.assertEqual(payload["disk_temperature"]["current"], 44.0)
+
+    def test_block_graph_resolves_synthetic_lvm_without_name_heuristics(self):
+        graph = build_block_device_graph(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sda", "kname": "sda", "type": "disk", "size": 1000,
+                        "children": [{
+                            "name": "sda3", "kname": "sda3", "pkname": "sda", "type": "part",
+                            "children": [{
+                                "name": "dm-0", "kname": "dm-0", "pkname": "sda3", "type": "lvm",
+                            }],
+                        }],
+                    }
+                ]
+            },
+            sys_block_root="/no-sys-block",
+        )
+        self.assertEqual(resolve_backing_physical_disks("/dev/dm-0", graph), ["sda"])
+
+    def test_explicit_filesystem_probe_reports_usage_and_lvm_backing_disk(self):
+        graph = build_block_device_graph(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sda", "kname": "sda", "type": "disk", "size": 1000,
+                        "children": [{
+                            "name": "sda3", "kname": "sda3", "pkname": "sda", "type": "part",
+                            "children": [{
+                                "name": "dm-0", "kname": "dm-0", "pkname": "sda3", "type": "lvm",
+                            }],
+                        }],
+                    }
+                ]
+            },
+            sys_block_root="/no-sys-block",
+        )
+
+        def runner(command, timeout):
+            self.assertEqual(command[:3], ["findmnt", "--json", "--target"])
+            return 0, json.dumps({
+                "filesystems": [{"source": "/dev/dm-0", "fstype": "ext4"}]
+            })
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+
+        filesystems, error = collect_filesystems(
+            [{"mountpoint": "/", "probe_path": "/host-storage/root"}],
+            graph,
+            command_runner=runner,
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(filesystems[0]["backing_disk_ids"], ["sda"])
+        self.assertEqual(filesystems[0]["stack_type"], "lvm")
+        self.assertEqual(filesystems[0]["used_bytes"], 750 * 1024)
+        self.assertEqual(filesystems[0]["usage_percent"], 75.0)
+
+    def test_client_build_only_projects_explicit_build_environment(self):
+        self.assertIsNone(collect_client_build({}))
+        self.assertEqual(
+            collect_client_build({
+                "HERMESSTATUS_CLIENT_VERSION": "2.3-preview",
+                "HERMESSTATUS_CLIENT_REVISION": "abcdef0123abcdef0123abcdef0123abcdef0123",
+                "HERMESSTATUS_CLIENT_BUILD_TIME": "2026-08-11T00:00:00Z",
+                "HERMESSTATUS_CLIENT_PROTOCOL": "device_v2",
+            }),
+            {
+                "version": "2.3-preview",
+                "revision": "abcdef0123abcdef0123abcdef0123abcdef0123",
+                "build_time": "2026-08-11T00:00:00Z",
+                "protocol": "device_v2",
+            },
+        )
+        self.assertIsNone(
+            collect_client_build({
+                "HERMESSTATUS_CLIENT_VERSION": "2.3-preview",
+                "HERMESSTATUS_CLIENT_REVISION": "unknown",
+                "HERMESSTATUS_CLIENT_PROTOCOL": "device_v2",
+            })
+        )
+
+    def test_extension_payload_exposes_client_build_at_the_root(self):
+        build = {"version": "2.3-preview", "revision": "abcdef012345", "protocol": "device_v2", "build_time": None}
+        collector = HostExtensionCollector(
+            host_os_release_file=str(FIXTURES / "os-release"),
+            client_build=build,
+            status_dir="",
+            command_runner=lambda command, timeout: (0, ""),
+            docker_request=lambda path: [],
+        )
+        payload = collector.extension_payload()
+        self.assertEqual(payload["client_build"], build)
+        self.assertNotIn("client_build", payload["hardware"])
 
     def test_docker_normal_list_uses_release_c_allowlist(self):
         rows = fixture_json("docker-containers.json")

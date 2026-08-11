@@ -320,6 +320,14 @@ func extensionHasBusinessError(extension ExtensionStats) bool {
 	var extensionErrors []*ExtensionError
 	if extension.Hardware != nil {
 		extensionErrors = append(extensionErrors, extension.Hardware.Error)
+		if storage := extension.Hardware.Storage; storage != nil {
+			extensionErrors = append(extensionErrors, storage.Error)
+			for _, disk := range storage.PhysicalDisks {
+				if disk.SMARTStatus == DiskSMARTFailed || disk.CollectionStatus != "healthy" {
+					return true
+				}
+			}
+		}
 	}
 	if extension.Docker != nil {
 		extensionErrors = append(extensionErrors, extension.Docker.Error)
@@ -394,6 +402,13 @@ func forceExtensionStale(extension *ExtensionSnapshot) {
 		value := *extension.Hardware
 		extension.Hardware = &value
 		extension.Hardware.Stale = true
+		if value.Storage != nil {
+			storage := *value.Storage
+			storage.PhysicalDisks = append([]PhysicalDiskStats(nil), value.Storage.PhysicalDisks...)
+			storage.Filesystems = append([]FilesystemStats(nil), value.Storage.Filesystems...)
+			storage.Stale = true
+			value.Storage = &storage
+		}
 	}
 	if extension.Docker != nil {
 		value := *extension.Docker

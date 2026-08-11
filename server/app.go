@@ -367,6 +367,7 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 		base["hermes"] = extension.Hermes
 		base["lucky"] = extension.Lucky
 		base["easytier"] = extension.EasyTier
+		base["client_build"] = extension.ClientBuild
 		if a.registry != nil {
 			device, _ := a.registryDevice(deviceID)
 			status := a.deviceStatusAt(node, now)
@@ -378,6 +379,8 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 			}
 			base["device_id"] = node.DeviceID
 			base["display_name"] = node.DisplayName
+			base["enabled"] = node.Enabled
+			base["ingestion_mode"] = node.Ownership.Mode
 			base["status"] = status
 			base["identity_status"] = identityStatus
 			base["protocol_mode"] = protocolMode
@@ -424,6 +427,7 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 		"servers":  servers,
 		"sslcerts": a.sslSnapshot(runtime.SSLCerts, now),
 		"updated":  strconv.FormatInt(now.Unix(), 10),
+		"build":    serverBuildInfo(),
 	}
 	if a.registry != nil {
 		result["schema_version"] = 2

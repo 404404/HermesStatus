@@ -50,6 +50,16 @@ class DeviceClientConfigTests(unittest.TestCase):
         legacy = load_client_selection([], environ={"SERVER": "127.0.0.1"})
         self.assertIs(legacy.mode, ClientMode.LEGACY)
 
+        legacy_with_build_metadata = load_client_selection(
+            [],
+            environ={
+                "SERVER": "127.0.0.1",
+                "HERMESSTATUS_CLIENT_VERSION": "2.3-preview",
+                "HERMESSTATUS_CLIENT_REVISION": "abcdef012345",
+            },
+        )
+        self.assertIs(legacy_with_build_metadata.mode, ClientMode.LEGACY)
+
         v2 = load_client_selection([], environ=self.complete_env)
         self.assertIs(v2.mode, ClientMode.DEVICE_V2)
         self.assertEqual(v2.device_v2.device_id, "device-alpha")
@@ -95,6 +105,73 @@ class DeviceClientConfigTests(unittest.TestCase):
         self.assertEqual(config.read_timeout_seconds, 25)
         self.assertEqual(config.connect_timeout_seconds, 7)
         self.assertEqual(config.collection_interval_seconds, 120)
+
+    def test_hardware_json_config_is_normalized_and_cli_overrides_env_and_file(self):
+        config_path = self.root / "hardware-client.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "server": {
+                        "url": "https://file.example.invalid",
+                        "verify_tls": True,
+                        "connect_timeout_seconds": 7,
+                        "read_timeout_seconds": 20,
+                    },
+                    "device": {
+                        "id": "device-alpha", "name": "File",
+                        "fqdn": None, "token_file": str(self.token_path),
+                    },
+                    "collection": {"interval_seconds": 120},
+                    "hardware": {
+                        "smart_devices": [{"path": "/dev/sda", "type": "sat"}],
+                        "primary_smart_device": "/dev/sda",
+                        "filesystem_probes": [{
+                            "mountpoint": "/volume1", "probe_path": "/host-storage/volume1",
+                        }],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        selection = load_client_selection(
+            [
+                'HERMESSTATUS_SMART_DEVICES=[{"path":"/dev/nvme0n1","type":"nvme"}]',
+                "HERMESSTATUS_PRIMARY_SMART_DEVICE=/dev/nvme0n1",
+            ],
+            environ={
+                "HERMESSTATUS_CONFIG_FILE": str(config_path),
+                "SMART_DEVICES": '[{"path":"/dev/sdb"}]',
+                "PRIMARY_SMART_DEVICE": "/dev/sdb",
+            },
+        )
+        config = selection.device_v2
+        self.assertEqual(config.smart_devices[0].path, "/dev/nvme0n1")
+        self.assertEqual(config.smart_devices[0].type, "nvme")
+        self.assertEqual(config.primary_smart_device, "/dev/nvme0n1")
+        self.assertEqual(config.filesystem_probes[0].mountpoint, "/volume1")
+
+    def test_hardware_config_rejects_unsafe_device_and_probe_paths(self):
+        for hardware in (
+            {"smart_devices": [{"path": "/dev/../sda"}]},
+            {"filesystem_probes": [{"mountpoint": "/", "probe_path": "relative"}]},
+        ):
+            document = {
+                "version": 1,
+                "server": {
+                    "url": "https://file.example.invalid", "verify_tls": True,
+                    "connect_timeout_seconds": 7, "read_timeout_seconds": 20,
+                },
+                "device": {
+                    "id": "device-alpha", "name": None, "fqdn": None,
+                    "token_file": str(self.token_path),
+                },
+                "collection": {"interval_seconds": 120}, "hardware": hardware,
+            }
+            path = self.root / ("invalid-%s.json" % len(hardware))
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.subTest(hardware=hardware), self.assertRaises(ClientContractError):
+                load_client_selection([], environ={"HERMESSTATUS_CONFIG_FILE": str(path)})
 
     def test_partial_unknown_malformed_and_mixed_v2_fail_closed(self):
         invalid_environments = [
