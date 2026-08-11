@@ -82,7 +82,9 @@ a:hover{color:var(--accent-glow)}
 .device-selector{display:flex;flex-direction:column;gap:.7rem;min-width:0;padding:.8rem 1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-alt);box-shadow:var(--shadow)}
 .device-selector-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-width:0}
 .device-selector-heading strong{font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.device-selector-tools{display:flex;align-items:center;justify-content:flex-end;gap:.65rem;min-width:0}
 .device-selection-notice{min-width:0;color:var(--warn);font-size:12px;text-align:right;overflow-wrap:anywhere}
+.device-diagnostics-button{height:28px;font-size:12px}
 .device-buttons{display:flex;gap:.55rem;max-width:100%;padding:1px 1px .25rem;overflow-x:auto;overscroll-behavior-inline:contain}
 .device-button{display:flex;align-items:center;gap:.55rem;min-width:140px;max-width:260px;height:38px;padding:0 .75rem;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text-dim);cursor:pointer;transition:var(--transition)}
 .device-button:hover{border-color:var(--accent);color:var(--text)}
@@ -145,7 +147,12 @@ body.light .health-card{background:#fff}
 .health-value{max-width:100%;font-size:23px;font-weight:750;line-height:1.18;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;word-break:break-word}
 .power-on-value{display:flex;align-items:baseline;gap:.45rem;white-space:nowrap}
 .power-on-days,.health-inline-meta{color:var(--text-dim);font-size:12px;font-weight:700;letter-spacing:.08em}
+.single-line-value{overflow:hidden;white-space:nowrap}
+.single-line-value .power-on-days{flex:0 0 auto}
 .lucky-home-value{display:flex;align-items:baseline;gap:.45rem;white-space:nowrap}
+.hardware-system-info{padding:0 1.35rem 1.1rem}
+.hardware-filesystems-table{min-width:960px!important}
+.hardware-disks-table{min-width:820px!important}
 .lucky-table{min-width:900px!important}
 .lucky-config-table{min-width:1260px!important}
 .lucky-config-table thead tr:first-child th{border-bottom:1px solid var(--border)}
@@ -201,6 +208,8 @@ table.data tbody tr:hover{background:rgba(255,255,255,.05)}
 
 .modal-backdrop{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:5vh 1rem;background:rgba(0,0,0,.55);backdrop-filter:blur(4px)}
 .modal-box{position:relative;width:min(var(--content-max),100%);max-height:calc(100dvh - 2rem);max-height:min(88vh,calc(100dvh - 2rem));overflow:auto;padding:1.25rem 1.35rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-alt);box-shadow:0 8px 30px -6px rgba(0,0,0,.6);animation:fade .25s ease}
+.diagnostic-modal-box{width:min(720px,100%)}
+.diagnostic-details{padding:.15rem 0}
 .modal-close{position:absolute;top:10px;right:12px;padding:4px 8px;border:0;border-radius:8px;background:transparent;color:var(--text-dim);font-size:20px;line-height:1;cursor:pointer;transition:var(--transition)}
 .modal-close:hover,.modal-close:focus-visible{background:var(--bg);color:var(--text);outline:0}
 .modal-heading{display:flex;align-items:center;gap:.65rem;min-width:0;padding-right:2.2rem;margin-bottom:.9rem}
@@ -233,8 +242,11 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
 .detail-row dd{min-width:0;margin:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .detail-row dd.wrap-value{white-space:normal;overflow-wrap:anywhere;word-break:break-word}
 
-.footer{display:flex;justify-content:center;margin:1.5rem 0 2rem;color:var(--text-dim);font-size:12px}
+.footer{display:flex;align-items:center;justify-content:center;gap:.45rem;margin:1.5rem 0 2rem;color:var(--text-dim);font-size:12px}
 .footer a{color:var(--text-dim)}
+.footer-button{padding:0;border:0;background:transparent;color:var(--text-dim);font:inherit;cursor:pointer}
+.footer-button:hover{color:var(--accent)}
+.footer-button:focus-visible{outline:2px solid var(--accent-glow);outline-offset:2px}
 
 @keyframes fade{
     from{opacity:0;transform:translateY(4px)}
@@ -257,6 +269,7 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
     .actions{order:2;width:100%;justify-content:flex-end}
     .wrapper{padding:1rem}
     .device-selector-heading{align-items:flex-start;flex-direction:column;gap:.35rem}
+    .device-selector-tools{width:100%;justify-content:space-between}
     .device-selection-notice{text-align:left}
     .device-buttons{display:none}
     .device-select-label{display:block}

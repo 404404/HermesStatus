@@ -20,6 +20,7 @@
         </div>
         <nav class="nav" aria-label="主导航" role="tablist">
             <button id="homeTab" type="button" class="active" role="tab" aria-selected="true" aria-controls="homePage" aria-current="page" data-page-target="home">主页</button>
+            <button id="hardwareTab" type="button" role="tab" aria-selected="false" aria-controls="hardwarePage" tabindex="-1" data-page-target="hardware">硬件信息</button>
             <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
             <button id="luckyTab" type="button" role="tab" aria-selected="false" aria-controls="luckyPage" tabindex="-1" data-page-target="lucky">Lucky</button>
             <button id="easytierTab" type="button" role="tab" aria-selected="false" aria-controls="easytierPage" tabindex="-1" data-page-target="easytier">EasyTier</button>
@@ -37,7 +38,10 @@
         <section id="deviceSelector" class="device-selector" aria-labelledby="deviceSelectorLabel" hidden>
             <div class="device-selector-heading">
                 <strong id="deviceSelectorLabel">设备</strong>
-                <span id="deviceSelectionNotice" class="device-selection-notice" role="status" aria-live="polite" hidden></span>
+                <div class="device-selector-tools">
+                    <span id="deviceSelectionNotice" class="device-selection-notice" role="status" aria-live="polite" hidden></span>
+                    <button id="deviceDiagnosticsButton" type="button" class="tool-button device-diagnostics-button" aria-haspopup="dialog">设备信息</button>
+                </div>
             </div>
             <div id="deviceButtons" class="device-buttons" role="group" aria-labelledby="deviceSelectorLabel"></div>
             <label class="device-select-label" for="deviceSelect">
@@ -80,6 +84,33 @@
                             </tr>
                             </thead>
                             <tbody id="profilesBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <div id="hardwarePage" class="page-panel" role="tabpanel" aria-labelledby="hardwareTab" data-page="hardware" hidden>
+                <section class="data-section" aria-labelledby="hardwareSystemTitle">
+                    <div class="section-head"><h2 id="hardwareSystemTitle">系统信息</h2></div>
+                    <dl id="hardwareSystemInfo" class="detail-list hardware-system-info"></dl>
+                </section>
+
+                <section class="data-section" aria-labelledby="hardwareFilesystemsTitle">
+                    <div class="section-head"><h2 id="hardwareFilesystemsTitle">文件系统 / 存储卷</h2></div>
+                    <div class="table-wrap">
+                        <table class="data hardware-filesystems-table">
+                            <thead><tr><th>存储源</th><th>挂载点</th><th>文件系统</th><th>已用 / 总容量</th><th>使用率</th><th>后端磁盘</th></tr></thead>
+                            <tbody id="hardwareFilesystemsBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="data-section" aria-labelledby="hardwareDisksTitle">
+                    <div class="section-head"><h2 id="hardwareDisksTitle">物理磁盘</h2></div>
+                    <div class="table-wrap">
+                        <table class="data hardware-disks-table">
+                            <thead><tr><th>设备</th><th>型号</th><th>容量</th><th>温度</th><th>SMART</th><th>通电时间</th></tr></thead>
+                            <tbody id="hardwareDisksBody"></tbody>
                         </table>
                     </div>
                 </section>
@@ -179,8 +210,26 @@
         </section>
     </div>
 
+    <div id="deviceDiagnosticsModal" class="modal-backdrop" hidden>
+        <section class="modal-box diagnostic-modal-box" role="dialog" aria-modal="true" aria-labelledby="deviceDiagnosticsTitle" aria-describedby="deviceDiagnosticsContent">
+            <button id="deviceDiagnosticsClose" type="button" class="modal-close" title="关闭" aria-label="关闭">×</button>
+            <div class="modal-heading"><h2 id="deviceDiagnosticsTitle">设备信息</h2></div>
+            <dl id="deviceDiagnosticsContent" class="detail-list diagnostic-details"></dl>
+        </section>
+    </div>
+
+    <div id="aboutModal" class="modal-backdrop" hidden>
+        <section class="modal-box diagnostic-modal-box" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" aria-describedby="aboutContent">
+            <button id="aboutClose" type="button" class="modal-close" title="关闭" aria-label="关闭">×</button>
+            <div class="modal-heading"><h2 id="aboutTitle">关于 / 构建信息</h2></div>
+            <dl id="aboutContent" class="detail-list diagnostic-details"></dl>
+        </section>
+    </div>
+
     <footer class="footer">
         <a href="https://github.com/404404/HermesStatus" target="_blank" rel="noopener">HermesStatus</a>
+        <span aria-hidden="true">·</span>
+        <button id="aboutButton" type="button" class="footer-button" aria-haspopup="dialog">关于 / 构建信息</button>
     </footer>
 
     <script src="js/app.js?v=20260810-3" defer></script>

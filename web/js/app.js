@@ -16,6 +16,8 @@ const dashboardState = {
   deviceSelectionNotice: '',
   selectedProfileIndex: null,
   modalTrigger: null,
+  deviceDiagnosticsTrigger: null,
+  aboutTrigger: null,
   activePage: 'home',
   pagehideHandler: null,
   hashchangeHandler: null,
@@ -113,6 +115,12 @@ function formatTemperature(value){
   return `${Number.isInteger(number) ? number : number.toFixed(1)} °C`;
 }
 
+function formatCelsius(value){
+  const number = finiteNumber(value);
+  if(number === null) return '-';
+  return `${Number.isInteger(number) ? number : number.toFixed(1)}℃`;
+}
+
 function formatUptime(value){
   if(typeof value === 'string' && value.trim()) return value.trim();
   const seconds = finiteNumber(value);
@@ -166,7 +174,157 @@ function modelBreakdown(profile){
 }
 
 function normalizePageName(value){
-	return ['docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
+	return ['hardware', 'docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
+}
+
+function valueAt(objectValue, keys){
+  const object = safeObject(objectValue);
+  for(const key of keys){
+    const value = finiteNumber(object[key]);
+    if(value !== null) return value;
+  }
+  return null;
+}
+
+function deviceShortName(value){
+  const text = textOrDash(value);
+  if(text === '-') return text;
+  const segments = text.split('/').filter(Boolean);
+  return segments.length ? segments[segments.length - 1] : text;
+}
+
+function diskName(disk){
+  return textOrDash(disk?.id || deviceShortName(disk?.device));
+}
+
+function diskTemperatureC(disk){
+  return valueAt(disk, ['temperature_c', 'temperature', 'current_temperature_c']) ??
+    valueAt(disk?.temperature, ['current', 'value', 'temperature_c']);
+}
+
+function diskPowerOnHours(disk){
+  return valueAt(disk, ['power_on_hours', 'power_on_time_hours']);
+}
+
+function diskWrittenBytes(disk){
+  return valueAt(disk, ['written_bytes', 'bytes_written']);
+}
+
+function diskReadBytes(disk){
+  return valueAt(disk, ['read_bytes', 'bytes_read']);
+}
+
+function storageState(hardware){
+  const storage = safeObject(hardware?.storage);
+  const physicalDisks = Array.isArray(storage.physical_disks)
+    ? storage.physical_disks.filter(item => item && typeof item === 'object')
+    : [];
+  const filesystems = Array.isArray(storage.filesystems)
+    ? storage.filesystems.filter(item => item && typeof item === 'object')
+    : [];
+  return {storage, physicalDisks, filesystems};
+}
+
+function legacyPhysicalDisk(hardware){
+  const temperature = safeObject(hardware?.disk_temperature);
+  const hasLegacyValue = [
+    hardware?.disk_device,
+    hardware?.disk_smart_status,
+    hardware?.disk_power_on_hours,
+    hardware?.disk_written_bytes,
+    hardware?.disk_read_bytes,
+    temperature.current,
+    temperature.value
+  ].some(value => value !== null && value !== undefined && value !== 'unknown');
+  if(!hasLegacyValue) return null;
+  const device = textOrDash(hardware?.disk_device);
+  return {
+    id: deviceShortName(device),
+    device: device === '-' ? null : device,
+    model: null,
+    capacity_bytes: null,
+    temperature_c: valueAt(temperature, ['current', 'value', 'highest']),
+    smart_status: hardware?.disk_smart_status,
+    power_on_hours: hardware?.disk_power_on_hours,
+    written_bytes: hardware?.disk_written_bytes,
+    read_bytes: hardware?.disk_read_bytes,
+    smart_source: hardware?.disk_smart_source
+  };
+}
+
+function physicalDisksForView(hardware){
+  const state = storageState(hardware);
+  if(state.physicalDisks.length) return state.physicalDisks;
+  const legacy = legacyPhysicalDisk(hardware);
+  return legacy ? [legacy] : [];
+}
+
+function filesystemItemsForView(hardware){
+  return storageState(hardware).filesystems;
+}
+
+function temperatureSensorEntries(hardware){
+  const cpuTemperature = safeObject(hardware?.cpu_temperature);
+  const groups = [
+    hardware?.cpu_temperatures,
+    hardware?.cpu_temperature_sensors,
+    cpuTemperature.sensors,
+    safeObject(hardware?.sensors).cpu
+  ];
+  const entries = groups.flatMap(group => Array.isArray(group) ? group : [])
+    .filter(item => item && typeof item === 'object')
+    .map(item => ({
+      value: valueAt(item, ['value', 'temperature_c', 'temperature', 'current']),
+      label: textOrDash(item.label || item.name || item.sensor || item.id)
+    }))
+    .filter(item => item.value !== null);
+  if(entries.length) return entries;
+  const value = valueAt(cpuTemperature, ['value', 'temperature_c', 'current', 'highest']);
+  if(value === null) return [];
+  return [{value, label: textOrDash(cpuTemperature.label || cpuTemperature.sensor || cpuTemperature.name)}];
+}
+
+function maximumTemperature(entries){
+  const valid = entries.filter(entry => finiteNumber(entry?.value) !== null);
+  if(!valid.length) return null;
+  return valid.reduce((highest, entry) => entry.value > highest.value ? entry : highest);
+}
+
+function maxDiskBy(disks, metric){
+  const candidates = disks
+    .map(disk => ({disk, value: metric(disk)}))
+    .filter(item => item.value !== null);
+  if(!candidates.length) return null;
+  return candidates.reduce((highest, entry) => entry.value > highest.value ? entry : highest).disk;
+}
+
+function diskIoCandidate(disks){
+  return maxDiskBy(disks, diskWrittenBytes) || maxDiskBy(disks, diskReadBytes);
+}
+
+function parenthesizedMeta(value){
+  const text = textOrDash(value);
+  return text === '-' ? '' : `<span class="power-on-days">(${escapeHtml(text)})</span>`;
+}
+
+function smartHomeMarkup(disks, hardware){
+  if(disks.length === 1) return escapeHtml(statusText(disks[0].smart_status ?? hardware?.disk_smart_status));
+  if(disks.length > 1){
+    const passed = disks.filter(disk => String(disk.smart_status ?? '').toLowerCase() === 'passed');
+    const failed = disks
+      .filter(disk => String(disk.smart_status ?? '').toLowerCase() === 'failed')
+      .map(diskName)
+      .filter(name => name !== '-');
+    const unknown = disks.filter(disk => {
+      const status = String(disk.smart_status ?? '').toLowerCase();
+      return status !== 'passed' && status !== 'failed';
+    }).length;
+    const details = failed.length
+      ? `${failed.join('、')}故障`
+      : unknown ? `${unknown} 块未知` : '';
+    return `${escapeHtml(`${passed.length} / ${disks.length} 通过`)}${parenthesizedMeta(details)}`;
+  }
+  return escapeHtml(statusText(hardware?.disk_smart_status ?? 'unknown'));
 }
 
 function validDeviceId(value){
@@ -470,9 +628,24 @@ function fitSingleLineValue(selector, preferredSize = 23, minimumSize = 10){
   }
 }
 
+function fitSingleLineValues(selector, preferredSize = 23, minimumSize = 10){
+  for(const element of document.querySelectorAll(selector)){
+    if(element.clientWidth <= 0) continue;
+    element.style.fontSize = `${preferredSize}px`;
+    if(element.scrollWidth <= element.clientWidth) continue;
+    let size = fittedFontSize(preferredSize, minimumSize, element.clientWidth, element.scrollWidth);
+    element.style.fontSize = `${size}px`;
+    while(size > minimumSize && element.scrollWidth > element.clientWidth){
+      size = Math.max(minimumSize, size - 0.5);
+      element.style.fontSize = `${size}px`;
+    }
+  }
+}
+
 function fitOverviewSingleLineValues(){
   fitSingleLineValue('[data-fit-single-line="cpu-model"]', 23, 11);
   fitSingleLineValue('[data-fit-single-line="easytier-traffic"]', 23, 10);
+  fitSingleLineValues('[data-fit-single-line="hardware-home"]', 23, 10);
 }
 
 function renderOverview(view){
@@ -513,22 +686,85 @@ function renderOverview(view){
 function renderHardware(view){
   const hardware = view.hardware;
   const docker = view.docker;
-  const smartStatus = hardware.disk_smart_status ?? 'unknown';
-  const powerOnHours = finiteNumber(hardware.disk_power_on_hours);
+  const physicalDisks = physicalDisksForView(hardware);
+  const ioDisk = diskIoCandidate(physicalDisks);
+  const powerOnDisk = maxDiskBy(physicalDisks, diskPowerOnHours);
+  const hottestDisk = maxDiskBy(physicalDisks, diskTemperatureC);
+  const hottestCpuSensor = maximumTemperature(temperatureSensorEntries(hardware));
+  const readWrite = ioDisk
+    ? `${formatBytes(diskWrittenBytes(ioDisk))} / ${formatBytes(diskReadBytes(ioDisk))}`
+    : '-';
+  const powerOnHours = powerOnDisk ? diskPowerOnHours(powerOnDisk) : null;
   const powerOnDays = approximateDays(powerOnHours);
-  const readWrite = finiteNumber(hardware.disk_written_bytes) === null && finiteNumber(hardware.disk_read_bytes) === null
-    ? '-'
-    : `${formatBytes(hardware.disk_written_bytes)} / ${formatBytes(hardware.disk_read_bytes)}`;
   const uptime = uptimeHoursMetric(view.host.uptime_seconds);
   byId('hardwareHealth').innerHTML = `
-    <article class="health-card"><h2>硬盘 SMART 状态</h2><div class="health-value">${badge(smartStatus)}</div></article>
-    <article class="health-card"><h2>硬盘写入/读取量</h2><div class="health-value">${escapeHtml(readWrite)}</div></article>
-    <article class="health-card"><h2>硬盘通电时间</h2><div class="health-value power-on-value">${powerOnHours === null ? '-' : `${formatInteger(powerOnHours)} h <span class="power-on-days">(约${formatInteger(powerOnDays)}天)</span>`}</div></article>
-    <article class="health-card"><h2>系统已运行时间</h2><div class="health-value power-on-value">${uptime === null ? '-' : `${formatInteger(uptime.hours)} h <span class="power-on-days">(约${uptime.days}天)</span>`}</div></article>
-    <article class="health-card"><h2>操作系统</h2><div class="health-value health-text" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div></article>
+    <article class="health-card"><h2>硬盘 SMART 状态</h2><div class="health-value single-line-value" data-fit-single-line="hardware-home">${smartHomeMarkup(physicalDisks, hardware)}</div></article>
+    <article class="health-card"><h2>硬盘写入/读取量</h2><div class="health-value power-on-value single-line-value" data-fit-single-line="hardware-home" title="${escapeHtml(ioDisk ? `${readWrite} (${diskName(ioDisk)})` : readWrite)}">${escapeHtml(readWrite)}${parenthesizedMeta(ioDisk ? diskName(ioDisk) : null)}</div></article>
+    <article class="health-card"><h2>硬盘通电时间</h2><div class="health-value power-on-value single-line-value" data-fit-single-line="hardware-home" title="${escapeHtml(powerOnDisk ? `${formatInteger(powerOnHours)} h (约${formatInteger(powerOnDays)}天，${diskName(powerOnDisk)})` : '-')}">${powerOnHours === null ? '-' : `${formatInteger(powerOnHours)} h <span class="power-on-days">(约${formatInteger(powerOnDays)}天，${escapeHtml(diskName(powerOnDisk))})</span>`}</div></article>
+    <article class="health-card"><h2>CPU温度</h2><div class="health-value power-on-value single-line-value" data-fit-single-line="hardware-home">${hottestCpuSensor === null ? '-' : `${escapeHtml(formatCelsius(hottestCpuSensor.value))}${parenthesizedMeta(hottestCpuSensor.label)}`}</div></article>
+    <article class="health-card"><h2>硬盘温度</h2><div class="health-value power-on-value single-line-value" data-fit-single-line="hardware-home">${hottestDisk === null ? '-' : `${escapeHtml(formatCelsius(diskTemperatureC(hottestDisk)))}${parenthesizedMeta(diskName(hottestDisk))}`}</div></article>
     <article class="health-card"><h2>运行中/容器总数</h2><div class="health-value">${escapeHtml(formatPair(docker.running, docker.total))}</div></article>
     <article class="health-card"><h2>Lucky运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.lucky.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.lucky.version?.current))})</span></div></article>
-    <article class="health-card"><h2>EasyTier运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.easytier.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.easytier.node?.version))})</span></div></article>`;
+    <article class="health-card"><h2>EasyTier运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.easytier.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.easytier.node?.version))})</span></div></article>
+    <article class="health-card"><h2>系统已运行时间</h2><div class="health-value power-on-value">${uptime === null ? '-' : `${formatInteger(uptime.hours)} h <span class="power-on-days">(约${uptime.days}天)</span>`}</div></article>
+    <article class="health-card"><h2>操作系统版本</h2><div class="health-value health-text" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div></article>`;
+  requestAnimationFrame(fitOverviewSingleLineValues);
+}
+
+function filesystemBackingDisks(filesystem){
+  const ids = Array.isArray(filesystem?.backing_disk_ids)
+    ? filesystem.backing_disk_ids.map(value => deviceShortName(value)).filter(value => value !== '-')
+    : [];
+  if(!ids.length) return {text: '-', title: '-'};
+  return {
+    text: ids.length === 1 ? ids[0] : `${ids.length} 块磁盘`,
+    title: ids.join(' / ')
+  };
+}
+
+function filesystemUsage(filesystem){
+  const used = valueAt(filesystem, ['used_bytes']);
+  const total = valueAt(filesystem, ['total_bytes', 'capacity_bytes']);
+  if(used === null && total === null) return '-';
+  return `${formatBytes(used)} / ${formatBytes(total)}`;
+}
+
+function renderHardwareDetails(view){
+  const hardware = view.hardware;
+  const identity = safeObject(hardware.system_identity);
+  const system = Object.keys(identity).length ? identity : safeObject(hardware.system);
+  const memoryText = view.resources.memoryText === '-'
+    ? '-'
+    : `${view.resources.memoryText} (${formatPercentage(view.resources.memoryPercent)})`;
+  const distribution = textOrDash(system.distribution || system.name || hardware.distribution);
+  const release = textOrDash(system.release_version || system.version || hardware.release_version);
+  const prettyName = textOrDash(system.pretty_name || view.host.os);
+  byId('hardwareSystemInfo').innerHTML = [
+    ['CPU 型号', view.resources.cpuModel],
+    ['内存', memoryText],
+    ['发行版', distribution],
+    ['发行版本', release],
+    ['内核', textOrDash(system.kernel_release || hardware.kernel_release)],
+    ['架构', textOrDash(system.architecture || hardware.architecture)],
+    ['操作系统版本', prettyName]
+  ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+
+  const filesystems = filesystemItemsForView(hardware);
+  byId('hardwareFilesystemsBody').innerHTML = filesystems.length
+    ? filesystems.map(filesystem => {
+      const backing = filesystemBackingDisks(filesystem);
+      return `<tr><td class="wide-cell mono" title="${escapeHtml(textOrDash(filesystem.source))}">${escapeHtml(textOrDash(filesystem.source))}</td><td>${escapeHtml(textOrDash(filesystem.mountpoint))}</td><td>${escapeHtml(textOrDash(filesystem.fs_type || filesystem.filesystem_type))}</td><td>${escapeHtml(filesystemUsage(filesystem))}</td><td>${escapeHtml(formatPercentage(valueAt(filesystem, ['usage_percent', 'used_percent'])))}</td><td title="${escapeHtml(backing.title)}">${escapeHtml(backing.text)}</td></tr>`;
+    }).join('')
+    : '<tr><td colspan="6" class="table-empty">暂无可显示的文件系统数据</td></tr>';
+
+  const physicalDisks = physicalDisksForView(hardware);
+  byId('hardwareDisksBody').innerHTML = physicalDisks.length
+    ? physicalDisks.map(disk => {
+      const device = textOrDash(disk.device || disk.id);
+      const model = textOrDash(disk.model);
+      return `<tr><td class="mono">${escapeHtml(device)}</td><td class="wide-cell" title="${escapeHtml(model)}">${escapeHtml(model)}</td><td>${escapeHtml(formatBytes(valueAt(disk, ['capacity_bytes', 'size_bytes'])))}</td><td>${escapeHtml(formatCelsius(diskTemperatureC(disk)))}</td><td>${badge(disk.smart_status ?? 'unknown')}</td><td>${escapeHtml(diskPowerOnHours(disk) === null ? '-' : `${formatInteger(diskPowerOnHours(disk))} h`)}</td></tr>`;
+    }).join('')
+    : '<tr><td colspan="6" class="table-empty">暂无可显示的物理磁盘数据</td></tr>';
 }
 
 function renderLuckyTables(view){
@@ -700,7 +936,8 @@ function renderDeviceSelector(view){
   const buttons = byId('deviceButtons');
   const select = byId('deviceSelect');
   const notice = byId('deviceSelectionNotice');
-  if(!selector || !buttons || !select || !notice) return;
+  const diagnosticsButton = byId('deviceDiagnosticsButton');
+  if(!selector || !buttons || !select || !notice || !diagnosticsButton) return;
   buttons.replaceChildren();
   select.replaceChildren();
   const devices = view.devices || [];
@@ -733,6 +970,7 @@ function renderDeviceSelector(view){
   select.disabled = devices.length < 2;
   notice.textContent = dashboardState.deviceSelectionNotice;
   notice.hidden = !dashboardState.deviceSelectionNotice;
+  diagnosticsButton.disabled = !view.host;
 }
 
 function renderDashboard(view){
@@ -742,15 +980,20 @@ function renderDashboard(view){
   byId('dashboard').hidden = !hasHost;
   if(!hasHost){
     closeProfileModal();
+		closeDeviceDiagnostics();
+		closeAbout();
     setPageState(dashboardCondition(view));
     return;
   }
   renderOverview(view);
 	renderHardware(view);
+  renderHardwareDetails(view);
   renderProfiles(view);
 	renderContainers(view);
 	renderLucky(view);
 	renderEasyTier(view);
+  if(!byId('deviceDiagnosticsModal').hidden) renderDeviceDiagnostics(view);
+  if(!byId('aboutModal').hidden) renderBuildProvenance(view);
   applyPageVisibility();
   setPageState(dashboardCondition(view));
   if(dashboardState.selectedProfileIndex !== null){
@@ -785,7 +1028,7 @@ function selectDevice(deviceId, options = {}){
 function applyPageVisibility(){
   const activePage = normalizePageName(dashboardState.activePage);
   dashboardState.activePage = activePage;
-	for(const page of ['home', 'docker', 'lucky', 'easytier']){
+	for(const page of ['home', 'hardware', 'docker', 'lucky', 'easytier']){
     const active = page === activePage;
     const tab = byId(`${page}Tab`);
     const panel = byId(`${page}Page`);
@@ -814,6 +1057,70 @@ function setActivePage(page, options = {}){
 
 function detailRow(label, value, extraClass = ''){
   return `<div class="detail-row"><dt>${escapeHtml(label)}</dt><dd class="${extraClass}">${value}</dd></div>`;
+}
+
+function shortRevision(value){
+  const revision = textOrDash(value);
+  return revision === '-' ? revision : [...revision].slice(0, 12).join('');
+}
+
+function revisionMarkup(value){
+  const revision = textOrDash(value);
+  return revision === '-'
+    ? '-'
+    : `<span class="mono" title="${escapeHtml(revision)}">${escapeHtml(shortRevision(revision))}</span>`;
+}
+
+function deviceDiagnosticsMarkup(view){
+  const host = safeObject(view?.host);
+  const expectation = safeObject(view?.easytierExpectation);
+  const proxyCidrs = Array.isArray(expectation.proxy_cidrs)
+    ? expectation.proxy_cidrs.map(textOrDash).join(' / ')
+    : '-';
+  const expectationConfigured = Object.keys(expectation).length > 0;
+  const lastSeen = host.last_seen_at || host.last_seen || host.received_at;
+  const lastAccepted = host.last_accepted_at || host.accepted_at || host.collected_at || host.last_collected_at || view?.hardware?.updated_at;
+  return [
+    ['Device ID', textOrDash(host.device_id)],
+    ['显示名称', deviceDisplayName(host)],
+    ['状态', statusText(normalizedDeviceStatus(host))],
+    ['身份状态', statusText(host.identity_status)],
+    ['协议模式', textOrDash(host.protocol_mode)],
+    ['已启用', host.enabled === false || host.disabled === true ? '否' : '是'],
+    ['接入模式', textOrDash(host.ingestion_mode)],
+    ['最后上线', formatDateTime(lastSeen)],
+    ['最后接受 / 采集', formatDateTime(lastAccepted)],
+    ['EasyTier 预期已配置', expectationConfigured ? '是' : '否'],
+    ['预期网络', textOrDash(expectation.network_name)],
+    ['预期 Overlay IP', textOrDash(expectation.overlay_ipv4)],
+    ['预期 Proxy CIDRs', proxyCidrs || '-']
+  ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+}
+
+function buildProvenanceMarkup(view){
+  const build = safeObject(view?.document?.build);
+  const server = Object.keys(safeObject(build.server)).length ? safeObject(build.server) : build;
+  const client = safeObject(view?.hardware?.client_build || view?.host?.client_build);
+  const environment = textOrDash(build.deployment || build.environment || build.deployment_env || server.environment);
+  const protocol = textOrDash(client.protocol || view?.host?.protocol_mode || server.protocol);
+  const schema = textOrDash(build.stats_schema || build.schema_version || view?.document?.schema_version);
+  return [
+    ['环境', escapeHtml(environment)],
+    ['服务端版本', escapeHtml(textOrDash(server.version || server.server_version))],
+    ['服务端 Revision', revisionMarkup(server.revision || server.server_revision)],
+    ['客户端版本', escapeHtml(textOrDash(client.version || client.client_version))],
+    ['客户端 Revision', revisionMarkup(client.revision || client.client_revision)],
+    ['协议', escapeHtml(protocol)],
+    ['Stats Schema', escapeHtml(schema)]
+  ].map(([label, value]) => detailRow(label, value, 'wrap-value')).join('');
+}
+
+function renderDeviceDiagnostics(view){
+  byId('deviceDiagnosticsContent').innerHTML = deviceDiagnosticsMarkup(view);
+}
+
+function renderBuildProvenance(view){
+  byId('aboutContent').innerHTML = buildProvenanceMarkup(view);
 }
 
 function booleanText(value){
@@ -952,6 +1259,8 @@ function renderProfileModal(profile){
 function openProfileModal(index, trigger){
   const profile = dashboardState.view?.profiles?.[index];
   if(!profile) return;
+	closeDeviceDiagnostics();
+	closeAbout();
   dashboardState.selectedProfileIndex = index;
   dashboardState.modalTrigger = trigger || document.activeElement;
   renderProfileModal(profile);
@@ -968,6 +1277,45 @@ function closeProfileModal(){
   dashboardState.selectedProfileIndex = null;
   dashboardState.modalTrigger?.focus?.();
   dashboardState.modalTrigger = null;
+}
+
+function openDeviceDiagnostics(trigger){
+  if(!dashboardState.view?.host) return;
+  closeProfileModal();
+  closeAbout();
+  dashboardState.deviceDiagnosticsTrigger = trigger || document.activeElement;
+  renderDeviceDiagnostics(dashboardState.view);
+  byId('deviceDiagnosticsModal').hidden = false;
+  document.body.classList.add('modal-open');
+  byId('deviceDiagnosticsClose').focus();
+}
+
+function closeDeviceDiagnostics(){
+  const modal = typeof document === 'undefined' ? null : byId('deviceDiagnosticsModal');
+  if(!modal || modal.hidden) return;
+  modal.hidden = true;
+  document.body.classList.remove('modal-open');
+  dashboardState.deviceDiagnosticsTrigger?.focus?.();
+  dashboardState.deviceDiagnosticsTrigger = null;
+}
+
+function openAbout(trigger){
+  closeProfileModal();
+  closeDeviceDiagnostics();
+  dashboardState.aboutTrigger = trigger || document.activeElement;
+  renderBuildProvenance(dashboardState.view || {document: {}, host: {}, hardware: {}});
+  byId('aboutModal').hidden = false;
+  document.body.classList.add('modal-open');
+  byId('aboutClose').focus();
+}
+
+function closeAbout(){
+  const modal = typeof document === 'undefined' ? null : byId('aboutModal');
+  if(!modal || modal.hidden) return;
+  modal.hidden = true;
+  document.body.classList.remove('modal-open');
+  dashboardState.aboutTrigger?.focus?.();
+  dashboardState.aboutTrigger = null;
 }
 
 function statsUrl(){
@@ -1064,12 +1412,14 @@ function applyRefreshError(error){
 
 function bindInteractions(){
   byId('refreshButton').addEventListener('click', () => dashboardState.controller?.refresh('manual'));
+  byId('deviceDiagnosticsButton').addEventListener('click', event => openDeviceDiagnostics(event.currentTarget));
+  byId('aboutButton').addEventListener('click', event => openAbout(event.currentTarget));
   for(const tab of document.querySelectorAll('[data-page-target]')){
     tab.addEventListener('click', () => setActivePage(tab.dataset.pageTarget));
     tab.addEventListener('keydown', event => {
       if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-			const pages = ['home', 'docker', 'lucky', 'easytier'];
+			const pages = ['home', 'hardware', 'docker', 'lucky', 'easytier'];
 			const current = pages.indexOf(dashboardState.activePage);
 			const nextPage = event.key === 'Home' ? pages[0] : event.key === 'End' ? pages[pages.length - 1] : event.key === 'ArrowLeft' ? pages[(current - 1 + pages.length) % pages.length] : pages[(current + 1) % pages.length];
       setActivePage(nextPage);
@@ -1098,8 +1448,20 @@ function bindInteractions(){
   byId('profileModal').addEventListener('click', event => {
     if(event.target === byId('profileModal')) closeProfileModal();
   });
+  byId('deviceDiagnosticsClose').addEventListener('click', closeDeviceDiagnostics);
+  byId('deviceDiagnosticsModal').addEventListener('click', event => {
+    if(event.target === byId('deviceDiagnosticsModal')) closeDeviceDiagnostics();
+  });
+  byId('aboutClose').addEventListener('click', closeAbout);
+  byId('aboutModal').addEventListener('click', event => {
+    if(event.target === byId('aboutModal')) closeAbout();
+  });
   document.addEventListener('keydown', event => {
-    if(event.key === 'Escape') closeProfileModal();
+    if(event.key === 'Escape'){
+      if(!byId('deviceDiagnosticsModal').hidden) closeDeviceDiagnostics();
+      else if(!byId('aboutModal').hidden) closeAbout();
+      else closeProfileModal();
+    }
   });
 }
 
@@ -1169,19 +1531,27 @@ const exported = {
   MAX_UI_DEVICES,
   approximateDays,
   buildViewModel,
+	buildProvenanceMarkup,
   canonicalDashboardHash,
   cleanCpuModel,
   collectWarnings,
   createRefreshController,
   dashboardCondition,
   deviceDisplayName,
+	deviceDiagnosticsMarkup,
+	deviceShortName,
 	luckyIsConfigured,
 	easytierIsConfigured,
   fittedFontSize,
   formatBytes,
+	formatCelsius,
   formatTrafficBytes,
   formatUptimeHours,
+	filesystemBackingDisks,
+	filesystemItemsForView,
 	ipv6UdpDirectText,
+  maximumTemperature,
+  physicalDisksForView,
   formatPair,
   profileSummary,
   modelBreakdown,
@@ -1198,8 +1568,10 @@ const exported = {
   selectSingleHost,
   statsUrl,
   statusTone,
+	smartHomeMarkup,
   tokenSourceText,
   tokenBreakdown,
+	temperatureSensorEntries,
   usageBand,
   validDeviceId,
   writeStoredDeviceId
