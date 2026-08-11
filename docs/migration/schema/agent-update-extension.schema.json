@@ -216,7 +216,7 @@
       ],
       "properties": {
         "source": {"type": ["string", "null"], "maxLength": 256},
-        "mountpoint": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^/[A-Za-z0-9._/-]*$"},
+        "mountpoint": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^/.*$", "description": "Absolute display path; control characters and parent traversal are rejected by the strict server contract"},
         "fs_type": {"type": ["string", "null"], "maxLength": 64},
         "total_bytes": {"$ref": "#/$defs/nullableCounter"},
         "used_bytes": {"$ref": "#/$defs/nullableCounter"},

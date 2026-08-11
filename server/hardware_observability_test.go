@@ -108,6 +108,20 @@ func TestHardwareObservabilityRejectsUnsafeOrInconsistentStorage(t *testing.T) {
 
 	storage = validStorageFixture()
 	stats.Hardware.Storage = &storage
+	storage.Filesystems[0].Mountpoint = "/mnt/My Drive/数据"
+	if err := ValidateExtensionStats(stats); err != nil {
+		t.Fatalf("valid non-ASCII filesystem mountpoint was rejected: %v", err)
+	}
+
+	storage = validStorageFixture()
+	stats.Hardware.Storage = &storage
+	storage.Filesystems[0].Mountpoint = "/mnt/../invalid"
+	if err := ValidateExtensionStats(stats); err == nil {
+		t.Fatal("filesystem mountpoint with parent traversal was accepted")
+	}
+
+	storage = validStorageFixture()
+	stats.Hardware.Storage = &storage
 	for len(storage.PhysicalDisks) <= MaxPhysicalDisks {
 		disk := storage.PhysicalDisks[0]
 		disk.ID = "sda" + strings.Repeat("x", len(storage.PhysicalDisks))

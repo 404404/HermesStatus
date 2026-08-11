@@ -252,8 +252,15 @@ def resolve_client_config(
         ),
     }.items():
         for name in names:
-            if env.get(name) not in (None, ""):
-                env_values[field] = env[name]
+            value = env.get(name)
+            if value not in (None, ""):
+                # The container image's SMART_DEVICE=auto is a legacy
+                # automatic-discovery sentinel, not an explicit Device v2
+                # allowlist.  It must not override a JSON allowlist (including
+                # an intentional empty list) from the config file.
+                if name == "SMART_DEVICE" and isinstance(value, str) and value.strip().lower() == "auto":
+                    continue
+                env_values[field] = value
                 break
 
     merged: dict[str, Any] = {
@@ -363,6 +370,10 @@ def _smart_device_path(value: Any, field: str, *, optional: bool = False) -> str
 
 def _smart_devices_value(value: Any) -> tuple[SmartDeviceConfig, ...] | None:
     if value is None:
+        return None
+    if isinstance(value, str) and value.strip().lower() == "auto":
+        # Preserve the legacy automatic-discovery alias when it reaches this
+        # parser through a compatible environment spelling or CLI override.
         return None
     if isinstance(value, str) and value.strip().startswith("/dev/"):
         return (SmartDeviceConfig(path=_smart_device_path(value, "smart_devices")),)

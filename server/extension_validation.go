@@ -27,7 +27,6 @@ var (
 	errorSourcePattern      = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 	physicalDiskIDPattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 	devicePathPattern       = regexp.MustCompile(`^/dev/[A-Za-z0-9._/-]+$`)
-	mountpointPattern       = regexp.MustCompile(`^/[A-Za-z0-9._/-]*$`)
 	filesystemTextPattern   = regexp.MustCompile(`^[A-Za-z0-9._+-]+$`)
 	gitRevisionPattern      = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	controlCharacterPattern = regexp.MustCompile(`[\x00-\x1F\x7F]`)
@@ -381,7 +380,7 @@ func validatePhysicalDiskStats(index int, disk *PhysicalDiskStats) error {
 	if err := validateRequiredString(prefix+".device", disk.Device, MaxDiskDeviceLength); err != nil {
 		return err
 	}
-	if !devicePathPattern.MatchString(disk.Device) || strings.Contains(disk.Device, "..") {
+	if !validSafeDevicePath(disk.Device) {
 		return validationError(validationCodeInvalidValue, prefix+".device", "must be a safe /dev path")
 	}
 	if err := validateOptionalString(prefix+".model", disk.Model, MaxDiskModelLength); err != nil {
@@ -427,13 +426,13 @@ func validateFilesystemStats(index int, filesystem *FilesystemStats, diskIDs map
 	if err := validateOptionalString(prefix+".source", filesystem.Source, MaxFilesystemSourceLength); err != nil {
 		return err
 	}
-	if filesystem.Source != nil && (!devicePathPattern.MatchString(*filesystem.Source) || strings.Contains(*filesystem.Source, "..")) {
+	if filesystem.Source != nil && !validSafeDevicePath(*filesystem.Source) {
 		return validationError(validationCodeInvalidValue, prefix+".source", "must be a safe /dev path")
 	}
 	if err := validateRequiredString(prefix+".mountpoint", filesystem.Mountpoint, MaxMountpointLength); err != nil {
 		return err
 	}
-	if !mountpointPattern.MatchString(filesystem.Mountpoint) || strings.Contains(filesystem.Mountpoint, "..") {
+	if !validSafeMountpoint(filesystem.Mountpoint) {
 		return validationError(validationCodeInvalidValue, prefix+".mountpoint", "must be a safe absolute path")
 	}
 	if err := validateOptionalString(prefix+".fs_type", filesystem.FSType, MaxFilesystemTypeLength); err != nil {
@@ -495,6 +494,37 @@ func validateFilesystemStats(index int, filesystem *FilesystemStats, diskIDs map
 		return err
 	}
 	return nil
+}
+
+func validSafeDevicePath(value string) bool {
+	if !devicePathPattern.MatchString(value) {
+		return false
+	}
+	parts := strings.Split(value, "/")
+	if len(parts) < 3 || parts[0] != "" || parts[1] != "dev" {
+		return false
+	}
+	for _, part := range parts[2:] {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+func validSafeMountpoint(value string) bool {
+	if !strings.HasPrefix(value, "/") {
+		return false
+	}
+	// validateRequiredString has already checked UTF-8, maximum length, and
+	// control characters.  Do not impose an ASCII-only restriction here: Linux
+	// mountpoints may safely contain spaces and non-ASCII characters.
+	for _, part := range strings.Split(value, "/")[1:] {
+		if part == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 func validateStorageSummary(summary StorageSummary, physicalDiskCount, filesystemCount int, smartCounts map[DiskSMARTStatus]int, temperatureMin, temperatureMax *float64) error {

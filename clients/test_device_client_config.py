@@ -18,7 +18,7 @@ from device_client_config import (  # noqa: E402
     load_custom_ca,
     load_device_token,
 )
-from multi_device_contracts import ClientContractError  # noqa: E402
+from multi_device_contracts import ClientContractError, resolve_client_config  # noqa: E402
 
 
 TOKEN = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -172,6 +172,18 @@ class DeviceClientConfigTests(unittest.TestCase):
             path.write_text(json.dumps(document), encoding="utf-8")
             with self.subTest(hardware=hardware), self.assertRaises(ClientContractError):
                 load_client_selection([], environ={"HERMESSTATUS_CONFIG_FILE": str(path)})
+
+    def test_device_v2_treats_legacy_auto_as_a_discovery_sentinel(self):
+        automatic = resolve_client_config(
+            env={**self.complete_env, "SMART_DEVICE": "auto"},
+        )
+        self.assertIsNone(automatic.smart_devices)
+
+        explicit_empty = resolve_client_config(
+            env={**self.complete_env, "SMART_DEVICE": "auto"},
+            file_values={"smart_devices": []},
+        )
+        self.assertEqual(explicit_empty.smart_devices, ())
 
     def test_partial_unknown_malformed_and_mixed_v2_fail_closed(self):
         invalid_environments = [

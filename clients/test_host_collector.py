@@ -281,6 +281,23 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(payload["storage"]["summary"]["physical_disk_count"], 2)
         self.assertEqual(payload["storage"]["summary"]["smart_passed"], 2)
 
+    def test_explicit_empty_smart_allowlist_keeps_topology_without_an_error(self):
+        runner = MultiSmartRunner({})
+        records, error = collect_smart_devices([], runner)
+        self.assertEqual(records, [])
+        self.assertIsNone(error)
+
+        payload = collect_hardware(
+            "Example CPU", smart_devices=[], command_runner=runner,
+            sys_block_root="/no-sys-block", now=FIXED_NOW,
+        )
+        self.assertIsNone(payload["storage"]["error"])
+        self.assertEqual(payload["storage"]["summary"]["physical_disk_count"], 2)
+        self.assertTrue(all(
+            disk["collection_status"] == "unsupported"
+            for disk in payload["storage"]["physical_disks"]
+        ))
+
     def test_explicit_primary_smart_device_restores_legacy_projection(self):
         first = fixture_json("smart-normal.json")
         second = fixture_json("smart-normal.json")
@@ -394,6 +411,45 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(filesystems[0]["backing_disk_ids"], ["sda"])
         self.assertEqual(filesystems[0]["stack_type"], "plain")
 
+    def test_filesystem_probe_retains_safe_nested_device_mapper_source(self):
+        graph = build_block_device_graph(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sda", "kname": "sda", "type": "disk", "size": 1000,
+                        "children": [{
+                            "name": "vg-root", "kname": "dm-0",
+                            "path": "/dev/mapper/vg-root", "pkname": "sda", "type": "lvm",
+                        }],
+                    }
+                ]
+            },
+            sys_block_root="/no-sys-block",
+        )
+
+        def runner(command, timeout):
+            self.assertEqual(command[:3], ["findmnt", "--json", "--target"])
+            return 0, json.dumps({
+                "filesystems": [{"source": "/dev/mapper/vg-root", "fstype": "ext4"}]
+            })
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+
+        filesystems, error = collect_filesystems(
+            [{"mountpoint": "/mnt/My Drive/数据", "probe_path": "/host-storage/data"}],
+            graph,
+            command_runner=runner,
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(filesystems[0]["source"], "/dev/mapper/vg-root")
+        self.assertEqual(filesystems[0]["backing_disk_ids"], ["sda"])
+        self.assertEqual(filesystems[0]["stack_type"], "lvm")
+
     def test_client_build_only_projects_explicit_build_environment(self):
         self.assertIsNone(collect_client_build({}))
         self.assertEqual(
@@ -430,6 +486,16 @@ class HostCollectorTests(unittest.TestCase):
         payload = collector.extension_payload()
         self.assertEqual(payload["client_build"], build)
         self.assertNotIn("client_build", payload["hardware"])
+
+    def test_extension_payload_omits_unavailable_client_build(self):
+        collector = HostExtensionCollector(
+            host_os_release_file=str(FIXTURES / "os-release"),
+            client_build=None,
+            status_dir="",
+            command_runner=lambda command, timeout: (0, ""),
+            docker_request=lambda path: [],
+        )
+        self.assertNotIn("client_build", collector.extension_payload())
 
     def test_docker_normal_list_uses_release_c_allowlist(self):
         rows = fixture_json("docker-containers.json")
@@ -608,6 +674,7 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(update["hardware"], not_reported_hardware())
         self.assertEqual(update["docker"], not_reported_docker())
         self.assertEqual(update["lucky"], not_configured_lucky())
+        self.assertNotIn("client_build", update)
 
     def test_collector_starts_with_stable_empty_hermes(self):
         collector = HostExtensionCollector(

@@ -82,7 +82,7 @@ func extensionOpenAPISchemas() map[string]any {
 		[]string{"source", "mountpoint", "fs_type", "total_bytes", "used_bytes", "available_bytes", "usage_percent", "backing_disk_ids", "stack_type", "collection_status"},
 		map[string]any{
 			"source":            nullableString(MaxFilesystemSourceLength, "Sanitized backing block-device path when observed"),
-			"mountpoint":        map[string]any{"type": "string", "maxLength": MaxMountpointLength, "pattern": "^/[A-Za-z0-9._/-]*$"},
+			"mountpoint":        map[string]any{"type": "string", "maxLength": MaxMountpointLength, "pattern": "^/.*$", "description": "Absolute display path; control characters and parent traversal are rejected"},
 			"fs_type":           nullableString(MaxFilesystemTypeLength, "Filesystem type when observed"),
 			"total_bytes":       nullableInteger(MaxSafeInteger, "Filesystem capacity"),
 			"used_bytes":        nullableInteger(MaxSafeInteger, "Filesystem used bytes"),

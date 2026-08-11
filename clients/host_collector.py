@@ -27,7 +27,11 @@ MAX_TEMPERATURE_SOURCE_LENGTH = 128
 MAX_DISK_DEVICE_LENGTH = 128
 MAX_DISK_SMART_SOURCE_LENGTH = 64
 MAX_DISK_MODEL_LENGTH = 256
-MAX_FILESYSTEM_SOURCE_LENGTH = 512
+# This value is a wire contract shared with the Go Server.  Keeping the client
+# cap at the server's limit ensures a legitimate local probe cannot make the
+# complete hardware domain fail strict validation merely because its source is
+# longer than the projection accepts.
+MAX_FILESYSTEM_SOURCE_LENGTH = 256
 MAX_MOUNTPOINT_LENGTH = 512
 MAX_FILESYSTEM_TYPE_LENGTH = 64
 MAX_SYSTEM_IDENTITY_TEXT_LENGTH = 256
@@ -53,6 +57,9 @@ DOCKER_TIMEOUT_SECONDS = 4
 MAX_DOCKER_RESPONSE_BYTES = 4 * 1024 * 1024
 
 _SAFE_BLOCK_DEVICE_RE = re.compile(r"^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$")
+_SAFE_FILESYSTEM_SOURCE_RE = re.compile(
+    r"^/dev/[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)*$"
+)
 _SAFE_SMART_TYPE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9,._+-]{0,63}$")
 _PSEUDO_FILESYSTEMS = {
     "aufs", "cgroup", "cgroup2", "configfs", "debugfs", "devpts", "devtmpfs",
@@ -829,7 +836,11 @@ def collect_smart_devices(devices="auto", command_runner=None):
         records.append((candidate, smart, error))
         if error:
             errors.append(error)
-    if not candidates:
+    # An explicit empty Device v2 allowlist is a valid operator choice: it
+    # requests topology-only disk inventory without attempting SMART.  It is
+    # distinct from automatic discovery finding no usable target.
+    explicitly_disabled = isinstance(devices, (list, tuple)) and not devices
+    if not candidates and not explicitly_disabled:
         errors.append(_error("smartctl_unavailable", "SMART data is unavailable", "smartctl", True))
     return records, _select_error(errors)
 
@@ -999,11 +1010,20 @@ def _normalized_filesystem_source(value):
     source = _nullable_text(value, MAX_FILESYSTEM_SOURCE_LENGTH)
     if not source:
         return None
-    match = re.fullmatch(r"(/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126})(?:\[[^\]\x00-\x1f]{0,384}\])?", source)
+    match = re.fullmatch(
+        r"(/dev/[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)*)(?:\[[^\]\x00-\x1f]{0,384}\])?",
+        source,
+    )
     if not match:
         return None
     device = match.group(1)
-    return device if _SAFE_BLOCK_DEVICE_RE.fullmatch(device) else None
+    # This deliberately permits safe mapper paths such as
+    # /dev/mapper/vg-root, while refusing traversal and non-device sources.
+    return (
+        device
+        if _SAFE_FILESYSTEM_SOURCE_RE.fullmatch(device) and ".." not in device
+        else None
+    )
 
 
 def collect_filesystems(filesystem_probes, block_graph, command_runner=None, statvfs_func=None):
@@ -1616,15 +1636,20 @@ class HostExtensionCollector(object):
             hermes = copy.deepcopy(self._hermes)
             lucky = copy.deepcopy(self._lucky)
             easytier = copy.deepcopy(self._easytier)
-        return {
+        payload = {
             "extension_version": EXTENSION_VERSION,
             "hardware": hardware,
-            "client_build": copy.deepcopy(self.client_build),
             "docker": docker_stats,
             "hermes": hermes,
             "lucky": lucky,
             "easytier": easytier,
         }
+        # Build provenance is optional.  Older/legacy clients must omit this
+        # domain instead of sending JSON null, which strict Device v2 decoding
+        # correctly treats as an invalid object.
+        if self.client_build is not None:
+            payload["client_build"] = copy.deepcopy(self.client_build)
+        return payload
 
 
 def add_extension_payload(update, collector):
@@ -1635,7 +1660,6 @@ def add_extension_payload(update, collector):
             {
                 "extension_version": EXTENSION_VERSION,
                 "hardware": not_reported_hardware(),
-                "client_build": None,
                 "docker": not_reported_docker(),
                 "hermes": not_reported_hermes(),
                 "lucky": not_configured_lucky(),

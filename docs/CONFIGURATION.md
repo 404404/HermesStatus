@@ -56,7 +56,8 @@ For Device v2, prefer the optional `hardware` object in `client-v2.json`:
 ```
 
 `smart_devices` is an explicit allowlist of 0–64 container-visible `/dev/*`
-paths. Optional `type` is a bounded smartctl device type such as `sat`, `scsi`,
+paths. An intentional empty array disables SMART probing while retaining only
+safe topology inventory; it is not a collection failure. Optional `type` is a bounded smartctl device type such as `sat`, `scsi`,
 or `nvme`; it is not a shell fragment. `label` is collector configuration
 metadata and is not promised as a persisted or UI display field.
 `primary_smart_device` is optional and selects the compatibility singular SMART
@@ -77,6 +78,8 @@ environment alternatives are `HERMESSTATUS_SMART_DEVICES` / `SMART_DEVICES`,
 `HERMESSTATUS_PRIMARY_SMART_DEVICE` / `PRIMARY_SMART_DEVICE`, and
 `HERMESSTATUS_FILESYSTEM_PROBES` / `FILESYSTEM_PROBES`; JSON values are JSON
 arrays. Legacy `SMART_DEVICE` remains the lowest-priority single-device form.
+Its image-default value `auto` is an automatic-discovery sentinel and does not
+override JSON `smart_devices`, including an intentional empty array.
 Do not set a legacy non-empty `SMART_DEVICE` in a Compose override that intends
 the JSON multi-disk allowlist to be authoritative.
 
