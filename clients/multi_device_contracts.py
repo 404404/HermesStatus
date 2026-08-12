@@ -419,8 +419,8 @@ def _smart_device_type(value: str) -> str:
     return value
 
 
-def _safe_probe_path(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value or len(value) > 4096 or "\x00" in value:
+def _safe_probe_path(value: Any, field: str, *, maximum_length: int = 4096) -> str:
+    if not isinstance(value, str) or not value or len(value) > maximum_length or "\x00" in value:
         raise ClientContractError(f"{field} is invalid")
     path = PurePosixPath(value)
     if not path.is_absolute() or str(path) != value or ".." in path.parts:
@@ -441,7 +441,9 @@ def _filesystem_probes_value(value: Any) -> tuple[FilesystemProbeConfig, ...]:
     for entry in entries:
         if not isinstance(entry, dict) or set(entry) != {"mountpoint", "probe_path"}:
             raise ClientContractError("filesystem_probes is invalid")
-        mountpoint = _safe_probe_path(entry["mountpoint"], "filesystem_probes.mountpoint")
+        mountpoint = _safe_probe_path(
+            entry["mountpoint"], "filesystem_probes.mountpoint", maximum_length=512
+        )
         probe_path = _safe_probe_path(entry["probe_path"], "filesystem_probes.probe_path")
         if mountpoint in mountpoints:
             raise ClientContractError("filesystem_probes contains duplicate mountpoints")

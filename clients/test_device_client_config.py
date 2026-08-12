@@ -173,6 +173,23 @@ class DeviceClientConfigTests(unittest.TestCase):
             with self.subTest(hardware=hardware), self.assertRaises(ClientContractError):
                 load_client_selection([], environ={"HERMESSTATUS_CONFIG_FILE": str(path)})
 
+    def test_filesystem_mountpoint_keeps_spacing_and_matches_wire_bound(self):
+        preserved = resolve_client_config(
+            env=self.complete_env,
+            file_values={"filesystem_probes": [{
+                "mountpoint": "/mnt/My  Drive", "probe_path": "/host-storage/data",
+            }]},
+        )
+        self.assertEqual(preserved.filesystem_probes[0].mountpoint, "/mnt/My  Drive")
+        too_long = "/" + "a" * 512
+        with self.assertRaises(ClientContractError):
+            resolve_client_config(
+                env=self.complete_env,
+                file_values={"filesystem_probes": [{
+                    "mountpoint": too_long, "probe_path": "/host-storage/data",
+                }]},
+            )
+
     def test_device_v2_treats_legacy_auto_as_a_discovery_sentinel(self):
         automatic = resolve_client_config(
             env={**self.complete_env, "SMART_DEVICE": "auto"},

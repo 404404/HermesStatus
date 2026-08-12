@@ -86,7 +86,7 @@
             "type": "object",
             "required": ["mountpoint", "probe_path"],
             "properties": {
-              "mountpoint": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/[^\\u0000-\\u001F\\u007F]*$"},
+              "mountpoint": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^/[^\\u0000-\\u001F\\u007F]*$"},
               "probe_path": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/[^\\u0000-\\u001F\\u007F]*$"}
             },
             "additionalProperties": false

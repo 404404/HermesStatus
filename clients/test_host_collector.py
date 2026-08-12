@@ -561,6 +561,31 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(len(filesystems[0]["backing_disk_ids"]), 16)
         self.assertEqual(filesystems[0]["stack_type"], "mdraid")
         self.assertEqual(filesystems[1]["stack_type"], "btrfs")
+        self.assertEqual(filesystems[1]["backing_disk_ids"], [])
+
+    def test_filesystem_probe_preserves_configured_mountpoint_spacing(self):
+        graph = build_block_device_graph(
+            {"blockdevices": [{"name": "sda", "kname": "sda", "type": "disk"}]},
+            sys_block_root="/no-sys-block",
+        )
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+            f_bfree = 250
+
+        filesystems, error = collect_filesystems(
+            [{"mountpoint": "/mnt/My  Drive", "probe_path": "/host-storage/data"}],
+            graph,
+            command_runner=lambda command, timeout: (0, json.dumps({"filesystems": [{
+                "source": "/dev/sda", "fstype": "ext4"
+            }]})),
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(filesystems[0]["mountpoint"], "/mnt/My  Drive")
 
     def test_hardware_keeps_probed_backing_disk_inside_bounded_inventory(self):
         disks = [

@@ -8,15 +8,13 @@ Hardware monitoring is read-only, current-state observability for a configured
 Client. It adds the Hardware view between Home and Docker without changing the
 single `/json/stats.json` fetch path. The view contains:
 
-1. CPU details: a bounded topology allowlist (architecture, vendor,
-   family/model/stepping, sockets, cores, threads, frequency, cache, and
-   virtualization) plus a short-window CPU-time breakdown.
+1. CPU details: model, architecture, stepping, a socket/core/thread summary,
+   minimum/maximum frequency, and virtualization plus a short-window CPU-time
+   breakdown without idle.
 2. Memory details: total, used, available, free, buffers, cache, reclaimable
    slab, active/inactive, dirty/writeback, slab, and Swap accounting.
 3. System information: distribution/release, kernel, and architecture.
-4. Filesystems / volumes: configured mountpoint capacity and resolved backing
-   physical disks.
-5. Physical disks: model, capacity, temperature, SMART result, power-on hours,
+4. Physical disks: model, capacity, temperature, SMART result, power-on hours,
    cumulative counters, and one row per associated partition or logical volume
    with its format, used/total capacity, and usage bar.
 
@@ -39,8 +37,9 @@ Filesystem / logical volume
 The Client derives the relationship from a bounded, cycle-safe block-device
 graph built from read-only system metadata. It does not infer a relationship
 from names such as `dm-0`, `md2`, or a vendor-specific mountpoint. This handles
-ordinary partitions and generic LVM, MD RAID, device-mapper, and Btrfs/EXT4
-stacks. A filesystem row may therefore name several backing disks and never
+ordinary partitions and generic LVM, MD RAID, and device-mapper stacks. A
+multi-device Btrfs source does not prove every member through this graph, so its
+backing relation remains unknown rather than incomplete. A filesystem row never
 receives a fabricated single-disk temperature or SMART result.
 
 The Server validates counts, string lengths, counters, statuses, paths, and
@@ -138,11 +137,12 @@ volumes:
   - /srv/example-data:/host-storage/data:ro
 ```
 
-The display mountpoint and container probe path must be absolute, bounded, and
-free of parent traversal. The collector uses `findmnt` and `statvfs` for
-metadata and capacity only. A bind-mount or Btrfs source such as
-`/dev/sda1[/data]` is normalized to `/dev/sda1`; non-device sources are omitted
-rather than exposing a remote endpoint. It does not recursively read
+The display mountpoint (at most 512 characters) and container probe path must
+be absolute, bounded, and free of parent traversal. The exact configured
+mountpoint, including legal repeated whitespace, is preserved. The collector
+uses `findmnt` and `statvfs` for metadata and capacity only. A bind-mount source
+such as `/dev/sda1[/data]` is normalized to `/dev/sda1`; non-device sources are
+omitted rather than exposing a remote endpoint. It does not recursively read
 directories. Pseudo filesystems, invalid metadata, and inaccessible probes are unavailable data,
 not zero usage and not a reason to mount the host root, enter a mount namespace,
 use `nsenter`, or add `CAP_SYS_ADMIN`.

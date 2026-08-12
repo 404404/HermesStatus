@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from pathlib import PurePosixPath
 
 from lucky_collector import collector_from_environment, not_configured_lucky
 from easytier_collector import collector_from_environment as easytier_collector_from_environment
@@ -1217,6 +1218,28 @@ def _normalized_filesystem_source(value):
     )
 
 
+def _configured_mountpoint(value):
+    """Preserve an already-validated display mountpoint byte-for-byte.
+
+    The contract parser accepts legal whitespace in a path.  Do not route this
+    field through generic display-text normalization: doing so would turn a
+    configured path into a different label.  The collector remains defensive
+    for direct callers and enforces the same 512-character wire limit.
+    """
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > MAX_MOUNTPOINT_LENGTH
+        or "\x00" in value
+        or any(ord(char) < 32 or ord(char) == 127 for char in value)
+    ):
+        return None
+    path = PurePosixPath(value)
+    if not path.is_absolute() or str(path) != value or ".." in path.parts:
+        return None
+    return value
+
+
 def collect_filesystems(filesystem_probes, block_graph, command_runner=None, statvfs_func=None):
     """Collect only explicitly configured, read-only filesystem probe mounts."""
     runner = command_runner or _default_command_runner
@@ -1226,7 +1249,7 @@ def collect_filesystems(filesystem_probes, block_graph, command_runner=None, sta
     for probe in list(filesystem_probes or [])[:MAX_FILESYSTEMS]:
         if not isinstance(probe, dict):
             continue
-        mountpoint = _nullable_text(probe.get("mountpoint"), MAX_MOUNTPOINT_LENGTH)
+        mountpoint = _configured_mountpoint(probe.get("mountpoint"))
         probe_path = probe.get("probe_path")
         if not mountpoint or not isinstance(probe_path, str):
             continue
@@ -1241,7 +1264,12 @@ def collect_filesystems(filesystem_probes, block_graph, command_runner=None, sta
             "used_bytes": None,
             "available_bytes": None,
             "usage_percent": None,
+            # `findmnt` reports one source for Btrfs, but that source does not
+            # authoritatively enumerate every member of a multi-device Btrfs
+            # filesystem.  An empty relation is safer than presenting an
+            # incomplete single-disk relationship as complete.
             "backing_disk_ids": (
+                [] if isinstance(fs_type, str) and fs_type.lower() == "btrfs" else
                 resolve_backing_physical_disks(source, block_graph)[:MAX_FILESYSTEM_BACKING_DISKS]
                 if source
                 else []

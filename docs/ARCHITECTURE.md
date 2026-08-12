@@ -39,18 +39,21 @@ remote-peer and traffic summaries, physical-disk temperature/SMART information,
 Hermes profiles, and Lucky/EasyTier state and version summaries when configured.
 EasyTier traffic uses one decimal place with automatic units and a single-line
 receive / transmit / forwarded presentation. The Hermes Profile section header
-shows the Agent version and profile count. Hardware follows Home and separates
-system information, filesystems/volumes, and physical disks. Docker has a
-separate container table; Lucky has its own configuration and service summaries;
-EasyTier presents per-command collection-status cards followed by its read-only
-network summary.
+shows the Agent version and profile count. Hardware follows Home and shows CPU,
+memory, system information, and physical disks. Its filesystem probes only
+associate safe partition data with physical-disk rows; there is no separate
+filesystems/volumes section. Docker has a separate container table; Lucky has
+its own configuration and service summaries; EasyTier presents per-command
+collection-status cards followed by its read-only network summary.
 
 `hardware.storage.physical_disks` and `hardware.storage.filesystems` are
 separate bounded collections. The Client builds a read-only block-device graph
-to resolve ordinary partitions and generic LVM, MD RAID, device-mapper, and
-Btrfs/EXT4 stacks to zero or more physical disk IDs. A filesystem never gains a
-made-up temperature or SMART value. Only operator-configured physical SMART
-devices and explicit read-only filesystem probe mounts are collected.
+to resolve ordinary partitions and generic LVM, MD RAID, and device-mapper
+stacks to zero or more physical disk IDs. A multi-device Btrfs source does not
+prove every member through that graph, so its backing relation is deliberately
+unknown rather than incomplete. A filesystem never gains a made-up temperature
+or SMART value. Only operator-configured physical SMART devices and explicit
+read-only filesystem probe mounts are collected.
 
 System identity reports sanitized distribution/release, kernel, architecture,
 and source provenance. Build provenance is similarly read-only: the Server

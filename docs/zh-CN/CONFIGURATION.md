@@ -44,7 +44,7 @@ Device v2 优先在 `client-v2.json` 中使用可选 `hardware` 对象：
 
 `smart_devices` 是 0–64 个 Client 容器内可见 `/dev/*` 路径的显式 allowlist。显式空数组会停用 SMART 探测、仅保留安全的拓扑库存，并不代表采集失败。可选 `type` 是有长度限制的 smartctl 设备类型，如 `sat`、`scsi` 或 `nvme`，不是 shell 片段；`label` 是采集器配置元数据，不承诺作为持久化或 UI 展示字段。`primary_smart_device` 可选，在观察到多块盘时选择兼容的单盘 SMART 字段来源。未设置时不会任意取第一块盘，详细的 `storage.physical_disks` 才是权威数据。
 
-`filesystem_probes` 是最多 128 个显式配置的绝对展示 `mountpoint` 与容器 `probe_path` 对。probe 路径必须是目标宿主机文件系统的只读挂载。Client 只运行 `findmnt` 和 `statvfs`，不会遍历或上传目录内容。bind mount 或 Btrfs source 会归一化为安全的 `/dev/*` 组件；非设备 source 会被省略而不会上报为端点。伪文件系统或不可用 probe 会明确显示不可用，不会被误报为宿主机存储。
+`filesystem_probes` 是最多 128 个显式配置的绝对展示 `mountpoint`（最多 512 个字符）与容器 `probe_path` 对。展示挂载点会原样保留，包括合法的重复空白；probe 路径必须是目标宿主机文件系统的只读挂载。Client 只运行 `findmnt` 和 `statvfs`，不会遍历或上传目录内容。bind mount source 会归一化为安全的 `/dev/*` 组件；非设备 source 会被省略而不会上报为端点。只有在能安全证明全部成员时才关联 Btrfs 后端磁盘，否则明确保留未知关系。伪文件系统或不可用 probe 会明确显示不可用，不会被误报为宿主机存储。
 
 配置优先级为 CLI、环境变量、JSON 文件、默认值。环境变量可使用 `HERMESSTATUS_SMART_DEVICES` / `SMART_DEVICES`、`HERMESSTATUS_PRIMARY_SMART_DEVICE` / `PRIMARY_SMART_DEVICE` 与 `HERMESSTATUS_FILESYSTEM_PROBES` / `FILESYSTEM_PROBES`，其中 JSON 值采用 JSON 数组。Legacy `SMART_DEVICE` 仍保留为最低优先级的单设备形式。镜像默认的 `SMART_DEVICE=auto` 是自动发现哨兵，不会覆盖 JSON 的 `smart_devices`（包括有意设置的空数组）。若希望 JSON 多盘 allowlist 为权威，不要在 Compose 覆盖中设置非空的 Legacy `SMART_DEVICE`。
 

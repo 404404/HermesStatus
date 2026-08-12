@@ -22,16 +22,17 @@ EasyTier health projection.
   temperature, I/O, and hours identify the selected device, while SMART shows
   passed counts and failed devices; a logical volume is never presented as one
   physical disk.
-- Hardware sits between Home and Docker. It preserves a bounded CPU topology
-  view (architecture, vendor, cores/threads, frequency, cache, and
-  virtualization), short-window CPU breakdowns including I/O wait,
-  memory/SWAP, System information, Filesystems / volumes, and Physical disks.
-  Each physical-disk row is expanded per associated partition or logical volume
-  with partition/format, used/total capacity, and a usage bar. Filesystems and
-  physical disks are intentionally not one-to-one: LVM, MD RAID, device mapper,
-  and Btrfs/EXT4 stacks list their resolved backing physical disks. The page
-  shows only configured, read-only observations; it does not read directory
-  contents, disk serial numbers, or raw SMART attributes.
+- Hardware sits between Home and Docker. It shows bounded CPU facts (model,
+  architecture, stepping, a socket/core/thread summary, minimum/maximum
+  frequency, and virtualization), detailed CPU use without idle (four desktop
+  columns, including I/O wait), memory/SWAP and system information (three
+  desktop columns), and Physical disks. The separate Filesystems / volumes
+  section is removed: configured read-only filesystem probes only associate
+  partition/format, used/total capacity, and a usage bar with physical-disk
+  rows. LVM, MD RAID, and device mapper list safely resolved backing disks;
+  multi-device Btrfs keeps the relation unknown when all members cannot be
+  proven. The page never reads directory contents, disk serial numbers, or raw
+  SMART attributes.
 - Docker: container counts, names, images, state, and port summaries.
 - Home also includes configured Hermes profiles with gateway, runtime,
   model/provider, and usage snapshots. Its section header shows the shared

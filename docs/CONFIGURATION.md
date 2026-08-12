@@ -66,12 +66,15 @@ not arbitrarily taken from the first disk; detailed `storage.physical_disks`
 remains authoritative.
 
 `filesystem_probes` is an explicit list of up to 128 absolute display
-`mountpoint` and container `probe_path` pairs. The probe path must be a
-read-only mount of the intended host filesystem. The Client runs `findmnt` and
-`statvfs` only; it never walks or uploads directory contents. Pseudo filesystems
-and unavailable probes are reported as unavailable rather than presented as
-host storage. A bind-mount or Btrfs source is normalized to its safe `/dev/*`
-component; non-device sources are omitted rather than reported as endpoints.
+`mountpoint` (at most 512 characters) and container `probe_path` pairs. The
+configured mountpoint is preserved exactly, including legal repeated whitespace;
+the probe path must be a read-only mount of the intended host filesystem. The
+Client runs `findmnt` and `statvfs` only; it never walks or uploads directory
+contents. Pseudo filesystems and unavailable probes are reported as unavailable
+rather than presented as host storage. A bind-mount source is normalized to its
+safe `/dev/*` component; non-device sources are omitted rather than reported as
+endpoints. A Btrfs backing relation remains unknown unless every member can be
+proven safely.
 
 Configuration precedence is CLI, environment, JSON file, then defaults. The
 environment alternatives are `HERMESSTATUS_SMART_DEVICES` / `SMART_DEVICES`,
