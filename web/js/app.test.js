@@ -95,6 +95,10 @@ async function run(){
   assert.equal(app.formatUptimeHours(90061), '25 h (约1.04天)');
   assert.equal(app.formatCelsius(47), '47℃');
   assert.equal(app.formatCelsius(47.25), '47.3℃');
+  assert.equal(
+    app.cpuLogicalProcessorText({logical_cpus: 16, sockets: 2, cores_per_socket: 4, threads_per_core: 2}),
+    '16（2 插槽 / 8 核心 / 16 线程）'
+  );
   assert.equal(app.formatTrafficBytes(0), '0.0B');
   assert.equal(app.formatTrafficBytes(1000000), '1.0MB');
 	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: null}, true), '未观察到');
@@ -499,11 +503,11 @@ async function run(){
   assert.match(hardwareMarkup, /id="hardwareCpuInfo"/);
   assert.match(hardwareMarkup, /id="hardwareCpuUsage"/);
   assert.match(hardwareMarkup, /id="hardwareMemoryInfo"/);
-  assert.match(hardwareMarkup, /id="hardwareFilesystemsBody"/);
+  assert.doesNotMatch(hardwareMarkup, /文件系统\s*\/\s*存储卷|hardwareFilesystemsBody/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
   assert.deepEqual(
     [...hardwareMarkup.matchAll(/<th>([^<]+)<\/th>/g)].map(match => match[1]),
-    ['存储源', '挂载点', '文件系统', '已用 / 总容量', '使用率', '后端磁盘', '设备', '型号', '容量', '温度', 'SMART', '通电时间', '分区 / 格式', '已用 / 总容量', '使用率']
+    ['设备', '型号', '容量', '温度', 'SMART', '通电时间', '分区 / 格式', '已用 / 总容量', '使用率']
   );
   assert.match(dockerMarkup, /id="containersBody"/);
   assert.deepEqual(
@@ -540,6 +544,11 @@ async function run(){
   assert.match(appSource, /function deviceDiagnosticsMarkup\(view\)/);
   assert.match(appSource, /function buildProvenanceMarkup\(view\)/);
   assert.match(appSource, /function cpuDetailsForView\(hardware\)/);
+  assert.match(appSource, /function cpuLogicalProcessorText\(cpu\)/);
+  assert.match(css, /\.hardware-usage-grid\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.hardware-three-column-info\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}/);
+  assert.match(appSource, /\['频率（最低 \/ 最高）'/);
+  assert.doesNotMatch(appSource, /\['空闲', cpuUsage\.idle_percent\]/);
   assert.match(appSource, /I\/O 等待/);
   assert.match(appSource, /function partitionRowsForDisk\(disk, filesystems\)/);
   assert.doesNotMatch(

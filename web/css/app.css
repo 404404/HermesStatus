@@ -151,13 +151,13 @@ body.light .health-card{background:#fff}
 .single-line-value .power-on-days{flex:0 0 auto}
 .lucky-home-value{display:flex;align-items:baseline;gap:.45rem;white-space:nowrap}
 .hardware-system-info{padding:0 1.35rem 1.1rem}
-.hardware-usage-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.9rem;padding:0 1.35rem 1.35rem}
+.hardware-three-column-info{grid-template-columns:repeat(3,minmax(0,1fr))}
+.hardware-usage-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.9rem;padding:0 1.35rem 1.35rem}
 .hardware-usage-item{min-width:0;padding:.9rem 1rem;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--bg-alt) 78%,transparent)}
 .hardware-usage-item>div{display:flex;align-items:baseline;justify-content:space-between;gap:.65rem;color:var(--text-dim);font-size:13px}
 .hardware-usage-item strong{color:var(--text);font-weight:700}
 .hardware-usage-item span{font-variant-numeric:tabular-nums;font-weight:750}
 .hardware-usage-item .usage-bar{margin-top:.65rem}
-.hardware-filesystems-table{min-width:960px!important}
 .hardware-disks-table{min-width:1260px!important}
 .table-usage{min-width:150px;padding:.45rem .8rem!important}
 .table-usage .usage-bar{margin:0;min-width:130px;height:22px;flex-basis:22px}

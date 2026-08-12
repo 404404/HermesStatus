@@ -743,19 +743,21 @@ function formatMHz(value){
   return `${Number.isInteger(number) ? number : number.toFixed(1)} MHz`;
 }
 
-function cpuTopologyText(cpu){
+function cpuLogicalProcessorText(cpu){
+  const logical = finiteNumber(cpu.logical_cpus);
   const sockets = finiteNumber(cpu.sockets);
-  const cores = finiteNumber(cpu.cores_per_socket);
-  const threads = finiteNumber(cpu.threads_per_core);
-  if(sockets === null && cores === null && threads === null) return '-';
-  const physical = sockets !== null && cores !== null ? sockets * cores : null;
+  const coresPerSocket = finiteNumber(cpu.cores_per_socket);
+  const threadsPerCore = finiteNumber(cpu.threads_per_core);
+  if(logical === null && sockets === null && coresPerSocket === null && threadsPerCore === null) return '-';
+  const cores = sockets !== null && coresPerSocket !== null ? sockets * coresPerSocket : null;
+  const threads = logical ?? (cores !== null && threadsPerCore !== null ? cores * threadsPerCore : null);
   const parts = [
-    physical === null ? null : `${formatInteger(physical)} 物理核心`,
     sockets === null ? null : `${formatInteger(sockets)} 插槽`,
-    cores === null ? null : `${formatInteger(cores)} 核心/插槽`,
-    threads === null ? null : `${formatInteger(threads)} 线程/核心`
+    cores === null ? null : `${formatInteger(cores)} 核心`,
+    threads === null ? null : `${formatInteger(threads)} 线程`
   ].filter(Boolean);
-  return parts.length ? parts.join(' · ') : '-';
+  const topology = parts.length ? `（${parts.join(' / ')}）` : '';
+  return logical === null ? (parts.join(' / ') || '-') : `${formatInteger(logical)}${topology}`;
 }
 
 function memoryUsedPercent(memory){
@@ -803,20 +805,17 @@ function renderHardwareDetails(view){
   const cpuInfo = [
     ['型号', textOrDash(cpu.model_name || hardware.cpu_model || view.resources.cpuModel)],
     ['架构', textOrDash(cpu.architecture)],
-    ['厂商', textOrDash(cpu.vendor)],
-    ['系列 / 型号 / 步进', [cpu.family, cpu.model_id, cpu.stepping].map(textOrDash).filter(value => value !== '-').join(' / ') || '-'],
-    ['拓扑', cpuTopologyText(cpu)],
-    ['逻辑处理器', finiteNumber(cpu.logical_cpus) === null ? '-' : formatInteger(cpu.logical_cpus)],
-    ['频率（当前 / 最低 / 最高）', `${formatMHz(cpu.current_mhz)} / ${formatMHz(cpu.min_mhz)} / ${formatMHz(cpu.max_mhz)}`],
-    ['虚拟化', textOrDash(cpu.virtualization)],
-    ['缓存（L1d / L1i / L2 / L3）', [cpu.l1d_cache, cpu.l1i_cache, cpu.l2_cache, cpu.l3_cache].map(textOrDash).join(' / ')]
+    ['步进', textOrDash(cpu.stepping)],
+    ['逻辑处理器', cpuLogicalProcessorText(cpu)],
+    ['频率（最低 / 最高）', `${formatMHz(cpu.min_mhz)} / ${formatMHz(cpu.max_mhz)}`],
+    ['虚拟化', textOrDash(cpu.virtualization)]
   ];
   byId('hardwareCpuInfo').innerHTML = cpuInfo.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 
   const usageItems = [
     ['总使用率', cpuUsage.total_percent], ['用户态', cpuUsage.user_percent], ['内核态', cpuUsage.system_percent],
     ['I/O 等待', cpuUsage.iowait_percent], ['Nice', cpuUsage.nice_percent], ['中断 IRQ', cpuUsage.irq_percent],
-    ['软中断 SoftIRQ', cpuUsage.softirq_percent], ['Steal', cpuUsage.steal_percent], ['空闲', cpuUsage.idle_percent]
+    ['软中断 SoftIRQ', cpuUsage.softirq_percent], ['Steal', cpuUsage.steal_percent]
   ].filter(([, value]) => finiteNumber(value) !== null);
   byId('hardwareCpuUsageMeta').textContent = usageItems.length ? '短时采样' : '数据不可用';
   byId('hardwareCpuUsage').innerHTML = usageItems.length
@@ -848,13 +847,6 @@ function renderHardwareDetails(view){
   ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 
   const filesystems = filesystemItemsForView(hardware);
-  byId('hardwareFilesystemsBody').innerHTML = filesystems.length
-    ? filesystems.map(filesystem => {
-      const backing = filesystemBackingDisks(filesystem);
-      return `<tr><td class="wide-cell mono" title="${escapeHtml(textOrDash(filesystem.source))}">${escapeHtml(textOrDash(filesystem.source))}</td><td>${escapeHtml(textOrDash(filesystem.mountpoint))}</td><td>${escapeHtml(textOrDash(filesystem.fs_type || filesystem.filesystem_type))}</td><td>${escapeHtml(filesystemUsage(filesystem))}</td><td>${escapeHtml(formatPercentage(valueAt(filesystem, ['usage_percent', 'used_percent'])))}</td><td title="${escapeHtml(backing.title)}">${escapeHtml(backing.text)}</td></tr>`;
-    }).join('')
-    : '<tr><td colspan="6" class="table-empty">暂无可显示的文件系统数据</td></tr>';
-
   const physicalDisks = physicalDisksForView(hardware);
   byId('hardwareDisksBody').innerHTML = physicalDisks.length
     ? physicalDisks.flatMap(disk => {
@@ -1637,6 +1629,7 @@ const exported = {
   canonicalDashboardHash,
   cleanCpuModel,
   collectWarnings,
+  cpuLogicalProcessorText,
   createRefreshController,
   dashboardCondition,
   deviceDisplayName,
