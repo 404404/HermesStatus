@@ -128,6 +128,8 @@ async function run(){
     ['sda', 'sdb', 'sdc']
   );
   assert.equal(app.filesystemItemsForView(multiDiskHardware).length, 1);
+  assert.equal(app.partitionRowsForDisk(multiDiskHardware.storage.physical_disks[0], multiDiskHardware.storage.filesystems).length, 1);
+  assert.equal(app.partitionRowsForDisk(multiDiskHardware.storage.physical_disks[2], multiDiskHardware.storage.filesystems).length, 0);
   assert.deepEqual(
     app.maximumTemperature(app.temperatureSensorEntries(multiDiskHardware)),
     {label: 'CPU0', value: 47}
@@ -488,11 +490,14 @@ async function run(){
   assert.match(homeMarkup, /id="profilesBody"/);
   assert.doesNotMatch(homeMarkup, /id="containersBody"/);
   assert.match(hardwareMarkup, /id="hardwareSystemInfo"/);
+  assert.match(hardwareMarkup, /id="hardwareCpuInfo"/);
+  assert.match(hardwareMarkup, /id="hardwareCpuUsage"/);
+  assert.match(hardwareMarkup, /id="hardwareMemoryInfo"/);
   assert.match(hardwareMarkup, /id="hardwareFilesystemsBody"/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
   assert.deepEqual(
     [...hardwareMarkup.matchAll(/<th>([^<]+)<\/th>/g)].map(match => match[1]),
-    ['存储源', '挂载点', '文件系统', '已用 / 总容量', '使用率', '后端磁盘', '设备', '型号', '容量', '温度', 'SMART', '通电时间']
+    ['存储源', '挂载点', '文件系统', '已用 / 总容量', '使用率', '后端磁盘', '设备', '型号', '容量', '温度', 'SMART', '通电时间', '分区 / 格式', '已用 / 总容量', '使用率']
   );
   assert.match(dockerMarkup, /id="containersBody"/);
   assert.deepEqual(
@@ -528,6 +533,9 @@ async function run(){
   assert.match(homeHardwareSource, /maximumTemperature\(temperatureSensorEntries\(hardware\)\)/);
   assert.match(appSource, /function deviceDiagnosticsMarkup\(view\)/);
   assert.match(appSource, /function buildProvenanceMarkup\(view\)/);
+  assert.match(appSource, /function cpuDetailsForView\(hardware\)/);
+  assert.match(appSource, /I\/O 等待/);
+  assert.match(appSource, /function partitionRowsForDisk\(disk, filesystems\)/);
   assert.doesNotMatch(
     appSource.slice(appSource.indexOf('function deviceDiagnosticsMarkup'), appSource.indexOf('function buildProvenanceMarkup')),
     /source_ip|fqdn|token|digest|credential|Authorization/i

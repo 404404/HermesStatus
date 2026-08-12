@@ -729,19 +729,114 @@ function filesystemUsage(filesystem){
   return `${formatBytes(used)} / ${formatBytes(total)}`;
 }
 
+function cpuDetailsForView(hardware){
+  return safeObject(hardware?.cpu_details);
+}
+
+function memoryDetailsForView(hardware){
+  return safeObject(hardware?.memory_details);
+}
+
+function formatMHz(value){
+  const number = finiteNumber(value);
+  if(number === null) return '-';
+  return `${Number.isInteger(number) ? number : number.toFixed(1)} MHz`;
+}
+
+function cpuTopologyText(cpu){
+  const sockets = finiteNumber(cpu.sockets);
+  const cores = finiteNumber(cpu.cores_per_socket);
+  const threads = finiteNumber(cpu.threads_per_core);
+  if(sockets === null && cores === null && threads === null) return '-';
+  const physical = sockets !== null && cores !== null ? sockets * cores : null;
+  const parts = [
+    physical === null ? null : `${formatInteger(physical)} 物理核心`,
+    sockets === null ? null : `${formatInteger(sockets)} 插槽`,
+    cores === null ? null : `${formatInteger(cores)} 核心/插槽`,
+    threads === null ? null : `${formatInteger(threads)} 线程/核心`
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : '-';
+}
+
+function memoryUsedPercent(memory){
+  return percentage(memory?.used_bytes, memory?.total_bytes);
+}
+
+function hardwareUsageMarkup(label, value){
+  const number = finiteNumber(value);
+  return `<article class="hardware-usage-item"><div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(formatPercentage(number))}</span></div>${resourceBar(number, label)}</article>`;
+}
+
+function filesystemBelongsToDisk(filesystem, disk){
+  const diskID = diskName(disk);
+  const backing = Array.isArray(filesystem?.backing_disk_ids) ? filesystem.backing_disk_ids : [];
+  if(backing.some(value => deviceShortName(value) === diskID)) return true;
+  const source = deviceShortName(filesystem?.source);
+  return source !== '-' && source.startsWith(diskID) && /^\w+$/.test(diskID);
+}
+
+function partitionRowsForDisk(disk, filesystems){
+  return filesystems.filter(filesystem => filesystemBelongsToDisk(filesystem, disk));
+}
+
+function partitionDisplay(filesystem){
+  if(!filesystem) return '-';
+  const source = textOrDash(filesystem.source);
+  const mountpoint = textOrDash(filesystem.mountpoint);
+  const type = textOrDash(filesystem.fs_type || filesystem.filesystem_type);
+  return `${source} (${mountpoint}) · ${type}`;
+}
+
 function renderHardwareDetails(view){
   const hardware = view.hardware;
+  const cpu = cpuDetailsForView(hardware);
+  const cpuUsage = safeObject(cpu.usage);
+  const memory = memoryDetailsForView(hardware);
   const identity = safeObject(hardware.system_identity);
   const system = Object.keys(identity).length ? identity : safeObject(hardware.system);
-  const memoryText = view.resources.memoryText === '-'
-    ? '-'
-    : `${view.resources.memoryText} (${formatPercentage(view.resources.memoryPercent)})`;
   const distribution = textOrDash(system.distribution || system.name || hardware.distribution);
   const release = textOrDash(system.release_version || system.version || hardware.release_version);
   const prettyName = textOrDash(system.pretty_name || view.host.os);
+  const cpuInfo = [
+    ['型号', textOrDash(cpu.model_name || hardware.cpu_model || view.resources.cpuModel)],
+    ['架构', textOrDash(cpu.architecture)],
+    ['厂商', textOrDash(cpu.vendor)],
+    ['系列 / 型号 / 步进', [cpu.family, cpu.model_id, cpu.stepping].map(textOrDash).filter(value => value !== '-').join(' / ') || '-'],
+    ['拓扑', cpuTopologyText(cpu)],
+    ['逻辑处理器', finiteNumber(cpu.logical_cpus) === null ? '-' : formatInteger(cpu.logical_cpus)],
+    ['频率（当前 / 最低 / 最高）', `${formatMHz(cpu.current_mhz)} / ${formatMHz(cpu.min_mhz)} / ${formatMHz(cpu.max_mhz)}`],
+    ['虚拟化', textOrDash(cpu.virtualization)],
+    ['缓存（L1d / L1i / L2 / L3）', [cpu.l1d_cache, cpu.l1i_cache, cpu.l2_cache, cpu.l3_cache].map(textOrDash).join(' / ')]
+  ];
+  byId('hardwareCpuInfo').innerHTML = cpuInfo.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+
+  const usageItems = [
+    ['总使用率', cpuUsage.total_percent], ['用户态', cpuUsage.user_percent], ['内核态', cpuUsage.system_percent],
+    ['I/O 等待', cpuUsage.iowait_percent], ['Nice', cpuUsage.nice_percent], ['中断 IRQ', cpuUsage.irq_percent],
+    ['软中断 SoftIRQ', cpuUsage.softirq_percent], ['Steal', cpuUsage.steal_percent], ['空闲', cpuUsage.idle_percent]
+  ].filter(([, value]) => finiteNumber(value) !== null);
+  byId('hardwareCpuUsageMeta').textContent = usageItems.length ? '短时采样' : '数据不可用';
+  byId('hardwareCpuUsage').innerHTML = usageItems.length
+    ? usageItems.map(([label, value]) => hardwareUsageMarkup(label, value)).join('')
+    : '<div class="table-empty">暂无可显示的 CPU 使用率数据</div>';
+
+  const memoryInfo = [
+    ['内存总量', formatBytes(memory.total_bytes)],
+    ['已用 / 可用', finiteNumber(memory.used_bytes) === null && finiteNumber(memory.available_bytes) === null ? '-' : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.available_bytes)} (${formatPercentage(memoryUsedPercent(memory))})`],
+    ['空闲内存', formatBytes(memory.free_bytes)],
+    ['Buffers', formatBytes(memory.buffers_bytes)],
+    ['页面缓存', formatBytes(memory.cached_bytes)],
+    ['可回收 Slab', formatBytes(memory.reclaimable_bytes)],
+    ['活动 / 非活动', `${formatBytes(memory.active_bytes)} / ${formatBytes(memory.inactive_bytes)}`],
+    ['Dirty / Writeback', `${formatBytes(memory.dirty_bytes)} / ${formatBytes(memory.writeback_bytes)}`],
+    ['Slab', formatBytes(memory.slab_bytes)],
+    ['Swap 总量', formatBytes(memory.swap_total_bytes)],
+    ['Swap 已用 / 空闲', finiteNumber(memory.swap_used_bytes) === null && finiteNumber(memory.swap_free_bytes) === null ? '-' : `${formatBytes(memory.swap_used_bytes)} / ${formatBytes(memory.swap_free_bytes)} (${formatPercentage(percentage(memory.swap_used_bytes, memory.swap_total_bytes))})`],
+    ['Swap Cache', formatBytes(memory.swap_cached_bytes)]
+  ];
+  byId('hardwareMemoryInfo').innerHTML = memoryInfo.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+
   byId('hardwareSystemInfo').innerHTML = [
-    ['CPU 型号', view.resources.cpuModel],
-    ['内存', memoryText],
     ['发行版', distribution],
     ['发行版本', release],
     ['内核', textOrDash(system.kernel_release || hardware.kernel_release)],
@@ -759,12 +854,16 @@ function renderHardwareDetails(view){
 
   const physicalDisks = physicalDisksForView(hardware);
   byId('hardwareDisksBody').innerHTML = physicalDisks.length
-    ? physicalDisks.map(disk => {
+    ? physicalDisks.flatMap(disk => {
       const device = textOrDash(disk.device || disk.id);
       const model = textOrDash(disk.model);
-      return `<tr><td class="mono">${escapeHtml(device)}</td><td class="wide-cell" title="${escapeHtml(model)}">${escapeHtml(model)}</td><td>${escapeHtml(formatBytes(valueAt(disk, ['capacity_bytes', 'size_bytes'])))}</td><td>${escapeHtml(formatCelsius(diskTemperatureC(disk)))}</td><td>${badge(disk.smart_status ?? 'unknown')}</td><td>${escapeHtml(diskPowerOnHours(disk) === null ? '-' : `${formatInteger(diskPowerOnHours(disk))} h`)}</td></tr>`;
+      const partitions = partitionRowsForDisk(disk, filesystems);
+      return (partitions.length ? partitions : [null]).map(filesystem => {
+        const usage = filesystem ? valueAt(filesystem, ['usage_percent', 'used_percent']) : null;
+        return `<tr><td class="mono">${escapeHtml(device)}</td><td class="wide-cell" title="${escapeHtml(model)}">${escapeHtml(model)}</td><td>${escapeHtml(formatBytes(valueAt(disk, ['capacity_bytes', 'size_bytes'])))}</td><td>${escapeHtml(formatCelsius(diskTemperatureC(disk)))}</td><td>${badge(disk.smart_status ?? 'unknown')}</td><td>${escapeHtml(diskPowerOnHours(disk) === null ? '-' : `${formatInteger(diskPowerOnHours(disk))} h`)}</td><td class="wide-cell mono" title="${escapeHtml(partitionDisplay(filesystem))}">${escapeHtml(partitionDisplay(filesystem))}</td><td>${escapeHtml(filesystem ? filesystemUsage(filesystem) : '-')}</td><td class="table-usage">${filesystem ? resourceBar(usage, '分区使用率') : '-'}</td></tr>`;
+      });
     }).join('')
-    : '<tr><td colspan="6" class="table-empty">暂无可显示的物理磁盘数据</td></tr>';
+    : '<tr><td colspan="9" class="table-empty">暂无可显示的物理磁盘数据</td></tr>';
 }
 
 function renderLuckyTables(view){
@@ -1549,6 +1648,9 @@ const exported = {
   formatUptimeHours,
 	filesystemBackingDisks,
 	filesystemItemsForView,
+	partitionRowsForDisk,
+	memoryDetailsForView,
+	memoryUsedPercent,
 	ipv6UdpDirectText,
   maximumTemperature,
   physicalDisksForView,

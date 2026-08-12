@@ -6,7 +6,7 @@
     <meta name="description" content="HermesStatus 多设备云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260729-1" />
+    <link rel="stylesheet" href="css/app.css?v=20260812-1" />
 </head>
 <body>
     <header class="topbar">
@@ -90,6 +90,21 @@
             </div>
 
             <div id="hardwarePage" class="page-panel" role="tabpanel" aria-labelledby="hardwareTab" data-page="hardware" hidden>
+                <section class="data-section" aria-labelledby="hardwareCpuTitle">
+                    <div class="section-head"><h2 id="hardwareCpuTitle">CPU 信息</h2></div>
+                    <dl id="hardwareCpuInfo" class="detail-list hardware-system-info"></dl>
+                </section>
+
+                <section class="data-section" aria-labelledby="hardwareCpuUsageTitle">
+                    <div class="section-head"><h2 id="hardwareCpuUsageTitle">CPU 使用率</h2><span id="hardwareCpuUsageMeta" class="section-meta"></span></div>
+                    <div id="hardwareCpuUsage" class="hardware-usage-grid"></div>
+                </section>
+
+                <section class="data-section" aria-labelledby="hardwareMemoryTitle">
+                    <div class="section-head"><h2 id="hardwareMemoryTitle">内存信息</h2></div>
+                    <dl id="hardwareMemoryInfo" class="detail-list hardware-system-info"></dl>
+                </section>
+
                 <section class="data-section" aria-labelledby="hardwareSystemTitle">
                     <div class="section-head"><h2 id="hardwareSystemTitle">系统信息</h2></div>
                     <dl id="hardwareSystemInfo" class="detail-list hardware-system-info"></dl>
@@ -109,7 +124,7 @@
                     <div class="section-head"><h2 id="hardwareDisksTitle">物理磁盘</h2></div>
                     <div class="table-wrap">
                         <table class="data hardware-disks-table">
-                            <thead><tr><th>设备</th><th>型号</th><th>容量</th><th>温度</th><th>SMART</th><th>通电时间</th></tr></thead>
+                            <thead><tr><th>设备</th><th>型号</th><th>容量</th><th>温度</th><th>SMART</th><th>通电时间</th><th>分区 / 格式</th><th>已用 / 总容量</th><th>使用率</th></tr></thead>
                             <tbody id="hardwareDisksBody"></tbody>
                         </table>
                     </div>
@@ -232,6 +247,6 @@
         <button id="aboutButton" type="button" class="footer-button" aria-haspopup="dialog">关于 / 构建信息</button>
     </footer>
 
-    <script src="js/app.js?v=20260810-3" defer></script>
+    <script src="js/app.js?v=20260812-1" defer></script>
 </body>
 </html>
