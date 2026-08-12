@@ -177,7 +177,11 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: ${{ steps.server_meta.outputs.tags }}
-          labels: ${{ steps.server_meta.outputs.labels }}
+          labels: |
+            ${{ steps.server_meta.outputs.labels }}
+            org.opencontainers.image.title=HermesStatus Server
+            org.opencontainers.image.description=HermesStatus device status server
+            io.hermesstatus.component=server
           build-args: |
             VERSION=${{ steps.provenance.outputs.version }}
             VCS_REF=${{ github.sha }}
@@ -190,7 +194,11 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: ${{ steps.client_meta.outputs.tags }}
-          labels: ${{ steps.client_meta.outputs.labels }}
+          labels: |
+            ${{ steps.client_meta.outputs.labels }}
+            org.opencontainers.image.title=HermesStatus Client
+            org.opencontainers.image.description=HermesStatus host and Hermes profile collector
+            io.hermesstatus.component=client
           build-args: |
             VERSION=${{ steps.provenance.outputs.version }}
             VCS_REF=${{ github.sha }}
