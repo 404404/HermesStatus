@@ -7,8 +7,8 @@
 硬件监控是已配置 Client 的只读当前状态观测能力。在不改变单一
 `/json/stats.json` 请求路径的前提下，它在主页和 Docker 之间增加 Hardware 页面。页面包含：
 
-1. CPU 详情：型号、架构、步进、插槽/核心/线程汇总、最低/最高频率和虚拟化等受限信息，以及不含空闲项的短时 CPU 时间占比。
-2. 内存详情：总量、已用、可用、空闲、Buffers、缓存、可回收 Slab、活动/非活动、Dirty/Writeback、Slab 和 Swap 账目。
+1. CPU 详情：架构、步进、插槽/核心/线程汇总、当前及最低/最高频率和虚拟化等受限信息；并列的 CPU 时间占比同样为六行：总量、用户态、内核态、I/O 等待、IRQ 和 SoftIRQ。不渲染厂商、系列/型号、拓扑、缓存、空闲、Nice 或 Steal。
+2. 内存详情：先展示物理内存和 Swap 的已用/可用/总量及已用百分比，再展示空闲内存、Buffers、缓存、可回收 Slab、活动/非活动、Dirty/Writeback、Slab 和 Swap Cache。
 3. 系统信息：发行版/版本、内核和架构。
 4. 物理磁盘：型号、容量、温度、SMART 结果、通电时间和累计计数器；每个关联分区或逻辑卷独占一行，展示分区/格式、已用/总容量和使用率条。
 
@@ -28,7 +28,7 @@ Client 基于只读系统元数据构建有上限、可防循环的 block-device
 
 Server 会在投影和持久化之前校验数量、字符串长度、计数器、状态、路径和采集状态。浏览器会转义所有磁盘、型号、挂载点、文件系统、操作系统和溯源字符串。
 
-CPU 详情只解析固定的 `lscpu --json` allowlist，不转发原始命令输出。CPU 使用率由两次聚合 `/proc/stat` 采样计算，`iowait` 与 idle 独立展示。内存只解析固定的 `/proc/meminfo` allowlist。这些值仅是观测，不得作为设备身份；可选源不可用时不伪造数值。
+CPU 详情只解析固定的 `lscpu --json` allowlist；若其中缺少当前 MHz，则从有限行数的 `/proc/cpuinfo` `cpu MHz` 数值计算平均值。不会转发原始命令或 proc 文件输出。CPU 使用率由两次聚合 `/proc/stat` 采样计算，`iowait` 与 idle 独立展示。内存只解析固定的 `/proc/meminfo` allowlist。这些值仅是观测，不得作为设备身份；可选源不可用时不伪造数值。
 
 ## 物理 SMART 采集
 

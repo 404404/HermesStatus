@@ -502,6 +502,8 @@ async function run(){
   assert.match(hardwareMarkup, /id="hardwareSystemInfo"/);
   assert.match(hardwareMarkup, /id="hardwareCpuInfo"/);
   assert.match(hardwareMarkup, /id="hardwareCpuUsage"/);
+  assert.match(hardwareMarkup, /class="hardware-cpu-columns"/);
+  assert.match(hardwareMarkup, /class="hardware-cpu-column"/);
   assert.match(hardwareMarkup, /id="hardwareMemoryInfo"/);
   assert.doesNotMatch(hardwareMarkup, /文件系统\s*\/\s*存储卷|hardwareFilesystemsBody/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
@@ -545,10 +547,17 @@ async function run(){
   assert.match(appSource, /function buildProvenanceMarkup\(view\)/);
   assert.match(appSource, /function cpuDetailsForView\(hardware\)/);
   assert.match(appSource, /function cpuLogicalProcessorText\(cpu\)/);
-  assert.match(css, /\.hardware-usage-grid\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-  assert.match(css, /\.hardware-three-column-info\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}/);
+  assert.match(css, /\.hardware-cpu-columns\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /#hardwareCpuUsage\.hardware-cpu-usage-grid\{grid-template-columns:1fr\}/);
+  assert.match(css, /\.detail-list\.hardware-three-column-info\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}/);
+  assert.match(css, /@media \(max-width:720px\)\{[\s\S]*\.detail-list\.hardware-three-column-info\{grid-template-columns:1fr\}/);
+  assert.match(appSource, /\['物理内存已用 \/ 可用 \/ 总量'/);
+  assert.match(appSource, /\['Swap 内存已用 \/ 可用 \/ 总量'/);
   assert.match(appSource, /\['频率（最低 \/ 最高）'/);
+  assert.match(appSource, /\['当前频率', formatMHz\(cpu\.current_mhz\)\]/);
   assert.doesNotMatch(appSource, /\['空闲', cpuUsage\.idle_percent\]/);
+  assert.doesNotMatch(appSource, /\['Nice', cpuUsage\.nice_percent\]/);
+  assert.doesNotMatch(appSource, /\['Steal', cpuUsage\.steal_percent\]/);
   assert.match(appSource, /I\/O 等待/);
   assert.match(appSource, /function partitionRowsForDisk\(disk, filesystems\)/);
   assert.doesNotMatch(

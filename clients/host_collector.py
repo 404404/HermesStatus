@@ -56,6 +56,7 @@ MAX_BLOCK_GRAPH_NODES = 256
 # bounded. It must never forward arbitrary command output such as the full
 # ``lscpu`` or ``/proc/meminfo`` document.
 CPU_USAGE_SAMPLE_SECONDS = 0.10
+MAX_CPUINFO_LINES = 4096
 _CPU_LSCPU_TEXT_FIELDS = {
     "architecture": "architecture",
     "vendor id": "vendor",
@@ -464,7 +465,28 @@ def _lscpu_float(value):
     return round(result, 1) if 0 <= result <= 1000000 else None
 
 
-def collect_cpu_details(command_runner=None):
+def _cpuinfo_current_mhz(path):
+    """Return a bounded average of per-CPU ``cpu MHz`` observations."""
+    values = []
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            for index, line in enumerate(handle):
+                if index >= MAX_CPUINFO_LINES:
+                    break
+                if ":" not in line:
+                    continue
+                key, value = line.split(":", 1)
+                if key.strip().lower() != "cpu mhz":
+                    continue
+                mhz = _lscpu_float(value)
+                if mhz is not None:
+                    values.append(mhz)
+    except OSError:
+        return None
+    return _lscpu_float(sum(values) / len(values)) if values else None
+
+
+def collect_cpu_details(command_runner=None, cpuinfo_path="/proc/cpuinfo"):
     """Collect a bounded allowlist of CPU topology facts from ``lscpu``."""
     runner = command_runner or _default_command_runner
     try:
@@ -488,6 +510,8 @@ def collect_cpu_details(command_runner=None):
         target: _lscpu_float(values.get(source))
         for source, target in _CPU_LSCPU_FLOAT_FIELDS.items()
     })
+    if details["current_mhz"] is None:
+        details["current_mhz"] = _cpuinfo_current_mhz(cpuinfo_path)
     details["model_name"] = _nullable_text(values.get("model name"), MAX_CPU_MODEL_LENGTH)
     return details, None
 

@@ -803,10 +803,10 @@ function renderHardwareDetails(view){
   const release = textOrDash(system.release_version || system.version || hardware.release_version);
   const prettyName = textOrDash(system.pretty_name || view.host.os);
   const cpuInfo = [
-    ['型号', textOrDash(cpu.model_name || hardware.cpu_model || view.resources.cpuModel)],
     ['架构', textOrDash(cpu.architecture)],
     ['步进', textOrDash(cpu.stepping)],
     ['逻辑处理器', cpuLogicalProcessorText(cpu)],
+    ['当前频率', formatMHz(cpu.current_mhz)],
     ['频率（最低 / 最高）', `${formatMHz(cpu.min_mhz)} / ${formatMHz(cpu.max_mhz)}`],
     ['虚拟化', textOrDash(cpu.virtualization)]
   ];
@@ -814,8 +814,7 @@ function renderHardwareDetails(view){
 
   const usageItems = [
     ['总使用率', cpuUsage.total_percent], ['用户态', cpuUsage.user_percent], ['内核态', cpuUsage.system_percent],
-    ['I/O 等待', cpuUsage.iowait_percent], ['Nice', cpuUsage.nice_percent], ['中断 IRQ', cpuUsage.irq_percent],
-    ['软中断 SoftIRQ', cpuUsage.softirq_percent], ['Steal', cpuUsage.steal_percent]
+    ['I/O 等待', cpuUsage.iowait_percent], ['中断 IRQ', cpuUsage.irq_percent], ['软中断 SoftIRQ', cpuUsage.softirq_percent]
   ].filter(([, value]) => finiteNumber(value) !== null);
   byId('hardwareCpuUsageMeta').textContent = usageItems.length ? '短时采样' : '数据不可用';
   byId('hardwareCpuUsage').innerHTML = usageItems.length
@@ -823,8 +822,8 @@ function renderHardwareDetails(view){
     : '<div class="table-empty">暂无可显示的 CPU 使用率数据</div>';
 
   const memoryInfo = [
-    ['内存总量', formatBytes(memory.total_bytes)],
-    ['已用 / 可用', finiteNumber(memory.used_bytes) === null && finiteNumber(memory.available_bytes) === null ? '-' : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.available_bytes)} (${formatPercentage(memoryUsedPercent(memory))})`],
+    ['物理内存已用 / 可用 / 总量', finiteNumber(memory.used_bytes) === null && finiteNumber(memory.available_bytes) === null && finiteNumber(memory.total_bytes) === null ? '-' : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.available_bytes)} / ${formatBytes(memory.total_bytes)} (${formatPercentage(memoryUsedPercent(memory))})`],
+    ['Swap 内存已用 / 可用 / 总量', finiteNumber(memory.swap_used_bytes) === null && finiteNumber(memory.swap_free_bytes) === null && finiteNumber(memory.swap_total_bytes) === null ? '-' : `${formatBytes(memory.swap_used_bytes)} / ${formatBytes(memory.swap_free_bytes)} / ${formatBytes(memory.swap_total_bytes)} (${formatPercentage(percentage(memory.swap_used_bytes, memory.swap_total_bytes))})`],
     ['空闲内存', formatBytes(memory.free_bytes)],
     ['Buffers', formatBytes(memory.buffers_bytes)],
     ['页面缓存', formatBytes(memory.cached_bytes)],
@@ -832,8 +831,6 @@ function renderHardwareDetails(view){
     ['活动 / 非活动', `${formatBytes(memory.active_bytes)} / ${formatBytes(memory.inactive_bytes)}`],
     ['Dirty / Writeback', `${formatBytes(memory.dirty_bytes)} / ${formatBytes(memory.writeback_bytes)}`],
     ['Slab', formatBytes(memory.slab_bytes)],
-    ['Swap 总量', formatBytes(memory.swap_total_bytes)],
-    ['Swap 已用 / 空闲', finiteNumber(memory.swap_used_bytes) === null && finiteNumber(memory.swap_free_bytes) === null ? '-' : `${formatBytes(memory.swap_used_bytes)} / ${formatBytes(memory.swap_free_bytes)} (${formatPercentage(percentage(memory.swap_used_bytes, memory.swap_total_bytes))})`],
     ['Swap Cache', formatBytes(memory.swap_cached_bytes)]
   ];
   byId('hardwareMemoryInfo').innerHTML = memoryInfo.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');

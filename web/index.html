@@ -90,14 +90,17 @@
             </div>
 
             <div id="hardwarePage" class="page-panel" role="tabpanel" aria-labelledby="hardwareTab" data-page="hardware" hidden>
-                <section class="data-section" aria-labelledby="hardwareCpuTitle">
-                    <div class="section-head"><h2 id="hardwareCpuTitle">CPU 信息</h2></div>
-                    <dl id="hardwareCpuInfo" class="detail-list hardware-system-info"></dl>
-                </section>
-
-                <section class="data-section" aria-labelledby="hardwareCpuUsageTitle">
-                    <div class="section-head"><h2 id="hardwareCpuUsageTitle">CPU 使用率</h2><span id="hardwareCpuUsageMeta" class="section-meta"></span></div>
-                    <div id="hardwareCpuUsage" class="hardware-usage-grid"></div>
+                <section class="data-section" aria-label="CPU 信息与使用率">
+                    <div class="hardware-cpu-columns">
+                        <div class="hardware-cpu-column">
+                            <div class="section-head"><h2 id="hardwareCpuTitle">CPU 信息</h2></div>
+                            <dl id="hardwareCpuInfo" class="detail-list hardware-system-info hardware-cpu-info"></dl>
+                        </div>
+                        <div class="hardware-cpu-column">
+                            <div class="section-head"><h2 id="hardwareCpuUsageTitle">CPU 使用率</h2><span id="hardwareCpuUsageMeta" class="section-meta"></span></div>
+                            <div id="hardwareCpuUsage" class="hardware-usage-grid hardware-cpu-usage-grid"></div>
+                        </div>
+                    </div>
                 </section>
 
                 <section class="data-section" aria-labelledby="hardwareMemoryTitle">

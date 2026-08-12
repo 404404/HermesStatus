@@ -151,7 +151,12 @@ body.light .health-card{background:#fff}
 .single-line-value .power-on-days{flex:0 0 auto}
 .lucky-home-value{display:flex;align-items:baseline;gap:.45rem;white-space:nowrap}
 .hardware-system-info{padding:0 1.35rem 1.1rem}
-.hardware-three-column-info{grid-template-columns:repeat(3,minmax(0,1fr))}
+.detail-list.hardware-three-column-info{grid-template-columns:repeat(3,minmax(0,1fr))}
+.hardware-cpu-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+.hardware-cpu-column{min-width:0}
+.hardware-cpu-column+.hardware-cpu-column{border-left:1px solid var(--border)}
+.hardware-cpu-info{grid-template-columns:1fr}
+#hardwareCpuUsage.hardware-cpu-usage-grid{grid-template-columns:1fr}
 .hardware-usage-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.9rem;padding:0 1.35rem 1.35rem}
 .hardware-usage-item{min-width:0;padding:.9rem 1rem;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--bg-alt) 78%,transparent)}
 .hardware-usage-item>div{display:flex;align-items:baseline;justify-content:space-between;gap:.65rem;color:var(--text-dim);font-size:13px}
@@ -271,6 +276,7 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
     .modal-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     .modal-two-column{grid-template-columns:1fr}
     .hardware-usage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    #hardwareCpuUsage.hardware-cpu-usage-grid{grid-template-columns:1fr}
 }
 
 @media (max-width:720px){
@@ -283,7 +289,9 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
     .device-selection-notice{text-align:left}
     .device-buttons{display:none}
     .device-select-label{display:block}
-    .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list,.easytier-command-grid,.hardware-usage-grid{grid-template-columns:1fr}
+    .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list,.easytier-command-grid,.hardware-usage-grid,.hardware-cpu-columns{grid-template-columns:1fr}
+    .detail-list.hardware-three-column-info{grid-template-columns:1fr}
+    .hardware-cpu-column+.hardware-cpu-column{border-top:1px solid var(--border);border-left:0}
     .overview-grid .summary-card:last-child,.health-grid .health-card:last-child{grid-column:auto}
     .section-head{display:block}
     .section-meta{display:block;margin:.45rem 0 0;text-align:left}

@@ -171,10 +171,16 @@ class HostCollectorTests(unittest.TestCase):
             {"field": "CPU max MHz:", "data": "3400.0"},
             {"field": "L3 cache:", "data": "4 MiB"},
         ]})
-        details, error = collect_cpu_details(lambda command, timeout: (0, lscpu))
+        with tempfile.TemporaryDirectory() as root:
+            cpuinfo = Path(root) / "cpuinfo"
+            cpuinfo.write_text("cpu MHz\t\t: 1200.0\ncpu MHz\t\t: 1800.0\n", encoding="utf-8")
+            details, error = collect_cpu_details(
+                lambda command, timeout: (0, lscpu), str(cpuinfo)
+            )
         self.assertIsNone(error)
         self.assertEqual(details["architecture"], "x86_64")
         self.assertEqual(details["logical_cpus"], 4)
+        self.assertEqual(details["current_mhz"], 1500.0)
         self.assertEqual(details["l3_cache"], "4 MiB")
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "stat"

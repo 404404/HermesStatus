@@ -8,11 +8,14 @@ Hardware monitoring is read-only, current-state observability for a configured
 Client. It adds the Hardware view between Home and Docker without changing the
 single `/json/stats.json` fetch path. The view contains:
 
-1. CPU details: model, architecture, stepping, a socket/core/thread summary,
-   minimum/maximum frequency, and virtualization plus a short-window CPU-time
-   breakdown without idle.
-2. Memory details: total, used, available, free, buffers, cache, reclaimable
-   slab, active/inactive, dirty/writeback, slab, and Swap accounting.
+1. CPU details: architecture, stepping, a socket/core/thread summary, current
+   and minimum/maximum frequency, and virtualization. The paired CPU-time
+   column has the same six rows: total, user, system, I/O wait, IRQ, and
+   SoftIRQ. Vendor, family/model, topology, caches, idle, Nice, and Steal are
+   not rendered.
+2. Memory details: physical-memory and Swap used/available/total with used
+   percentage first, then free memory, buffers, cache, reclaimable slab,
+   active/inactive, dirty/writeback, slab, and Swap cache.
 3. System information: distribution/release, kernel, and architecture.
 4. Physical disks: model, capacity, temperature, SMART result, power-on hours,
    cumulative counters, and one row per associated partition or logical volume
@@ -46,11 +49,13 @@ The Server validates counts, string lengths, counters, statuses, paths, and
 collection states before projection and persistence. Browser rendering escapes
 all disk, model, mountpoint, filesystem, OS, and provenance strings.
 
-CPU detail collection parses a fixed `lscpu --json` allowlist rather than
-forwarding raw command output. CPU use is calculated from two aggregate
-`/proc/stat` samples; `iowait` remains distinct from idle. Memory uses a fixed
-`/proc/meminfo` allowlist. These are observations, never device identity, and
-an unavailable optional source does not invent a value.
+CPU detail collection parses a fixed `lscpu --json` allowlist. When its
+current-MHz field is absent, it uses a bounded average of numeric `cpu MHz`
+lines from `/proc/cpuinfo`; raw command or proc-file output is not forwarded.
+CPU use is calculated from two aggregate `/proc/stat` samples; `iowait`
+remains distinct from idle. Memory uses a fixed `/proc/meminfo` allowlist.
+These are observations, never device identity, and an unavailable optional
+source does not invent a value.
 
 ## Physical SMART collection
 
