@@ -245,6 +245,16 @@ func ValidateHardwareStats(stats *HardwareStats) error {
 	if err := validateOptionalString("hardware.cpu_model", stats.CPUModel, MaxCPUModelLength); err != nil {
 		return err
 	}
+	if stats.CPUDetails != nil {
+		if err := ValidateCPUDetails(stats.CPUDetails); err != nil {
+			return err
+		}
+	}
+	if stats.MemoryDetails != nil {
+		if err := ValidateMemoryDetails(stats.MemoryDetails); err != nil {
+			return err
+		}
+	}
 	if stats.CPUTemperature != nil {
 		if err := validateTemperature("hardware.cpu_temperature.value", stats.CPUTemperature.Value); err != nil {
 			return err
@@ -313,6 +323,113 @@ func ValidateHardwareStats(stats *HardwareStats) error {
 		return err
 	}
 	return validatePayloadSize("hardware", stats, MaxHardwarePayloadBytes)
+}
+
+func ValidateCPUDetails(details *CPUDetails) error {
+	if details == nil {
+		return validationError(validationCodeInvalidValue, "hardware.cpu_details", "object is required")
+	}
+	for field, value := range map[string]*string{
+		"architecture": details.Architecture, "vendor": details.Vendor, "family": details.Family,
+		"model_id": details.ModelID, "model_name": details.ModelName, "stepping": details.Stepping,
+		"virtualization": details.Virtualization, "l1d_cache": details.L1DCache, "l1i_cache": details.L1ICache,
+		"l2_cache": details.L2Cache, "l3_cache": details.L3Cache,
+	} {
+		if err := validateOptionalString("hardware.cpu_details."+field, value, MaxCPUTextLength); err != nil {
+			return err
+		}
+	}
+	for field, value := range map[string]*int{
+		"logical_cpus": details.LogicalCPUs, "sockets": details.Sockets,
+		"cores_per_socket": details.CoresPerSocket, "threads_per_core": details.ThreadsPerCore,
+	} {
+		if value != nil && (*value <= 0 || *value > MaxCPUCount) {
+			return validationError(validationCodeInvalidValue, "hardware.cpu_details."+field, "value is outside the allowed range")
+		}
+	}
+	for field, value := range map[string]*float64{
+		"max_mhz": details.MaxMHz, "min_mhz": details.MinMHz, "current_mhz": details.CurrentMHz,
+	} {
+		if err := validateOptionalBoundedFloat("hardware.cpu_details."+field, value, MaxCPUFrequencyMHz); err != nil {
+			return err
+		}
+	}
+	if details.MinMHz != nil && details.MaxMHz != nil && *details.MinMHz > *details.MaxMHz {
+		return validationError(validationCodeInvalidValue, "hardware.cpu_details", "min_mhz cannot exceed max_mhz")
+	}
+	if details.Usage != nil {
+		if err := ValidateCPUUsageStats(details.Usage); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ValidateCPUUsageStats(usage *CPUUsageStats) error {
+	if usage == nil {
+		return validationError(validationCodeInvalidValue, "hardware.cpu_details.usage", "object is required")
+	}
+	values := map[string]*float64{
+		"user_percent": usage.UserPercent, "nice_percent": usage.NicePercent, "system_percent": usage.SystemPercent,
+		"idle_percent": usage.IdlePercent, "iowait_percent": usage.IOWaitPercent, "irq_percent": usage.IRQPercent,
+		"softirq_percent": usage.SoftIRQPercent, "steal_percent": usage.StealPercent, "total_percent": usage.TotalPercent,
+	}
+	for field, value := range values {
+		if err := validateOptionalBoundedFloat("hardware.cpu_details.usage."+field, value, 100); err != nil {
+			return err
+		}
+	}
+	if usage.IdlePercent != nil && usage.TotalPercent != nil && math.Abs(*usage.TotalPercent-(100-*usage.IdlePercent)) > 0.2 {
+		return validationError(validationCodeInvalidValue, "hardware.cpu_details.usage.total_percent", "must equal 100 minus idle_percent")
+	}
+	return nil
+}
+
+func ValidateMemoryDetails(memory *MemoryDetails) error {
+	if memory == nil {
+		return validationError(validationCodeInvalidValue, "hardware.memory_details", "object is required")
+	}
+	values := map[string]*int64{
+		"total_bytes": memory.TotalBytes, "used_bytes": memory.UsedBytes, "available_bytes": memory.AvailableBytes,
+		"free_bytes": memory.FreeBytes, "buffers_bytes": memory.BuffersBytes, "cached_bytes": memory.CachedBytes,
+		"reclaimable_bytes": memory.ReclaimableBytes, "active_bytes": memory.ActiveBytes,
+		"inactive_bytes": memory.InactiveBytes, "dirty_bytes": memory.DirtyBytes, "writeback_bytes": memory.WritebackBytes,
+		"slab_bytes": memory.SlabBytes, "swap_total_bytes": memory.SwapTotalBytes,
+		"swap_used_bytes": memory.SwapUsedBytes, "swap_free_bytes": memory.SwapFreeBytes,
+		"swap_cached_bytes": memory.SwapCachedBytes,
+	}
+	for field, value := range values {
+		if err := validateCounter("hardware.memory_details."+field, value, MaxSafeInteger); err != nil {
+			return err
+		}
+	}
+	if memory.TotalBytes == nil || *memory.TotalBytes <= 0 {
+		return validationError(validationCodeInvalidValue, "hardware.memory_details.total_bytes", "must be present and positive")
+	}
+	for field, value := range map[string]*int64{
+		"used_bytes": memory.UsedBytes, "available_bytes": memory.AvailableBytes, "free_bytes": memory.FreeBytes,
+		"buffers_bytes": memory.BuffersBytes, "cached_bytes": memory.CachedBytes, "reclaimable_bytes": memory.ReclaimableBytes,
+		"active_bytes": memory.ActiveBytes, "inactive_bytes": memory.InactiveBytes, "dirty_bytes": memory.DirtyBytes,
+		"writeback_bytes": memory.WritebackBytes, "slab_bytes": memory.SlabBytes,
+	} {
+		if value != nil && *value > *memory.TotalBytes {
+			return validationError(validationCodeInvalidValue, "hardware.memory_details."+field, "cannot exceed total_bytes")
+		}
+	}
+	if memory.UsedBytes == nil || memory.AvailableBytes == nil || *memory.UsedBytes+*memory.AvailableBytes != *memory.TotalBytes {
+		return validationError(validationCodeInvalidValue, "hardware.memory_details", "used_bytes and available_bytes must partition total_bytes")
+	}
+	if memory.SwapTotalBytes != nil {
+		for field, value := range map[string]*int64{"swap_used_bytes": memory.SwapUsedBytes, "swap_free_bytes": memory.SwapFreeBytes, "swap_cached_bytes": memory.SwapCachedBytes} {
+			if value != nil && *value > *memory.SwapTotalBytes {
+				return validationError(validationCodeInvalidValue, "hardware.memory_details."+field, "cannot exceed swap_total_bytes")
+			}
+		}
+		if memory.SwapUsedBytes == nil || memory.SwapFreeBytes == nil || *memory.SwapUsedBytes+*memory.SwapFreeBytes != *memory.SwapTotalBytes {
+			return validationError(validationCodeInvalidValue, "hardware.memory_details", "swap_used_bytes and swap_free_bytes must partition swap_total_bytes")
+		}
+	}
+	return nil
 }
 
 func ValidateStorageStats(storage *StorageStats) error {
@@ -1000,6 +1117,21 @@ func SanitizeExtensionStats(input ExtensionStats) ExtensionStats {
 		hardware.DiskSMARTSource = sanitizeStringPointer(hardware.DiskSMARTSource)
 		hardware.UpdatedAt = sanitizeStringPointer(hardware.UpdatedAt)
 		hardware.Error = sanitizeExtensionError(hardware.Error)
+		if hardware.CPUDetails != nil {
+			details := *hardware.CPUDetails
+			details.Architecture = sanitizeStringPointer(details.Architecture)
+			details.Vendor = sanitizeStringPointer(details.Vendor)
+			details.Family = sanitizeStringPointer(details.Family)
+			details.ModelID = sanitizeStringPointer(details.ModelID)
+			details.ModelName = sanitizeStringPointer(details.ModelName)
+			details.Stepping = sanitizeStringPointer(details.Stepping)
+			details.Virtualization = sanitizeStringPointer(details.Virtualization)
+			details.L1DCache = sanitizeStringPointer(details.L1DCache)
+			details.L1ICache = sanitizeStringPointer(details.L1ICache)
+			details.L2Cache = sanitizeStringPointer(details.L2Cache)
+			details.L3Cache = sanitizeStringPointer(details.L3Cache)
+			hardware.CPUDetails = &details
+		}
 		if hardware.CPUTemperature != nil {
 			temperature := *hardware.CPUTemperature
 			temperature.Source = sanitizeStringPointer(temperature.Source)
@@ -1311,6 +1443,25 @@ func validateRequiredHardware(raw json.RawMessage) error {
 	}
 	if err := validateNullableObjectFields(object["disk_temperature"], "hardware.disk_temperature", "current", "highest", "lowest", "unit", "source"); err != nil {
 		return err
+	}
+	if raw, ok := object["cpu_details"]; ok {
+		if err := validateNullableObjectFields(raw, "hardware.cpu_details", "architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "usage"); err != nil {
+			return err
+		}
+		if !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			cpuDetails, detailErr := requiredObject(raw, "hardware.cpu_details")
+			if detailErr != nil {
+				return detailErr
+			}
+			if detailErr = validateNullableObjectFields(cpuDetails["usage"], "hardware.cpu_details.usage", "user_percent", "nice_percent", "system_percent", "idle_percent", "iowait_percent", "irq_percent", "softirq_percent", "steal_percent", "total_percent"); detailErr != nil {
+				return detailErr
+			}
+		}
+	}
+	if raw, ok := object["memory_details"]; ok {
+		if err := validateNullableObjectFields(raw, "hardware.memory_details", "total_bytes", "used_bytes", "available_bytes", "free_bytes", "buffers_bytes", "cached_bytes", "reclaimable_bytes", "active_bytes", "inactive_bytes", "dirty_bytes", "writeback_bytes", "slab_bytes", "swap_total_bytes", "swap_used_bytes", "swap_free_bytes", "swap_cached_bytes"); err != nil {
+			return err
+		}
 	}
 	if raw, ok := object["storage"]; ok {
 		if err := validateRequiredStorage(raw); err != nil {

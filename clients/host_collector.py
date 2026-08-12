@@ -23,6 +23,8 @@ EXTENSION_VERSION = "1.0-draft"
 REDACTED_VALUE = "[redacted]"
 
 MAX_CPU_MODEL_LENGTH = 128
+MAX_CPU_VENDOR_LENGTH = 128
+MAX_CPU_TEXT_LENGTH = 128
 MAX_TEMPERATURE_SOURCE_LENGTH = 128
 MAX_DISK_DEVICE_LENGTH = 128
 MAX_DISK_SMART_SOURCE_LENGTH = 64
@@ -48,6 +50,42 @@ MAX_FILESYSTEMS = 128
 MAX_FILESYSTEM_BACKING_DISKS = 16
 MAX_BLOCK_GRAPH_DEPTH = 16
 MAX_BLOCK_GRAPH_NODES = 256
+
+# The hardware document deliberately keeps CPU and memory facts typed and
+# bounded. It must never forward arbitrary command output such as the full
+# ``lscpu`` or ``/proc/meminfo`` document.
+CPU_USAGE_SAMPLE_SECONDS = 0.10
+_CPU_LSCPU_TEXT_FIELDS = {
+    "architecture": "architecture",
+    "vendor id": "vendor",
+    "cpu family": "family",
+    "model": "model_id",
+    "stepping": "stepping",
+    "virtualization": "virtualization",
+    "l1d cache": "l1d_cache",
+    "l1i cache": "l1i_cache",
+    "l2 cache": "l2_cache",
+    "l3 cache": "l3_cache",
+}
+_CPU_LSCPU_INTEGER_FIELDS = {
+    "cpu(s)": "logical_cpus",
+    "socket(s)": "sockets",
+    "core(s) per socket": "cores_per_socket",
+    "thread(s) per core": "threads_per_core",
+}
+_CPU_LSCPU_FLOAT_FIELDS = {
+    "cpu max mhz": "max_mhz",
+    "cpu min mhz": "min_mhz",
+    "cpu mhz": "current_mhz",
+}
+_CPU_STAT_FIELDS = (
+    "user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal",
+)
+_MEMINFO_FIELDS = {
+    "MemTotal", "MemAvailable", "MemFree", "Buffers", "Cached", "SReclaimable",
+    "Shmem", "SwapTotal", "SwapFree", "SwapCached", "Active", "Inactive",
+    "Dirty", "Writeback", "Slab",
+}
 
 SMART_TIMEOUT_SECONDS = 12
 # smartctl bits 0 and 1 mean command-line parsing or device-open failure. Bit
@@ -127,6 +165,8 @@ def _error(code, message, source, retryable=False, http_status=None):
 def not_reported_hardware():
     return {
         "cpu_model": None,
+        "cpu_details": None,
+        "memory_details": None,
         "cpu_temperature": None,
         "disk_temperature": None,
         "disk_smart_status": "unknown",
@@ -391,6 +431,66 @@ def _cpu_model_from_lscpu_json(output):
     return None
 
 
+def _lscpu_values(output):
+    try:
+        data = json.loads(output)
+    except (TypeError, ValueError):
+        return {}
+    values = {}
+    for item in data.get("lscpu", []) if isinstance(data, dict) else []:
+        if not isinstance(item, dict):
+            continue
+        field = str(item.get("field") or "").strip().rstrip(":").lower()
+        value = item.get("data")
+        if field and value not in (None, "") and field not in values:
+            values[field] = value
+    return values
+
+
+def _lscpu_integer(value):
+    try:
+        result = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return result if 0 < result <= 65536 else None
+
+
+def _lscpu_float(value):
+    try:
+        result = float(str(value).strip().replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+    return round(result, 1) if 0 <= result <= 1000000 else None
+
+
+def collect_cpu_details(command_runner=None):
+    """Collect a bounded allowlist of CPU topology facts from ``lscpu``."""
+    runner = command_runner or _default_command_runner
+    try:
+        returncode, output = runner(["lscpu", "--json"], 3)
+        values = _lscpu_values(output) if returncode == 0 else {}
+    except (OSError, subprocess.SubprocessError, ValueError):
+        values = {}
+    if not values:
+        return None, _error(
+            "cpu_details_unavailable", "Host CPU details are unavailable", "lscpu", True
+        )
+    details = {
+        target: _nullable_text(values.get(source), MAX_CPU_VENDOR_LENGTH if target == "vendor" else MAX_CPU_TEXT_LENGTH)
+        for source, target in _CPU_LSCPU_TEXT_FIELDS.items()
+    }
+    details.update({
+        target: _lscpu_integer(values.get(source))
+        for source, target in _CPU_LSCPU_INTEGER_FIELDS.items()
+    })
+    details.update({
+        target: _lscpu_float(values.get(source))
+        for source, target in _CPU_LSCPU_FLOAT_FIELDS.items()
+    })
+    details["model_name"] = _nullable_text(values.get("model name"), MAX_CPU_MODEL_LENGTH)
+    return details, None
+
+
 def collect_cpu_model(command_runner=None, cpuinfo_path="/proc/cpuinfo"):
     runner = command_runner or _default_command_runner
     model = None
@@ -425,6 +525,94 @@ def collect_cpu_model(command_runner=None, cpuinfo_path="/proc/cpuinfo"):
         "cpu-model",
         False,
     )
+
+
+def _read_cpu_stat(path="/proc/stat"):
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if not line.startswith("cpu "):
+                    continue
+                values = line.split()[1:]
+                counters = []
+                for index in range(len(_CPU_STAT_FIELDS)):
+                    try:
+                        value = int(values[index]) if index < len(values) else 0
+                    except (TypeError, ValueError):
+                        return None
+                    if value < 0:
+                        return None
+                    counters.append(value)
+                return counters
+    except OSError:
+        pass
+    return None
+
+
+def collect_cpu_usage(cpu_stat_path="/proc/stat", sleep_func=None):
+    """Sample aggregate CPU time twice so iowait is an actual interval share."""
+    pause = sleep_func or time.sleep
+    before = _read_cpu_stat(cpu_stat_path)
+    if before is None:
+        return None, _error("cpu_usage_unavailable", "CPU usage is unavailable", "proc-stat", True)
+    try:
+        pause(CPU_USAGE_SAMPLE_SECONDS)
+    except (TypeError, ValueError):
+        return None, _error("cpu_usage_unavailable", "CPU usage is unavailable", "proc-stat", True)
+    after = _read_cpu_stat(cpu_stat_path)
+    if after is None:
+        return None, _error("cpu_usage_unavailable", "CPU usage is unavailable", "proc-stat", True)
+    delta = [max(0, right - left) for left, right in zip(before, after)]
+    total = sum(delta)
+    if total <= 0:
+        return None, _error("cpu_usage_unavailable", "CPU usage is unavailable", "proc-stat", True)
+    usage = {
+        "%s_percent" % field: round((delta[index] * 100.0) / total, 1)
+        for index, field in enumerate(_CPU_STAT_FIELDS)
+    }
+    usage["total_percent"] = round(max(0.0, 100.0 - usage["idle_percent"]), 1)
+    return usage, None
+
+
+def collect_memory_details(meminfo_path="/proc/meminfo"):
+    values = {}
+    try:
+        with open(meminfo_path, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                match = re.match(r"^([A-Za-z]+):\s*(\d+)\s*kB$", line.strip())
+                if not match or match.group(1) not in _MEMINFO_FIELDS:
+                    continue
+                values[match.group(1)] = int(match.group(2)) * 1024
+    except (OSError, ValueError):
+        values = {}
+    total = values.get("MemTotal")
+    if total is None or not _valid_counter(total) or total <= 0:
+        return None, _error("memory_unavailable", "Host memory details are unavailable", "meminfo", True)
+    available = values.get("MemAvailable")
+    if available is None:
+        available = sum(values.get(name, 0) for name in ("MemFree", "Buffers", "Cached", "SReclaimable"))
+    available = min(total, max(0, available))
+    cached = max(0, values.get("Cached", 0) + values.get("SReclaimable", 0) - values.get("Shmem", 0))
+    swap_total = values.get("SwapTotal", 0)
+    swap_free = min(swap_total, max(0, values.get("SwapFree", 0)))
+    return {
+        "total_bytes": total,
+        "used_bytes": max(0, total - available),
+        "available_bytes": available,
+        "free_bytes": values.get("MemFree"),
+        "buffers_bytes": values.get("Buffers"),
+        "cached_bytes": cached,
+        "reclaimable_bytes": values.get("SReclaimable"),
+        "active_bytes": values.get("Active"),
+        "inactive_bytes": values.get("Inactive"),
+        "dirty_bytes": values.get("Dirty"),
+        "writeback_bytes": values.get("Writeback"),
+        "slab_bytes": values.get("Slab"),
+        "swap_total_bytes": swap_total,
+        "swap_used_bytes": max(0, swap_total - swap_free),
+        "swap_free_bytes": swap_free,
+        "swap_cached_bytes": values.get("SwapCached"),
+    }, None
 
 
 def _read_text(path):
@@ -983,7 +1171,7 @@ def _stack_type(source, graph, fs_type=None):
         return "lvm"
     if node_type in {"crypt", "dm"} or str(name).startswith("dm-"):
         return "device_mapper"
-    if node_type == "raid":
+    if isinstance(node_type, str) and node_type.startswith("raid"):
         return "mdraid"
     return "plain" if node_type in {"disk", "part"} else "unknown"
 
@@ -1075,7 +1263,11 @@ def collect_filesystems(filesystem_probes, block_graph, command_runner=None, sta
             block_size = int(stats.f_frsize or stats.f_bsize)
             total = int(stats.f_blocks) * block_size
             available = int(stats.f_bavail) * block_size
-            used = max(0, int(stats.f_blocks - stats.f_bavail) * block_size)
+            # f_bfree is the filesystem-wide free block count. f_bavail is
+            # user-available capacity and deliberately excludes reserved
+            # blocks, so use f_bfree for used capacity while still reporting
+            # f_bavail as available capacity.
+            used = max(0, int(stats.f_blocks - stats.f_bfree) * block_size)
             if not all(_valid_counter(value) for value in (total, available, used)) or total <= 0:
                 raise ValueError("invalid statvfs values")
             item.update({
@@ -1211,8 +1403,17 @@ def collect_hardware(
     system_identity=None,
     sys_block_root="/sys/class/block",
     statvfs_func=None,
+    cpu_details=None,
+    cpu_stat_path="/proc/stat",
+    cpu_usage_sleep=None,
+    meminfo_path="/proc/meminfo",
 ):
     errors = list(identity_errors or [])
+    cpu_usage, cpu_usage_error = collect_cpu_usage(cpu_stat_path, cpu_usage_sleep)
+    memory_details, memory_error = collect_memory_details(meminfo_path)
+    for item in (cpu_usage_error, memory_error):
+        if item:
+            errors.append(item)
     sensors = collect_hwmon_temperatures(hwmon_root)
     cpu_temperature = pick_cpu_temperature(sensors)
     if not cpu_temperature:
@@ -1263,8 +1464,13 @@ def collect_hardware(
             "source": _nullable_text(legacy_smart.get("temperature_source"), MAX_TEMPERATURE_SOURCE_LENGTH),
         }
 
+    reported_cpu_details = dict(cpu_details) if isinstance(cpu_details, dict) else None
+    if reported_cpu_details is not None:
+        reported_cpu_details["usage"] = cpu_usage
     return {
         "cpu_model": _nullable_text(cpu_model, MAX_CPU_MODEL_LENGTH),
+        "cpu_details": reported_cpu_details,
+        "memory_details": memory_details,
         "cpu_temperature": {
             "value": float(cpu_temperature["value"]),
             "unit": "C",
@@ -1532,6 +1738,10 @@ class HostExtensionCollector(object):
         if self.system_identity.get("pretty_name"):
             self.host_os = self.system_identity["pretty_name"]
         self.cpu_model, cpu_error = collect_cpu_model(command_runner)
+        self.cpu_details, _cpu_details_error = collect_cpu_details(command_runner)
+        # CPU detail fields are an optional observability enhancement. Their
+        # absence must not turn otherwise valid SMART/storage data into a
+        # failed hardware domain.
         self.identity_errors = [item for item in (os_error, cpu_error) if item]
         self._hardware = not_reported_hardware()
         self._docker = not_reported_docker()
@@ -1564,6 +1774,7 @@ class HostExtensionCollector(object):
                 filesystem_probes=self.filesystem_probes,
                 system_identity=self.system_identity,
                 sys_block_root=self.sys_block_root,
+                cpu_details=self.cpu_details,
             )
         except Exception:
             payload = not_reported_hardware()

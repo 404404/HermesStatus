@@ -17,6 +17,9 @@ const (
 	MaxHTTPStatus         = 599
 
 	MaxCPUModelLength          = 128
+	MaxCPUTextLength           = 128
+	MaxCPUCount                = 65536
+	MaxCPUFrequencyMHz         = 1000000.0
 	MaxTemperatureSourceLength = 128
 	MaxDiskDeviceLength        = 128
 	MaxDiskSmartSourceLength   = 64
@@ -135,6 +138,8 @@ type ExtensionSnapshot struct {
 
 type HardwareStats struct {
 	CPUModel         *string               `json:"cpu_model"`
+	CPUDetails       *CPUDetails           `json:"cpu_details,omitempty"`
+	MemoryDetails    *MemoryDetails        `json:"memory_details,omitempty"`
 	CPUTemperature   *TemperatureReading   `json:"cpu_temperature"`
 	DiskTemperature  *DiskTemperatureStats `json:"disk_temperature"`
 	DiskSMARTStatus  DiskSMARTStatus       `json:"disk_smart_status"`
@@ -150,6 +155,66 @@ type HardwareStats struct {
 	UpdatedAt      *string         `json:"updated_at"`
 	Stale          bool            `json:"stale"`
 	Error          *ExtensionError `json:"error"`
+}
+
+// CPUDetails is a bounded allowlist of host CPU topology fields. It is not a
+// raw lscpu payload: capability flags, firmware strings, and arbitrary command
+// output are intentionally excluded.
+type CPUDetails struct {
+	Architecture   *string        `json:"architecture"`
+	Vendor         *string        `json:"vendor"`
+	Family         *string        `json:"family"`
+	ModelID        *string        `json:"model_id"`
+	ModelName      *string        `json:"model_name"`
+	Stepping       *string        `json:"stepping"`
+	Virtualization *string        `json:"virtualization"`
+	L1DCache       *string        `json:"l1d_cache"`
+	L1ICache       *string        `json:"l1i_cache"`
+	L2Cache        *string        `json:"l2_cache"`
+	L3Cache        *string        `json:"l3_cache"`
+	LogicalCPUs    *int           `json:"logical_cpus"`
+	Sockets        *int           `json:"sockets"`
+	CoresPerSocket *int           `json:"cores_per_socket"`
+	ThreadsPerCore *int           `json:"threads_per_core"`
+	MaxMHz         *float64       `json:"max_mhz"`
+	MinMHz         *float64       `json:"min_mhz"`
+	CurrentMHz     *float64       `json:"current_mhz"`
+	Usage          *CPUUsageStats `json:"usage"`
+}
+
+// CPUUsageStats is a short sampling-window share of aggregate CPU time.
+// IOWait is separate from idle so operators can distinguish storage pressure.
+type CPUUsageStats struct {
+	UserPercent    *float64 `json:"user_percent"`
+	NicePercent    *float64 `json:"nice_percent"`
+	SystemPercent  *float64 `json:"system_percent"`
+	IdlePercent    *float64 `json:"idle_percent"`
+	IOWaitPercent  *float64 `json:"iowait_percent"`
+	IRQPercent     *float64 `json:"irq_percent"`
+	SoftIRQPercent *float64 `json:"softirq_percent"`
+	StealPercent   *float64 `json:"steal_percent"`
+	TotalPercent   *float64 `json:"total_percent"`
+}
+
+// MemoryDetails provides host memory accounting from a bounded /proc/meminfo
+// allowlist. It does not include process-level memory or page contents.
+type MemoryDetails struct {
+	TotalBytes       *int64 `json:"total_bytes"`
+	UsedBytes        *int64 `json:"used_bytes"`
+	AvailableBytes   *int64 `json:"available_bytes"`
+	FreeBytes        *int64 `json:"free_bytes"`
+	BuffersBytes     *int64 `json:"buffers_bytes"`
+	CachedBytes      *int64 `json:"cached_bytes"`
+	ReclaimableBytes *int64 `json:"reclaimable_bytes"`
+	ActiveBytes      *int64 `json:"active_bytes"`
+	InactiveBytes    *int64 `json:"inactive_bytes"`
+	DirtyBytes       *int64 `json:"dirty_bytes"`
+	WritebackBytes   *int64 `json:"writeback_bytes"`
+	SlabBytes        *int64 `json:"slab_bytes"`
+	SwapTotalBytes   *int64 `json:"swap_total_bytes"`
+	SwapUsedBytes    *int64 `json:"swap_used_bytes"`
+	SwapFreeBytes    *int64 `json:"swap_free_bytes"`
+	SwapCachedBytes  *int64 `json:"swap_cached_bytes"`
 }
 
 // StorageStats is a bounded, read-only storage inventory. Physical disks and

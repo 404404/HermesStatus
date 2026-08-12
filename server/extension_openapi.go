@@ -123,6 +123,46 @@ func extensionOpenAPISchemas() map[string]any {
 			"source":          map[string]any{"type": "string", "enum": []string{"os-release", "dsm-version", "unknown", "unavailable"}},
 		},
 	)
+	cpuUsage := requiredObject(
+		[]string{"user_percent", "nice_percent", "system_percent", "idle_percent", "iowait_percent", "irq_percent", "softirq_percent", "steal_percent", "total_percent"},
+		map[string]any{
+			"user_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU user-time percentage"}, "nice_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU nice-time percentage"},
+			"system_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU system-time percentage"}, "idle_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU idle-time percentage"},
+			"iowait_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU I/O-wait percentage"}, "irq_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU IRQ percentage"},
+			"softirq_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU soft-IRQ percentage"}, "steal_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU steal-time percentage"},
+			"total_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate non-idle CPU percentage"},
+		},
+	)
+	cpuDetails := requiredObject(
+		[]string{"architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "usage"},
+		map[string]any{
+			"architecture": nullableString(MaxCPUTextLength, "CPU architecture"), "vendor": nullableString(MaxCPUTextLength, "CPU vendor"),
+			"family": nullableString(MaxCPUTextLength, "CPU family"), "model_id": nullableString(MaxCPUTextLength, "CPU model identifier"),
+			"model_name": nullableString(MaxCPUModelLength, "CPU model name"), "stepping": nullableString(MaxCPUTextLength, "CPU stepping"),
+			"virtualization": nullableString(MaxCPUTextLength, "CPU virtualization capability"), "l1d_cache": nullableString(MaxCPUTextLength, "L1 data cache"),
+			"l1i_cache": nullableString(MaxCPUTextLength, "L1 instruction cache"), "l2_cache": nullableString(MaxCPUTextLength, "L2 cache"),
+			"l3_cache":     nullableString(MaxCPUTextLength, "L3 cache"),
+			"logical_cpus": nullableInteger(MaxCPUCount, "Logical CPU count"), "sockets": nullableInteger(MaxCPUCount, "CPU socket count"),
+			"cores_per_socket": nullableInteger(MaxCPUCount, "CPU cores per socket"), "threads_per_core": nullableInteger(MaxCPUCount, "CPU threads per core"),
+			"max_mhz":     map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
+			"min_mhz":     map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
+			"current_mhz": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
+			"usage":       nullableRef("CPUUsageStats"),
+		},
+	)
+	memoryDetails := requiredObject(
+		[]string{"total_bytes", "used_bytes", "available_bytes", "free_bytes", "buffers_bytes", "cached_bytes", "reclaimable_bytes", "active_bytes", "inactive_bytes", "dirty_bytes", "writeback_bytes", "slab_bytes", "swap_total_bytes", "swap_used_bytes", "swap_free_bytes", "swap_cached_bytes"},
+		map[string]any{
+			"total_bytes": nullableInteger(MaxSafeInteger, "Total host memory"), "used_bytes": nullableInteger(MaxSafeInteger, "Used host memory"),
+			"available_bytes": nullableInteger(MaxSafeInteger, "Available host memory"), "free_bytes": nullableInteger(MaxSafeInteger, "Free host memory"),
+			"buffers_bytes": nullableInteger(MaxSafeInteger, "Host buffer memory"), "cached_bytes": nullableInteger(MaxSafeInteger, "Host page cache memory"),
+			"reclaimable_bytes": nullableInteger(MaxSafeInteger, "Reclaimable slab memory"), "active_bytes": nullableInteger(MaxSafeInteger, "Active memory"),
+			"inactive_bytes": nullableInteger(MaxSafeInteger, "Inactive memory"), "dirty_bytes": nullableInteger(MaxSafeInteger, "Dirty memory"),
+			"writeback_bytes": nullableInteger(MaxSafeInteger, "Writeback memory"), "slab_bytes": nullableInteger(MaxSafeInteger, "Slab memory"),
+			"swap_total_bytes": nullableInteger(MaxSafeInteger, "Total swap"), "swap_used_bytes": nullableInteger(MaxSafeInteger, "Used swap"),
+			"swap_free_bytes": nullableInteger(MaxSafeInteger, "Free swap"), "swap_cached_bytes": nullableInteger(MaxSafeInteger, "Swap cache"),
+		},
+	)
 	clientBuild := requiredObject(
 		[]string{"version", "revision", "build_time", "protocol"},
 		map[string]any{
@@ -145,6 +185,8 @@ func extensionOpenAPISchemas() map[string]any {
 		[]string{"cpu_model", "cpu_temperature", "disk_temperature", "disk_smart_status", "disk_power_on_hours", "disk_written_bytes", "disk_read_bytes", "disk_device", "disk_smart_source", "updated_at", "stale", "error"},
 		map[string]any{
 			"cpu_model":           nullableString(MaxCPUModelLength, "Sanitized CPU model"),
+			"cpu_details":         nullableRef("CPUDetails"),
+			"memory_details":      nullableRef("MemoryDetails"),
 			"cpu_temperature":     nullableRef("TemperatureReading"),
 			"disk_temperature":    nullableRef("DiskTemperature"),
 			"disk_smart_status":   map[string]any{"type": "string", "enum": []string{"passed", "failed", "unknown"}},
@@ -164,7 +206,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"cpu_model": "Example CPU", "cpu_temperature": nil, "disk_temperature": nil,
 		"disk_smart_status": "unknown", "disk_power_on_hours": nil, "disk_written_bytes": nil,
 		"disk_read_bytes": nil, "disk_device": nil, "disk_smart_source": nil,
-		"storage": nil, "system_identity": nil,
+		"cpu_details": nil, "memory_details": nil, "storage": nil, "system_identity": nil,
 		"updated_at": nil, "stale": true,
 		"error": map[string]any{"code": "not_reported", "message": "Extension data was not reported", "source": "hardware", "retryable": false, "http_status": nil},
 	}
@@ -509,6 +551,9 @@ func extensionOpenAPISchemas() map[string]any {
 		"StorageSummary":                storageSummary,
 		"StorageStats":                  storageStats,
 		"SystemIdentity":                systemIdentity,
+		"CPUUsageStats":                 cpuUsage,
+		"CPUDetails":                    cpuDetails,
+		"MemoryDetails":                 memoryDetails,
 		"ClientBuildInfo":               clientBuild,
 		"ServerBuildInfo":               serverBuild,
 		"HardwareStats":                 hardware,

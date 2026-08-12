@@ -17,12 +17,15 @@ from host_collector import (
     atomic_write_json,
     build_block_device_graph,
     collect_client_build,
+    collect_cpu_details,
     collect_cpu_model,
+    collect_cpu_usage,
     collect_docker,
     collect_filesystems,
     collect_hardware,
     collect_host_os,
     collect_hwmon_temperatures,
+    collect_memory_details,
     collect_smart,
     collect_smart_devices,
     not_reported_docker,
@@ -155,6 +158,52 @@ class HostCollectorTests(unittest.TestCase):
         )
         self.assertEqual(model, "Example Processor 4125 @ 2.00GHz")
         self.assertIsNone(error)
+
+    def test_cpu_details_and_usage_are_bounded_and_include_iowait(self):
+        lscpu = json.dumps({"lscpu": [
+            {"field": "Architecture:", "data": "x86_64"},
+            {"field": "Vendor ID:", "data": "ExampleVendor"},
+            {"field": "Model name:", "data": "Example CPU"},
+            {"field": "CPU(s):", "data": "4"},
+            {"field": "Socket(s):", "data": "1"},
+            {"field": "Core(s) per socket:", "data": "2"},
+            {"field": "Thread(s) per core:", "data": "2"},
+            {"field": "CPU max MHz:", "data": "3400.0"},
+            {"field": "L3 cache:", "data": "4 MiB"},
+        ]})
+        details, error = collect_cpu_details(lambda command, timeout: (0, lscpu))
+        self.assertIsNone(error)
+        self.assertEqual(details["architecture"], "x86_64")
+        self.assertEqual(details["logical_cpus"], 4)
+        self.assertEqual(details["l3_cache"], "4 MiB")
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "stat"
+            path.write_text("cpu  100 10 20 800 30 4 6 2\n", encoding="utf-8")
+
+            def advance(_seconds):
+                path.write_text("cpu  130 10 40 860 45 5 10 5\n", encoding="utf-8")
+
+            usage, usage_error = collect_cpu_usage(str(path), advance)
+        self.assertIsNone(usage_error)
+        self.assertGreater(usage["iowait_percent"], 0)
+        self.assertAlmostEqual(usage["total_percent"], 100 - usage["idle_percent"], places=1)
+
+    def test_memory_details_reports_buffers_cache_and_swap(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "meminfo"
+            path.write_text(
+                "MemTotal:       1000 kB\nMemAvailable:    400 kB\nMemFree: 200 kB\n"
+                "Buffers: 100 kB\nCached: 250 kB\nSReclaimable: 50 kB\nShmem: 20 kB\n"
+                "SwapTotal: 500 kB\nSwapFree: 300 kB\nSwapCached: 10 kB\n",
+                encoding="utf-8",
+            )
+            memory, error = collect_memory_details(str(path))
+        self.assertIsNone(error)
+        self.assertEqual(memory["total_bytes"], 1000 * 1024)
+        self.assertEqual(memory["used_bytes"], 600 * 1024)
+        self.assertEqual(memory["buffers_bytes"], 100 * 1024)
+        self.assertEqual(memory["cached_bytes"], 280 * 1024)
+        self.assertEqual(memory["swap_used_bytes"], 200 * 1024)
 
     def test_hwmon_skips_damaged_sensor_and_selects_cpu(self):
         with tempfile.TemporaryDirectory() as root:
@@ -362,6 +411,7 @@ class HostCollectorTests(unittest.TestCase):
             f_bsize = 1024
             f_blocks = 1000
             f_bavail = 250
+            f_bfree = 250
 
         filesystems, error = collect_filesystems(
             [{"mountpoint": "/", "probe_path": "/host-storage/root"}],
@@ -399,6 +449,7 @@ class HostCollectorTests(unittest.TestCase):
             f_bsize = 1024
             f_blocks = 1000
             f_bavail = 250
+            f_bfree = 250
 
         filesystems, error = collect_filesystems(
             [{"mountpoint": "/data", "probe_path": "/host-storage/data"}],
@@ -410,6 +461,29 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(filesystems[0]["source"], "/dev/sda1")
         self.assertEqual(filesystems[0]["backing_disk_ids"], ["sda"])
         self.assertEqual(filesystems[0]["stack_type"], "plain")
+
+    def test_filesystem_usage_counts_reserved_blocks_as_used(self):
+        graph = build_block_device_graph(
+            {"blockdevices": [{"name": "sda", "kname": "sda", "type": "disk", "size": 1000}]},
+            sys_block_root="/no-sys-block",
+        )
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+            f_bfree = 300
+
+        filesystems, error = collect_filesystems(
+            [{"mountpoint": "/data", "probe_path": "/host-storage/data"}], graph,
+            command_runner=lambda command, timeout: (0, json.dumps({"filesystems": [{"source": "/dev/sda", "fstype": "ext4"}]})),
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(filesystems[0]["available_bytes"], 250 * 1024)
+        self.assertEqual(filesystems[0]["used_bytes"], 700 * 1024)
+        self.assertEqual(filesystems[0]["usage_percent"], 70.0)
 
     def test_filesystem_probe_retains_safe_nested_device_mapper_source(self):
         graph = build_block_device_graph(
@@ -438,6 +512,7 @@ class HostCollectorTests(unittest.TestCase):
             f_bsize = 1024
             f_blocks = 1000
             f_bavail = 250
+            f_bfree = 250
 
         filesystems, error = collect_filesystems(
             [{"mountpoint": "/mnt/My Drive/数据", "probe_path": "/host-storage/data"}],
@@ -454,7 +529,7 @@ class HostCollectorTests(unittest.TestCase):
         graph = {
             "aliases": {"/dev/md0": "md0", "/dev/sda1": "sda1"},
             "nodes": {
-                "md0": {"type": "raid", "slaves": ["disk%02d" % index for index in range(17)]},
+                "md0": {"type": "raid1", "slaves": ["disk%02d" % index for index in range(17)]},
                 "sda1": {"type": "part", "parent": "sda"},
                 "sda": {"type": "disk"},
                 **{"disk%02d" % index: {"type": "disk"} for index in range(17)},
@@ -471,6 +546,7 @@ class HostCollectorTests(unittest.TestCase):
             f_bsize = 1024
             f_blocks = 1000
             f_bavail = 250
+            f_bfree = 250
 
         filesystems, error = collect_filesystems(
             [
@@ -483,6 +559,7 @@ class HostCollectorTests(unittest.TestCase):
         )
         self.assertIsNone(error)
         self.assertEqual(len(filesystems[0]["backing_disk_ids"]), 16)
+        self.assertEqual(filesystems[0]["stack_type"], "mdraid")
         self.assertEqual(filesystems[1]["stack_type"], "btrfs")
 
     def test_nvme_controller_smart_target_reuses_its_namespace_topology_disk(self):

@@ -269,6 +269,37 @@
       },
       "additionalProperties": false
     },
+    "cpuUsage": {
+      "type": ["object", "null"],
+      "required": ["user_percent", "nice_percent", "system_percent", "idle_percent", "iowait_percent", "irq_percent", "softirq_percent", "steal_percent", "total_percent"],
+      "properties": {
+        "user_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}, "nice_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "system_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}, "idle_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "iowait_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}, "irq_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "softirq_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}, "steal_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "total_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}
+      },
+      "additionalProperties": false
+    },
+    "cpuDetails": {
+      "type": ["object", "null"],
+      "required": ["architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "usage"],
+      "properties": {
+        "architecture": {"type": ["string", "null"], "maxLength": 128}, "vendor": {"type": ["string", "null"], "maxLength": 128}, "family": {"type": ["string", "null"], "maxLength": 128}, "model_id": {"type": ["string", "null"], "maxLength": 128}, "model_name": {"type": ["string", "null"], "maxLength": 128}, "stepping": {"type": ["string", "null"], "maxLength": 128}, "virtualization": {"type": ["string", "null"], "maxLength": 128},
+        "l1d_cache": {"type": ["string", "null"], "maxLength": 128}, "l1i_cache": {"type": ["string", "null"], "maxLength": 128}, "l2_cache": {"type": ["string", "null"], "maxLength": 128}, "l3_cache": {"type": ["string", "null"], "maxLength": 128},
+        "logical_cpus": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536}, "sockets": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536}, "cores_per_socket": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536}, "threads_per_core": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536},
+        "max_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "min_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "current_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "usage": {"$ref": "#/$defs/cpuUsage"}
+      },
+      "additionalProperties": false
+    },
+    "memoryDetails": {
+      "type": ["object", "null"],
+      "required": ["total_bytes", "used_bytes", "available_bytes", "free_bytes", "buffers_bytes", "cached_bytes", "reclaimable_bytes", "active_bytes", "inactive_bytes", "dirty_bytes", "writeback_bytes", "slab_bytes", "swap_total_bytes", "swap_used_bytes", "swap_free_bytes", "swap_cached_bytes"],
+      "properties": {
+        "total_bytes": {"$ref": "#/$defs/nullableCounter"}, "used_bytes": {"$ref": "#/$defs/nullableCounter"}, "available_bytes": {"$ref": "#/$defs/nullableCounter"}, "free_bytes": {"$ref": "#/$defs/nullableCounter"}, "buffers_bytes": {"$ref": "#/$defs/nullableCounter"}, "cached_bytes": {"$ref": "#/$defs/nullableCounter"}, "reclaimable_bytes": {"$ref": "#/$defs/nullableCounter"}, "active_bytes": {"$ref": "#/$defs/nullableCounter"}, "inactive_bytes": {"$ref": "#/$defs/nullableCounter"}, "dirty_bytes": {"$ref": "#/$defs/nullableCounter"}, "writeback_bytes": {"$ref": "#/$defs/nullableCounter"}, "slab_bytes": {"$ref": "#/$defs/nullableCounter"}, "swap_total_bytes": {"$ref": "#/$defs/nullableCounter"}, "swap_used_bytes": {"$ref": "#/$defs/nullableCounter"}, "swap_free_bytes": {"$ref": "#/$defs/nullableCounter"}, "swap_cached_bytes": {"$ref": "#/$defs/nullableCounter"}
+      },
+      "additionalProperties": false
+    },
     "clientBuild": {
       "type": ["object", "null"],
       "required": ["version", "revision", "build_time", "protocol"],
@@ -304,6 +335,8 @@
           ],
           "maxLength": 128
         },
+        "cpu_details": {"$ref": "#/$defs/cpuDetails"},
+        "memory_details": {"$ref": "#/$defs/memoryDetails"},
         "cpu_temperature": {
           "$ref": "#/$defs/cpuTemperature"
         },

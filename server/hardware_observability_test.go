@@ -10,6 +10,35 @@ import (
 func hardwareText(value string) *string     { return &value }
 func hardwareCounter(value int64) *int64    { return &value }
 func hardwareNumber(value float64) *float64 { return &value }
+func hardwareCount(value int) *int          { return &value }
+
+func validCPUDetailsFixture() CPUDetails {
+	return CPUDetails{
+		Architecture: hardwareText("x86_64"), Vendor: hardwareText("GenuineIntel"),
+		Family: hardwareText("6"), ModelID: hardwareText("151"), ModelName: hardwareText("Example CPU"),
+		Stepping: hardwareText("2"), Virtualization: hardwareText("VT-x"),
+		L1DCache: hardwareText("128 KiB"), L1ICache: hardwareText("128 KiB"),
+		L2Cache: hardwareText("1 MiB"), L3Cache: hardwareText("4 MiB"),
+		LogicalCPUs: hardwareCount(4), Sockets: hardwareCount(1), CoresPerSocket: hardwareCount(2), ThreadsPerCore: hardwareCount(2),
+		MaxMHz: hardwareNumber(3400), MinMHz: hardwareNumber(800), CurrentMHz: hardwareNumber(2100),
+		Usage: &CPUUsageStats{
+			UserPercent: hardwareNumber(10), NicePercent: hardwareNumber(0), SystemPercent: hardwareNumber(5),
+			IdlePercent: hardwareNumber(80), IOWaitPercent: hardwareNumber(2), IRQPercent: hardwareNumber(0),
+			SoftIRQPercent: hardwareNumber(1), StealPercent: hardwareNumber(2), TotalPercent: hardwareNumber(20),
+		},
+	}
+}
+
+func validMemoryDetailsFixture() MemoryDetails {
+	total, used, available := int64(16000), int64(6000), int64(10000)
+	swapTotal, swapUsed, swapFree := int64(4000), int64(1000), int64(3000)
+	return MemoryDetails{
+		TotalBytes: &total, UsedBytes: &used, AvailableBytes: &available,
+		FreeBytes: hardwareCounter(5000), BuffersBytes: hardwareCounter(1000), CachedBytes: hardwareCounter(3000), ReclaimableBytes: hardwareCounter(500),
+		ActiveBytes: hardwareCounter(4000), InactiveBytes: hardwareCounter(6000), DirtyBytes: hardwareCounter(10), WritebackBytes: hardwareCounter(1), SlabBytes: hardwareCounter(700),
+		SwapTotalBytes: &swapTotal, SwapUsedBytes: &swapUsed, SwapFreeBytes: &swapFree, SwapCachedBytes: hardwareCounter(0),
+	}
+}
 
 func validStorageFixture() StorageStats {
 	updatedAt := "2026-07-28T12:00:00Z"
@@ -60,6 +89,8 @@ func TestHardwareObservabilityOptionalFieldsDecodeAndValidate(t *testing.T) {
 		PrettyName: hardwareText("Ubuntu 24.04 LTS"), KernelRelease: hardwareText("6.8.0-test"),
 		Architecture: hardwareText("x86_64"), Source: "os-release",
 	}
+	payload["hardware"].(map[string]any)["cpu_details"] = validCPUDetailsFixture()
+	payload["hardware"].(map[string]any)["memory_details"] = validMemoryDetailsFixture()
 	payload["client_build"] = validClientBuildFixture()
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -70,8 +101,31 @@ func TestHardwareObservabilityOptionalFieldsDecodeAndValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if stats.Hardware.Storage == nil || len(stats.Hardware.Storage.PhysicalDisks) != 1 ||
-		stats.Hardware.SystemIdentity == nil || stats.ClientBuild == nil {
+		stats.Hardware.SystemIdentity == nil || stats.Hardware.CPUDetails == nil || stats.Hardware.MemoryDetails == nil || stats.ClientBuild == nil {
 		t.Fatalf("new optional fields were not retained: %#v", stats)
+	}
+}
+
+func TestHardwareDetailsRejectInconsistentCPUAndMemory(t *testing.T) {
+	stats := mustDecodeUpdate(t, "update-normal.json")
+	cpu := validCPUDetailsFixture()
+	stats.Hardware.CPUDetails = &cpu
+	memory := validMemoryDetailsFixture()
+	stats.Hardware.MemoryDetails = &memory
+	if err := ValidateExtensionStats(stats); err != nil {
+		t.Fatalf("valid CPU and memory details rejected: %v", err)
+	}
+	cpu.Usage.TotalPercent = hardwareNumber(99)
+	if err := ValidateExtensionStats(stats); err == nil {
+		t.Fatal("inconsistent CPU total percent was accepted")
+	}
+	cpu = validCPUDetailsFixture()
+	stats.Hardware.CPUDetails = &cpu
+	memory = validMemoryDetailsFixture()
+	memory.UsedBytes = hardwareCounter(7000)
+	stats.Hardware.MemoryDetails = &memory
+	if err := ValidateExtensionStats(stats); err == nil {
+		t.Fatal("inconsistent memory partition was accepted")
 	}
 }
 
