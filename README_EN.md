@@ -22,16 +22,13 @@ EasyTier health projection.
   temperature, I/O, and hours identify the selected device, while SMART shows
   passed counts and failed devices; a logical volume is never presented as one
   physical disk.
-- Hardware sits between Home and Docker. On desktop, CPU facts occupy the left
-  third in one row per fact (architecture, stepping, socket/core/thread
-  summary, current and minimum/maximum frequency, and virtualization). The two
-  equal right columns show total, I/O wait, user, and system CPU use, with the
-  label, percentage, and bar on one line. Vendor, family/model, topology,
-  caches, idle, Nice, Steal, IRQ, and SoftIRQ are not displayed. Memory is
-  ordered top-to-bottom by column: physical memory, Swap, free memory, and Swap
-  cache; then active/inactive, buffers, page cache, and dirty/writeback; then
-  remaining details. The first memory column reserves more label width. System
-  information remains three columns. The separate Filesystems / volumes
+- Hardware sits between Home and Docker. On desktop, CPU facts and CPU use each
+  occupy one half; the right side uses two columns for total, I/O wait, user,
+  and system CPU use, with no duplicate percentage outside the bar. Memory is a
+  four-row, three-column responsive-width grid that remains single-line at
+  normal 16:9 desktop widths. System information contains only OS version,
+  architecture, and kernel. Vendor, family/model, topology, caches, idle, Nice,
+  Steal, IRQ, and SoftIRQ are not displayed. The separate Filesystems / volumes
   section is removed: configured read-only filesystem probes only associate
   partition/format, used/total capacity, and a usage bar with physical-disk
   rows. LVM, MD RAID, and device mapper list safely resolved backing disks;

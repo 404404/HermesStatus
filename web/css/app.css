@@ -152,21 +152,20 @@ body.light .health-card{background:#fff}
 .lucky-home-value{display:flex;align-items:baseline;gap:.45rem;white-space:nowrap}
 .hardware-system-info{padding:0 1.35rem 1.1rem}
 .detail-list.hardware-three-column-info{grid-template-columns:repeat(3,minmax(0,1fr))}
-.hardware-cpu-columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}
+.hardware-cpu-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
 .hardware-cpu-column{min-width:0}
 .hardware-cpu-column+.hardware-cpu-column{border-left:1px solid var(--border)}
-.hardware-cpu-column:last-child{grid-column:span 2}
 .hardware-cpu-info{grid-template-columns:1fr}
 #hardwareCpuUsage.hardware-cpu-usage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .hardware-usage-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.9rem;padding:0 1.35rem 1.35rem}
 .hardware-usage-item{display:grid;grid-template-columns:minmax(0,auto) minmax(96px,1fr);align-items:center;gap:.65rem;min-width:0;padding:.9rem 1rem;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--bg-alt) 78%,transparent)}
-.hardware-usage-item>div{display:flex;align-items:baseline;justify-content:space-between;gap:.65rem;min-width:0;color:var(--text-dim);font-size:13px;white-space:nowrap}
 .hardware-usage-item strong{color:var(--text);font-weight:700}
-.hardware-usage-item span{font-variant-numeric:tabular-nums;font-weight:750}
 .hardware-usage-item .usage-bar{min-width:0;margin:0}
-.hardware-memory-columns{display:grid;grid-template-columns:1.35fr repeat(2,minmax(0,1fr));gap:1.2rem}
-.hardware-memory-list{grid-template-columns:1fr}
-#hardwareMemoryPrimary .detail-row{grid-template-columns:minmax(205px,.9fr) minmax(0,1fr)}
+.hardware-memory-grid{display:grid;grid-template-columns:minmax(460px,1.6fr) minmax(260px,1fr) minmax(220px,.9fr);gap:0 1.2rem}
+.hardware-memory-grid .detail-row{grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:.7rem}
+.hardware-memory-grid .detail-row dt,.hardware-memory-grid .detail-row dd{white-space:nowrap}
+.hardware-memory-grid .detail-row dd.memory-value{overflow:visible;text-overflow:clip}
+.hardware-memory-placeholder{border-bottom:1px solid var(--border)}
 .hardware-disks-table{min-width:1260px!important}
 .table-usage{min-width:150px;padding:.45rem .8rem!important}
 .table-usage .usage-bar{margin:0;min-width:130px;height:22px;flex-basis:22px}
@@ -293,9 +292,8 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
     .device-selection-notice{text-align:left}
     .device-buttons{display:none}
     .device-select-label{display:block}
-    .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list,.easytier-command-grid,.hardware-usage-grid,.hardware-cpu-columns,.hardware-memory-columns{grid-template-columns:1fr}
+    .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list,.easytier-command-grid,.hardware-usage-grid,.hardware-cpu-columns,.hardware-memory-grid{grid-template-columns:1fr}
     .detail-list.hardware-three-column-info{grid-template-columns:1fr}
-    .hardware-cpu-column:last-child{grid-column:auto}
     .hardware-cpu-column+.hardware-cpu-column{border-top:1px solid var(--border);border-left:0}
     .overview-grid .summary-card:last-child,.health-grid .health-card:last-child{grid-column:auto}
     .section-head{display:block}

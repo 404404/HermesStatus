@@ -8,17 +8,13 @@ Hardware monitoring is read-only, current-state observability for a configured
 Client. It adds the Hardware view between Home and Docker without changing the
 single `/json/stats.json` fetch path. The view contains:
 
-1. CPU details: the left desktop third has one row per architecture, stepping,
-   socket/core/thread summary, current and minimum/maximum frequency, and
-   virtualization. The two equal right thirds show total, I/O wait, user, and
-   system CPU time with label, percentage, and bar on one line. Vendor,
-   family/model, topology, caches, idle, Nice, Steal, IRQ, and SoftIRQ are not
-   rendered.
-2. Memory details are ordered top-to-bottom by desktop column: physical-memory
-   and Swap used/available/total with used percentage, free memory, and Swap
-   cache; then active/inactive, buffers, page cache, and dirty/writeback; then
-   the remaining details. The first memory column has additional label width.
-3. System information: distribution/release, kernel, and architecture.
+1. CPU details and CPU use each occupy one desktop half. The CPU-use half has
+   two columns for total, I/O wait, user, and system time; its percentage is
+   shown only inside the bar. Vendor, family/model, topology, caches, idle,
+   Nice, Steal, IRQ, and SoftIRQ are not rendered.
+2. Memory details use a four-row, three-column responsive-width grid with
+   bounded, single-line values at normal 16:9 desktop widths.
+3. System information: OS version, architecture, and kernel only.
 4. Physical disks: model, capacity, temperature, SMART result, power-on hours,
    cumulative counters, and one row per associated partition or logical volume
    with its format, used/total capacity, and usage bar.

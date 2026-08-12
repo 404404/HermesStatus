@@ -766,7 +766,7 @@ function memoryUsedPercent(memory){
 
 function hardwareUsageMarkup(label, value){
   const number = finiteNumber(value);
-  return `<article class="hardware-usage-item"><div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(formatPercentage(number))}</span></div>${resourceBar(number, label)}</article>`;
+  return `<article class="hardware-usage-item"><strong>${escapeHtml(label)}</strong>${resourceBar(number, label)}</article>`;
 }
 
 function filesystemBelongsToDisk(filesystem, disk){
@@ -799,8 +799,6 @@ function renderHardwareDetails(view){
   const memory = memoryDetailsForView(hardware);
   const identity = safeObject(hardware.system_identity);
   const system = Object.keys(identity).length ? identity : safeObject(hardware.system);
-  const distribution = textOrDash(system.distribution || system.name || hardware.distribution);
-  const release = textOrDash(system.release_version || system.version || hardware.release_version);
   const prettyName = textOrDash(system.pretty_name || view.host.os);
   const cpuInfo = [
     ['架构', textOrDash(cpu.architecture)],
@@ -821,33 +819,27 @@ function renderHardwareDetails(view){
     ? usageItems.map(([label, value]) => hardwareUsageMarkup(label, value)).join('')
     : '<div class="table-empty">暂无可显示的 CPU 使用率数据</div>';
 
-  const memoryColumns = [
-    [
+  const memoryRows = [
     ['物理内存已用 / 可用 / 总量', finiteNumber(memory.used_bytes) === null && finiteNumber(memory.available_bytes) === null && finiteNumber(memory.total_bytes) === null ? '-' : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.available_bytes)} / ${formatBytes(memory.total_bytes)} (${formatPercentage(memoryUsedPercent(memory))})`],
     ['Swap 内存已用 / 可用 / 总量', finiteNumber(memory.swap_used_bytes) === null && finiteNumber(memory.swap_free_bytes) === null && finiteNumber(memory.swap_total_bytes) === null ? '-' : `${formatBytes(memory.swap_used_bytes)} / ${formatBytes(memory.swap_free_bytes)} / ${formatBytes(memory.swap_total_bytes)} (${formatPercentage(percentage(memory.swap_used_bytes, memory.swap_total_bytes))})`],
     ['空闲内存', formatBytes(memory.free_bytes)],
-    ['Swap Cache', formatBytes(memory.swap_cached_bytes)]
-    ], [
-    ['活动 / 非活动', `${formatBytes(memory.active_bytes)} / ${formatBytes(memory.inactive_bytes)}`],
+    ['Swap Cache', formatBytes(memory.swap_cached_bytes)],
     ['Buffers', formatBytes(memory.buffers_bytes)],
     ['页面缓存', formatBytes(memory.cached_bytes)],
-    ['Dirty / Writeback', `${formatBytes(memory.dirty_bytes)} / ${formatBytes(memory.writeback_bytes)}`]
-    ], [
     ['可回收 Slab', formatBytes(memory.reclaimable_bytes)],
+    ['活动 / 非活动', `${formatBytes(memory.active_bytes)} / ${formatBytes(memory.inactive_bytes)}`],
+    ['Dirty / Writeback', `${formatBytes(memory.dirty_bytes)} / ${formatBytes(memory.writeback_bytes)}`],
     ['Slab', formatBytes(memory.slab_bytes)]
-    ]
   ];
-  ['hardwareMemoryPrimary', 'hardwareMemorySecondary', 'hardwareMemoryTertiary'].forEach((id, index) => {
-    byId(id).innerHTML = memoryColumns[index]
-      .map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
-  });
+  const memoryPlaceholders = Array.from({length: Math.max(0, 12 - memoryRows.length)}, () => '<div class="hardware-memory-placeholder" aria-hidden="true"></div>');
+  byId('hardwareMemoryInfo').innerHTML = memoryRows
+    .map(([label, value]) => detailRow(label, escapeHtml(value), 'memory-value'))
+    .concat(memoryPlaceholders).join('');
 
   byId('hardwareSystemInfo').innerHTML = [
-    ['发行版', distribution],
-    ['发行版本', release],
-    ['内核', textOrDash(system.kernel_release || hardware.kernel_release)],
+    ['操作系统版本', prettyName],
     ['架构', textOrDash(system.architecture || hardware.architecture)],
-    ['操作系统版本', prettyName]
+    ['内核', textOrDash(system.kernel_release || hardware.kernel_release)]
   ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 
   const filesystems = filesystemItemsForView(hardware);

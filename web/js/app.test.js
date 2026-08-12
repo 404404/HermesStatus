@@ -505,9 +505,7 @@ async function run(){
   assert.match(hardwareMarkup, /class="hardware-cpu-columns"/);
   assert.match(hardwareMarkup, /class="hardware-cpu-column"/);
   assert.match(hardwareMarkup, /id="hardwareMemoryInfo"/);
-  assert.match(hardwareMarkup, /id="hardwareMemoryPrimary"/);
-  assert.match(hardwareMarkup, /id="hardwareMemorySecondary"/);
-  assert.match(hardwareMarkup, /id="hardwareMemoryTertiary"/);
+  assert.doesNotMatch(hardwareMarkup, /hardwareMemoryPrimary|hardwareMemorySecondary|hardwareMemoryTertiary/);
   assert.doesNotMatch(hardwareMarkup, /文件系统\s*\/\s*存储卷|hardwareFilesystemsBody/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
   assert.deepEqual(
@@ -550,17 +548,16 @@ async function run(){
   assert.match(appSource, /function buildProvenanceMarkup\(view\)/);
   assert.match(appSource, /function cpuDetailsForView\(hardware\)/);
   assert.match(appSource, /function cpuLogicalProcessorText\(cpu\)/);
-  assert.match(css, /\.hardware-cpu-columns\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
-  assert.match(css, /\.hardware-cpu-column:last-child\{grid-column:span 2\}/);
+  assert.match(css, /\.hardware-cpu-columns\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(css, /#hardwareCpuUsage\.hardware-cpu-usage-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
   assert.match(css, /\.hardware-usage-item\{display:grid;grid-template-columns:minmax\(0,auto\) minmax\(96px,1fr\)/);
-  assert.match(css, /\.hardware-memory-columns\{display:grid;grid-template-columns:1\.35fr repeat\(2,minmax\(0,1fr\)\)/);
-  assert.match(css, /#hardwareMemoryPrimary \.detail-row\{grid-template-columns:minmax\(205px,\.9fr\) minmax\(0,1fr\)\}/);
+  assert.match(css, /\.hardware-memory-grid\{display:grid;grid-template-columns:minmax\(460px,1\.6fr\) minmax\(260px,1fr\) minmax\(220px,\.9fr\)/);
+  assert.match(css, /\.hardware-memory-grid \.detail-row dt,\.hardware-memory-grid \.detail-row dd\{white-space:nowrap\}/);
   assert.match(css, /\.detail-list\.hardware-three-column-info\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}/);
   assert.match(css, /@media \(max-width:720px\)\{[\s\S]*\.detail-list\.hardware-three-column-info\{grid-template-columns:1fr\}/);
   assert.match(appSource, /\['物理内存已用 \/ 可用 \/ 总量'/);
   assert.match(appSource, /\['Swap 内存已用 \/ 可用 \/ 总量'/);
-  assert.match(appSource, /\['hardwareMemoryPrimary', 'hardwareMemorySecondary', 'hardwareMemoryTertiary'\]/);
+  assert.match(appSource, /const memoryPlaceholders = Array\.from\(\{length: Math\.max\(0, 12 - memoryRows\.length\)/);
   assert.match(appSource, /\['频率（最低 \/ 最高）'/);
   assert.match(appSource, /\['当前频率', formatMHz\(cpu\.current_mhz\)\]/);
   assert.doesNotMatch(appSource, /\['空闲', cpuUsage\.idle_percent\]/);
@@ -568,6 +565,7 @@ async function run(){
   assert.doesNotMatch(appSource, /\['Steal', cpuUsage\.steal_percent\]/);
   assert.doesNotMatch(appSource, /\['中断 IRQ', cpuUsage\.irq_percent\]/);
   assert.doesNotMatch(appSource, /\['软中断 SoftIRQ', cpuUsage\.softirq_percent\]/);
+  assert.doesNotMatch(appSource, /发行版.*distribution|发行版本.*release/);
   assert.match(appSource, /I\/O 等待/);
   assert.match(appSource, /function partitionRowsForDisk\(disk, filesystems\)/);
   assert.doesNotMatch(
