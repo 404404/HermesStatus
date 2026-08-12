@@ -181,6 +181,11 @@ jobs:
             ${{ steps.server_meta.outputs.labels }}
             org.opencontainers.image.title=HermesStatus Server
             org.opencontainers.image.description=HermesStatus device status server
+            org.opencontainers.image.version=${{ steps.provenance.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.build_date }}
+            org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
+            org.opencontainers.image.licenses=MIT
             io.hermesstatus.component=server
           build-args: |
             VERSION=${{ steps.provenance.outputs.version }}
@@ -198,6 +203,11 @@ jobs:
             ${{ steps.client_meta.outputs.labels }}
             org.opencontainers.image.title=HermesStatus Client
             org.opencontainers.image.description=HermesStatus host and Hermes profile collector
+            org.opencontainers.image.version=${{ steps.provenance.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.build_date }}
+            org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
+            org.opencontainers.image.licenses=MIT
             io.hermesstatus.component=client
           build-args: |
             VERSION=${{ steps.provenance.outputs.version }}
