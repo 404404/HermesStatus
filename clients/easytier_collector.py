@@ -24,6 +24,7 @@ MAX_OUTPUT_BYTES = 512 * 1024
 # detailed tables can contain long but allowlisted strings and CIDRs, so a
 # conservative per-table budget keeps their combined JSON below that cap.
 MAX_ITEMS = 16
+MAX_STATS_ITEMS = 128
 SAFE_TEXT_LIMIT = 128
 MAX_COMMAND_DURATION_MS = 30000
 COMMANDS = (
@@ -280,6 +281,24 @@ def _list_payload(value, keys):
     return None
 
 
+def _stats_values(value):
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, list) or len(value) > MAX_STATS_ITEMS:
+        return None
+    result = {}
+    for item in value:
+        if not isinstance(item, dict):
+            return None
+        name = _safe_text(item.get("name"), 64)
+        metric = item.get("value")
+        if name in {"traffic_bytes_rx", "traffic_bytes_tx", "traffic_bytes_forwarded"}:
+            if name in result or isinstance(metric, bool) or not isinstance(metric, (int, float)) or not math.isfinite(metric) or not 0 <= metric <= 9007199254740991:
+                return None
+            result[name] = metric
+    return result
+
+
 def _valid_command_payload(name, value):
     if name == "node_info":
         return isinstance(value, dict) and _safe_text(_deep_lookup(value, "peer_id", "virtual_peer_id"), 32) is not None and _safe_text(_deep_lookup(value, "version")) is not None
@@ -288,13 +307,20 @@ def _valid_command_payload(name, value):
         return items is not None and len(items) <= MAX_ITEMS and all(isinstance(item, dict) and _safe_text(_lookup(item, "peer_id", "virtual_peer_id", "id"), 32) is not None for item in items)
     if name == "route_list":
         items = _list_payload(value, ("routes", "data", "items"))
-        return items is not None and len(items) <= MAX_ITEMS and all(isinstance(item, dict) and _safe_text(_lookup(item, "peer_id", "virtual_peer_id", "id"), 32) is not None for item in items)
+        return items is not None and len(items) <= MAX_ITEMS and all(
+            isinstance(item, dict) and (
+                _safe_text(_lookup(item, "peer_id", "virtual_peer_id", "id"), 32) is not None
+                or _internal_ip(_lookup(item, "overlay_ipv4", "virtual_ipv4", "ipv4")) is not None
+            )
+            for item in items
+        )
     if name == "connector_list":
         items = _list_payload(value, ("connectors", "data", "items"))
         return items is not None and len(items) <= MAX_ITEMS and all(isinstance(item, dict) for item in items)
     if name == "stats_show":
-        return isinstance(value, dict) and all(
-            isinstance(_lookup(value, *keys), (int, float)) and not isinstance(_lookup(value, *keys), bool) and math.isfinite(_lookup(value, *keys)) and 0 <= _lookup(value, *keys) <= 9007199254740991
+        metrics = _stats_values(value)
+        return metrics is not None and all(
+            isinstance(_lookup(metrics, *keys), (int, float)) and not isinstance(_lookup(metrics, *keys), bool) and math.isfinite(_lookup(metrics, *keys)) and 0 <= _lookup(metrics, *keys) <= 9007199254740991
             for keys in (("traffic_bytes_rx", "bytes_rx"), ("traffic_bytes_tx", "bytes_tx"), ("traffic_bytes_forwarded", "bytes_forwarded"))
         )
     return False
@@ -386,7 +412,7 @@ class EasyTierCollector(object):
             return _empty_payload("unavailable", _error("rpc_unavailable"))
         self._apply_node(payload, values.get("node_info"))
         self._apply_peers(payload, values.get("peer_list"), payload["node"]["peer_id"])
-        self._apply_routes(payload, values.get("route_list"), payload["node"]["peer_id"])
+        self._apply_routes(payload, values.get("route_list"), payload["node"]["peer_id"], payload["node"]["overlay_ipv4"])
         self._apply_connectors(payload, values.get("connector_list"))
         self._apply_stats(payload, values.get("stats_show"))
         payload["updated_at"] = _now()
@@ -473,9 +499,10 @@ class EasyTierCollector(object):
             )
 
     @staticmethod
-    def _apply_routes(payload, value, own_peer_id):
+    def _apply_routes(payload, value, own_peer_id, own_overlay_ipv4=None):
         for route in _as_list(value):
             peer_id = _safe_text(_lookup(route, "peer_id", "virtual_peer_id", "id"), 32)
+            overlay_ipv4 = _internal_ip(_lookup(route, "overlay_ipv4", "virtual_ipv4", "ipv4"))
             next_hop = _safe_text(_lookup(route, "next_hop_peer_id", "next_hop"), 32)
             evidence = str(_lookup(route, "connection_type", "path", "route_type") or "").lower()
             path_state = "unknown"
@@ -483,16 +510,19 @@ class EasyTierCollector(object):
                 path_state = "direct"
             elif peer_id and next_hop and peer_id != next_hop:
                 path_state = "relayed"
-            own_route = peer_id is not None and own_peer_id is not None and peer_id == own_peer_id
+            own_route = (
+                (peer_id is not None and own_peer_id is not None and peer_id == own_peer_id)
+                or (peer_id is None and own_overlay_ipv4 is not None and overlay_ipv4 == own_overlay_ipv4)
+            )
             payload["routes"]["total"] += 1
             payload["routes"]["items"].append({
                     "peer_id": peer_id,
-                    "overlay_ipv4": _internal_ip(_lookup(route, "overlay_ipv4", "virtual_ipv4", "ipv4")),
+                    "overlay_ipv4": overlay_ipv4,
                     "hostname": _safe_text(_lookup(route, "hostname", "name")),
                     "version": _safe_text(_lookup(route, "version")),
                     "next_hop_peer_id": next_hop,
                     "cost": _bounded_number(_lookup(route, "cost"), 1000000),
-                    "path_latency_ms": _bounded_number(_lookup(route, "path_latency_ms", "latency_ms"), 600000, True),
+                    "path_latency_ms": _bounded_number(_lookup(route, "path_latency_ms", "path_latency", "latency_ms"), 600000, True),
                     "proxy_cidrs": _internal_cidrs(_lookup(route, "proxy_cidrs", "proxy_cidr", "cidrs")),
                     "path_state": path_state,
                     "is_local": own_route,
@@ -523,18 +553,19 @@ class EasyTierCollector(object):
 
     @staticmethod
     def _apply_stats(payload, value):
-        if not isinstance(value, dict):
+        metrics = _stats_values(value)
+        if metrics is None:
             return
         traffic = payload["traffic"]
-        network_name = _safe_text(_deep_lookup(value, "network_name"))
+        network_name = _safe_text(_deep_lookup(value, "network_name")) if isinstance(value, dict) else None
         if network_name is not None:
             payload["node"]["network_name"] = network_name
-        listener = _lookup(value, "tcp_listener_available", "tcp_listener")
+        listener = _lookup(value, "tcp_listener_available", "tcp_listener") if isinstance(value, dict) else None
         if isinstance(listener, bool):
             payload["connectors"]["tcp_listener_available"] = listener
-        traffic["bytes_rx"] = _counter(_lookup(value, "traffic_bytes_rx", "bytes_rx"))
-        traffic["bytes_tx"] = _counter(_lookup(value, "traffic_bytes_tx", "bytes_tx"))
-        traffic["bytes_forwarded"] = _counter(_lookup(value, "traffic_bytes_forwarded", "bytes_forwarded"))
+        traffic["bytes_rx"] = _counter(_lookup(metrics, "traffic_bytes_rx", "bytes_rx"))
+        traffic["bytes_tx"] = _counter(_lookup(metrics, "traffic_bytes_tx", "bytes_tx"))
+        traffic["bytes_forwarded"] = _counter(_lookup(metrics, "traffic_bytes_forwarded", "bytes_forwarded"))
 
 
 def collector_from_environment(argv=None):
