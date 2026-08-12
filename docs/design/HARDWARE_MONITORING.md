@@ -8,12 +8,17 @@ Hardware monitoring is read-only, current-state observability for a configured
 Client. It adds the Hardware view between Home and Docker without changing the
 single `/json/stats.json` fetch path. The view contains:
 
-1. System information: CPU model, memory, distribution/release, kernel, and
-   architecture.
-2. Filesystems / volumes: configured mountpoint capacity and resolved backing
+1. CPU details: a bounded topology allowlist (architecture, vendor,
+   family/model/stepping, sockets, cores, threads, frequency, cache, and
+   virtualization) plus a short-window CPU-time breakdown.
+2. Memory details: total, used, available, free, buffers, cache, reclaimable
+   slab, active/inactive, dirty/writeback, slab, and Swap accounting.
+3. System information: distribution/release, kernel, and architecture.
+4. Filesystems / volumes: configured mountpoint capacity and resolved backing
    physical disks.
-3. Physical disks: model, capacity, temperature, SMART result, power-on hours,
-   and supported cumulative counters.
+5. Physical disks: model, capacity, temperature, SMART result, power-on hours,
+   cumulative counters, and one row per associated partition or logical volume
+   with its format, used/total capacity, and usage bar.
 
 It does not control disks, change mounts, run repair commands, read directory
 contents, expose raw SMART attributes, send serials/WWNs/UUIDs, or create a
@@ -41,6 +46,12 @@ receives a fabricated single-disk temperature or SMART result.
 The Server validates counts, string lengths, counters, statuses, paths, and
 collection states before projection and persistence. Browser rendering escapes
 all disk, model, mountpoint, filesystem, OS, and provenance strings.
+
+CPU detail collection parses a fixed `lscpu --json` allowlist rather than
+forwarding raw command output. CPU use is calculated from two aggregate
+`/proc/stat` samples; `iowait` remains distinct from idle. Memory uses a fixed
+`/proc/meminfo` allowlist. These are observations, never device identity, and
+an unavailable optional source does not invent a value.
 
 ## Physical SMART collection
 
@@ -126,6 +137,12 @@ rather than exposing a remote endpoint. It does not recursively read
 directories. Pseudo filesystems, invalid metadata, and inaccessible probes are unavailable data,
 not zero usage and not a reason to mount the host root, enter a mount namespace,
 use `nsenter`, or add `CAP_SYS_ADMIN`.
+
+`available_bytes` uses `statvfs.f_bavail` (space usable by an unprivileged
+writer), while `used_bytes` uses `f_blocks - f_bfree` so reserved filesystem
+blocks are not incorrectly reported as free. The physical-disk table repeats a
+disk for each safely resolved filesystem row; an unassociated disk gets a
+single unavailable partition row rather than fabricated partition data.
 
 ## Home and Hardware semantics
 

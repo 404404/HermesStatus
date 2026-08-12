@@ -70,6 +70,8 @@ Registry 不保存 token；对应 credential 文件只保存 SHA-256 digest。
 
 `url` 必须匹配 TLS 证书的名称或 IP SAN。Token 文件应归 Client 运行用户所有，权限只能是 `0400` 或 `0600`。
 
+`device.id` 是稳定的 Device v2 身份，也会写入浏览器设备选择 hash（例如 `#hardware?device=gk50`）。独立的 21443 部署仍处于 Preview，并不表示面向生产展示的设备 ID 应带 `preview`。重命名已有 ID 属于受控迁移：先备份状态，再同步修改 Registry 的设备 ID 和默认 ID、对应仅含 digest 的 credential 文件名及其 `device_id`、Client JSON，并在重启前迁移独立 Server 状态。它不是自动注册，绝不能因此生成新的 Token 或 credential。
+
 ## Compose 挂载映射
 
 Server 覆盖配置：

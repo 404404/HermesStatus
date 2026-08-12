@@ -84,6 +84,15 @@ not the browser display-name authority.
 `url` must match the TLS certificate name or IP SAN. Keep the token file owned
 by the Client user and mode `0400` or `0600`.
 
+`device.id` is the stable Device v2 identity and is also the value used in the
+browser selection hash (for example `#hardware?device=gk50`). Do not put
+`preview` in a production-facing ID merely because the independent 21443
+deployment is Preview. Renaming an existing ID is a controlled migration: back
+up state, change the Registry device ID and default ID, rename/update the
+matching digest-only credential document's filename and `device_id`, update
+the Client JSON, and migrate the isolated Server state before restart. It is
+not auto-registration and must never generate a new token or credential.
+
 ## Compose mappings
 
 Apply the Server mounts with an override such as:
