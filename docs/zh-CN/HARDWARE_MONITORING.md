@@ -72,6 +72,9 @@ environment: !override
 
 对应 JSON allowlist 只能包含这些路径。不得使用 `privileged`、挂载完整 `/dev`、增加 `SYS_ADMIN`、调用 shell，也不能只因拓扑引用某控制器就授予它访问权。如果某平台 SMART 必须要更多访问权限，应记录限制并停止，不能默认扩大信任边界。
 
+当某个**已显式配置**的文件系统 probe 位于已知 LVM 或 device-mapper 逻辑卷上时，可在已授权物理盘之外，只读映射这一个逻辑卷（例如
+`/dev/mapper/vgdata-root:/dev/mapper/vgdata-root:r`）。这只允许安全地从逻辑卷经分区解析到物理盘；不授权整个 `/dev/mapper` 目录、device-mapper control 节点或任何其他块设备。没有任何已配置 probe 使用该逻辑卷时，应省略此映射。
+
 ## 文件系统 probe
 
 容器文件系统容量不能自动等同于宿主机文件系统容量。Client 只采集显式配置且以只读方式挂载的 probe：

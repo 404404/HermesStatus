@@ -119,6 +119,8 @@ services:
     devices: !override
       - /dev/sda:/dev/sda:r
       - /dev/sdb:/dev/sdb:r
+      # Only when an authorized probe is backed by this specific LVM LV.
+      - /dev/mapper/vgdata-root:/dev/mapper/vgdata-root:r
     volumes:
       - /etc/hermesstatus/device-v2/client-v2.json:/etc/hermesstatus/client-v2.json:ro
       - /etc/hermesstatus/device-v2/secrets/gk50.token:/run/secrets/hermesstatus-device-token:ro
@@ -134,6 +136,13 @@ Do not mount full `/dev`, use `privileged`, add `SYS_ADMIN`, or mount the host
 root for filesystem capacity. Each filesystem probe needs its own narrow
 read-only mount; it is sampled through `findmnt` and `statvfs`, never by
 walking files.
+
+For a filesystem probe on a specific LVM/device-mapper logical volume, map
+that exact LV read-only as well as its already-authorized physical disk. This
+lets `lsblk` safely resolve the LV through its partition to the physical disk
+for the Hardware table. It does not permit reads of arbitrary devices and is
+not a reason to mount `/dev`, `/dev/mapper`, a host root, or the device-mapper
+control node. Keep the mapping absent when no configured probe needs it.
 
 `label` in `smart_devices` is collector configuration metadata. It is not a
 promise that a label is persisted or rendered. Device, model, mountpoint, and

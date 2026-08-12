@@ -97,6 +97,8 @@ services:
     devices: !override
       - /dev/sda:/dev/sda:r
       - /dev/sdb:/dev/sdb:r
+      # 仅当已授权 probe 由该特定 LVM 逻辑卷承载时添加。
+      - /dev/mapper/vgdata-root:/dev/mapper/vgdata-root:r
     volumes:
       - /etc/hermesstatus/device-v2/client-v2.json:/etc/hermesstatus/client-v2.json:ro
       - /etc/hermesstatus/device-v2/secrets/gk50.token:/run/secrets/hermesstatus-device-token:ro
@@ -106,6 +108,8 @@ services:
 ```
 
 基础 Client Compose 为非 privileged，且不映射宿主机块设备，因此不会假设存在 `/dev/sda`。受审计的覆盖文件会添加 `SYS_RAWIO` 并使用 `devices: !override`，使映射路径与 JSON allowlist 精确一致。不得挂载完整 `/dev`、使用 `privileged`、增加 `SYS_ADMIN`，也不能仅为文件系统容量挂载宿主机根目录。每个文件系统 probe 都需要单独的窄范围只读挂载；它只会经由 `findmnt` 和 `statvfs` 采样，绝不遍历文件。
+
+当已配置的文件系统 probe 位于特定 LVM/device-mapper 逻辑卷上时，除已授权的物理盘外，也只读映射该**唯一**逻辑卷。这样 `lsblk` 才能安全地经分区将逻辑卷关联到物理盘，供 Hardware 表展示；它不会允许读取任意设备，也绝不能因此挂载 `/dev`、`/dev/mapper`、宿主机根目录或 device-mapper control 节点。没有任何已配置 probe 需要它时，不要添加该映射。
 
 `smart_devices` 中的 `label` 是采集器配置元数据，不承诺持久化或渲染。设备、型号、挂载点和文件系统观测数据同样不能用于标识或认证 Client。
 

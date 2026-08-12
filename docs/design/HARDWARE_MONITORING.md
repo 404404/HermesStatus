@@ -113,6 +113,15 @@ grant a controller simply because a topology references it. If a platform
 needs more access than this for SMART, document the limitation and stop rather
 than expanding the trust boundary by default.
 
+When an explicitly configured filesystem probe is on a known LVM or
+device-mapper logical volume, map that one LV read-only alongside its already
+authorized physical disk (for example,
+`/dev/mapper/vgdata-root:/dev/mapper/vgdata-root:r`). This permits safe
+topology resolution from the logical volume through its partition to the disk.
+It does not authorize the full `/dev/mapper` directory, the device-mapper
+control node, or any other block device; omit it when no configured probe uses
+that LV.
+
 ## Filesystem probes
 
 Container filesystem capacity is not automatically host filesystem capacity.
