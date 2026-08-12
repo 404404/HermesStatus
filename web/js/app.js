@@ -821,15 +821,15 @@ function renderHardwareDetails(view){
 
   const memoryRows = [
     ['物理内存已用 / 可用 / 总量', finiteNumber(memory.used_bytes) === null && finiteNumber(memory.available_bytes) === null && finiteNumber(memory.total_bytes) === null ? '-' : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.available_bytes)} / ${formatBytes(memory.total_bytes)} (${formatPercentage(memoryUsedPercent(memory))})`],
-    ['Swap 内存已用 / 可用 / 总量', finiteNumber(memory.swap_used_bytes) === null && finiteNumber(memory.swap_free_bytes) === null && finiteNumber(memory.swap_total_bytes) === null ? '-' : `${formatBytes(memory.swap_used_bytes)} / ${formatBytes(memory.swap_free_bytes)} / ${formatBytes(memory.swap_total_bytes)} (${formatPercentage(percentage(memory.swap_used_bytes, memory.swap_total_bytes))})`],
-    ['空闲内存', formatBytes(memory.free_bytes)],
-    ['Swap Cache', formatBytes(memory.swap_cached_bytes)],
-    ['Buffers', formatBytes(memory.buffers_bytes)],
-    ['页面缓存', formatBytes(memory.cached_bytes)],
-    ['可回收 Slab', formatBytes(memory.reclaimable_bytes)],
     ['活动 / 非活动', `${formatBytes(memory.active_bytes)} / ${formatBytes(memory.inactive_bytes)}`],
-    ['Dirty / Writeback', `${formatBytes(memory.dirty_bytes)} / ${formatBytes(memory.writeback_bytes)}`],
-    ['Slab', formatBytes(memory.slab_bytes)]
+    ['可回收 Slab', formatBytes(memory.reclaimable_bytes)],
+    ['Swap 内存已用 / 可用 / 总量', finiteNumber(memory.swap_used_bytes) === null && finiteNumber(memory.swap_free_bytes) === null && finiteNumber(memory.swap_total_bytes) === null ? '-' : `${formatBytes(memory.swap_used_bytes)} / ${formatBytes(memory.swap_free_bytes)} / ${formatBytes(memory.swap_total_bytes)} (${formatPercentage(percentage(memory.swap_used_bytes, memory.swap_total_bytes))})`],
+    ['Buffers', formatBytes(memory.buffers_bytes)],
+    ['Slab', formatBytes(memory.slab_bytes)],
+    ['空闲内存', formatBytes(memory.free_bytes)],
+    ['页面缓存', formatBytes(memory.cached_bytes)],
+    ['Swap Cache', formatBytes(memory.swap_cached_bytes)],
+    ['Dirty / Writeback', `${formatBytes(memory.dirty_bytes)} / ${formatBytes(memory.writeback_bytes)}`]
   ];
   const memoryPlaceholders = Array.from({length: Math.max(0, 12 - memoryRows.length)}, () => '<div class="hardware-memory-placeholder" aria-hidden="true"></div>');
   byId('hardwareMemoryInfo').innerHTML = memoryRows

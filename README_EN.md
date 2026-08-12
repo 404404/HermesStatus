@@ -25,8 +25,9 @@ EasyTier health projection.
 - Hardware sits between Home and Docker. On desktop, CPU facts and CPU use each
   occupy one half; the right side uses two columns for total, I/O wait, user,
   and system CPU use, with no duplicate percentage outside the bar. Memory is a
-  four-row, three-column responsive-width grid that remains single-line at
-  normal 16:9 desktop widths. System information contains only OS version,
+  transposition of the prior vertical columns: physical/active-reclaimable,
+  Swap/buffers-Slab, free/page-cache, and Swap-cache/dirty-writeback. It
+  remains single-line at normal 16:9 desktop widths. System information contains only OS version,
   architecture, and kernel. Vendor, family/model, topology, caches, idle, Nice,
   Steal, IRQ, and SoftIRQ are not displayed. The separate Filesystems / volumes
   section is removed: configured read-only filesystem probes only associate

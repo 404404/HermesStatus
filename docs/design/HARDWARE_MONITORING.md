@@ -12,8 +12,10 @@ single `/json/stats.json` fetch path. The view contains:
    two columns for total, I/O wait, user, and system time; its percentage is
    shown only inside the bar. Vendor, family/model, topology, caches, idle,
    Nice, Steal, IRQ, and SoftIRQ are not rendered.
-2. Memory details use a four-row, three-column responsive-width grid with
-   bounded, single-line values at normal 16:9 desktop widths.
+2. Memory details use the strict transposition of the prior vertical columns:
+   physical/active-reclaimable, Swap/buffers-Slab, free/page-cache, and
+   Swap-cache/dirty-writeback. The four-row, three-column grid keeps bounded,
+   single-line values at normal 16:9 desktop widths.
 3. System information: OS version, architecture, and kernel only.
 4. Physical disks: model, capacity, temperature, SMART result, power-on hours,
    cumulative counters, and one row per associated partition or logical volume

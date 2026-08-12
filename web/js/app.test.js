@@ -557,6 +557,11 @@ async function run(){
   assert.match(css, /@media \(max-width:720px\)\{[\s\S]*\.detail-list\.hardware-three-column-info\{grid-template-columns:1fr\}/);
   assert.match(appSource, /\['物理内存已用 \/ 可用 \/ 总量'/);
   assert.match(appSource, /\['Swap 内存已用 \/ 可用 \/ 总量'/);
+  const memorySource = appSource.slice(appSource.indexOf('const memoryRows'), appSource.indexOf('const memoryPlaceholders'));
+  assert.deepEqual(
+    [...memorySource.matchAll(/\['([^']+)'/g)].map(match => match[1]),
+    ['物理内存已用 / 可用 / 总量', '活动 / 非活动', '可回收 Slab', 'Swap 内存已用 / 可用 / 总量', 'Buffers', 'Slab', '空闲内存', '页面缓存', 'Swap Cache', 'Dirty / Writeback']
+  );
   assert.match(appSource, /const memoryPlaceholders = Array\.from\(\{length: Math\.max\(0, 12 - memoryRows\.length\)/);
   assert.match(appSource, /\['频率（最低 \/ 最高）'/);
   assert.match(appSource, /\['当前频率', formatMHz\(cpu\.current_mhz\)\]/);
