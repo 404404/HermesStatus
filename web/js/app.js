@@ -813,27 +813,34 @@ function renderHardwareDetails(view){
   byId('hardwareCpuInfo').innerHTML = cpuInfo.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 
   const usageItems = [
-    ['总使用率', cpuUsage.total_percent], ['用户态', cpuUsage.user_percent], ['内核态', cpuUsage.system_percent],
-    ['I/O 等待', cpuUsage.iowait_percent], ['中断 IRQ', cpuUsage.irq_percent], ['软中断 SoftIRQ', cpuUsage.softirq_percent]
+    ['总使用率', cpuUsage.total_percent], ['I/O 等待', cpuUsage.iowait_percent],
+    ['用户态', cpuUsage.user_percent], ['内核态', cpuUsage.system_percent]
   ].filter(([, value]) => finiteNumber(value) !== null);
   byId('hardwareCpuUsageMeta').textContent = usageItems.length ? '短时采样' : '数据不可用';
   byId('hardwareCpuUsage').innerHTML = usageItems.length
     ? usageItems.map(([label, value]) => hardwareUsageMarkup(label, value)).join('')
     : '<div class="table-empty">暂无可显示的 CPU 使用率数据</div>';
 
-  const memoryInfo = [
+  const memoryColumns = [
+    [
     ['物理内存已用 / 可用 / 总量', finiteNumber(memory.used_bytes) === null && finiteNumber(memory.available_bytes) === null && finiteNumber(memory.total_bytes) === null ? '-' : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.available_bytes)} / ${formatBytes(memory.total_bytes)} (${formatPercentage(memoryUsedPercent(memory))})`],
     ['Swap 内存已用 / 可用 / 总量', finiteNumber(memory.swap_used_bytes) === null && finiteNumber(memory.swap_free_bytes) === null && finiteNumber(memory.swap_total_bytes) === null ? '-' : `${formatBytes(memory.swap_used_bytes)} / ${formatBytes(memory.swap_free_bytes)} / ${formatBytes(memory.swap_total_bytes)} (${formatPercentage(percentage(memory.swap_used_bytes, memory.swap_total_bytes))})`],
     ['空闲内存', formatBytes(memory.free_bytes)],
+    ['Swap Cache', formatBytes(memory.swap_cached_bytes)]
+    ], [
+    ['活动 / 非活动', `${formatBytes(memory.active_bytes)} / ${formatBytes(memory.inactive_bytes)}`],
     ['Buffers', formatBytes(memory.buffers_bytes)],
     ['页面缓存', formatBytes(memory.cached_bytes)],
+    ['Dirty / Writeback', `${formatBytes(memory.dirty_bytes)} / ${formatBytes(memory.writeback_bytes)}`]
+    ], [
     ['可回收 Slab', formatBytes(memory.reclaimable_bytes)],
-    ['活动 / 非活动', `${formatBytes(memory.active_bytes)} / ${formatBytes(memory.inactive_bytes)}`],
-    ['Dirty / Writeback', `${formatBytes(memory.dirty_bytes)} / ${formatBytes(memory.writeback_bytes)}`],
-    ['Slab', formatBytes(memory.slab_bytes)],
-    ['Swap Cache', formatBytes(memory.swap_cached_bytes)]
+    ['Slab', formatBytes(memory.slab_bytes)]
+    ]
   ];
-  byId('hardwareMemoryInfo').innerHTML = memoryInfo.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+  ['hardwareMemoryPrimary', 'hardwareMemorySecondary', 'hardwareMemoryTertiary'].forEach((id, index) => {
+    byId(id).innerHTML = memoryColumns[index]
+      .map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+  });
 
   byId('hardwareSystemInfo').innerHTML = [
     ['发行版', distribution],
