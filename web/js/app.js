@@ -772,7 +772,10 @@ function filesystemBelongsToDisk(filesystem, disk){
   const backing = Array.isArray(filesystem?.backing_disk_ids) ? filesystem.backing_disk_ids : [];
   if(backing.some(value => deviceShortName(value) === diskID)) return true;
   const source = deviceShortName(filesystem?.source);
-  return source !== '-' && source.startsWith(diskID) && /^\w+$/.test(diskID);
+  if(source === '-' || !/^[A-Za-z0-9._+-]+$/.test(diskID)) return false;
+  const escapedDiskID = diskID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const partitionSuffix = /\d$/.test(diskID) ? 'p\\d+' : '\\d+';
+  return new RegExp(`^${escapedDiskID}(?:${partitionSuffix})?$`).test(source);
 }
 
 function partitionRowsForDisk(disk, filesystems){

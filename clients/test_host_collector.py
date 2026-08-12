@@ -562,6 +562,41 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(filesystems[0]["stack_type"], "mdraid")
         self.assertEqual(filesystems[1]["stack_type"], "btrfs")
 
+    def test_hardware_keeps_probed_backing_disk_inside_bounded_inventory(self):
+        disks = [
+            {"name": "disk%02d" % index, "kname": "disk%02d" % index, "type": "disk"}
+            for index in range(65)
+        ]
+
+        def runner(command, timeout):
+            if command[:1] == ["lsblk"]:
+                return 0, json.dumps({"blockdevices": disks})
+            if command[:3] == ["findmnt", "--json", "--target"]:
+                return 0, json.dumps({"filesystems": [{
+                    "source": "/dev/disk64", "fstype": "ext4"
+                }]})
+            raise AssertionError("unexpected command: %r" % (command,))
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+            f_bfree = 250
+
+        payload = collect_hardware(
+            "Example CPU", smart_devices=[], command_runner=runner,
+            filesystem_probes=[{"mountpoint": "/data", "probe_path": "/host-storage/data"}],
+            sys_block_root="/no-sys-block", statvfs_func=lambda path: SyntheticStatvfs(),
+            now=FIXED_NOW,
+        )
+        reported = {disk["id"] for disk in payload["storage"]["physical_disks"]}
+        self.assertEqual(len(reported), 64)
+        self.assertIn("disk64", reported)
+        self.assertEqual(
+            payload["storage"]["filesystems"][0]["backing_disk_ids"], ["disk64"]
+        )
+
     def test_nvme_controller_smart_target_reuses_its_namespace_topology_disk(self):
         smart = fixture_json("smart-normal.json")
 

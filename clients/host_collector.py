@@ -1286,6 +1286,45 @@ def collect_filesystems(filesystem_probes, block_graph, command_runner=None, sta
     return filesystems, _select_error(errors)
 
 
+def _physical_disk_ids_for_report(smart_by_id, block_graph, filesystems):
+    """Select the bounded disk inventory without orphaning probe relations.
+
+    Filesystem probes are an explicit operator request. Their resolved backing
+    disks therefore take precedence over unobserved topology-only inventory
+    entries, while explicitly queried SMART disks retain their highest
+    priority. The wire contract has a hard maximum, so any relationship that
+    cannot fit is removed rather than sending an invalid reference that would
+    make the server reject the complete hardware domain.
+    """
+    nodes = block_graph.get("nodes", {}) if isinstance(block_graph, dict) else {}
+    selected = list(smart_by_id)
+    selected_set = set(selected)
+
+    for filesystem in filesystems:
+        for disk_id in filesystem.get("backing_disk_ids", []):
+            if (
+                disk_id not in selected_set
+                and nodes.get(disk_id, {}).get("type") == "disk"
+            ):
+                selected.append(disk_id)
+                selected_set.add(disk_id)
+
+    for disk_id, node in nodes.items():
+        if node.get("type") == "disk" and disk_id not in selected_set:
+            selected.append(disk_id)
+            selected_set.add(disk_id)
+
+    selected = selected[:MAX_PHYSICAL_DISKS]
+    selected_set = set(selected)
+    for filesystem in filesystems:
+        filesystem["backing_disk_ids"] = [
+            disk_id
+            for disk_id in filesystem.get("backing_disk_ids", [])
+            if disk_id in selected_set
+        ]
+    return selected
+
+
 def _smart_collection_status(smart, error):
     if smart is not None and error is None:
         return "healthy"
@@ -1435,13 +1474,11 @@ def collect_hardware(
         disk_id = _topology_disk_id(candidate, block_graph)
         if disk_id and disk_id not in smart_by_id:
             smart_by_id[disk_id] = (smart, record_error)
-    physical_ids = list(smart_by_id)
-    physical_ids.extend(
-        name for name, node in block_graph["nodes"].items()
-        if node.get("type") == "disk" and name not in smart_by_id
+    physical_ids = _physical_disk_ids_for_report(
+        smart_by_id, block_graph, filesystems
     )
     physical_disks = []
-    for disk_id in physical_ids[:MAX_PHYSICAL_DISKS]:
+    for disk_id in physical_ids:
         smart, record_error = smart_by_id.get(disk_id, (None, None))
         record = _physical_disk_record(
             disk_id, smart, record_error, block_graph["nodes"].get(disk_id)

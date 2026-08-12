@@ -130,6 +130,12 @@ async function run(){
   assert.equal(app.filesystemItemsForView(multiDiskHardware).length, 1);
   assert.equal(app.partitionRowsForDisk(multiDiskHardware.storage.physical_disks[0], multiDiskHardware.storage.filesystems).length, 1);
   assert.equal(app.partitionRowsForDisk(multiDiskHardware.storage.physical_disks[2], multiDiskHardware.storage.filesystems).length, 0);
+  assert.equal(app.partitionRowsForDisk(
+    {id: 'sda'}, [{source: '/dev/sdaa1', backing_disk_ids: []}]
+  ).length, 0);
+  assert.equal(app.partitionRowsForDisk(
+    {id: 'nvme0n1'}, [{source: '/dev/nvme0n1p2', backing_disk_ids: []}]
+  ).length, 1);
   assert.deepEqual(
     app.maximumTemperature(app.temperatureSensorEntries(multiDiskHardware)),
     {label: 'CPU0', value: 47}
