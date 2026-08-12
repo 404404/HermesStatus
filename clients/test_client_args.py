@@ -4,6 +4,7 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 CLIENT_DIR = Path(__file__).resolve().parent
@@ -12,6 +13,54 @@ if str(CLIENT_DIR) not in sys.path:
 
 
 class ClientArgumentTests(unittest.TestCase):
+
+    def test_device_v2_clients_pass_normalized_hardware_config_to_collector(self):
+        if "psutil" not in sys.modules and importlib.util.find_spec("psutil") is None:
+            sys.modules["psutil"] = types.ModuleType("psutil")
+        from multi_device_contracts import (
+            ClientV2Config,
+            FilesystemProbeConfig,
+            SmartDeviceConfig,
+        )
+
+        config = ClientV2Config(
+            server_url="https://status.example.invalid",
+            device_id="device-alpha",
+            device_name=None,
+            device_fqdn=None,
+            token_file="/run/secrets/token",
+            smart_devices=(SmartDeviceConfig("/dev/sda", "sat", "disk one"),),
+            primary_smart_device="/dev/sda",
+            filesystem_probes=(FilesystemProbeConfig("/", "/host-storage/root"),),
+        )
+        for filename in ("client-linux.py", "client-psutil.py"):
+            with self.subTest(client=filename):
+                namespace = runpy.run_path(str(CLIENT_DIR / filename))
+                captured = {}
+
+                class CapturingCollector(object):
+                    def __init__(self, **kwargs):
+                        captured.update(kwargs)
+
+                with mock.patch.dict(
+                    namespace["_device_v2_extension_collector"].__globals__,
+                    {
+                        "HostExtensionCollector": CapturingCollector,
+                        "collect_client_build": lambda protocol: {
+                            "version": "2.3-preview-test",
+                            "revision": "a" * 40,
+                            "build_time": "2026-08-11T00:00:00Z",
+                            "protocol": protocol,
+                        },
+                    },
+                ):
+                    namespace["_device_v2_extension_collector"](config, ["synthetic"])
+                self.assertEqual(captured["smart_devices"], [{"path": "/dev/sda", "type": "sat", "label": "disk one"}])
+                self.assertEqual(captured["primary_smart_device"], "/dev/sda")
+                self.assertEqual(captured["filesystem_probes"], [{"mountpoint": "/", "probe_path": "/host-storage/root"}])
+                self.assertEqual(captured["client_build"]["protocol"], "device_v2")
+                self.assertEqual(captured["easytier_args"], ["synthetic"])
+
     def test_password_with_user_text_does_not_replace_username(self):
         if "psutil" not in sys.modules and importlib.util.find_spec("psutil") is None:
             sys.modules["psutil"] = types.ModuleType("psutil")

@@ -10,6 +10,7 @@ import json
 import ipaddress
 import math
 import re
+import shlex
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
@@ -69,6 +70,7 @@ ALLOWED_STATS_FIELDS = {
     "hermes",
     "lucky",
     "easytier",
+    "client_build",
     "hardware_json",
     "docker_json",
     "hermes_json",
@@ -78,6 +80,8 @@ SAFE_GENERATION_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 RFC3339_UTC_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$"
 )
+SMART_DEVICE_PATH_RE = re.compile(r"^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$")
+SMART_DEVICE_TYPE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9,._+-]{0,63}$")
 
 ENV_TO_FIELD = {
     "HERMESSTATUS_SERVER_URL": "server_url",
@@ -90,6 +94,9 @@ ENV_TO_FIELD = {
     "HERMESSTATUS_CONNECT_TIMEOUT_SECONDS": "connect_timeout_seconds",
     "HERMESSTATUS_READ_TIMEOUT_SECONDS": "read_timeout_seconds",
     "HERMESSTATUS_COLLECTION_INTERVAL_SECONDS": "collection_interval_seconds",
+    "HERMESSTATUS_SMART_DEVICES": "smart_devices",
+    "HERMESSTATUS_PRIMARY_SMART_DEVICE": "primary_smart_device",
+    "HERMESSTATUS_FILESYSTEM_PROBES": "filesystem_probes",
 }
 ALLOWED_FIELDS = {
     "server_url",
@@ -102,12 +109,28 @@ ALLOWED_FIELDS = {
     "connect_timeout_seconds",
     "read_timeout_seconds",
     "collection_interval_seconds",
+    "smart_devices",
+    "primary_smart_device",
+    "filesystem_probes",
 }
 FORBIDDEN_AMBIGUOUS_KEYS = {"DOMAIN", "TOKEN", "PASSWORD", "AUTHORIZATION"}
 
 
 class ClientContractError(ValueError):
     """A sanitized configuration or envelope contract failure."""
+
+
+@dataclass(frozen=True)
+class SmartDeviceConfig:
+    path: str
+    type: str | None = None
+    label: str | None = None
+
+
+@dataclass(frozen=True)
+class FilesystemProbeConfig:
+    mountpoint: str
+    probe_path: str
 
 
 @dataclass(frozen=True)
@@ -122,6 +145,9 @@ class ClientV2Config:
     connect_timeout_seconds: int = 10
     read_timeout_seconds: int = 30
     collection_interval_seconds: int = 60
+    smart_devices: tuple[SmartDeviceConfig, ...] | None = None
+    primary_smart_device: str | None = None
+    filesystem_probes: tuple[FilesystemProbeConfig, ...] = ()
     loopback_test_profile: bool = False
 
 
@@ -147,7 +173,12 @@ def parse_config_json(data: str | bytes) -> dict[str, Any]:
         raise ClientContractError("config is not valid JSON") from exc
     if not isinstance(document, dict):
         raise ClientContractError("config root must be an object")
-    _require_keys(document, {"version", "server", "device", "collection"}, "config")
+    _require_fields(
+        document,
+        {"version", "server", "device", "collection"},
+        {"hardware"},
+        "config",
+    )
     if document["version"] != 1:
         raise ClientContractError("config.version must equal 1")
     server = _object(document["server"], "server")
@@ -161,7 +192,7 @@ def parse_config_json(data: str | bytes) -> dict[str, Any]:
     )
     _require_keys(device, {"id", "name", "fqdn", "token_file"}, "device")
     _require_keys(collection, {"interval_seconds"}, "collection")
-    return {
+    values = {
         "server_url": server["url"],
         "verify_tls": server["verify_tls"],
         "connect_timeout_seconds": server["connect_timeout_seconds"],
@@ -173,6 +204,18 @@ def parse_config_json(data: str | bytes) -> dict[str, Any]:
         "token_file": device["token_file"],
         "collection_interval_seconds": collection["interval_seconds"],
     }
+    if "hardware" in document:
+        hardware = _object(document["hardware"], "hardware")
+        _require_fields(
+            hardware,
+            set(),
+            {"smart_devices", "primary_smart_device", "filesystem_probes"},
+            "hardware",
+        )
+        for key in ("smart_devices", "primary_smart_device", "filesystem_probes"):
+            if key in hardware:
+                values[key] = hardware[key]
+    return values
 
 
 def resolve_client_config(
@@ -194,6 +237,31 @@ def resolve_client_config(
     for env_key, field in ENV_TO_FIELD.items():
         if env_key in env and env[env_key] not in (None, ""):
             env_values[field] = env[env_key]
+    # SMART_DEVICE predates device_v2.  Keep it as the lowest-priority
+    # environment spelling while allowing explicit plural JSON configuration
+    # to override the config file without reopening unrestricted /dev access.
+    for field, names in {
+        "smart_devices": (
+            "HERMESSTATUS_SMART_DEVICES", "SMART_DEVICES", "SMART_DEVICE",
+        ),
+        "primary_smart_device": (
+            "HERMESSTATUS_PRIMARY_SMART_DEVICE", "PRIMARY_SMART_DEVICE",
+        ),
+        "filesystem_probes": (
+            "HERMESSTATUS_FILESYSTEM_PROBES", "FILESYSTEM_PROBES",
+        ),
+    }.items():
+        for name in names:
+            value = env.get(name)
+            if value not in (None, ""):
+                # The container image's SMART_DEVICE=auto is a legacy
+                # automatic-discovery sentinel, not an explicit Device v2
+                # allowlist.  It must not override a JSON allowlist (including
+                # an intentional empty list) from the config file.
+                if name == "SMART_DEVICE" and isinstance(value, str) and value.strip().lower() == "auto":
+                    continue
+                env_values[field] = value
+                break
 
     merged: dict[str, Any] = {
         "verify_tls": True,
@@ -256,6 +324,15 @@ def resolve_client_config(
         if merged.get("ca_file") not in (None, "")
         else None
     )
+    smart_devices = _smart_devices_value(merged.get("smart_devices"))
+    primary_smart_device = _smart_device_path(
+        merged.get("primary_smart_device"), "primary_smart_device", optional=True
+    )
+    if primary_smart_device and smart_devices is not None and not any(
+        device.path == primary_smart_device for device in smart_devices
+    ):
+        raise ClientContractError("primary_smart_device is not configured")
+    filesystem_probes = _filesystem_probes_value(merged.get("filesystem_probes"))
     return ClientV2Config(
         server_url=server_url,
         device_id=device_id,
@@ -267,8 +344,112 @@ def resolve_client_config(
         connect_timeout_seconds=connect_timeout,
         read_timeout_seconds=read_timeout,
         collection_interval_seconds=interval,
+        smart_devices=smart_devices,
+        primary_smart_device=primary_smart_device,
+        filesystem_probes=filesystem_probes,
         loopback_test_profile=loopback_test_profile,
     )
+
+
+def _json_value(value: Any, field: str) -> Any:
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value, object_pairs_hook=_strict_object)
+    except (TypeError, json.JSONDecodeError, ClientContractError) as exc:
+        raise ClientContractError(f"{field} is invalid") from exc
+
+
+def _smart_device_path(value: Any, field: str, *, optional: bool = False) -> str | None:
+    if value is None and optional:
+        return None
+    if not isinstance(value, str) or not SMART_DEVICE_PATH_RE.fullmatch(value):
+        raise ClientContractError(f"{field} is invalid")
+    return value
+
+
+def _smart_devices_value(value: Any) -> tuple[SmartDeviceConfig, ...] | None:
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip().lower() == "auto":
+        # Preserve the legacy automatic-discovery alias when it reaches this
+        # parser through a compatible environment spelling or CLI override.
+        return None
+    if isinstance(value, str) and value.strip().startswith("/dev/"):
+        return (SmartDeviceConfig(path=_smart_device_path(value, "smart_devices")),)
+    if isinstance(value, str) and not value.lstrip().startswith("["):
+        try:
+            parts = shlex.split(value)
+        except ValueError as exc:
+            raise ClientContractError("smart_devices is invalid") from exc
+        if parts and "-d" in parts:
+            position = parts.index("-d")
+            device_type = parts[position + 1] if position + 1 < len(parts) else None
+            path = next((part for part in parts if part.startswith("/dev/")), None)
+            if path and device_type:
+                return (
+                    SmartDeviceConfig(
+                        path=_smart_device_path(path, "smart_devices"),
+                        type=_smart_device_type(device_type),
+                    ),
+                )
+    entries = _json_value(value, "smart_devices")
+    if not isinstance(entries, list) or len(entries) > 64:
+        raise ClientContractError("smart_devices is invalid")
+    devices = []
+    paths = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) - {"path", "type", "label"} or "path" not in entry:
+            raise ClientContractError("smart_devices is invalid")
+        path = _smart_device_path(entry["path"], "smart_devices.path")
+        device_type = _optional_text(entry.get("type"), "smart_devices.type", 64)
+        if device_type is not None:
+            device_type = _smart_device_type(device_type)
+        label = _optional_text(entry.get("label"), "smart_devices.label", 128)
+        if path in paths:
+            raise ClientContractError("smart_devices contains duplicate paths")
+        paths.add(path)
+        devices.append(SmartDeviceConfig(path=path, type=device_type, label=label))
+    return tuple(devices)
+
+
+def _smart_device_type(value: str) -> str:
+    if not SMART_DEVICE_TYPE_RE.fullmatch(value):
+        raise ClientContractError("smart_devices.type is invalid")
+    return value
+
+
+def _safe_probe_path(value: Any, field: str, *, maximum_length: int = 4096) -> str:
+    if not isinstance(value, str) or not value or len(value) > maximum_length or "\x00" in value:
+        raise ClientContractError(f"{field} is invalid")
+    path = PurePosixPath(value)
+    if not path.is_absolute() or str(path) != value or ".." in path.parts:
+        raise ClientContractError(f"{field} is invalid")
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ClientContractError(f"{field} is invalid")
+    return value
+
+
+def _filesystem_probes_value(value: Any) -> tuple[FilesystemProbeConfig, ...]:
+    if value is None:
+        return ()
+    entries = _json_value(value, "filesystem_probes")
+    if not isinstance(entries, list) or len(entries) > 128:
+        raise ClientContractError("filesystem_probes is invalid")
+    probes = []
+    mountpoints = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"mountpoint", "probe_path"}:
+            raise ClientContractError("filesystem_probes is invalid")
+        mountpoint = _safe_probe_path(
+            entry["mountpoint"], "filesystem_probes.mountpoint", maximum_length=512
+        )
+        probe_path = _safe_probe_path(entry["probe_path"], "filesystem_probes.probe_path")
+        if mountpoint in mountpoints:
+            raise ClientContractError("filesystem_probes contains duplicate mountpoints")
+        mountpoints.add(mountpoint)
+        probes.append(FilesystemProbeConfig(mountpoint=mountpoint, probe_path=probe_path))
+    return tuple(probes)
 
 
 def validate_server_url(

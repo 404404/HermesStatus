@@ -49,6 +49,36 @@ raw SMART output, Docker API responses, Hermes configuration, `.env` files, or
 authentication headers. The dashboard may report stale or unavailable data;
 that is safer than inventing a healthy value.
 
+## Hardware boundary
+
+Hardware observation is Client-only and read-only. The base Client deployment
+is non-privileged and maps no host block device. SMART requires an explicit
+audited JSON allowlist plus `SYS_RAWIO` and one read-only Compose mapping per
+confirmed device. Never mount full `/dev`, add `SYS_ADMIN`, use a host
+mount-namespace escape, or grant an unseen device merely to make auto-discovery
+convenient.
+
+Filesystem capacity requires an operator-selected, narrow read-only probe mount.
+The collector calls metadata and `statvfs` only; it does not enumerate files.
+Do not mount the host root merely to show capacity. Storage collection retains
+no serial number, WWN, filesystem UUID, raw SMART attribute table, raw command
+output, or directory listing.
+
+All reported device paths, models, mountpoints, filesystem types, operating
+system strings, and build metadata are bounded and rendered as escaped text.
+They are observations only, never Device v2 identity or authentication inputs.
+Per-disk and per-filesystem failure remains unavailable/degraded data rather
+than a fabricated healthy or empty result.
+
+## Read-only diagnostics and provenance
+
+Device diagnostics may expose sanitized status, protocol, timestamps, expected
+EasyTier comparison state, and Server/Client build provenance. They must not
+expose tokens, digests, credential paths, Registry paths, source-IP evidence,
+private CA data, raw host configuration, or headers. Build provenance is
+injected at build time; images must not run Git at runtime, and qualification
+compares the full revision with the OCI revision label.
+
 ## EasyTier monitoring
 
 EasyTier monitoring is loopback-RPC and read-only. The runtime command allowlist

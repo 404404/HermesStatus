@@ -31,6 +31,9 @@
     },
     "easytier": {
       "$ref": "easytier-extension.schema.json"
+    },
+    "client_build": {
+      "$ref": "#/$defs/clientBuild"
     }
   },
   "additionalProperties": false,
@@ -120,6 +123,13 @@
             "null"
           ],
           "maxLength": 128
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
         }
       },
       "additionalProperties": false
@@ -174,6 +184,133 @@
       },
       "additionalProperties": false
     },
+    "physicalDisk": {
+      "type": "object",
+      "required": [
+        "id", "device", "model", "capacity_bytes", "temperature_c",
+        "smart_status", "power_on_hours", "written_bytes", "read_bytes",
+        "smart_source", "collection_status"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+-]*$"},
+        "device": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^/dev/[A-Za-z0-9._+/-]+$"},
+        "model": {"type": ["string", "null"], "maxLength": 256},
+        "capacity_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "temperature_c": {"type": ["number", "null"], "minimum": -100, "maximum": 250},
+        "smart_status": {"enum": ["passed", "failed", "unknown"]},
+        "power_on_hours": {"$ref": "#/$defs/nullableCounter"},
+        "written_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "read_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "smart_source": {"type": ["string", "null"], "maxLength": 64},
+        "collection_status": {"enum": ["healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"]},
+        "error": {"$ref": "#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "filesystem": {
+      "type": "object",
+      "required": [
+        "source", "mountpoint", "fs_type", "total_bytes", "used_bytes",
+        "available_bytes", "usage_percent", "backing_disk_ids", "stack_type",
+        "collection_status"
+      ],
+      "properties": {
+        "source": {"type": ["string", "null"], "maxLength": 256},
+        "mountpoint": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^/.*$", "description": "Absolute display path; control characters and parent traversal are rejected by the strict server contract"},
+        "fs_type": {"type": ["string", "null"], "maxLength": 64},
+        "total_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "used_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "available_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "usage_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "backing_disk_ids": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"}},
+        "stack_type": {"enum": ["plain", "lvm", "mdraid", "device_mapper", "btrfs", "unknown"]},
+        "collection_status": {"enum": ["healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"]},
+        "error": {"$ref": "#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "storageSummary": {
+      "type": "object",
+      "required": ["physical_disk_count", "smart_passed", "smart_failed", "smart_unknown", "temperature_min_c", "temperature_max_c", "filesystem_count"],
+      "properties": {
+        "physical_disk_count": {"type": "integer", "minimum": 0, "maximum": 64},
+        "smart_passed": {"type": "integer", "minimum": 0, "maximum": 64},
+        "smart_failed": {"type": "integer", "minimum": 0, "maximum": 64},
+        "smart_unknown": {"type": "integer", "minimum": 0, "maximum": 64},
+        "temperature_min_c": {"type": ["number", "null"], "minimum": -100, "maximum": 250},
+        "temperature_max_c": {"type": ["number", "null"], "minimum": -100, "maximum": 250},
+        "filesystem_count": {"type": "integer", "minimum": 0, "maximum": 128}
+      },
+      "additionalProperties": false
+    },
+    "storage": {
+      "type": ["object", "null"],
+      "required": ["physical_disks", "filesystems", "summary", "updated_at", "stale", "error"],
+      "properties": {
+        "physical_disks": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/physicalDisk"}},
+        "filesystems": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/filesystem"}},
+        "summary": {"$ref": "#/$defs/storageSummary"},
+        "updated_at": {"$ref": "#/$defs/nullableDateTime"},
+        "stale": {"type": "boolean"},
+        "error": {"$ref": "#/$defs/error"}
+      },
+      "additionalProperties": false
+    },
+    "systemIdentity": {
+      "type": ["object", "null"],
+      "required": ["distribution", "release_version", "pretty_name", "kernel_release", "architecture", "source"],
+      "properties": {
+        "distribution": {"type": ["string", "null"], "maxLength": 256},
+        "release_version": {"type": ["string", "null"], "maxLength": 256},
+        "pretty_name": {"type": ["string", "null"], "maxLength": 256},
+        "kernel_release": {"type": ["string", "null"], "maxLength": 256},
+        "architecture": {"type": ["string", "null"], "maxLength": 256},
+        "source": {"enum": ["os-release", "dsm-version", "unavailable", "unknown"]}
+      },
+      "additionalProperties": false
+    },
+    "cpuUsage": {
+      "type": ["object", "null"],
+      "required": ["user_percent", "nice_percent", "system_percent", "idle_percent", "iowait_percent", "irq_percent", "softirq_percent", "steal_percent", "total_percent"],
+      "properties": {
+        "user_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}, "nice_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "system_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}, "idle_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "iowait_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}, "irq_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "softirq_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}, "steal_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "total_percent": {"type": ["number", "null"], "minimum": 0, "maximum": 100}
+      },
+      "additionalProperties": false
+    },
+    "cpuDetails": {
+      "type": ["object", "null"],
+      "required": ["architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "usage"],
+      "properties": {
+        "architecture": {"type": ["string", "null"], "maxLength": 128}, "vendor": {"type": ["string", "null"], "maxLength": 128}, "family": {"type": ["string", "null"], "maxLength": 128}, "model_id": {"type": ["string", "null"], "maxLength": 128}, "model_name": {"type": ["string", "null"], "maxLength": 128}, "stepping": {"type": ["string", "null"], "maxLength": 128}, "virtualization": {"type": ["string", "null"], "maxLength": 128},
+        "l1d_cache": {"type": ["string", "null"], "maxLength": 128}, "l1i_cache": {"type": ["string", "null"], "maxLength": 128}, "l2_cache": {"type": ["string", "null"], "maxLength": 128}, "l3_cache": {"type": ["string", "null"], "maxLength": 128},
+        "logical_cpus": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536}, "sockets": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536}, "cores_per_socket": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536}, "threads_per_core": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536},
+        "max_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "min_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "current_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "usage": {"$ref": "#/$defs/cpuUsage"}
+      },
+      "additionalProperties": false
+    },
+    "memoryDetails": {
+      "type": ["object", "null"],
+      "required": ["total_bytes", "used_bytes", "available_bytes", "free_bytes", "buffers_bytes", "cached_bytes", "reclaimable_bytes", "active_bytes", "inactive_bytes", "dirty_bytes", "writeback_bytes", "slab_bytes", "swap_total_bytes", "swap_used_bytes", "swap_free_bytes", "swap_cached_bytes"],
+      "properties": {
+        "total_bytes": {"$ref": "#/$defs/nullableCounter"}, "used_bytes": {"$ref": "#/$defs/nullableCounter"}, "available_bytes": {"$ref": "#/$defs/nullableCounter"}, "free_bytes": {"$ref": "#/$defs/nullableCounter"}, "buffers_bytes": {"$ref": "#/$defs/nullableCounter"}, "cached_bytes": {"$ref": "#/$defs/nullableCounter"}, "reclaimable_bytes": {"$ref": "#/$defs/nullableCounter"}, "active_bytes": {"$ref": "#/$defs/nullableCounter"}, "inactive_bytes": {"$ref": "#/$defs/nullableCounter"}, "dirty_bytes": {"$ref": "#/$defs/nullableCounter"}, "writeback_bytes": {"$ref": "#/$defs/nullableCounter"}, "slab_bytes": {"$ref": "#/$defs/nullableCounter"}, "swap_total_bytes": {"$ref": "#/$defs/nullableCounter"}, "swap_used_bytes": {"$ref": "#/$defs/nullableCounter"}, "swap_free_bytes": {"$ref": "#/$defs/nullableCounter"}, "swap_cached_bytes": {"$ref": "#/$defs/nullableCounter"}
+      },
+      "additionalProperties": false
+    },
+    "clientBuild": {
+      "type": ["object", "null"],
+      "required": ["version", "revision", "build_time", "protocol"],
+      "properties": {
+        "version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "build_time": {"$ref": "#/$defs/nullableDateTime"},
+        "protocol": {"const": "device_v2"}
+      },
+      "additionalProperties": false
+    },
     "hardware": {
       "type": "object",
       "required": [
@@ -198,6 +335,8 @@
           ],
           "maxLength": 128
         },
+        "cpu_details": {"$ref": "#/$defs/cpuDetails"},
+        "memory_details": {"$ref": "#/$defs/memoryDetails"},
         "cpu_temperature": {
           "$ref": "#/$defs/cpuTemperature"
         },
@@ -234,6 +373,12 @@
             "null"
           ],
           "maxLength": 64
+        },
+        "storage": {
+          "$ref": "#/$defs/storage"
+        },
+        "system_identity": {
+          "$ref": "#/$defs/systemIdentity"
         },
         "updated_at": {
           "$ref": "#/$defs/nullableDateTime"

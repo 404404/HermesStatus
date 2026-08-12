@@ -26,7 +26,7 @@ docker compose --env-file /secure/path/client.env \
 
 启用 EasyTier 的候选版本必须使用独立 Compose 项目、Registry、credential 目录、状态目录、Client 状态目录以及 HTTPS 主机端口。该端口必须显式绑定到 overlay 或局域网所用的私有网卡（例如 EasyTier 网卡），不得绑定到 `0.0.0.0` 或公网地址。只读挂载 EasyTier CLI 二进制到 Client；不要挂载其配置或秘密。若 Device v2 使用 TLS 代理，Server 的受信代理 CIDR 只能包含该代理，后端 HTTP 必须保持在 Compose 网络内。提升前，在 `/json/stats.json` 中确认选定设备、`easytier.status` 与五个命令状态；单节点 overlay 的远端节点数为零是有效状态。
 
-## SMART 设备访问
+## 硬件、SMART 与文件系统访问
 
 SMART 采集需要访问真实块设备的 ioctl。单盘监控时，不要把 Client 改为 privileged，也不要挂载完整 `/dev`。对于 `/dev/sda`，最小 Compose 配置为：
 
@@ -39,9 +39,30 @@ environment:
   SMART_DEVICE: /dev/sda
 ```
 
-这段配置应替换而非叠加在 `docker-compose-client.yml` 中遗留的宽泛设置上：添加 capability 和单设备映射前，设置 `CLIENT_PRIVILEGED=false`，并删除 `/dev:/dev:ro` 卷挂载。完整的 Device v2 最小权限覆盖示例见 `config/examples/docker-compose-client.override.example.yml`。仓库基础 Compose 文件为兼容性保留这些旧默认值；若仍保留它们，就不是最小权限部署。
+仓库基础 `docker-compose-client.yml` 为非 privileged，且默认不映射宿主机块设备，因此可在 SATA、NVMe、virtio 等主机上启动。完整 Device v2 最小权限示例见 `config/examples/docker-compose-client.override.example.yml`；只有经审核的 allowlist 才通过覆盖文件添加 `SYS_RAWIO` 并替换 `devices:`。
 
-保留只读根文件系统和 `no-new-privileges`。如果主机使用其他磁盘路径、RAID 或 NVMe 控制器，先确认并验证该具体设备，不能仅为自动发现而扩大设备权限。
+保留只读根文件系统和 `no-new-privileges`。多盘部署是显式、逐项审核的设备授权，例如：
+
+```yaml
+devices:
+  - /dev/sda:/dev/sda:r
+  - /dev/sdb:/dev/sdb:r
+environment:
+  # 当 client-v2.json 提供 hardware.smart_devices 时保持为空。
+  SMART_DEVICE: ""
+```
+
+`client-v2.json` 中匹配的 `hardware.smart_devices` 只能列出这些相同且在容器中可见的路径。不得使用 `privileged`、挂载完整 `/dev`、增加 `SYS_ADMIN`，也不得让自动发现扩大设备权限。RAID、LVM 和 device-mapper 是拓扑观测数据，不是授予其完整设备树访问权的理由。包括平台特定 smartctl 类型在内，每个物理 SMART 目标都必须先确认。
+
+文件系统容量也需要显式的只读 probe 挂载。以下是一个运维人员选定的数据文件系统示例，不是宿主机根目录挂载：
+
+```yaml
+volumes:
+  - /srv/example-data:/host-storage/data:ro
+```
+
+对应 Client JSON 项为 `{ "mountpoint": "/data", "probe_path":
+"/host-storage/data" }`。Client 只做元数据和 `statvfs` 检查，不会枚举文件。如果所需宿主机文件系统无法以窄范围只读 probe 方式提供，应报告为不可用，不能使用 mount namespace 进入、`nsenter`、`CAP_SYS_ADMIN` 或 privileged 模式。
 
 ## 健康检查
 
@@ -51,14 +72,16 @@ curl -fsS http://127.0.0.1:<web-port>/json/stats.json
 docker compose -p <project> ps
 ```
 
-检查 Client 健康状态和重启次数，再确认 `stats.json` 中目标设备 SMART 状态不为 `unknown`。
+检查 Client 健康状态和重启次数，再确认 `hardware.storage` 只包含预期物理磁盘和已配置的文件系统 probe。SMART 记录或文件系统 probe 不可用属于诊断数据，不能显示成健康值。单个已选磁盘仍可使用兼容的单盘 SMART 字段；多盘请使用详细存储记录及显式 `primary_smart_device`。
 
 ## 2.3 Preview staging
 
 `2.3-preview` 必须使用独立的 Compose 项目、状态目录、Registry、凭据、网络
 和候选镜像。当前 Preview 主机端口为 21443，升级时沿用既有 staging 绑定策略，
-不得擅自放宽。变更前记录 2.2 的容器 ID、镜像、OCI label、端口、挂载、网络和
-重启次数；2.3 Preview 不得停止、重建或修改 2.2。
+不得擅自放宽。页面环境名称由部署的运维配置提供（例如
+`HERMESSTATUS_DEPLOYMENT_ENV=preview`），不能从 21443 推断。变更前记录 2.2 的
+容器 ID、镜像、OCI label、端口、挂载、网络和重启次数；2.3 Preview 不得停止、
+重建或修改 2.2。
 
 只从干净的候选 commit 构建，并使 Server 和 Client 的 OCI revision 精确等于
 该 commit。备份 Preview 配置和状态，安全升级现有 Preview 项目，再验证 health、

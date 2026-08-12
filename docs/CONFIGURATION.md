@@ -32,6 +32,67 @@ The Client also accepts paths and intervals for host collection. The important
 ones are `HWMON_ROOT`, `SMART_DEVICE`, `DOCKER_SOCKET`,
 `HARDWARE_INTERVAL`, `DOCKER_INTERVAL`, and `CLIENT_STATUS_DIR`.
 
+## Hardware collection
+
+Hardware details are optional bounded observations. `hardware.storage` separates
+physical disks from filesystems: a filesystem can resolve to one, many, or no
+reported physical disks. This supports ordinary partitions, LVM, MD RAID,
+device mapper, and Btrfs/EXT4 stacks without guessing that a logical volume is
+a disk.
+
+For Device v2, prefer the optional `hardware` object in `client-v2.json`:
+
+```json
+"hardware": {
+  "smart_devices": [
+    {"path": "/dev/sda", "type": null, "label": "data-disk-a"},
+    {"path": "/dev/sdb", "type": "sat", "label": "data-disk-b"}
+  ],
+  "primary_smart_device": "/dev/sda",
+  "filesystem_probes": [
+    {"mountpoint": "/data", "probe_path": "/host-storage/data"}
+  ]
+}
+```
+
+`smart_devices` is an explicit allowlist of 0–64 container-visible `/dev/*`
+paths. An intentional empty array disables SMART probing while retaining only
+safe topology inventory; it is not a collection failure. Optional `type` is a bounded smartctl device type such as `sat`, `scsi`,
+or `nvme`; it is not a shell fragment. `label` is collector configuration
+metadata and is not promised as a persisted or UI display field.
+`primary_smart_device` is optional and selects the compatibility singular SMART
+fields when several disks are observed. Without it, those singular fields are
+not arbitrarily taken from the first disk; detailed `storage.physical_disks`
+remains authoritative.
+
+`filesystem_probes` is an explicit list of up to 128 absolute display
+`mountpoint` (at most 512 characters) and container `probe_path` pairs. The
+configured mountpoint is preserved exactly, including legal repeated whitespace;
+the probe path must be a read-only mount of the intended host filesystem. The
+Client runs `findmnt` and `statvfs` only; it never walks or uploads directory
+contents. Pseudo filesystems and unavailable probes are reported as unavailable
+rather than presented as host storage. A bind-mount source is normalized to its
+safe `/dev/*` component; non-device sources are omitted rather than reported as
+endpoints. A Btrfs backing relation remains unknown unless every member can be
+proven safely.
+
+Configuration precedence is CLI, environment, JSON file, then defaults. The
+environment alternatives are `HERMESSTATUS_SMART_DEVICES` / `SMART_DEVICES`,
+`HERMESSTATUS_PRIMARY_SMART_DEVICE` / `PRIMARY_SMART_DEVICE`, and
+`HERMESSTATUS_FILESYSTEM_PROBES` / `FILESYSTEM_PROBES`; JSON values are JSON
+arrays. Legacy `SMART_DEVICE` remains the lowest-priority single-device form.
+Its image-default value `auto` is an automatic-discovery sentinel and does not
+override JSON `smart_devices`, including an intentional empty array.
+Do not set a legacy non-empty `SMART_DEVICE` in a Compose override that intends
+the JSON multi-disk allowlist to be authoritative.
+
+`auto` is retained for compatibility, but can discover only block devices
+already visible to the Client container. It does not grant devices, change
+cgroups, inspect unavailable host paths, or expand `/dev` access. See
+[Hardware monitoring design](design/HARDWARE_MONITORING.md) for the data and
+safety contract and [the device guide](DEVICE_CONFIGURATION.md) for Compose
+mappings.
+
 ## Hermes and Lucky
 
 `HERMES_EXPORT_CONFIG` points to a JSON or YAML exporter configuration. It
@@ -101,8 +162,8 @@ device, authenticate a Client, or select credentials:
 "easytier_expectation": {
   "administrative_role": "site_router",
   "network_name": "home-404",
-  "overlay_ipv4": "10.250.250.1",
-  "proxy_cidrs": ["192.168.68.0/24"]
+  "overlay_ipv4": "10.0.0.1",
+  "proxy_cidrs": ["10.0.0.0/24"]
 }
 ```
 

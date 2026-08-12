@@ -43,6 +43,7 @@
       }
     },
     "updated": {"type": "string", "pattern": "^[0-9]+$", "maxLength": 20},
+    "build": {"$ref": "#/$defs/serverBuild"},
     "reload": {"type": "boolean"}
   },
   "additionalProperties": false,
@@ -84,6 +85,8 @@
           "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
         },
         "display_name": {"type": "string", "minLength": 1, "maxLength": 128},
+        "enabled": {"type": "boolean"},
+        "ingestion_mode": {"enum": ["legacy", "device_v2", "cutover"]},
         "status": {
           "enum": ["online", "degraded", "stale", "offline", "never_seen", "disabled", "identity_error"]
         },
@@ -149,6 +152,7 @@
         },
         "lucky": {"$ref": "../docs/migration/schema/lucky-extension.schema.json"},
         "easytier": {"$ref": "../docs/migration/schema/easytier-extension.schema.json"},
+        "client_build": {"$ref": "#/$defs/clientBuild"},
         "easytier_expectation": {"$ref": "#/$defs/easytierExpectation"},
         "hardware_json": {"type": "string", "maxLength": 262144},
         "docker_json": {"type": "string", "maxLength": 262144},
@@ -175,6 +179,28 @@
         "expected": {"$ref": "#/$defs/easytierExpectationValues"},
         "observed": {"$ref": "#/$defs/easytierExpectationValues"},
         "result": {"enum": ["matched", "mismatch", "not_observable", "not_configured"]}
+      },
+      "additionalProperties": false
+    },
+    "clientBuild": {
+      "type": ["object", "null"],
+      "required": ["version", "revision", "build_time", "protocol"],
+      "properties": {
+        "version": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F]+$"},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "build_time": {"type": ["string", "null"], "format": "date-time", "maxLength": 40},
+        "protocol": {"const": "device_v2"}
+      },
+      "additionalProperties": false
+    },
+    "serverBuild": {
+      "type": "object",
+      "required": ["version", "revision", "build_time", "deployment"],
+      "properties": {
+        "version": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[^\\u0000-\\u001F\\u007F]+$"},
+        "revision": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^(?:[0-9a-f]{40}|unknown)$"},
+        "build_time": {"type": ["string", "null"], "format": "date-time", "maxLength": 40},
+        "deployment": {"enum": ["production", "preview", "staging", "development", "unknown"]}
       },
       "additionalProperties": false
     }

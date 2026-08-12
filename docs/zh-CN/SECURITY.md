@@ -26,6 +26,18 @@ EasyTier 监控只允许通过仅回环 RPC 执行 `node info`、`peer list`、`
 
 使用 `/api/health` 与已脱敏的 `/json/stats.json` 排障。不得暴露原始 SMART 输出、Docker API 响应、Hermes 配置、`.env` 或认证头。宁可显示陈旧或不可用状态，也不能伪造健康值。
 
+## 硬件边界
+
+硬件观测仅在 Client 上以只读方式进行。基础 Client 部署为非 privileged，且不映射宿主机块设备。SMART 需要显式、经审核的 JSON allowlist，并为每块已确认磁盘单独提供 `SYS_RAWIO` 与只读 Compose 映射。不得挂载完整 `/dev`、增加 `SYS_ADMIN`、进入宿主机 mount namespace，也不能为了方便自动发现而授予不可见设备。
+
+文件系统容量需要由运维人员选择的窄范围只读 probe 挂载。采集器只调用元数据和 `statvfs`，不会枚举文件；不得仅为展示容量而挂载宿主机根目录。存储采集不会保留序列号、WWN、文件系统 UUID、原始 SMART 属性表、原始命令输出或目录清单。
+
+所有上报的设备路径、型号、挂载点、文件系统类型、操作系统字符串和构建元数据均有长度限制并以转义文本渲染。它们仅是观测数据，绝不作为 Device v2 身份或认证输入。单盘或单文件系统失败会保留为不可用/降级数据，不会伪造健康或空结果。
+
+## 只读诊断与溯源
+
+设备诊断可显示已脱敏的状态、协议、时间戳、EasyTier 期望比较状态以及 Server/Client 构建溯源，但绝不能暴露 token、digest、credential 路径、Registry 路径、源 IP 证据、私有 CA、原始宿主机配置或请求头。构建溯源在构建时注入，镜像不能在运行时运行 Git；资格验证会比对完整 revision 与 OCI revision label。
+
 ## EasyTier 监控
 
 EasyTier 只使用 loopback RPC 的只读监控。运行时命令白名单仅包含 `node info`、

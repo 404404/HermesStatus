@@ -52,7 +52,7 @@ var (
 		"hdd_total": true, "hdd_used": true, "io_read": true, "io_write": true,
 		"cpu": true, "cpu_cores": true, "cpu_model": true, "custom": true, "os": true,
 		"online4": true, "online6": true,
-		"extension_version": true, "hardware": true, "docker": true, "hermes": true, "lucky": true, "easytier": true,
+		"extension_version": true, "hardware": true, "docker": true, "hermes": true, "lucky": true, "easytier": true, "client_build": true,
 		"hardware_json": true, "docker_json": true, "hermes_json": true,
 	}
 )

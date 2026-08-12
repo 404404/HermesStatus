@@ -15,11 +15,27 @@ EasyTier health projection.
   each Client keeps its endpoint IP and port in a separate Client configuration
   file.
 - Home first shows CPU, memory, disk capacity, EasyTier remote-peer counts, and
-  EasyTier traffic. The hardware area shows SMART, read/write volume, power-on
-  hours, system uptime, physical-host OS, Docker, Lucky, and EasyTier
-  state/version. State and version use a compact “Normal (version)” form, and
-  EasyTier traffic uses one decimal place in a single-line receive / transmit /
-  forwarded layout with automatic B/KB/MB/GB unit scaling.
+  EasyTier traffic. Its hardware area shows the highest CPU-sensor temperature,
+  highest physical-disk temperature, SMART, read/write volume, power-on hours,
+  system uptime, physical-host OS version, Docker, Lucky, and EasyTier
+  state/version. Multi-disk summaries are calculated only from physical disks:
+  temperature, I/O, and hours identify the selected device, while SMART shows
+  passed counts and failed devices; a logical volume is never presented as one
+  physical disk.
+- Hardware sits between Home and Docker. On desktop, CPU facts and CPU use each
+  occupy one half; the right side uses two columns for total, I/O wait, user,
+  and system CPU use, with no duplicate percentage outside the bar. Memory is a
+  transposition of the prior vertical columns: physical/active-reclaimable,
+  Swap/buffers-Slab, free/page-cache, and Swap-cache/dirty-writeback. It
+  remains single-line at normal 16:9 desktop widths. System information contains only OS version,
+  architecture, and kernel. Vendor, family/model, topology, caches, idle, Nice,
+  Steal, IRQ, and SoftIRQ are not displayed. The separate Filesystems / volumes
+  section is removed: configured read-only filesystem probes only associate
+  partition/format, used/total capacity, and a usage bar with physical-disk
+  rows. LVM, MD RAID, and device mapper list safely resolved backing disks;
+  multi-device Btrfs keeps the relation unknown when all members cannot be
+  proven. The page never reads directory contents, disk serial numbers, or raw
+  SMART attributes.
 - Docker: container counts, names, images, state, and port summaries.
 - Home also includes configured Hermes profiles with gateway, runtime,
   model/provider, and usage snapshots. Its section header shows the shared
@@ -39,7 +55,7 @@ latency probes are not HermesStatus dashboard features.
 ## Architecture
 
 ```text
-Host / hwmon / SMART / Docker / Hermes / Lucky / EasyTier
+Host / hwmon / SMART / read-only filesystem probes / Docker / Hermes / Lucky / EasyTier
                        ↓
                   Python Client
                        ↓
@@ -69,7 +85,7 @@ The default Server address is `http://127.0.0.1:8080/`. Health is at
 `/api/health`, status is `/json/stats.json`, and Legacy Agent TCP listens on
 `35601`. Prefer `SERVERSTATUS_USER`; `USER` exists only for compatibility.
 
-## Minimum SMART permissions
+## Minimum hardware and SMART permissions
 
 Do not use `privileged` or mount the full `/dev` tree solely to collect SMART.
 For a confirmed `/dev/sda` disk:
@@ -83,15 +99,31 @@ environment:
   SMART_DEVICE: /dev/sda
 ```
 
-This block replaces, rather than supplements, the legacy broad entries in
-`docker-compose-client.yml`: set `CLIENT_PRIVILEGED=false` and remove its
-`/dev:/dev:ro` volume before adding the capability and single-device mapping.
+The repository base `docker-compose-client.yml` is non-privileged and maps no
+host block device by default, so it starts on SATA, NVMe, virtio, and similar
+hosts. Use an audited override to add `SYS_RAWIO` and one read-only `devices:`
+mapping per confirmed physical disk when SMART collection is required.
 `config/examples/docker-compose-client.override.example.yml` contains a
-complete minimum-permission Device v2 override. Keeping those defaults is not
-a minimum-permission deployment.
+complete minimum-permission Device v2 example.
 
-Keep the read-only root filesystem and `no-new-privileges`. Other disks, RAID,
-or NVMe controllers need an explicit, validated device grant.
+Keep the read-only root filesystem and `no-new-privileges`. For multiple disks,
+list every device explicitly in Client JSON `hardware.smart_devices` and grant
+each one a separate read-only Compose `devices:` mapping. Do not restore
+`privileged`, a full `/dev` mount, or `SYS_ADMIN`. `SMART_DEVICE` remains
+compatible with single-disk deployments; `SMART_DEVICES` is an optional JSON
+environment override. `auto` discovers only devices already visible and
+authorized to the Client container.
+
+Filesystem capacity is not an automatic host scan either: only a
+`hardware.filesystem_probes` entry with a read-only mount at its explicit
+`probe_path` is checked through `statvfs`. This prevents a container-namespace
+capacity from being reported as host capacity and does not require mounting the
+full host root. Device, mountpoint, path, and model values are bounded and
+escaped observations; none can become device identity.
+
+See the [Hardware monitoring design](docs/design/HARDWARE_MONITORING.md) and
+[device configuration guide](docs/DEVICE_CONFIGURATION.md) for fields,
+precedence, mappings, and diagnostics.
 
 ## Device v2
 
@@ -116,6 +148,7 @@ serverstatus --validate-device-config \
 - [Operations](docs/OPERATIONS.md)
 - [Development and testing](docs/DEVELOPMENT.md)
 - [EasyTier 2.3 design](docs/design/EASYTIER_MONITORING.md)
+- [Hardware monitoring design](docs/design/HARDWARE_MONITORING.md)
 - [Device configuration guide](docs/DEVICE_CONFIGURATION.md)
 
 ```bash
@@ -125,10 +158,14 @@ serverstatus --validate-device-config \
 ```
 
 `2.3-preview` is the sole 2.3 integration and 21443 staging branch; it is not
-automatically promoted to `2.0`. Only real GK50 zero-peer collection is
-currently qualified. Real Synology dual-site, IPv6 UDP Direct, TCP fallback,
-192.168.88.0/24, and real Direct/Relay behavior remain pending. Synthetic
-fixtures qualify preview states only and are never real-network verification.
+automatically promoted to `2.0`. The 21443 environment label comes from
+deployment configuration; the port itself does not define an environment. Only
+real GK50 zero-peer EasyTier collection is currently qualified. Synology DSM
+multi-disk/MD RAID/LVM/Btrfs structures have contract qualification using
+secret-free synthetic fixtures and still await real-device qualification. Real
+Synology dual-site, IPv6 UDP Direct, TCP fallback, a future remote private
+CIDR, and real Direct/Relay behavior also remain pending. Synthetic fixtures
+qualify preview states only and are never real-network verification.
 
 Never commit real tokens, passwords, credentials, private addresses, or
 production configuration.

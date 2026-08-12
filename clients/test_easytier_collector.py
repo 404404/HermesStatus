@@ -99,6 +99,39 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertFalse(payload["connectors"]["tcp_configured"])
         self.assertFalse(payload["connectors"]["tcp_active"])
 
+    def test_accepts_observed_26_local_route_and_metric_list(self):
+        class ObservedRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                command = tuple(argv[-2:])
+                if command == ("node", "info"):
+                    return Result({
+                        "hostname": "gk50", "version": "2.6.4-8428a89d",
+                        "peer_id": 12345, "ipv4_addr": "10.250.250.1/24",
+                    })
+                if command == ("route", "list"):
+                    return Result([{
+                        "ipv4": "10.250.250.1/24", "hostname": "gk50",
+                        "proxy_cidrs": "192.168.68.0/24", "next_hop_hostname": "Local",
+                        "path_latency": 0, "version": "2.6.4-8428a89d",
+                    }])
+                if command == ("stats", "show"):
+                    return Result([
+                        {"name": "traffic_bytes_rx", "value": 101, "labels": {"network_name": "fixture-net"}},
+                        {"name": "traffic_bytes_tx", "value": 202, "labels": {"network_name": "fixture-net"}},
+                        {"name": "traffic_bytes_forwarded", "value": 303, "labels": {"network_name": "fixture-net"}},
+                        {"name": "network_secret", "value": 999},
+                    ])
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=ObservedRunner()).collect()
+        self.assertEqual(payload["status"], "healthy")
+        self.assertEqual(payload["command_status"]["route_list"]["status"], "healthy")
+        self.assertEqual(payload["command_status"]["stats_show"]["status"], "healthy")
+        self.assertEqual(payload["routes"]["items"][0]["overlay_ipv4"], "10.250.250.1")
+        self.assertTrue(payload["routes"]["items"][0]["is_local"])
+        self.assertEqual(payload["traffic"], {"bytes_rx": 101, "bytes_tx": 202, "bytes_forwarded": 303})
+        self.assertNotIn("network_secret", json.dumps(payload))
+
     def test_partial_failure_is_degraded_and_does_not_leak_stderr(self):
         payload = EasyTierCollector(environ=self.environ, runner=Runner({("route", "list")})).collect()
         self.assertEqual(payload["status"], "degraded")

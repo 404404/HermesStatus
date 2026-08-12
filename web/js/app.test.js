@@ -50,11 +50,13 @@ async function run(){
   assert.equal(app.usageBand(normal.resources.memoryPercent), 'medium');
   assert.equal(app.usageBand(normal.resources.diskPercent), 'high');
   assert.equal(app.normalizePageName('home'), 'home');
+  assert.equal(app.normalizePageName('hardware'), 'hardware');
   assert.equal(app.normalizePageName('docker'), 'docker');
   assert.equal(app.normalizePageName('lucky'), 'lucky');
   assert.equal(app.normalizePageName('unexpected'), 'home');
   assert.equal(app.pageFromHash(''), 'home');
   assert.equal(app.pageFromHash('#home'), 'home');
+  assert.equal(app.pageFromHash('#hardware'), 'hardware');
   assert.equal(app.pageFromHash('#docker'), 'docker');
   assert.equal(app.pageFromHash('#lucky'), 'lucky');
   assert.equal(app.pageFromHash('#invalid'), 'home');
@@ -91,6 +93,12 @@ async function run(){
   assert.match(indexMarkup, /<h2 id="easytierCommandsTitle">采集状态<\/h2>/);
   assert.doesNotMatch(indexMarkup, /<th>说明<\/th>/);
   assert.equal(app.formatUptimeHours(90061), '25 h (约1.04天)');
+  assert.equal(app.formatCelsius(47), '47℃');
+  assert.equal(app.formatCelsius(47.25), '47.3℃');
+  assert.equal(
+    app.cpuLogicalProcessorText({logical_cpus: 16, sockets: 2, cores_per_socket: 4, threads_per_core: 2}),
+    '16（2 插槽 / 8 核心 / 16 线程）'
+  );
   assert.equal(app.formatTrafficBytes(0), '0.0B');
   assert.equal(app.formatTrafficBytes(1000000), '1.0MB');
 	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: null}, true), '未观察到');
@@ -101,6 +109,76 @@ async function run(){
     app.modelBreakdown({model: 'example-model', usage_mode: 'api', provider: 'OpenCode Go'}),
     'example-model / api / OpenCode Go'
   );
+
+  const multiDiskHardware = {
+    cpu_temperatures: [
+      {label: 'CPU Package', value: 44}, {label: 'CPU0', value: 47}
+    ],
+    storage: {
+      physical_disks: [
+        {id: 'sda', device: '/dev/sda', model: 'Disk A', temperature_c: 42, smart_status: 'passed', power_on_hours: 12000, written_bytes: 2_000_000_000_000, read_bytes: 1_000_000_000_000},
+        {id: 'sdb', device: '/dev/sdb', model: 'Disk B', temperature_c: 50, smart_status: 'failed', power_on_hours: 22344, written_bytes: 4_730_000_000_000, read_bytes: 2_500_000_000_000},
+        {id: 'sdc', device: '/dev/sdc', model: 'Disk C', temperature_c: 39, smart_status: 'passed', power_on_hours: 3000, written_bytes: null, read_bytes: null}
+      ],
+      filesystems: [{
+        source: '/dev/mapper/vg-root', mountpoint: '/', fs_type: 'ext4',
+        used_bytes: 32_500_000_000, total_bytes: 110_000_000_000,
+        usage_percent: 29.5, backing_disk_ids: ['sda', 'sdb']
+      }]
+    }
+  };
+  assert.deepEqual(
+    app.physicalDisksForView(multiDiskHardware).map(disk => disk.id),
+    ['sda', 'sdb', 'sdc']
+  );
+  assert.equal(app.filesystemItemsForView(multiDiskHardware).length, 1);
+  assert.equal(app.partitionRowsForDisk(multiDiskHardware.storage.physical_disks[0], multiDiskHardware.storage.filesystems).length, 1);
+  assert.equal(app.partitionRowsForDisk(multiDiskHardware.storage.physical_disks[2], multiDiskHardware.storage.filesystems).length, 0);
+  assert.equal(app.partitionRowsForDisk(
+    {id: 'sda'}, [{source: '/dev/sdaa1', backing_disk_ids: []}]
+  ).length, 0);
+  assert.equal(app.partitionRowsForDisk(
+    {id: 'nvme0n1'}, [{source: '/dev/nvme0n1p2', backing_disk_ids: []}]
+  ).length, 1);
+  assert.deepEqual(
+    app.maximumTemperature(app.temperatureSensorEntries(multiDiskHardware)),
+    {label: 'CPU0', value: 47}
+  );
+  assert.deepEqual(app.filesystemBackingDisks(multiDiskHardware.storage.filesystems[0]), {
+    text: '2 块磁盘', title: 'sda / sdb'
+  });
+  assert.match(app.smartHomeMarkup(multiDiskHardware.storage.physical_disks, multiDiskHardware), /2 \/ 3 通过/);
+  assert.match(app.smartHomeMarkup(multiDiskHardware.storage.physical_disks, multiDiskHardware), /sdb故障/);
+  const legacyDisk = app.physicalDisksForView({
+    disk_device: '/dev/sda', disk_smart_status: 'passed', disk_power_on_hours: 12000,
+    disk_written_bytes: 2_000_000_000_000, disk_read_bytes: 1_000_000_000_000,
+    disk_temperature: {current: 42}
+  });
+  assert.equal(legacyDisk.length, 1);
+  assert.equal(legacyDisk[0].id, 'sda');
+  assert.equal(app.smartHomeMarkup(legacyDisk, {}), '通过');
+  const diagnosticMarkup = app.deviceDiagnosticsMarkup({
+    host: {
+      device_id: 'device-alpha', display_name: '<script>display</script>', status: 'online',
+      identity_status: 'matched', protocol_mode: 'device_v2', disabled: false,
+      ingestion_mode: 'device_v2', last_seen_at: '2026-08-01T00:00:00Z',
+      last_accepted_at: '2026-08-01T00:00:01Z', source_ip: '192.0.2.1', fqdn: 'hidden.example'
+    },
+    hardware: {},
+    easytierExpectation: {
+      network_name: '<img src=x>', overlay_ipv4: '10.250.250.1', proxy_cidrs: ['192.168.68.0/24']
+    }
+  });
+  assert.match(diagnosticMarkup, /&lt;script&gt;display/);
+  assert.doesNotMatch(diagnosticMarkup, /<script>|<img src=x>|source_ip|192\.0\.2\.1|hidden\.example/);
+  const provenanceMarkup = app.buildProvenanceMarkup({
+    document: {schema_version: 2, build: {environment: 'preview', version: '2.3-preview', revision: '0123456789abcdef', token: 'must-not-render'}},
+    host: {protocol_mode: 'device_v2'},
+    hardware: {client_build: {version: '2.3-preview', revision: 'fedcba9876543210', protocol: 'device_v2'}}
+  });
+  assert.match(provenanceMarkup, /0123456789ab/);
+  assert.match(provenanceMarkup, /fedcba987654/);
+  assert.doesNotMatch(provenanceMarkup, /must-not-render/);
 
   const empty = app.buildViewModel(statsDocument('empty'));
   assert.equal(empty.profiles.length, 0);
@@ -400,20 +478,40 @@ async function run(){
   assert.match(indexMarkup, /id="deviceButtons"/);
   assert.match(indexMarkup, /id="deviceSelect"/);
   assert.match(indexMarkup, /id="deviceSelectionNotice"[^>]*aria-live="polite"/);
+  assert.match(indexMarkup, /id="deviceDiagnosticsButton"[^>]*aria-haspopup="dialog"/);
+  assert.match(indexMarkup, /id="deviceDiagnosticsModal"[^>]*hidden/);
+  assert.match(indexMarkup, /id="aboutButton"[^>]*aria-haspopup="dialog"/);
+  assert.match(indexMarkup, /id="aboutModal"[^>]*hidden/);
   assert.match(indexMarkup, /id="homeTab"[^>]*>主页<\/button>/);
+  assert.match(indexMarkup, /id="hardwareTab"[^>]*>硬件信息<\/button>/);
   assert.match(indexMarkup, /id="dockerTab"[^>]*>Docker<\/button>/);
   assert.match(indexMarkup, /id="luckyTab"[^>]*>Lucky<\/button>/);
   assert.doesNotMatch(indexMarkup, /data-page-target="[^"]+"[^>]*>主机<\/button>/);
   assert.match(indexMarkup, /id="homePage"[^>]*data-page="home"/);
+  assert.match(indexMarkup, /id="hardwarePage"[^>]*data-page="hardware"[^>]*hidden/);
   assert.match(indexMarkup, /id="dockerPage"[^>]*data-page="docker"[^>]*hidden/);
   assert.match(indexMarkup, /id="luckyPage"[^>]*data-page="lucky"[^>]*hidden/);
   assert.doesNotMatch(indexMarkup, /id="dockerSummary"/);
-  const homeMarkup = indexMarkup.slice(indexMarkup.indexOf('id="homePage"'), indexMarkup.indexOf('id="dockerPage"'));
+  const homeMarkup = indexMarkup.slice(indexMarkup.indexOf('id="homePage"'), indexMarkup.indexOf('id="hardwarePage"'));
+  const hardwareMarkup = indexMarkup.slice(indexMarkup.indexOf('id="hardwarePage"'), indexMarkup.indexOf('id="dockerPage"'));
   const dockerMarkup = indexMarkup.slice(indexMarkup.indexOf('id="dockerPage"'), indexMarkup.indexOf('id="luckyPage"'));
   const luckyMarkup = indexMarkup.slice(indexMarkup.indexOf('id="luckyPage"'), indexMarkup.indexOf('id="profileModal"'));
   assert.match(homeMarkup, /id="overviewCards"/);
   assert.match(homeMarkup, /id="profilesBody"/);
   assert.doesNotMatch(homeMarkup, /id="containersBody"/);
+  assert.match(hardwareMarkup, /id="hardwareSystemInfo"/);
+  assert.match(hardwareMarkup, /id="hardwareCpuInfo"/);
+  assert.match(hardwareMarkup, /id="hardwareCpuUsage"/);
+  assert.match(hardwareMarkup, /class="hardware-cpu-columns"/);
+  assert.match(hardwareMarkup, /class="hardware-cpu-column"/);
+  assert.match(hardwareMarkup, /id="hardwareMemoryInfo"/);
+  assert.doesNotMatch(hardwareMarkup, /hardwareMemoryPrimary|hardwareMemorySecondary|hardwareMemoryTertiary/);
+  assert.doesNotMatch(hardwareMarkup, /文件系统\s*\/\s*存储卷|hardwareFilesystemsBody/);
+  assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
+  assert.deepEqual(
+    [...hardwareMarkup.matchAll(/<th>([^<]+)<\/th>/g)].map(match => match[1]),
+    ['设备', '型号', '容量', '温度', 'SMART', '通电时间', '分区 / 格式', '已用 / 总容量', '使用率']
+  );
   assert.match(dockerMarkup, /id="containersBody"/);
   assert.deepEqual(
     [...dockerMarkup.matchAll(/<th>([^<]+)<\/th>/g)]
@@ -437,6 +535,50 @@ async function run(){
   assert.match(appSource, /refresh\('initial'\)/);
   assert.match(appSource, /setActivePage\(tab\.dataset\.pageTarget\)/);
   assert.match(appSource, /parseDashboardHash\(window\.location\.hash\)/);
+  assert.match(appSource, /\['home', 'hardware', 'docker', 'lucky', 'easytier'\]/);
+  const homeHardwareSource = appSource.slice(appSource.indexOf('function renderHardware'), appSource.indexOf('function filesystemBackingDisks'));
+  assert.deepEqual(
+    [...homeHardwareSource.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1]),
+    ['硬盘 SMART 状态', '硬盘写入/读取量', '硬盘通电时间', 'CPU温度', '硬盘温度', '运行中/容器总数', 'Lucky运行状态/版本', 'EasyTier运行状态/版本', '系统已运行时间', '操作系统版本']
+  );
+  assert.match(homeHardwareSource, /smartHomeMarkup\(physicalDisks, hardware\)/);
+  assert.match(homeHardwareSource, /maxDiskBy\(physicalDisks, diskTemperatureC\)/);
+  assert.match(homeHardwareSource, /maximumTemperature\(temperatureSensorEntries\(hardware\)\)/);
+  assert.match(appSource, /function deviceDiagnosticsMarkup\(view\)/);
+  assert.match(appSource, /function buildProvenanceMarkup\(view\)/);
+  assert.match(appSource, /function cpuDetailsForView\(hardware\)/);
+  assert.match(appSource, /function cpuLogicalProcessorText\(cpu\)/);
+  assert.match(css, /\.hardware-cpu-columns\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /#hardwareCpuUsage\.hardware-cpu-usage-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
+  assert.match(css, /\.hardware-usage-item\{display:grid;grid-template-columns:minmax\(0,auto\) minmax\(96px,1fr\)/);
+  assert.match(css, /\.hardware-memory-grid\{display:grid;grid-template-columns:minmax\(460px,1\.6fr\) minmax\(260px,1fr\) minmax\(220px,\.9fr\)/);
+  assert.match(css, /\.hardware-memory-grid \.detail-row dt,\.hardware-memory-grid \.detail-row dd\{white-space:nowrap\}/);
+  assert.match(css, /\.detail-list\.hardware-three-column-info\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}/);
+  assert.match(css, /@media \(max-width:720px\)\{[\s\S]*\.detail-list\.hardware-three-column-info\{grid-template-columns:1fr\}/);
+  assert.match(appSource, /\['物理内存已用 \/ 可用 \/ 总量'/);
+  assert.match(appSource, /\['Swap 内存已用 \/ 可用 \/ 总量'/);
+  const memorySource = appSource.slice(appSource.indexOf('const memoryRows'), appSource.indexOf('const memoryPlaceholders'));
+  assert.deepEqual(
+    [...memorySource.matchAll(/\['([^']+)'/g)].map(match => match[1]),
+    ['物理内存已用 / 可用 / 总量', '活动 / 非活动', '可回收 Slab', 'Swap 内存已用 / 可用 / 总量', 'Buffers', 'Slab', '空闲内存', '页面缓存', 'Swap Cache', 'Dirty / Writeback']
+  );
+  assert.match(appSource, /const memoryPlaceholders = Array\.from\(\{length: Math\.max\(0, 12 - memoryRows\.length\)/);
+  assert.match(appSource, /\['频率（最低 \/ 最高）'/);
+  assert.match(appSource, /\['当前频率', formatMHz\(cpu\.current_mhz\)\]/);
+  assert.doesNotMatch(appSource, /\['空闲', cpuUsage\.idle_percent\]/);
+  assert.doesNotMatch(appSource, /\['Nice', cpuUsage\.nice_percent\]/);
+  assert.doesNotMatch(appSource, /\['Steal', cpuUsage\.steal_percent\]/);
+  assert.doesNotMatch(appSource, /\['中断 IRQ', cpuUsage\.irq_percent\]/);
+  assert.doesNotMatch(appSource, /\['软中断 SoftIRQ', cpuUsage\.softirq_percent\]/);
+  assert.doesNotMatch(appSource, /发行版.*distribution|发行版本.*release/);
+  assert.match(appSource, /I\/O 等待/);
+  assert.match(appSource, /function partitionRowsForDisk\(disk, filesystems\)/);
+  assert.doesNotMatch(
+    appSource.slice(appSource.indexOf('function deviceDiagnosticsMarkup'), appSource.indexOf('function buildProvenanceMarkup')),
+    /source_ip|fqdn|token|digest|credential|Authorization/i
+  );
+  assert.match(appSource, /if\(!byId\('deviceDiagnosticsModal'\)\.hidden\) closeDeviceDiagnostics\(\)/);
+  assert.match(appSource, /else if\(!byId\('aboutModal'\)\.hidden\) closeAbout\(\)/);
   assert.doesNotMatch(appSource, /renderDockerSummary|renderLuckyOverview/);
   const pageSwitchSource = appSource.slice(appSource.indexOf('function setActivePage'), appSource.indexOf('function detailRow'));
   assert.doesNotMatch(pageSwitchSource, /fetchStats|controller\.refresh|setInterval/);

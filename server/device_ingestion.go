@@ -320,6 +320,20 @@ func extensionHasBusinessError(extension ExtensionStats) bool {
 	var extensionErrors []*ExtensionError
 	if extension.Hardware != nil {
 		extensionErrors = append(extensionErrors, extension.Hardware.Error)
+		if storage := extension.Hardware.Storage; storage != nil {
+			extensionErrors = append(extensionErrors, storage.Error)
+			for _, disk := range storage.PhysicalDisks {
+				// A topology-only disk is not necessarily an authorized SMART
+				// target. It is retained for safe physical-disk relationships,
+				// but `unsupported` without a collection error must not make an
+				// otherwise healthy device appear degraded.
+				if disk.SMARTStatus == DiskSMARTFailed ||
+					(disk.CollectionStatus != "healthy" &&
+						!(disk.CollectionStatus == "unsupported" && disk.Error == nil)) {
+					return true
+				}
+			}
+		}
 	}
 	if extension.Docker != nil {
 		extensionErrors = append(extensionErrors, extension.Docker.Error)
@@ -394,6 +408,13 @@ func forceExtensionStale(extension *ExtensionSnapshot) {
 		value := *extension.Hardware
 		extension.Hardware = &value
 		extension.Hardware.Stale = true
+		if value.Storage != nil {
+			storage := *value.Storage
+			storage.PhysicalDisks = append([]PhysicalDiskStats(nil), value.Storage.PhysicalDisks...)
+			storage.Filesystems = append([]FilesystemStats(nil), value.Storage.Filesystems...)
+			storage.Stale = true
+			value.Storage = &storage
+		}
 	}
 	if extension.Docker != nil {
 		value := *extension.Docker

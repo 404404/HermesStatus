@@ -36,3 +36,16 @@ mark ready, merge, or promote Preview work to `2.0` automatically.
 EasyTier changes require the normal Python, Go, race, vet, build, Node, Compose,
 contract, and secret gates, plus synthetic state fixtures and a real loopback
 GK50 collection check. Synthetic topology states must remain clearly labelled.
+
+Hardware changes require the same gates plus Client configuration precedence,
+single- and multi-disk SMART behavior, partial failure, block-graph cycle/depth
+bounds, generic LVM/MD RAID/device-mapper fixtures, filesystem probe safety,
+Server validation/persistence, and escaped WebUI rendering. Verify the
+single-stats-fetch invariant for Home, Hardware, Docker, Lucky, and EasyTier at
+desktop and mobile sizes. Synthetic Synology layouts are contract fixtures only;
+do not describe them as real DSM qualification.
+
+Candidate images must receive Server/Client version, full revision, and build
+time at build time. Qualify the displayed revisions against the image OCI
+revision labels, deploy the final HEAD to the isolated 21443 Preview project,
+and leave the resulting pull request Draft for manual merge.

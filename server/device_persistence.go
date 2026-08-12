@@ -133,14 +133,21 @@ func persistedDeviceFromNode(
 		}
 		observations["last_request_digest"] = raw
 	}
-	domains := make(map[string]json.RawMessage, 5)
-	for key, value := range map[string]any{
+	domains := make(map[string]json.RawMessage, 6)
+	domainValues := map[string]any{
 		"hardware": node.Extension.Hardware,
 		"docker":   node.Extension.Docker,
 		"hermes":   node.Extension.Hermes,
 		"lucky":    node.Extension.Lucky,
 		"easytier": node.Extension.EasyTier,
-	} {
+	}
+	// A typed nil pointer in an interface map serializes as JSON null. Build
+	// provenance is optional for older clients, so omit it instead of emitting
+	// an invalid persisted domain object.
+	if node.Extension.ClientBuild != nil {
+		domainValues["client_build"] = node.Extension.ClientBuild
+	}
+	for key, value := range domainValues {
 		raw, err := rawJSON(value)
 		if err != nil {
 			return contracts.PersistedDevice{}, err
@@ -390,6 +397,13 @@ func restorePersistedDeviceFields(node *NodeState, persisted contracts.Persisted
 			return err
 		}
 		node.Extension.EasyTier = &value
+	}
+	if raw, exists := persisted.Domains["client_build"]; exists {
+		var value ClientBuildInfo
+		if err := decodeStrictRuntime(raw, &value); err != nil || ValidateClientBuildInfo(&value) != nil {
+			return errors.New("persisted client build is invalid")
+		}
+		node.Extension.ClientBuild = &value
 	}
 	return nil
 }

@@ -18,7 +18,7 @@ from device_client_config import (  # noqa: E402
     load_custom_ca,
     load_device_token,
 )
-from multi_device_contracts import ClientContractError  # noqa: E402
+from multi_device_contracts import ClientContractError, resolve_client_config  # noqa: E402
 
 
 TOKEN = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -49,6 +49,16 @@ class DeviceClientConfigTests(unittest.TestCase):
     def test_legacy_default_and_complete_v2_are_explicit(self):
         legacy = load_client_selection([], environ={"SERVER": "127.0.0.1"})
         self.assertIs(legacy.mode, ClientMode.LEGACY)
+
+        legacy_with_build_metadata = load_client_selection(
+            [],
+            environ={
+                "SERVER": "127.0.0.1",
+                "HERMESSTATUS_CLIENT_VERSION": "2.3-preview",
+                "HERMESSTATUS_CLIENT_REVISION": "abcdef012345",
+            },
+        )
+        self.assertIs(legacy_with_build_metadata.mode, ClientMode.LEGACY)
 
         v2 = load_client_selection([], environ=self.complete_env)
         self.assertIs(v2.mode, ClientMode.DEVICE_V2)
@@ -95,6 +105,102 @@ class DeviceClientConfigTests(unittest.TestCase):
         self.assertEqual(config.read_timeout_seconds, 25)
         self.assertEqual(config.connect_timeout_seconds, 7)
         self.assertEqual(config.collection_interval_seconds, 120)
+
+    def test_hardware_json_config_is_normalized_and_cli_overrides_env_and_file(self):
+        config_path = self.root / "hardware-client.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "server": {
+                        "url": "https://file.example.invalid",
+                        "verify_tls": True,
+                        "connect_timeout_seconds": 7,
+                        "read_timeout_seconds": 20,
+                    },
+                    "device": {
+                        "id": "device-alpha", "name": "File",
+                        "fqdn": None, "token_file": str(self.token_path),
+                    },
+                    "collection": {"interval_seconds": 120},
+                    "hardware": {
+                        "smart_devices": [{"path": "/dev/sda", "type": "sat"}],
+                        "primary_smart_device": "/dev/sda",
+                        "filesystem_probes": [{
+                            "mountpoint": "/volume1", "probe_path": "/host-storage/volume1",
+                        }],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        selection = load_client_selection(
+            [
+                'HERMESSTATUS_SMART_DEVICES=[{"path":"/dev/nvme0n1","type":"nvme"}]',
+                "HERMESSTATUS_PRIMARY_SMART_DEVICE=/dev/nvme0n1",
+            ],
+            environ={
+                "HERMESSTATUS_CONFIG_FILE": str(config_path),
+                "SMART_DEVICES": '[{"path":"/dev/sdb"}]',
+                "PRIMARY_SMART_DEVICE": "/dev/sdb",
+            },
+        )
+        config = selection.device_v2
+        self.assertEqual(config.smart_devices[0].path, "/dev/nvme0n1")
+        self.assertEqual(config.smart_devices[0].type, "nvme")
+        self.assertEqual(config.primary_smart_device, "/dev/nvme0n1")
+        self.assertEqual(config.filesystem_probes[0].mountpoint, "/volume1")
+
+    def test_hardware_config_rejects_unsafe_device_and_probe_paths(self):
+        for hardware in (
+            {"smart_devices": [{"path": "/dev/../sda"}]},
+            {"filesystem_probes": [{"mountpoint": "/", "probe_path": "relative"}]},
+        ):
+            document = {
+                "version": 1,
+                "server": {
+                    "url": "https://file.example.invalid", "verify_tls": True,
+                    "connect_timeout_seconds": 7, "read_timeout_seconds": 20,
+                },
+                "device": {
+                    "id": "device-alpha", "name": None, "fqdn": None,
+                    "token_file": str(self.token_path),
+                },
+                "collection": {"interval_seconds": 120}, "hardware": hardware,
+            }
+            path = self.root / ("invalid-%s.json" % len(hardware))
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.subTest(hardware=hardware), self.assertRaises(ClientContractError):
+                load_client_selection([], environ={"HERMESSTATUS_CONFIG_FILE": str(path)})
+
+    def test_filesystem_mountpoint_keeps_spacing_and_matches_wire_bound(self):
+        preserved = resolve_client_config(
+            env=self.complete_env,
+            file_values={"filesystem_probes": [{
+                "mountpoint": "/mnt/My  Drive", "probe_path": "/host-storage/data",
+            }]},
+        )
+        self.assertEqual(preserved.filesystem_probes[0].mountpoint, "/mnt/My  Drive")
+        too_long = "/" + "a" * 512
+        with self.assertRaises(ClientContractError):
+            resolve_client_config(
+                env=self.complete_env,
+                file_values={"filesystem_probes": [{
+                    "mountpoint": too_long, "probe_path": "/host-storage/data",
+                }]},
+            )
+
+    def test_device_v2_treats_legacy_auto_as_a_discovery_sentinel(self):
+        automatic = resolve_client_config(
+            env={**self.complete_env, "SMART_DEVICE": "auto"},
+        )
+        self.assertIsNone(automatic.smart_devices)
+
+        explicit_empty = resolve_client_config(
+            env={**self.complete_env, "SMART_DEVICE": "auto"},
+            file_values={"smart_devices": []},
+        )
+        self.assertEqual(explicit_empty.smart_devices, ())
 
     def test_partial_unknown_malformed_and_mixed_v2_fail_closed(self):
         invalid_environments = [

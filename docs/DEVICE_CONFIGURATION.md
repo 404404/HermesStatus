@@ -12,8 +12,8 @@ Client.
 The Device Registry `devices[].display_name` is the production name shown in
 the device selector and dashboard. The Client-reported name is never allowed to
 replace it. Use a stable operational name such as `GK50`, not a deployment
-suffix such as `Preview`. Each Client keeps its own Server LAN IP and HTTPS port in
-`client-v2.json`, for example `https://192.168.68.11:21443`.
+suffix such as `Preview`. Each Client keeps its own Server endpoint and HTTPS
+port in `client-v2.json`, for example `https://status.example.invalid:21443`.
 
 Use these files (production paths are examples, not repository files):
 
@@ -48,14 +48,14 @@ matching credential document.
 ## Client file
 
 The Client endpoint is configured independently in `client-v2.json`. Its URL
-contains the Server LAN IP and HTTPS port; `device.name` is an identity hint,
+contains the Server endpoint and HTTPS port; `device.name` is an identity hint,
 not the browser display-name authority.
 
 ```json
 {
   "version": 1,
   "server": {
-    "url": "https://192.168.68.11:21443",
+    "url": "https://status.example.invalid:21443",
     "verify_tls": true,
     "ca_file": "/run/secrets/hermesstatus-ca.crt",
     "connect_timeout_seconds": 10,
@@ -67,12 +67,31 @@ not the browser display-name authority.
     "fqdn": null,
     "token_file": "/run/secrets/hermesstatus-device-token"
   },
-  "collection": {"interval_seconds": 60}
+  "collection": {"interval_seconds": 60},
+  "hardware": {
+    "smart_devices": [
+      {"path": "/dev/sda", "type": null, "label": "data-disk-a"},
+      {"path": "/dev/sdb", "type": "sat", "label": "data-disk-b"}
+    ],
+    "primary_smart_device": "/dev/sda",
+    "filesystem_probes": [
+      {"mountpoint": "/data", "probe_path": "/host-storage/data"}
+    ]
+  }
 }
 ```
 
 `url` must match the TLS certificate name or IP SAN. Keep the token file owned
 by the Client user and mode `0400` or `0600`.
+
+`device.id` is the stable Device v2 identity and is also the value used in the
+browser selection hash (for example `#hardware?device=gk50`). Do not put
+`preview` in a production-facing ID merely because the independent 21443
+deployment is Preview. Renaming an existing ID is a controlled migration: back
+up state, change the Registry device ID and default ID, rename/update the
+matching digest-only credential document's filename and `device_id`, update
+the Client JSON, and migrate the isolated Server state before restart. It is
+not auto-registration and must never generate a new token or credential.
 
 ## Compose mappings
 
@@ -87,19 +106,47 @@ services:
       - /etc/hermesstatus/device-v2/legacy-device-mapping.json:/etc/hermesstatus/legacy-device-mapping.json:ro
 ```
 
-For each Client, mount its own configuration, token, CA, and status directory:
+For each Client, mount its own configuration, token, CA, status directory, and
+only the hardware paths that it is authorized to observe:
 
 ```yaml
 services:
   serverstatus-client:
     environment:
       HERMESSTATUS_CONFIG_FILE: /etc/hermesstatus/client-v2.json
+      # Leave blank so the JSON multi-disk allowlist is not overridden.
+      SMART_DEVICE: ""
+    devices: !override
+      - /dev/sda:/dev/sda:r
+      - /dev/sdb:/dev/sdb:r
+      # Only when an authorized probe is backed by this specific LVM LV.
+      - /dev/mapper/vgdata-root:/dev/mapper/vgdata-root:r
     volumes:
       - /etc/hermesstatus/device-v2/client-v2.json:/etc/hermesstatus/client-v2.json:ro
       - /etc/hermesstatus/device-v2/secrets/gk50.token:/run/secrets/hermesstatus-device-token:ro
       - /etc/hermesstatus/device-v2/ca.crt:/run/secrets/hermesstatus-ca.crt:ro
       - /var/lib/hermesstatus/device-v2/gk50:/var/lib/serverstatus-client
+      - /srv/example-data:/host-storage/data:ro
 ```
+
+The base Client Compose file is non-privileged and maps no host block device,
+so it starts on systems that do not expose `/dev/sda`. An audited override adds
+`SYS_RAWIO` and `devices: !override` so paths match the JSON allowlist exactly.
+Do not mount full `/dev`, use `privileged`, add `SYS_ADMIN`, or mount the host
+root for filesystem capacity. Each filesystem probe needs its own narrow
+read-only mount; it is sampled through `findmnt` and `statvfs`, never by
+walking files.
+
+For a filesystem probe on a specific LVM/device-mapper logical volume, map
+that exact LV read-only as well as its already-authorized physical disk. This
+lets `lsblk` safely resolve the LV through its partition to the physical disk
+for the Hardware table. It does not permit reads of arbitrary devices and is
+not a reason to mount `/dev`, `/dev/mapper`, a host root, or the device-mapper
+control node. Keep the mapping absent when no configured probe needs it.
+
+`label` in `smart_devices` is collector configuration metadata. It is not a
+promise that a label is persisted or rendered. Device, model, mountpoint, and
+filesystem observations also cannot identify or authenticate the Client.
 
 Validate Server inputs before restart:
 
@@ -112,6 +159,20 @@ serverstatus --validate-device-config \
 
 Never commit the production configuration, token, digest documents, private CA,
 or private endpoint addresses.
+
+## Read-only diagnostics and provenance
+
+The device information dialog is read-only. It may show Device ID, configured
+display name, enabled/ingestion/protocol status, safe collection timestamps,
+system identity, configured EasyTier expectation status, and Server/Client
+build provenance. It must not show a token, digest, credential or Registry
+path, source address evidence, private CA, or authorization header.
+
+Set the environment label through the Server deployment, for example
+`HERMESSTATUS_DEPLOYMENT_ENV=preview`; do not infer it from the current Preview
+port 21443. Image builds inject version, revision, and build time. During
+candidate qualification, compare the full Server and Client revisions with the
+corresponding `org.opencontainers.image.revision` labels.
 
 ## EasyTier expectation example
 
@@ -128,8 +189,8 @@ does not alter the Client's Server URL, port, authentication, or device ID.
   "easytier_expectation": {
     "administrative_role": "site_router",
     "network_name": "home-404",
-    "overlay_ipv4": "10.250.250.1",
-    "proxy_cidrs": ["192.168.68.0/24"]
+    "overlay_ipv4": "10.0.0.1",
+    "proxy_cidrs": ["10.0.0.0/24"]
   }
 }
 ```

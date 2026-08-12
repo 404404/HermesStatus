@@ -15,9 +15,9 @@ services:
       - /tmp:size=32m,mode=1777,nosuid,nodev,noexec
     network_mode: host
     pid: host
-    # Release A keeps the 1.0 SMART access model. This is intentionally broad
-    # and must be narrowed to a device/capability allowlist in a later release.
-    privileged: ${CLIENT_PRIVILEGED:-true}
+    # The base service deliberately maps no host block device. Add SYS_RAWIO
+    # and one confirmed read-only `devices:` entry through an audited override;
+    # never grant the whole /dev tree or privileged mode.
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'python3 /app/client-' >/dev/null"]
       interval: 30s
@@ -80,7 +80,6 @@ services:
       # A read-only bind does not make the Docker API read-only. The collector
       # is constrained in code to GET /containers/json?all=1 only.
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /dev:/dev:ro
       - ${HERMES_EXPORT_CONFIG_HOST:-./hermes-exporter.json}:${HERMES_EXPORT_CONFIG:-/app/hermes-exporter.json}:ro
       - ${HERMES_ROOT_HOST:-/home/hermes}:${HERMES_ROOT:-/home/hermes}:ro
       - ${CLIENT_STATUS_DIR_HOST:-./client-status}:${CLIENT_STATUS_DIR:-/var/lib/serverstatus-client}
