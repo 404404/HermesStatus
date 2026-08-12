@@ -1338,7 +1338,9 @@ def collect_filesystems(filesystem_probes, block_graph, command_runner=None, sta
     return filesystems, _select_error(errors)
 
 
-def _physical_disk_ids_for_report(smart_by_id, block_graph, filesystems):
+def _physical_disk_ids_for_report(
+    smart_by_id, block_graph, filesystems, include_topology_inventory=True
+):
     """Select the bounded disk inventory without orphaning probe relations.
 
     Filesystem probes are an explicit operator request. Their resolved backing
@@ -1361,10 +1363,11 @@ def _physical_disk_ids_for_report(smart_by_id, block_graph, filesystems):
                 selected.append(disk_id)
                 selected_set.add(disk_id)
 
-    for disk_id, node in nodes.items():
-        if node.get("type") == "disk" and disk_id not in selected_set:
-            selected.append(disk_id)
-            selected_set.add(disk_id)
+    if include_topology_inventory:
+        for disk_id, node in nodes.items():
+            if node.get("type") == "disk" and disk_id not in selected_set:
+                selected.append(disk_id)
+                selected_set.add(disk_id)
 
     selected = selected[:MAX_PHYSICAL_DISKS]
     selected_set = set(selected)
@@ -1527,7 +1530,18 @@ def collect_hardware(
         if disk_id and disk_id not in smart_by_id:
             smart_by_id[disk_id] = (smart, record_error)
     physical_ids = _physical_disk_ids_for_report(
-        smart_by_id, block_graph, filesystems
+        smart_by_id,
+        block_graph,
+        filesystems,
+        # A non-empty Device v2 SMART allowlist is an authorization boundary:
+        # do not turn a narrow set of mapped block devices into a host-wide
+        # topology inventory.  An empty allowlist deliberately requests the
+        # existing topology-only view, and automatic discovery retains the
+        # broad compatibility behavior.
+        include_topology_inventory=not (
+            isinstance(configured_smart_devices, (list, tuple))
+            and len(configured_smart_devices) > 0
+        ),
     )
     physical_disks = []
     for disk_id in physical_ids:
@@ -1831,7 +1845,15 @@ class HostExtensionCollector(object):
         # CPU detail fields are an optional observability enhancement. Their
         # absence must not turn otherwise valid SMART/storage data into a
         # failed hardware domain.
-        self.identity_errors = [item for item in (os_error, cpu_error) if item]
+        # DSM normally exposes /etc.defaults/VERSION instead of os-release.
+        # Its validated identity is authoritative, so a missing os-release
+        # mount is expected and must not degrade an otherwise healthy hardware
+        # report.
+        dsm_identity = self.system_identity.get("source") == "dsm-version"
+        self.identity_errors = [
+            item for item in (os_error, cpu_error)
+            if item and not (dsm_identity and item.get("code") == "host_os_unavailable")
+        ]
         self._hardware = not_reported_hardware()
         self._docker = not_reported_docker()
         self._hermes = not_reported_hermes()

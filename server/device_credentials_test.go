@@ -70,6 +70,35 @@ func TestCredentialDirectoryLoadsCurrentAndOverlappingRotation(t *testing.T) {
 	}
 }
 
+func TestCredentialDirectoryLoadsMultipleDeviceRecords(t *testing.T) {
+	now := time.Now().UTC()
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+		testRegistryDevice("device-beta", "Beta", 20, true, "device_v2", nil),
+	)
+	directory := t.TempDir()
+	writeJSONTestFile(t, filepath.Join(directory, "device-alpha.json"), testCredentialRecord(
+		"device-alpha",
+		testCredentialSlot("current", testCurrentToken, now.Add(-time.Hour), now.Add(time.Hour)),
+	))
+	writeJSONTestFile(t, filepath.Join(directory, "device-beta.json"), testCredentialRecord(
+		"device-beta",
+		testCredentialSlot("current", testNextToken, now.Add(-time.Hour), now.Add(time.Hour)),
+	))
+
+	loaded, err := loadDeviceCredentialDirectory(directory, &registry)
+	if err != nil {
+		t.Fatalf("multiple valid device credentials were rejected: %v", err)
+	}
+	if len(loaded) != 2 || len(loaded["device-alpha"].Slots) != 1 || len(loaded["device-beta"].Slots) != 1 {
+		t.Fatalf("multiple records were not loaded: %#v", loaded)
+	}
+	if err := validateRequiredDeviceCredentials(loaded, &registry, now); err != nil {
+		t.Fatalf("multiple active credentials were not accepted: %v", err)
+	}
+}
+
+
 func TestCredentialDirectoryUsesHeldDescriptorAcrossPathReplacement(t *testing.T) {
 	now := time.Now().UTC()
 	registry := testRegistry(

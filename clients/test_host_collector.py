@@ -144,6 +144,26 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(name, "unknown")
         self.assertEqual(error["code"], "host_os_unavailable")
 
+    def test_dsm_identity_does_not_degrade_hardware_when_os_release_is_absent(self):
+        with tempfile.TemporaryDirectory() as root:
+            version = Path(root) / "VERSION"
+            version.write_text(
+                "productversion=7.2.1\nbuildnumber=69057\nsmallfixnumber=1\n",
+                encoding="utf-8",
+            )
+            collector = HostExtensionCollector(
+                host_os_release_file=str(Path(root) / "missing-os-release"),
+                dsm_version_file=str(version),
+                status_dir="",
+                command_runner=lambda command, timeout: (1, ""),
+                docker_request=lambda path: [],
+            )
+            self.assertEqual(collector.system_identity["source"], "dsm-version")
+            self.assertFalse(any(
+                item.get("code") == "host_os_unavailable"
+                for item in collector.identity_errors
+            ))
+
     def test_cpu_model_prefers_lscpu(self):
         output = json.dumps(
             {"lscpu": [{"field": "Model name:", "data": "Example CPU from lscpu"}]}
@@ -335,6 +355,31 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNone(payload["disk_temperature"])
         self.assertEqual(payload["storage"]["summary"]["physical_disk_count"], 2)
         self.assertEqual(payload["storage"]["summary"]["smart_passed"], 2)
+
+    def test_explicit_smart_allowlist_does_not_expand_to_unmapped_topology_disks(self):
+        smart = fixture_json("smart-normal.json")
+
+        def runner(command, timeout):
+            if command[:1] == ["lsblk"]:
+                return 0, json.dumps({"blockdevices": [
+                    {"name": "sda", "kname": "sda", "type": "disk", "size": 1000},
+                    {"name": "sdb", "kname": "sdb", "type": "disk", "size": 2000},
+                    {"name": "zram0", "kname": "zram0", "type": "disk", "size": 3000},
+                ]})
+            if "-j" in command:
+                return 0, json.dumps(smart)
+            return 0, "SMART overall-health self-assessment test result: PASSED\n"
+
+        payload = collect_hardware(
+            "Example CPU",
+            smart_devices=[{"path": "/dev/sda"}],
+            command_runner=runner,
+            sys_block_root="/no-sys-block",
+            now=FIXED_NOW,
+        )
+        self.assertEqual(
+            [disk["id"] for disk in payload["storage"]["physical_disks"]], ["sda"]
+        )
 
     def test_explicit_empty_smart_allowlist_keeps_topology_without_an_error(self):
         runner = MultiSmartRunner({})
