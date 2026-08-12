@@ -169,6 +169,15 @@ func TestHardwareObservabilityRejectsUnsafeOrInconsistentStorage(t *testing.T) {
 
 	storage = validStorageFixture()
 	stats.Hardware.Storage = &storage
+	storage.PhysicalDisks[0].ID = "disk+1"
+	storage.PhysicalDisks[0].Device = "/dev/disk+1"
+	storage.Filesystems[0].BackingDiskIDs = []string{"disk+1"}
+	if err := ValidateExtensionStats(stats); err != nil {
+		t.Fatalf("client-accepted plus-sign device path was rejected: %v", err)
+	}
+
+	storage = validStorageFixture()
+	stats.Hardware.Storage = &storage
 	storage.Filesystems[0].Mountpoint = "/mnt/../invalid"
 	if err := ValidateExtensionStats(stats); err == nil {
 		t.Fatal("filesystem mountpoint with parent traversal was accepted")

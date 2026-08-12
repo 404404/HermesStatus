@@ -38,6 +38,9 @@ class ClientV2ConfigContractTests(unittest.TestCase):
         self.assertEqual(config.connect_timeout_seconds, 10)
         self.assertEqual(config.read_timeout_seconds, 30)
         self.assertEqual(config.collection_interval_seconds, 60)
+        self.assertEqual(config.smart_devices[0].path, "/dev/disk+1")
+        self.assertEqual(config.primary_smart_device, "/dev/disk+1")
+        self.assertEqual(config.filesystem_probes[0].probe_path, "/host-storage/data")
 
         document = json.loads(self.fixture)
         document["DOMAIN"] = "ambiguous.example.invalid"

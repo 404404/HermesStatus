@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.example.invalid/hermesstatus/client-v2-config.schema.json",
-  "title": "HermesStatus 2.2 Client configuration",
+  "title": "HermesStatus 2.3 Client configuration",
   "type": "object",
   "required": ["version", "server", "device", "collection"],
   "properties": {
@@ -58,6 +58,40 @@
       "required": ["interval_seconds"],
       "properties": {
         "interval_seconds": {"type": "integer", "minimum": 10, "maximum": 3600}
+      },
+      "additionalProperties": false
+    },
+    "hardware": {
+      "type": "object",
+      "properties": {
+        "smart_devices": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+              "path": {"type": "string", "minLength": 6, "maxLength": 132, "pattern": "^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$"},
+              "type": {"type": ["string", "null"], "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9,._+-]{0,63}$"},
+              "label": {"type": ["string", "null"], "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F]+$"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "primary_smart_device": {"type": ["string", "null"], "minLength": 6, "maxLength": 132, "pattern": "^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$"},
+        "filesystem_probes": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "required": ["mountpoint", "probe_path"],
+            "properties": {
+              "mountpoint": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/[^\\u0000-\\u001F\\u007F]*$"},
+              "probe_path": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/[^\\u0000-\\u001F\\u007F]*$"}
+            },
+            "additionalProperties": false
+          }
+        }
       },
       "additionalProperties": false
     }

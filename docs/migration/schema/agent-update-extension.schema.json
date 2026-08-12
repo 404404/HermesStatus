@@ -192,8 +192,8 @@
         "smart_source", "collection_status"
       ],
       "properties": {
-        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"},
-        "device": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^/dev/[A-Za-z0-9._/-]+$"},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+-]*$"},
+        "device": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^/dev/[A-Za-z0-9._+/-]+$"},
         "model": {"type": ["string", "null"], "maxLength": 256},
         "capacity_bytes": {"$ref": "#/$defs/nullableCounter"},
         "temperature_c": {"type": ["number", "null"], "minimum": -100, "maximum": 250},

@@ -64,8 +64,8 @@ func extensionOpenAPISchemas() map[string]any {
 	physicalDisk := requiredObject(
 		[]string{"id", "device", "model", "capacity_bytes", "temperature_c", "smart_status", "power_on_hours", "written_bytes", "read_bytes", "smart_source", "collection_status"},
 		map[string]any{
-			"id":                map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"},
-			"device":            map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength, "pattern": "^/dev/[A-Za-z0-9._/-]+$"},
+			"id":                map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+-]*$"},
+			"device":            map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength, "pattern": "^/dev/[A-Za-z0-9._+/-]+$"},
 			"model":             nullableString(MaxDiskModelLength, "Sanitized disk model without serial or WWN"),
 			"capacity_bytes":    nullableInteger(MaxSafeInteger, "Physical device capacity"),
 			"temperature_c":     nullableNumber("Physical disk temperature in Celsius"),
