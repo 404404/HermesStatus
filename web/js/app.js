@@ -238,12 +238,15 @@ function synologyVolumeLabel(filesystems){
 function homeDiskUsage(host, hardware){
   const used = finiteNumber(host?.hdd_used);
   const total = finiteNumber(host?.hdd_total);
-  if(used === null || total === null) return {text: '-', percent: null};
+  if(used === null || total === null) return {text: '-', valueText: '-', label: null, percent: null};
   const label = isSynologyHost(hardware)
     ? synologyVolumeLabel(dataFilesystemItemsForView(hardware))
     : diskName(largestDiskByCapacity(physicalDisksForView(hardware)));
+  const valueText = `${formatBytes(used * 1000 * 1000)} / ${formatBytes(total * 1000 * 1000)}`;
   return {
-    text: `${formatBytes(used * 1000 * 1000)} / ${formatBytes(total * 1000 * 1000)}${label === '-' ? '' : ` (${label})`}`,
+    text: `${valueText}${label === '-' ? '' : ` (${label})`}`,
+    valueText,
+    label: label === '-' ? null : label,
     percent: percentage(used, total)
   };
 }
@@ -530,7 +533,9 @@ function buildViewModel(documentValue, selectedDeviceId = null){
       memoryText: finiteNumber(host.memory_used) === null || finiteNumber(host.memory_total) === null
         ? '-'
         : `${formatBytes(host.memory_used * 1000)} / ${formatBytes(host.memory_total * 1000)}`,
-      diskText: diskUsage.text
+      diskText: diskUsage.text,
+      diskValueText: diskUsage.valueText,
+      diskLabel: diskUsage.label
     }
   };
 }
@@ -717,7 +722,7 @@ function renderOverview(view){
     </article>
     <article class="summary-card resource-card">
       <h2>硬盘</h2>
-      <div class="card-detail resource-value">${escapeHtml(resources.diskText)}</div>
+      <div class="card-detail resource-value single-line-value" data-fit-single-line="overview-disk" title="${escapeHtml(resources.diskText)}">${escapeHtml(resources.diskValueText)}${parenthesizedMeta(resources.diskLabel)}</div>
       ${resourceBar(resources.diskPercent, '硬盘使用率')}
     </article>
     <article class="summary-card metric-card">

@@ -31,6 +31,7 @@ from host_collector import (
     not_reported_docker,
     not_reported_hardware,
     not_reported_hermes,
+    preferred_filesystem_usage,
     read_hermes_snapshot,
     resolve_backing_physical_disks,
     smart_candidates,
@@ -118,6 +119,19 @@ class MultiSmartRunner(object):
 
 
 class HostCollectorTests(unittest.TestCase):
+    def test_preferred_filesystem_usage_uses_largest_healthy_authorized_probe(self):
+        hardware = {
+            "storage": {
+                "filesystems": [
+                    {"mountpoint": "/volume1", "collection_status": "healthy", "total_bytes": 877_000_000_000, "used_bytes": 97_200_000_000},
+                    {"mountpoint": "/volume2", "collection_status": "healthy", "total_bytes": 7_930_000_000_000, "used_bytes": 4_039_000_000_000},
+                    {"mountpoint": "/missing", "collection_status": "unavailable", "total_bytes": 9_000_000_000_000, "used_bytes": 1},
+                ]
+            }
+        }
+        self.assertEqual(preferred_filesystem_usage(hardware), (7_930_000, 4_039_000))
+        self.assertIsNone(preferred_filesystem_usage({"storage": {"filesystems": []}}))
+
     def test_easytier_uses_resolved_collector_interval(self):
         class EasyTierFixture(object):
             config = {"interval_seconds": 75}

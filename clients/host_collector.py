@@ -1464,6 +1464,46 @@ def _storage_summary(physical_disks, filesystems):
     }
 
 
+def preferred_filesystem_usage(hardware):
+    """Return the largest healthy configured filesystem as decimal MB.
+
+    Device-v2's legacy-compatible top-level HDD counters are used by the
+    overview cards.  Inside a container, a generic mount scan can include the
+    client root filesystem or an operator's small system volume.  Prefer the
+    largest *explicitly configured* healthy filesystem from the hardware
+    domain instead.  This keeps the overview aligned with the detailed storage
+    view without discovering or reading arbitrary host mounts.
+
+    ``None`` means that the hardware collector has not produced a suitable
+    filesystem yet, so callers must retain their existing compatibility
+    counters.
+    """
+    if not isinstance(hardware, dict):
+        return None
+    storage = hardware.get("storage")
+    if not isinstance(storage, dict):
+        return None
+    candidates = []
+    for filesystem in storage.get("filesystems") or []:
+        if not isinstance(filesystem, dict):
+            continue
+        if filesystem.get("collection_status") != "healthy":
+            continue
+        total = filesystem.get("total_bytes")
+        used = filesystem.get("used_bytes")
+        if not isinstance(total, int) or not isinstance(used, int):
+            continue
+        if total <= 0 or used < 0 or used > total:
+            continue
+        candidates.append((total, used))
+    if not candidates:
+        return None
+    total, used = max(candidates, key=lambda item: item[0])
+    # The established wire counters are decimal megabytes.  Retain that unit
+    # so existing Server validation and clients remain compatible.
+    return total // 1000 // 1000, used // 1000 // 1000
+
+
 def _aggregate_smart_status(records):
     if any(smart and smart.get("health") == "failed" for _, smart, _ in records):
         return "failed"
@@ -2036,6 +2076,13 @@ class HostExtensionCollector(object):
         if self.client_build is not None:
             payload["client_build"] = copy.deepcopy(self.client_build)
         return payload
+
+    def preferred_disk_usage(self, fallback_total, fallback_used):
+        """Return overview disk counters, preferring authorized storage data."""
+        with self._lock:
+            hardware = copy.deepcopy(self._hardware)
+        selected = preferred_filesystem_usage(hardware)
+        return selected if selected is not None else (fallback_total, fallback_used)
 
 
 def add_extension_payload(update, collector):
