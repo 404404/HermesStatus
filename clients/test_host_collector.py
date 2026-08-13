@@ -333,6 +333,15 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(smart["source"], "smartctl-json")
         self.assertEqual(smart["health"], "passed")
 
+    def test_smart_snapshot_without_health_is_invalid_not_healthy(self):
+        data = fixture_json("smart-normal.json")
+        data.pop("smart_status", None)
+        runner = SmartRunner(json.dumps(data))
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "unknown")
+        self.assertEqual(error["code"], "smart_value_invalid")
+
     def test_hardware_combines_hwmon_and_smart(self):
         with tempfile.TemporaryDirectory() as root:
             chip = Path(root) / "hwmon0"
@@ -367,6 +376,7 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(len(records), 2)
         self.assertIsNone(error)
         self.assertEqual([record[1]["device"] for record in records], ["/dev/sda", "/dev/sdb"])
+        self.assertIn(["smartctl", "-x", "-j", "-d", "sat", "/dev/sda"], runner.commands)
 
         payload = collect_hardware(
             "Example CPU", smart_devices=[{"path": "/dev/sda"}, {"path": "/dev/sdb"}],

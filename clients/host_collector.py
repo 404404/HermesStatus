@@ -1021,7 +1021,11 @@ def _collect_smart_candidate(candidate, device_type, command_runner=None):
             "smartctl_unavailable", "SMART data is unavailable", "smartctl", True
         )
     values = _smart_values(data, text)
-    invalid_value = not all(
+    # A transport mismatch can produce syntactically valid smartctl output
+    # containing inventory fields but no trustworthy overall-health result.
+    # Retain any bounded observations for the per-disk row, but never label
+    # that partial snapshot healthy or let it hide an unavailable SMART state.
+    invalid_value = values["health"] not in {"passed", "failed"} or not all(
         _valid_temperature(values[key]) for key in ("current", "highest", "lowest")
     ) or not all(
         _valid_counter(values[key])
