@@ -262,10 +262,10 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(collect_hwmon_temperatures("/does/not/exist"), [])
 
     def test_missing_hermes_snapshot_is_an_optional_agent_not_an_error(self):
-        snapshot = read_hermes_snapshot("/does/not/exist")
+        snapshot = read_hermes_snapshot("/does/not/exist", exporter_enabled=False)
         self.assertEqual(snapshot["profiles"], [])
         self.assertFalse(snapshot["stale"])
-        self.assertIsNone(snapshot["error"])
+        self.assertEqual(snapshot["error"]["code"], "not_installed")
 
     def test_smart_json_uses_dynamic_logical_sector_size(self):
         runner = SmartRunner(json.dumps(fixture_json("smart-normal.json")))
