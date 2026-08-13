@@ -1356,6 +1356,8 @@ func safeErrorMessage(code string) string {
 	switch code {
 	case "not_reported":
 		return "Extension data was not reported"
+	case "not_installed":
+		return "Hermes Agent is not installed"
 	case "smartctl_unavailable":
 		return "SMART data is unavailable"
 	case "sector_size_unknown":
@@ -1465,7 +1467,10 @@ func validateRequiredHardware(raw json.RawMessage) error {
 		return err
 	}
 	if raw, ok := object["cpu_details"]; ok {
-		if err := validateNullableObjectFields(raw, "hardware.cpu_details", "architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "instruction_sets", "usage"); err != nil {
+		// instruction_sets was added after the initial Device v2 CPU-details
+		// contract. Keep it optional so an older compatible client does not
+		// lose the entire hardware domain during a rolling server upgrade.
+		if err := validateNullableObjectFields(raw, "hardware.cpu_details", "architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "usage"); err != nil {
 			return err
 		}
 		if !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {

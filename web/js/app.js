@@ -371,7 +371,12 @@ function parenthesizedMeta(value){
 }
 
 function smartHomeMarkup(disks, hardware){
-  if(disks.length === 1) return escapeHtml(statusText(disks[0].smart_status ?? hardware?.disk_smart_status));
+  if(disks.length === 1){
+    const disk = disks[0];
+    const state = disk.smart_status ?? hardware?.disk_smart_status;
+    const fallback = disk?.completeness === 'partial' && disk?.health_source === 'attribute_check';
+    return escapeHtml(fallback ? `${statusText(state)}（属性检查）` : statusText(state));
+  }
   if(disks.length > 1){
     const passed = disks.filter(disk => String(disk.smart_status ?? '').toLowerCase() === 'passed');
     const attributeFallback = passed

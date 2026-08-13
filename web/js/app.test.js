@@ -152,6 +152,10 @@ async function run(){
   assert.equal(legacyDisk.length, 1);
   assert.equal(legacyDisk[0].id, 'sda');
   assert.equal(app.smartHomeMarkup(legacyDisk, {}), '通过');
+  const attributeFallbackDisk = [{
+    id: 'sdu', smart_status: 'passed', completeness: 'partial', health_source: 'attribute_check'
+  }];
+  assert.equal(app.smartHomeMarkup(attributeFallbackDisk, {}), '通过（属性检查）');
   const diagnosticMarkup = app.deviceDiagnosticsMarkup({
     host: {
       device_id: 'device-alpha', display_name: '<script>display</script>', status: 'online',
