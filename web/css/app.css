@@ -125,7 +125,8 @@ body.light .summary-card,body.light .health-card,body.light .data-section{backgr
 .summary-card h2,.health-card h2{display:block;max-width:100%;margin:0 0 .65rem;color:var(--text-dim);font-size:12px;font-weight:700;letter-spacing:.08em;line-height:1.4;text-transform:uppercase;overflow-wrap:anywhere;word-break:break-word}
 .card-value{max-width:100%;font-size:23px;font-weight:750;line-height:1.14;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;word-break:break-word}
 .card-detail{max-width:100%;color:var(--text-dim);font-size:13px;overflow-wrap:anywhere;word-break:break-word}
-.resource-value{display:flex;align-items:center;height:27px;min-height:27px;margin-top:.35rem;color:var(--text);font-size:23px;font-weight:750;line-height:1.14;letter-spacing:0}
+.resource-value{display:flex;align-items:center;gap:.45rem;height:27px;min-height:27px;margin-top:.35rem;color:var(--text);font-size:23px;font-weight:750;line-height:1.14;letter-spacing:0}
+.resource-value .power-on-days{flex:0 0 auto}
 .resource-card:first-child .resource-value{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stacked-card .card-value{margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card-subvalue{max-width:100%;margin-top:.45rem;color:var(--text-dim);font-size:13px;font-weight:650;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
