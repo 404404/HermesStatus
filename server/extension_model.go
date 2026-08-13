@@ -243,6 +243,9 @@ type PhysicalDiskStats struct {
 	WrittenBytes     *int64          `json:"written_bytes"`
 	ReadBytes        *int64          `json:"read_bytes"`
 	SMARTSource      *string         `json:"smart_source"`
+	Completeness     *string         `json:"completeness"`
+	HealthSource     *string         `json:"health_source"`
+	NativeStatus     *string         `json:"native_status"`
 	CollectionStatus string          `json:"collection_status"`
 	Error            *ExtensionError `json:"error"`
 }

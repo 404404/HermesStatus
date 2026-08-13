@@ -605,6 +605,8 @@ async function run(){
   assert.doesNotMatch(appSource, /发行版.*distribution|发行版本.*release/);
   assert.match(appSource, /I\/O 等待/);
   assert.match(appSource, /function partitionRowsForDisk\(disk, filesystems\)/);
+  assert.match(appSource, /function diskSmartMarkup\(disk\)/);
+  assert.match(appSource, /属性检查/);
   assert.doesNotMatch(
     appSource.slice(appSource.indexOf('function deviceDiagnosticsMarkup'), appSource.indexOf('function buildProvenanceMarkup')),
     /source_ip|fqdn|token|digest|credential|Authorization/i

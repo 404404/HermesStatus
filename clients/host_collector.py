@@ -903,6 +903,25 @@ def _smart_overall_status_incomplete(data, text):
     return "smart status not supported" in combined or "incomplete response" in combined
 
 
+def _smart_attribute_fallback_available(data, text):
+    """Return true only for a readable SMART attribute/threshold table.
+
+    USB bridges may prevent ATA SMART RETURN STATUS while still allowing the
+    attributes which smartctl uses for its explicit overall-health fallback.
+    A bare ``PASSED`` string is not sufficient evidence: require either the
+    structured table or its bounded text representation as well.
+    """
+    attributes = data.get("ata_smart_attributes") if isinstance(data, dict) else None
+    table = attributes.get("table") if isinstance(attributes, dict) else None
+    if isinstance(table, list) and any(isinstance(item, dict) for item in table):
+        return True
+    normalized = text or ""
+    return bool(
+        re.search(r"^\s*ID#\s+ATTRIBUTE_NAME\b", normalized, re.I | re.M)
+        and re.search(r"^\s*\d+\s+\S+\s+\S+", normalized, re.M)
+    )
+
+
 def _json_nested_value(data, keys):
     if isinstance(data, dict):
         for key, value in data.items():
@@ -1034,13 +1053,42 @@ def _collect_smart_candidate(candidate, device_type, command_runner=None):
         )
     values = _smart_values(data, text)
     incomplete_health = _smart_overall_status_incomplete(data, text)
-    if incomplete_health:
+    # Some USB/SATA bridges cannot return ATA SMART RETURN STATUS yet expose
+    # the complete attribute/threshold table.  smartctl explicitly reports
+    # its attribute-check fallback in that case; keep that bounded verdict,
+    # while projecting its lower quality separately from native SMART status.
+    trusted_health = values["health"] in {"passed", "failed"}
+    attribute_fallback = (
+        incomplete_health
+        and trusted_health
+        and _smart_attribute_fallback_available(data, text)
+    )
+    if attribute_fallback:
+        health_source = "attribute_check"
+        native_status = "unavailable"
+        completeness = "partial"
+    elif incomplete_health:
+        # A bridge that cannot perform RETURN STATUS needs independent
+        # attribute/threshold evidence before its health result is trusted.
         values["health"] = "unknown"
+        health_source = "unknown"
+        native_status = "unavailable"
+        completeness = "unavailable"
+    elif trusted_health:
+        health_source = "native_status"
+        native_status = "available"
+        completeness = "complete"
+    else:
+        # Do not manufacture a quality level when neither native status nor
+        # the attribute-check fallback yielded a bounded health result.
+        health_source = "unknown"
+        native_status = "unavailable" if incomplete_health else "unknown"
+        completeness = "unavailable"
     # A transport mismatch can produce syntactically valid smartctl output
     # containing inventory fields but no trustworthy overall-health result.
     # Retain any bounded observations for the per-disk row, but never label
     # that partial snapshot healthy or let it hide an unavailable SMART state.
-    invalid_value = incomplete_health or values["health"] not in {"passed", "failed"} or not all(
+    invalid_value = values["health"] not in {"passed", "failed"} or not all(
         _valid_temperature(values[key]) for key in ("current", "highest", "lowest")
     ) or not all(
         _valid_counter(values[key])
@@ -1083,10 +1131,20 @@ def _collect_smart_candidate(candidate, device_type, command_runner=None):
         "temperature_source": values["temperature_source"],
         "model": _smart_model(data),
         "capacity_bytes": _smart_capacity_bytes(data),
+        "completeness": completeness,
+        "health_source": health_source,
+        "native_status": native_status,
     }
     if sector_error:
         return result, _error(
             "sector_size_unknown", "Logical sector size is unavailable", "smartctl", False
+        )
+    if attribute_fallback:
+        return result, _error(
+            "smart_return_status_unavailable",
+            "SMART native return status is unavailable; attribute health fallback was used",
+            "smartctl",
+            False,
         )
     if invalid_value:
         return result, _error(
@@ -1460,6 +1518,8 @@ def _physical_disk_ids_for_report(
 def _smart_collection_status(smart, error):
     if smart is not None and error is None:
         return "healthy"
+    if smart is not None and error and error.get("code") == "smart_return_status_unavailable":
+        return "partial"
     if smart is not None:
         return "invalid_data"
     return "unavailable"
@@ -1488,6 +1548,9 @@ def _physical_disk_record(disk_id, smart=None, smart_error=None, graph_node=None
         "written_bytes": smart.get("written_bytes") if smart else None,
         "read_bytes": smart.get("read_bytes") if smart else None,
         "smart_source": _nullable_text(smart.get("source"), MAX_DISK_SMART_SOURCE_LENGTH) if smart else None,
+        "completeness": smart.get("completeness") if smart else "unavailable",
+        "health_source": smart.get("health_source") if smart else "unknown",
+        "native_status": smart.get("native_status") if smart else "unknown",
         "collection_status": _smart_collection_status(smart, smart_error),
         "error": smart_error,
     }

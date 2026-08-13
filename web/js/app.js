@@ -374,6 +374,9 @@ function smartHomeMarkup(disks, hardware){
   if(disks.length === 1) return escapeHtml(statusText(disks[0].smart_status ?? hardware?.disk_smart_status));
   if(disks.length > 1){
     const passed = disks.filter(disk => String(disk.smart_status ?? '').toLowerCase() === 'passed');
+    const attributeFallback = passed
+      .filter(disk => disk?.completeness === 'partial' && disk?.health_source === 'attribute_check')
+      .length;
     const failed = disks
       .filter(disk => String(disk.smart_status ?? '').toLowerCase() === 'failed')
       .map(diskName)
@@ -384,10 +387,19 @@ function smartHomeMarkup(disks, hardware){
     }).length;
     const details = failed.length
       ? `${failed.join('、')}故障`
-      : unknown ? `${unknown} 块未知` : '';
+      : unknown ? `${unknown} 块未知`
+      : attributeFallback ? `${attributeFallback} 块属性检查` : '';
     return `${escapeHtml(`${passed.length} / ${disks.length} 通过`)}${parenthesizedMeta(details)}`;
   }
   return escapeHtml(statusText(hardware?.disk_smart_status ?? 'unknown'));
+}
+
+function diskSmartMarkup(disk){
+  const state = String(disk?.smart_status ?? 'unknown').toLowerCase();
+  const fallback = disk?.completeness === 'partial' && disk?.health_source === 'attribute_check';
+  const label = fallback ? `${statusText(state)}（属性检查）` : statusText(state);
+  const detail = fallback ? '原生 SMART RETURN STATUS 不可用；已使用属性阈值检查结果。' : '';
+  return `<span class="badge ${statusTone(state)}"${detail ? ` title="${escapeHtml(detail)}"` : ''}>${escapeHtml(label)}</span>`;
 }
 
 function validDeviceId(value){
@@ -917,7 +929,7 @@ function renderHardwareDetails(view){
       const partitions = partitionRowsForDisk(disk, filesystems);
       return (partitions.length ? partitions : [null]).map(filesystem => {
         const usage = filesystem ? valueAt(filesystem, ['usage_percent', 'used_percent']) : null;
-        return `<tr><td class="mono">${escapeHtml(device)}</td><td class="wide-cell" title="${escapeHtml(model)}">${escapeHtml(model)}</td><td>${escapeHtml(formatBytes(valueAt(disk, ['capacity_bytes', 'size_bytes'])))}</td><td>${escapeHtml(formatCelsius(diskTemperatureC(disk)))}</td><td>${badge(disk.smart_status ?? 'unknown')}</td><td>${escapeHtml(diskPowerOnHours(disk) === null ? '-' : `${formatInteger(diskPowerOnHours(disk))} h`)}</td><td class="wide-cell mono" title="${escapeHtml(partitionDisplay(filesystem))}">${escapeHtml(partitionDisplay(filesystem))}</td><td>${escapeHtml(filesystem ? filesystemUsage(filesystem) : '-')}</td><td class="table-usage">${filesystem ? resourceBar(usage, '分区使用率') : '-'}</td></tr>`;
+        return `<tr><td class="mono">${escapeHtml(device)}</td><td class="wide-cell" title="${escapeHtml(model)}">${escapeHtml(model)}</td><td>${escapeHtml(formatBytes(valueAt(disk, ['capacity_bytes', 'size_bytes'])))}</td><td>${escapeHtml(formatCelsius(diskTemperatureC(disk)))}</td><td>${diskSmartMarkup(disk)}</td><td>${escapeHtml(diskPowerOnHours(disk) === null ? '-' : `${formatInteger(diskPowerOnHours(disk))} h`)}</td><td class="wide-cell mono" title="${escapeHtml(partitionDisplay(filesystem))}">${escapeHtml(partitionDisplay(filesystem))}</td><td>${escapeHtml(filesystem ? filesystemUsage(filesystem) : '-')}</td><td class="table-usage">${filesystem ? resourceBar(usage, '分区使用率') : '-'}</td></tr>`;
       });
     }).join('')
     : '<tr><td colspan="9" class="table-empty">暂无可显示的物理磁盘数据</td></tr>';

@@ -332,6 +332,9 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(smart["source"], "smartctl-json")
         self.assertEqual(smart["health"], "passed")
+        self.assertEqual(smart["completeness"], "complete")
+        self.assertEqual(smart["health_source"], "native_status")
+        self.assertEqual(smart["native_status"], "available")
 
     def test_smart_snapshot_without_health_is_invalid_not_healthy(self):
         data = fixture_json("smart-normal.json")
@@ -341,17 +344,62 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNotNone(smart)
         self.assertEqual(smart["health"], "unknown")
         self.assertEqual(error["code"], "smart_value_invalid")
+        self.assertEqual(smart["completeness"], "unavailable")
+        self.assertEqual(smart["health_source"], "unknown")
+        self.assertEqual(smart["native_status"], "unknown")
 
-    def test_incomplete_bridge_health_is_unknown_not_passed(self):
+    def test_incomplete_bridge_attribute_fallback_is_partial_passed(self):
         data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 100, "worst": 100, "thresh": 36}]
+        }
         runner = SmartRunner(
             json.dumps(data),
             "SMART Status not supported: Incomplete response\n"
+            "This result is based on an Attribute check.\n"
             "SMART overall-health self-assessment test result: PASSED\n",
         )
         smart, error = collect_smart("/dev/example", runner)
         self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "passed")
+        self.assertEqual(smart["completeness"], "partial")
+        self.assertEqual(smart["health_source"], "attribute_check")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertEqual(error["code"], "smart_return_status_unavailable")
+
+    def test_incomplete_bridge_attribute_fallback_can_be_failed(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 1, "worst": 1, "thresh": 36}]
+        }
+        runner = SmartRunner(
+            json.dumps(data),
+            "SMART Status not supported: Incomplete response\n"
+            "This result is based on an Attribute check.\n"
+            "SMART overall-health self-assessment test result: FAILED\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "failed")
+        self.assertEqual(smart["completeness"], "partial")
+        self.assertEqual(smart["health_source"], "attribute_check")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertEqual(error["code"], "smart_return_status_unavailable")
+
+    def test_incomplete_bridge_without_attributes_is_unknown(self):
+        data = fixture_json("smart-normal.json")
+        data.pop("smart_status", None)
+        runner = SmartRunner(
+            json.dumps(data),
+            "=== START OF READ SMART DATA SECTION ===\n"
+            "SMART Status not supported: Incomplete response\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
         self.assertEqual(smart["health"], "unknown")
+        self.assertEqual(smart["completeness"], "unavailable")
+        self.assertEqual(smart["health_source"], "unknown")
+        self.assertEqual(smart["native_status"], "unavailable")
         self.assertEqual(error["code"], "smart_value_invalid")
 
     def test_hardware_combines_hwmon_and_smart(self):

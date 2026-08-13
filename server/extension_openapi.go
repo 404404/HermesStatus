@@ -74,7 +74,10 @@ func extensionOpenAPISchemas() map[string]any {
 			"written_bytes":     nullableInteger(MaxSafeInteger, "SMART lifetime bytes written"),
 			"read_bytes":        nullableInteger(MaxSafeInteger, "SMART lifetime bytes read"),
 			"smart_source":      nullableString(MaxDiskSmartSourceLength, "Safe SMART collector source label"),
-			"collection_status": map[string]any{"type": "string", "enum": []string{"healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"}},
+			"completeness":      map[string]any{"type": []string{"string", "null"}, "enum": []any{"complete", "partial", "unavailable", nil}},
+			"health_source":     map[string]any{"type": []string{"string", "null"}, "enum": []any{"native_status", "attribute_check", "unknown", nil}},
+			"native_status":     map[string]any{"type": []string{"string", "null"}, "enum": []any{"available", "unavailable", "unknown", nil}},
+			"collection_status": map[string]any{"type": "string", "enum": []string{"healthy", "partial", "unavailable", "unsupported", "permission_denied", "invalid_data"}},
 			"error":             nullableRef("ExtensionError"),
 		},
 	)

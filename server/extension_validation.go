@@ -526,8 +526,26 @@ func validatePhysicalDiskStats(index int, disk *PhysicalDiskStats) error {
 	if err := validateOptionalString(prefix+".smart_source", disk.SMARTSource, MaxDiskSmartSourceLength); err != nil {
 		return err
 	}
+	if err := validateOptionalEnum(prefix+".completeness", disk.Completeness, "complete", "partial", "unavailable"); err != nil {
+		return err
+	}
+	if err := validateOptionalEnum(prefix+".health_source", disk.HealthSource, "native_status", "attribute_check", "unknown"); err != nil {
+		return err
+	}
+	if err := validateOptionalEnum(prefix+".native_status", disk.NativeStatus, "available", "unavailable", "unknown"); err != nil {
+		return err
+	}
 	if !validStorageCollectionStatus(disk.CollectionStatus) {
 		return validationError(validationCodeInvalidValue, prefix+".collection_status", "status is not supported")
+	}
+	if disk.CollectionStatus == "partial" {
+		if disk.Completeness == nil || *disk.Completeness != "partial" ||
+			disk.HealthSource == nil || *disk.HealthSource != "attribute_check" ||
+			disk.NativeStatus == nil || *disk.NativeStatus != "unavailable" ||
+			(disk.SMARTStatus != DiskSMARTPassed && disk.SMARTStatus != DiskSMARTFailed) ||
+			disk.Error == nil || disk.Error.Code != "smart_return_status_unavailable" {
+			return validationError(validationCodeInvalidValue, prefix+".collection_status", "partial SMART requires an attribute-check fallback")
+		}
 	}
 	if err := ValidateExtensionError(prefix+".error", disk.Error); err != nil {
 		return err
@@ -716,7 +734,7 @@ func ValidateClientBuildInfo(build *ClientBuildInfo) error {
 }
 
 func validStorageCollectionStatus(value string) bool {
-	return value == "healthy" || value == "unavailable" || value == "unsupported" || value == "permission_denied" || value == "invalid_data"
+	return value == "healthy" || value == "partial" || value == "unavailable" || value == "unsupported" || value == "permission_denied" || value == "invalid_data"
 }
 
 func validStorageStackType(value string) bool {
@@ -1344,6 +1362,8 @@ func safeErrorMessage(code string) string {
 		return "Logical sector size is unavailable"
 	case "smart_value_invalid":
 		return "One or more SMART values are invalid"
+	case "smart_return_status_unavailable":
+		return "SMART native return status is unavailable; attribute health fallback was used"
 	case "hwmon_unavailable":
 		return "CPU temperature is unavailable"
 	case "host_os_unavailable":
@@ -1670,6 +1690,18 @@ func validateOptionalString(field string, value *string, maxLength int) error {
 		return validationError(validationCodeInvalidValue, field, "value contains disallowed content")
 	}
 	return nil
+}
+
+func validateOptionalEnum(field string, value *string, allowed ...string) error {
+	if value == nil {
+		return nil
+	}
+	for _, candidate := range allowed {
+		if *value == candidate {
+			return nil
+		}
+	}
+	return validationError(validationCodeInvalidValue, field, "value is not supported")
 }
 
 func validateStringValue(field, value string, maxLength int) error {

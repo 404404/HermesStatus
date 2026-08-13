@@ -214,6 +214,32 @@ func TestTopologyOnlyDiskDoesNotDegradeAnOtherwiseHealthyDevice(t *testing.T) {
 	}
 }
 
+func TestPartialSMARTAttributeFallbackIsStrictAndPreservesHealth(t *testing.T) {
+	stats := mustDecodeUpdate(t, "update-normal.json")
+	storage := validStorageFixture()
+	disk := &storage.PhysicalDisks[0]
+	disk.CollectionStatus = "partial"
+	disk.Completeness = hardwareText("partial")
+	disk.HealthSource = hardwareText("attribute_check")
+	disk.NativeStatus = hardwareText("unavailable")
+	disk.Error = &ExtensionError{
+		Code: "smart_return_status_unavailable", Source: "smartctl",
+		Message: "safe", Retryable: false,
+	}
+	stats.Hardware.Storage = &storage
+	if err := ValidateExtensionStats(stats); err != nil {
+		t.Fatalf("valid partial SMART attribute fallback rejected: %v", err)
+	}
+	if storage.PhysicalDisks[0].SMARTStatus != DiskSMARTPassed {
+		t.Fatalf("partial fallback health was altered: %#v", storage.PhysicalDisks[0])
+	}
+
+	disk.NativeStatus = hardwareText("available")
+	if err := ValidateExtensionStats(stats); err == nil {
+		t.Fatal("partial SMART fallback with native status was accepted")
+	}
+}
+
 func TestHardwareObservabilityRejectsSerialAndInvalidClientBuild(t *testing.T) {
 	var payload map[string]any
 	if err := json.Unmarshal(readFixture(t, "update-normal.json"), &payload); err != nil {
