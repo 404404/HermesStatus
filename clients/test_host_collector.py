@@ -247,6 +247,12 @@ class HostCollectorTests(unittest.TestCase):
     def test_hwmon_missing_returns_empty_list(self):
         self.assertEqual(collect_hwmon_temperatures("/does/not/exist"), [])
 
+    def test_missing_hermes_snapshot_is_an_optional_agent_not_an_error(self):
+        snapshot = read_hermes_snapshot("/does/not/exist")
+        self.assertEqual(snapshot["profiles"], [])
+        self.assertFalse(snapshot["stale"])
+        self.assertIsNone(snapshot["error"])
+
     def test_smart_json_uses_dynamic_logical_sector_size(self):
         runner = SmartRunner(json.dumps(fixture_json("smart-normal.json")))
         smart, error = collect_smart("/dev/example", runner)
@@ -356,7 +362,7 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(payload["storage"]["summary"]["physical_disk_count"], 2)
         self.assertEqual(payload["storage"]["summary"]["smart_passed"], 2)
 
-    def test_explicit_smart_allowlist_does_not_expand_to_unmapped_topology_disks(self):
+    def test_explicit_smart_allowlist_keeps_usb_and_boot_but_excludes_zram(self):
         smart = fixture_json("smart-normal.json")
 
         def runner(command, timeout):
@@ -365,6 +371,8 @@ class HostCollectorTests(unittest.TestCase):
                     {"name": "sda", "kname": "sda", "type": "disk", "size": 1000},
                     {"name": "sdb", "kname": "sdb", "type": "disk", "size": 2000},
                     {"name": "zram0", "kname": "zram0", "type": "disk", "size": 3000},
+                    {"name": "sdu", "kname": "sdu", "type": "disk", "size": 4000, "tran": "usb"},
+                    {"name": "synoboot", "kname": "synoboot", "type": "disk", "size": 5000},
                 ]})
             if "-j" in command:
                 return 0, json.dumps(smart)
@@ -378,7 +386,8 @@ class HostCollectorTests(unittest.TestCase):
             now=FIXED_NOW,
         )
         self.assertEqual(
-            [disk["id"] for disk in payload["storage"]["physical_disks"]], ["sda"]
+            [disk["id"] for disk in payload["storage"]["physical_disks"]],
+            ["sda", "sdu", "synoboot"],
         )
 
     def test_explicit_empty_smart_allowlist_keeps_topology_without_an_error(self):
@@ -835,11 +844,11 @@ class HostCollectorTests(unittest.TestCase):
         self.assertNotIn("received_at", payload)
         self.assertNotIn("unexpected", payload)
 
-    def test_hermes_snapshot_reader_degrades_missing_or_corrupt_data(self):
+    def test_hermes_snapshot_reader_allows_missing_agent_but_degrades_corrupt_data(self):
         missing = read_hermes_snapshot("/does/not/exist")
         self.assertEqual(missing["profiles"], [])
-        self.assertTrue(missing["stale"])
-        self.assertEqual(missing["error"]["code"], "snapshot_unavailable")
+        self.assertFalse(missing["stale"])
+        self.assertIsNone(missing["error"])
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "hermes.json"
             path.write_text("{invalid", encoding="utf-8")

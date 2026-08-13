@@ -98,7 +98,6 @@ func TestCredentialDirectoryLoadsMultipleDeviceRecords(t *testing.T) {
 	}
 }
 
-
 func TestCredentialDirectoryUsesHeldDescriptorAcrossPathReplacement(t *testing.T) {
 	now := time.Now().UTC()
 	registry := testRegistry(

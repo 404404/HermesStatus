@@ -222,10 +222,22 @@ def not_reported_hermes():
     }
 
 
+def not_installed_hermes():
+    """A missing optional Hermes Agent is a valid host capability state."""
+    return {
+        "profiles": [],
+        "updated_at": _utc_timestamp(),
+        "stale": False,
+        "error": None,
+    }
+
+
 def read_hermes_snapshot(path):
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as handle:
             payload = json.load(handle)
+    except FileNotFoundError:
+        return not_installed_hermes()
     except (OSError, TypeError, ValueError):
         payload = None
     if not isinstance(payload, dict) or not isinstance(payload.get("profiles"), list):
@@ -1089,6 +1101,7 @@ def _append_block_node(graph, value, parent_name=None):
     node["type"] = _nullable_text(value.get("type"), 32)
     node["size"] = _coerce_int(value.get("size"))
     node["model"] = _nullable_text(value.get("model"), MAX_DISK_MODEL_LENGTH)
+    node["transport"] = _nullable_text(value.get("tran"), 32)
     pkname = _block_name(value.get("pkname"))
     if pkname:
         node["parent"] = pkname
@@ -1138,7 +1151,7 @@ def collect_block_device_graph(command_runner=None, sys_block_root="/sys/class/b
     runner = command_runner or _default_command_runner
     command = [
         "lsblk", "--json", "--bytes", "--output",
-        "NAME,KNAME,PKNAME,PATH,TYPE,SIZE,MODEL",
+        "NAME,KNAME,PKNAME,PATH,TYPE,SIZE,MODEL,TRAN",
     ]
     try:
         returncode, output = runner(command, 4)
@@ -1351,7 +1364,15 @@ def _physical_disk_ids_for_report(
     make the server reject the complete hardware domain.
     """
     nodes = block_graph.get("nodes", {}) if isinstance(block_graph, dict) else {}
-    selected = list(smart_by_id)
+    def excluded(disk_id):
+        return str(disk_id).lower().startswith("zram")
+
+    def supported_topology_device(disk_id, node):
+        if excluded(disk_id) or node.get("type") != "disk":
+            return False
+        return disk_id == "synoboot" or str(node.get("transport") or "").lower() == "usb"
+
+    selected = [disk_id for disk_id in smart_by_id if not excluded(disk_id)]
     selected_set = set(selected)
 
     for filesystem in filesystems:
@@ -1359,13 +1380,26 @@ def _physical_disk_ids_for_report(
             if (
                 disk_id not in selected_set
                 and nodes.get(disk_id, {}).get("type") == "disk"
+                and not excluded(disk_id)
             ):
                 selected.append(disk_id)
                 selected_set.add(disk_id)
 
     if include_topology_inventory:
         for disk_id, node in nodes.items():
-            if node.get("type") == "disk" and disk_id not in selected_set:
+            if (
+                node.get("type") == "disk"
+                and disk_id not in selected_set
+                and not excluded(disk_id)
+            ):
+                selected.append(disk_id)
+                selected_set.add(disk_id)
+    else:
+        # A bounded Device v2 SMART allowlist must not become host-wide
+        # inventory. Keep only the operator-visible removable and boot media
+        # that are part of the device's storage topology.
+        for disk_id, node in nodes.items():
+            if disk_id not in selected_set and supported_topology_device(disk_id, node):
                 selected.append(disk_id)
                 selected_set.add(disk_id)
 

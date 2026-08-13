@@ -105,6 +105,7 @@ function cleanCpuModel(value){
   return model
     .replace(/\((?:R|TM|C)\)/gi, '')
     .replace(/\s+CPU\s*@\s*[\d.]+\s*(?:[GMK]?Hz)?\s*$/i, '')
+    .replace(/\s+@\s*[\d.]+\s*(?:[GMK]?Hz)?\s*$/i, '')
     .replace(/\s+/g, ' ')
     .trim() || '-';
 }
@@ -214,6 +215,49 @@ function diskReadBytes(disk){
   return valueAt(disk, ['read_bytes', 'bytes_read']);
 }
 
+function isSynologyHost(hardware){
+  const identity = safeObject(hardware?.system_identity);
+  return /synology\s+dsm/i.test(String(identity.distribution || identity.pretty_name || '')) ||
+    String(identity.source || '').toLowerCase() === 'dsm-version';
+}
+
+function largestDiskByCapacity(disks){
+  return maxDiskBy(disks, disk => finiteNumber(disk?.capacity_bytes));
+}
+
+function synologyVolumeLabel(filesystems){
+  const candidate = (Array.isArray(filesystems) ? filesystems : [])
+    .map(filesystem => ({filesystem, total: finiteNumber(filesystem?.total_bytes)}))
+    .filter(item => item.total !== null)
+    .sort((left, right) => right.total - left.total)[0]?.filesystem;
+  const mountpoint = String(candidate?.mountpoint || '');
+  const match = /^\/volume(\d+)(?:\/|$)/.exec(mountpoint);
+  return match ? `vol${match[1]}` : '-';
+}
+
+function homeDiskUsage(host, hardware){
+  const used = finiteNumber(host?.hdd_used);
+  const total = finiteNumber(host?.hdd_total);
+  if(used === null || total === null) return {text: '-', percent: null};
+  const label = isSynologyHost(hardware)
+    ? synologyVolumeLabel(dataFilesystemItemsForView(hardware))
+    : diskName(largestDiskByCapacity(physicalDisksForView(hardware)));
+  return {
+    text: `${formatBytes(used * 1000 * 1000)} / ${formatBytes(total * 1000 * 1000)}${label === '-' ? '' : ` (${label})`}`,
+    percent: percentage(used, total)
+  };
+}
+
+function conciseOsVersion(host, hardware){
+  const identity = safeObject(hardware?.system_identity);
+  if(isSynologyHost(hardware)){
+    const version = String(identity.version || host?.os || '');
+    const match = /(?:dsm\s*)?(\d+\.\d+(?:\.\d+)?)/i.exec(version);
+    return match ? `DSM ${match[1]}` : 'DSM';
+  }
+  return textOrDash(host?.os);
+}
+
 function storageState(hardware){
   const storage = safeObject(hardware?.storage);
   const physicalDisks = Array.isArray(storage.physical_disks)
@@ -261,6 +305,14 @@ function physicalDisksForView(hardware){
 
 function filesystemItemsForView(hardware){
   return storageState(hardware).filesystems;
+}
+
+function dataFilesystemItemsForView(hardware){
+  const filesystems = filesystemItemsForView(hardware);
+  if(!isSynologyHost(hardware)) return filesystems;
+  // DSM exposes small internal, boot and package filesystems too. The
+  // explicitly configured /volumeN probes are its operator data volumes.
+  return filesystems.filter(filesystem => /^\/volume\d+(?:\/|$)/.test(String(filesystem?.mountpoint || '')));
 }
 
 function temperatureSensorEntries(hardware){
@@ -455,7 +507,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
 	const lucky = safeObject(host.lucky);
 	const easytier = safeObject(host.easytier);
   const memoryPercent = percentage(host.memory_used, host.memory_total);
-  const diskPercent = percentage(host.hdd_used, host.hdd_total);
+  const diskUsage = homeDiskUsage(host, hardware);
   const cpuPercent = finiteNumber(host.cpu) === null ? null : clamp(host.cpu, 0, 100);
 
   return {
@@ -473,14 +525,12 @@ function buildViewModel(documentValue, selectedDeviceId = null){
     resources: {
       cpuPercent,
       memoryPercent,
-      diskPercent,
+      diskPercent: diskUsage.percent,
       cpuModel: cleanCpuModel(hardware.cpu_model ?? host.cpu_model),
       memoryText: finiteNumber(host.memory_used) === null || finiteNumber(host.memory_total) === null
         ? '-'
         : `${formatBytes(host.memory_used * 1000)} / ${formatBytes(host.memory_total * 1000)}`,
-      diskText: finiteNumber(host.hdd_used) === null || finiteNumber(host.hdd_total) === null
-        ? '-'
-        : `${formatBytes(host.hdd_used * 1000 * 1000)} / ${formatBytes(host.hdd_total * 1000 * 1000)}`
+      diskText: diskUsage.text
     }
   };
 }
@@ -707,7 +757,7 @@ function renderHardware(view){
     <article class="health-card"><h2>Lucky运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.lucky.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.lucky.version?.current))})</span></div></article>
     <article class="health-card"><h2>EasyTier运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.easytier.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.easytier.node?.version))})</span></div></article>
     <article class="health-card"><h2>系统已运行时间</h2><div class="health-value power-on-value">${uptime === null ? '-' : `${formatInteger(uptime.hours)} h <span class="power-on-days">(约${uptime.days}天)</span>`}</div></article>
-    <article class="health-card"><h2>操作系统版本</h2><div class="health-value health-text" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div></article>`;
+    <article class="health-card"><h2>操作系统版本</h2><div class="health-value health-text" title="${escapeHtml(conciseOsVersion(view.host, view.hardware))}">${escapeHtml(conciseOsVersion(view.host, view.hardware))}</div></article>`;
   requestAnimationFrame(fitOverviewSingleLineValues);
 }
 
@@ -995,7 +1045,7 @@ function renderProfiles(view){
       <td>${escapeHtml(formatPair(profile.scheduled_jobs_active, profile.scheduled_jobs_total))}</td>
       <td>${escapeHtml(formatPair(profile.sessions_active, profile.sessions_total))}</td>
       <td class="token-cell">${escapeHtml(tokenBreakdown(profile.usage))}${profile.usage?.estimated ? '<span class="estimate-mark" title="估算值">估算</span>' : ''}</td>
-    </tr>`).join('') : '<tr><td colspan="9" class="table-empty">暂无 Hermes Profile 数据</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="9" class="table-empty">未安装 Hermes Agent</td></tr>';
 }
 
 function renderContainers(view){
@@ -1624,6 +1674,7 @@ const exported = {
 	buildProvenanceMarkup,
   canonicalDashboardHash,
   cleanCpuModel,
+  conciseOsVersion,
   collectWarnings,
   cpuLogicalProcessorText,
   createRefreshController,
@@ -1638,8 +1689,10 @@ const exported = {
 	formatCelsius,
   formatTrafficBytes,
   formatUptimeHours,
-	filesystemBackingDisks,
-	filesystemItemsForView,
+  filesystemBackingDisks,
+  filesystemItemsForView,
+  dataFilesystemItemsForView,
+  homeDiskUsage,
 	partitionRowsForDisk,
 	memoryDetailsForView,
 	memoryUsedPercent,
