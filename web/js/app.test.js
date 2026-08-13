@@ -506,6 +506,8 @@ async function run(){
   assert.match(indexMarkup, /id="hardwareTab"[^>]*>硬件信息<\/button>/);
   assert.match(indexMarkup, /id="dockerTab"[^>]*>Docker<\/button>/);
   assert.match(indexMarkup, /id="luckyTab"[^>]*>Lucky<\/button>/);
+  assert.match(indexMarkup, /id="luckyServiceSummary"/);
+  assert.match(appSource, /\['API 可用性', service\.api_reachable/);
   assert.doesNotMatch(indexMarkup, /data-page-target="[^"]+"[^>]*>主机<\/button>/);
   assert.match(indexMarkup, /id="homePage"[^>]*data-page="home"/);
   assert.match(indexMarkup, /id="hardwarePage"[^>]*data-page="hardware"[^>]*hidden/);

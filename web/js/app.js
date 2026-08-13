@@ -945,6 +945,16 @@ function sumLuckyValues(items, field){
 }
 
 function renderLucky(view){
+	const service = safeObject(view.lucky.service);
+	const serviceError = safeObject(service.error);
+	const apiError = serviceError.http_status
+		? `HTTP ${serviceError.http_status}`
+		: textOrDash(serviceError.code || serviceError.message);
+	byId('luckyServiceSummary').innerHTML = [
+		['进程状态', service.process_running === null || service.process_running === undefined ? '未知' : service.process_running ? '运行中' : '未运行'],
+		['API 可用性', service.api_reachable ? '可用' : '不可用'],
+		['API 错误', service.api_reachable ? '-' : apiError]
+	].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 	renderLuckyTables(view);
 }
 

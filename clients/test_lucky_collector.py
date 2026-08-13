@@ -14,6 +14,7 @@ from lucky_collector import (
     _parse_time,
     collector_from_environment,
     compare_versions,
+    lucky_process_state,
     not_configured_lucky,
 )
 
@@ -340,12 +341,29 @@ class LuckyCollectorTests(unittest.TestCase):
 
     def test_public_version_failure_degrades_only_lucky(self):
         def request(path, headers):
-            raise LuckyAPIError("timeout")
+            raise LuckyAPIError("invalid_response", 502)
 
-        payload = LuckyCollector(enabled=True, request_func=request).collect(FIXED_NOW)
+        payload = LuckyCollector(
+            enabled=True,
+            request_func=request,
+            process_state_func=lambda: (True, 4242),
+        ).collect(FIXED_NOW)
         self.assertEqual(payload["status"], "unavailable")
-        self.assertEqual(payload["error"]["code"], "timeout")
+        self.assertEqual(payload["error"]["code"], "invalid_response")
+        self.assertEqual(payload["error"]["http_status"], 502)
+        self.assertTrue(payload["service"]["process_running"])
+        self.assertEqual(payload["service"]["process_pid"], 4242)
+        self.assertFalse(payload["service"]["api_reachable"])
         self.assertNotIn("fixture-value", json.dumps(payload))
+
+    def test_process_state_reads_only_comm_and_never_process_arguments(self):
+        with tempfile.TemporaryDirectory() as root:
+            process = Path(root) / "4242"
+            process.mkdir()
+            (process / "comm").write_text("Lucky\n", encoding="utf-8")
+            (process / "cmdline").write_text("--token=must-not-read", encoding="utf-8")
+            self.assertEqual(lucky_process_state(root), (True, 4242))
+        self.assertEqual(lucky_process_state("/does/not/exist"), (None, None))
 
     def test_one_module_failure_is_isolated(self):
         responses = normal_responses()
