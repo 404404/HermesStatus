@@ -135,7 +135,11 @@ def unavailable_lucky(code="connection_refused", http_status=None,
         "error": error,
     })
     for name in ("version", "ip_resolution", "dynamic_dns", "web_services", "port_forwards", "certificates"):
-        result[name]["status"] = "unavailable" if "status" in result[name] else result[name].get("status")
+        # Version has no collection-status field in the strict Device v2
+        # contract.  Do not manufacture one while marking an API outage, or
+        # the Server will safely reject the entire Lucky projection.
+        if "status" in result[name]:
+            result[name]["status"] = "unavailable"
         result[name]["error"] = error
     return result
 

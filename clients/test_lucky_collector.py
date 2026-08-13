@@ -354,6 +354,7 @@ class LuckyCollectorTests(unittest.TestCase):
         self.assertTrue(payload["service"]["process_running"])
         self.assertEqual(payload["service"]["process_pid"], 4242)
         self.assertFalse(payload["service"]["api_reachable"])
+        self.assertNotIn("status", payload["version"])
         self.assertNotIn("fixture-value", json.dumps(payload))
 
     def test_process_state_reads_only_comm_and_never_process_arguments(self):
