@@ -564,6 +564,8 @@ async function run(){
   assert.doesNotMatch(hardwareMarkup, /hardwareMemoryPrimary|hardwareMemorySecondary|hardwareMemoryTertiary/);
   assert.match(hardwareMarkup, /id="hardwareFilesystemsBody"/);
   assert.match(hardwareMarkup, /卷 \/ 文件系统/);
+  assert.match(indexMarkup, /css\/app\.css\?v=20260813-5/);
+  assert.match(indexMarkup, /js\/app\.js\?v=20260813-5/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
   assert.deepEqual(
     [...hardwareMarkup.matchAll(/<th>([^<]+)<\/th>/g)].map(match => match[1]),
