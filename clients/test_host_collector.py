@@ -342,6 +342,18 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(smart["health"], "unknown")
         self.assertEqual(error["code"], "smart_value_invalid")
 
+    def test_incomplete_bridge_health_is_unknown_not_passed(self):
+        data = fixture_json("smart-normal.json")
+        runner = SmartRunner(
+            json.dumps(data),
+            "SMART Status not supported: Incomplete response\n"
+            "SMART overall-health self-assessment test result: PASSED\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "unknown")
+        self.assertEqual(error["code"], "smart_value_invalid")
+
     def test_hardware_combines_hwmon_and_smart(self):
         with tempfile.TemporaryDirectory() as root:
             chip = Path(root) / "hwmon0"
