@@ -822,6 +822,16 @@ class LuckyCollector(object):
         try:
             version_payload = self.client.get("version")
         except LuckyAPIError as exc:
+            # Lucky's fixed version endpoint may redirect before its local
+            # backend error is exposed.  The fixed info endpoint is already
+            # part of the read-only allowlist; use it only to retain the
+            # bounded backend failure (for example HTTP 502), never to follow
+            # a redirect or turn a failed API into healthy data.
+            if exc.code == "invalid_response" and exc.http_status in (301, 302, 303, 307, 308):
+                try:
+                    self.client.get("info")
+                except LuckyAPIError as diagnostic_error:
+                    exc = diagnostic_error
             return unavailable_lucky(
                 exc.code, exc.http_status, process_running, process_pid
             )

@@ -357,6 +357,23 @@ class LuckyCollectorTests(unittest.TestCase):
         self.assertNotIn("status", payload["version"])
         self.assertNotIn("fixture-value", json.dumps(payload))
 
+    def test_version_redirect_preserves_fixed_info_backend_failure(self):
+        def request(path, headers):
+            if path == "/version":
+                raise LuckyAPIError("invalid_response", 307)
+            self.assertEqual(path, "/api/info")
+            raise LuckyAPIError("invalid_response", 502)
+
+        payload = LuckyCollector(
+            enabled=True,
+            request_func=request,
+            process_state_func=lambda: (True, 4242),
+        ).collect(FIXED_NOW)
+        self.assertEqual(payload["status"], "unavailable")
+        self.assertEqual(payload["error"]["http_status"], 502)
+        self.assertTrue(payload["service"]["process_running"])
+        self.assertFalse(payload["service"]["api_reachable"])
+
     def test_process_state_reads_only_comm_and_never_process_arguments(self):
         with tempfile.TemporaryDirectory() as root:
             process = Path(root) / "4242"
