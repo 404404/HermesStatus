@@ -239,9 +239,17 @@ function homeDiskUsage(host, hardware){
   const used = finiteNumber(host?.hdd_used);
   const total = finiteNumber(host?.hdd_total);
   if(used === null || total === null) return {text: '-', valueText: '-', label: null, percent: null};
-  const label = isSynologyHost(hardware)
-    ? synologyVolumeLabel(dataFilesystemItemsForView(hardware))
-    : diskName(largestDiskByCapacity(physicalDisksForView(hardware)));
+  const filesystems = dataFilesystemItemsForView(hardware);
+  const selectedFilesystem = filesystems
+    .filter(item => item?.collection_status === 'healthy' && finiteNumber(item?.total_bytes) !== null && finiteNumber(item?.used_bytes) !== null)
+    .sort((left, right) => finiteNumber(right.total_bytes) - finiteNumber(left.total_bytes))[0];
+  const reportedTotalBytes = total * 1000 * 1000;
+  const matchesSelectedFilesystem = selectedFilesystem && Math.abs(finiteNumber(selectedFilesystem.total_bytes) - reportedTotalBytes) < 1000 * 1000;
+  const label = matchesSelectedFilesystem
+    ? (isSynologyHost(hardware)
+      ? synologyVolumeLabel([selectedFilesystem])
+      : (filesystemBackingDisks(selectedFilesystem).text))
+    : '-';
   const valueText = `${formatBytes(used * 1000 * 1000)} / ${formatBytes(total * 1000 * 1000)}`;
   return {
     text: `${valueText}${label === '-' ? '' : ` (${label})`}`,
@@ -547,7 +555,7 @@ function collectWarnings(view){
 	if(easytierIsConfigured(view.easytier)) domains.push(view.easytier);
 	return domains
     .map(domain => domain?.error)
-    .filter(error => error && typeof error === 'object')
+    .filter(error => error && typeof error === 'object' && error.code !== 'not_installed')
     .map(error => textOrDash(error.message || error.code))
     .filter(message => message !== '-');
 }
@@ -897,7 +905,7 @@ function renderHardwareDetails(view){
     ['内核', textOrDash(system.kernel_release || hardware.kernel_release)]
   ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 
-  const filesystems = filesystemItemsForView(hardware);
+  const filesystems = dataFilesystemItemsForView(hardware);
   const physicalDisks = physicalDisksForView(hardware);
   byId('hardwareDisksBody').innerHTML = physicalDisks.length
     ? physicalDisks.flatMap(disk => {
@@ -1060,7 +1068,7 @@ function renderProfiles(view){
       <td>${escapeHtml(formatPair(profile.scheduled_jobs_active, profile.scheduled_jobs_total))}</td>
       <td>${escapeHtml(formatPair(profile.sessions_active, profile.sessions_total))}</td>
       <td class="token-cell">${escapeHtml(tokenBreakdown(profile.usage))}${profile.usage?.estimated ? '<span class="estimate-mark" title="估算值">估算</span>' : ''}</td>
-    </tr>`).join('') : '<tr><td colspan="9" class="table-empty">未安装 Hermes Agent</td></tr>';
+    </tr>`).join('') : `<tr><td colspan="9" class="table-empty">${view.hermes?.error?.code === 'not_installed' ? '未安装 Hermes Agent' : '暂无 Hermes Profile 数据'}</td></tr>`;
 }
 
 function renderContainers(view){

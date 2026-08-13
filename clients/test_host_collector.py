@@ -859,10 +859,12 @@ class HostCollectorTests(unittest.TestCase):
         self.assertNotIn("unexpected", payload)
 
     def test_hermes_snapshot_reader_allows_missing_agent_but_degrades_corrupt_data(self):
-        missing = read_hermes_snapshot("/does/not/exist")
+        missing = read_hermes_snapshot("/does/not/exist", exporter_enabled=False)
         self.assertEqual(missing["profiles"], [])
         self.assertFalse(missing["stale"])
-        self.assertIsNone(missing["error"])
+        self.assertEqual(missing["error"]["code"], "not_installed")
+        unavailable = read_hermes_snapshot("/does/not/exist", exporter_enabled=True)
+        self.assertEqual(unavailable["error"]["code"], "snapshot_unavailable")
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "hermes.json"
             path.write_text("{invalid", encoding="utf-8")

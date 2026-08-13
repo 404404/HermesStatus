@@ -192,13 +192,15 @@ async function run(){
       physical_disks: [{id: 'sda', capacity_bytes: 100}, {id: 'sdb', capacity_bytes: 200}],
       filesystems: [
         {mountpoint: '/volume1', total_bytes: 900000000000},
-        {mountpoint: '/volume2', total_bytes: 7930000000000},
+        {mountpoint: '/volume2', total_bytes: 7930000000000, used_bytes: 4039000000000, backing_disk_ids: ['sdb']},
         {mountpoint: '/var/packages/example', total_bytes: 990000000000},
         {mountpoint: '/dev/shm', total_bytes: 1000000000000}
       ]
     }
   };
   const dsmHost = {hdd_used: 4039000, hdd_total: 7930000, os: 'Synology DSM 7.2.1-69057 Update 1'};
+  dsmHardware.storage.filesystems[0].collection_status = 'healthy';
+  dsmHardware.storage.filesystems[1].collection_status = 'healthy';
   const dsmDiskUsage = app.homeDiskUsage(dsmHost, dsmHardware);
   assert.equal(dsmDiskUsage.text, '4.04 TB / 7.93 TB (vol2)');
   assert.equal(dsmDiskUsage.valueText, '4.04 TB / 7.93 TB');
@@ -206,6 +208,8 @@ async function run(){
   assert.equal(app.conciseOsVersion(dsmHost, dsmHardware), 'DSM 7.2.1');
   assert.deepEqual(app.dataFilesystemItemsForView(dsmHardware).map(item => item.mountpoint), ['/volume1', '/volume2']);
   assert.match(appSource, /parenthesizedMeta\(resources\.diskLabel\)/);
+  assert.equal(app.homeDiskUsage({hdd_used: 1, hdd_total: 2}, dsmHardware).label, null);
+  assert.match(appSource, /view\.hermes\?\.error\?\.code === 'not_installed'/);
 
   const degraded = app.buildViewModel(statsDocument('degraded'));
   assert.equal(app.collectWarnings(degraded).length, 5);

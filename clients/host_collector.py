@@ -128,6 +128,13 @@ def _env_int(name, default, minimum=1):
         return default
 
 
+def _env_bool(name, default):
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
 def _truncate(value, limit, empty="-"):
     text = " ".join(str(value or "").split())
     if not text:
@@ -228,16 +235,22 @@ def not_installed_hermes():
         "profiles": [],
         "updated_at": _utc_timestamp(),
         "stale": False,
-        "error": None,
+        "error": _error("not_installed", "Hermes Agent is not installed", "hermes", False),
     }
 
 
-def read_hermes_snapshot(path):
+def read_hermes_snapshot(path, exporter_enabled=True):
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as handle:
             payload = json.load(handle)
     except FileNotFoundError:
-        return not_installed_hermes()
+        if not exporter_enabled:
+            return not_installed_hermes()
+        result = not_reported_hermes()
+        result["error"] = _error(
+            "snapshot_unavailable", "Hermes integration snapshot is unavailable", "hermes-snapshot", True
+        )
+        return result
     except (OSError, TypeError, ValueError):
         payload = None
     if not isinstance(payload, dict) or not isinstance(payload.get("profiles"), list):
@@ -1852,6 +1865,7 @@ class HostExtensionCollector(object):
         docker_interval=None,
         docker_container_limit=None,
         hermes_status_file=None,
+        hermes_export_enabled=None,
         hermes_snapshot_interval=None,
         status_dir=None,
         command_runner=None,
@@ -1890,6 +1904,7 @@ class HostExtensionCollector(object):
         self.hermes_status_file = hermes_status_file or os.getenv(
             "HERMES_STATUS_FILE", "/var/lib/serverstatus-client/hermes/hermes.json"
         )
+        self.hermes_export_enabled = _env_bool("HERMES_EXPORT_ENABLED", True) if hermes_export_enabled is None else bool(hermes_export_enabled)
         self.hermes_snapshot_interval = hermes_snapshot_interval or _env_int(
             "HERMES_SNAPSHOT_INTERVAL", 10
         )
@@ -1991,7 +2006,7 @@ class HostExtensionCollector(object):
         return payload
 
     def collect_hermes_once(self):
-        payload = read_hermes_snapshot(self.hermes_status_file)
+        payload = read_hermes_snapshot(self.hermes_status_file, self.hermes_export_enabled)
         self._store("hermes", payload)
         return payload
 
