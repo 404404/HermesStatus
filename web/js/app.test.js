@@ -75,7 +75,7 @@ async function run(){
   assert.doesNotMatch(indexMarkup, /Lucky Monitoring|luckyHomeSummary|luckyHomeMeta/);
   assert.match(appSource, /<h2>EasyTier运行状态\/版本<\/h2>/);
   assert.match(appSource, /<h2>系统已运行时间<\/h2>/);
-  assert.match(appSource, /'指令集'/);
+  assert.match(appSource, /<dt>指令集<\/dt>/);
   assert.match(appSource, /<h2>运行中\/容器总数<\/h2>/);
   assert.match(appSource, /<h2>Lucky运行状态\/版本<\/h2>/);
   assert.match(appSource, /EasyTier远端节点数/);
@@ -557,6 +557,7 @@ async function run(){
   assert.doesNotMatch(homeMarkup, /id="containersBody"/);
   assert.match(hardwareMarkup, /id="hardwareSystemInfo"/);
   assert.match(hardwareMarkup, /id="hardwareCpuInfo"/);
+  assert.doesNotMatch(hardwareMarkup, /hardwareCpuInstructionSets/);
   assert.match(hardwareMarkup, /id="hardwareCpuUsage"/);
   assert.match(hardwareMarkup, /class="hardware-cpu-columns"/);
   assert.match(hardwareMarkup, /class="hardware-cpu-column"/);
@@ -564,8 +565,8 @@ async function run(){
   assert.doesNotMatch(hardwareMarkup, /hardwareMemoryPrimary|hardwareMemorySecondary|hardwareMemoryTertiary/);
   assert.match(hardwareMarkup, /id="hardwareFilesystemsBody"/);
   assert.match(hardwareMarkup, /卷 \/ 文件系统/);
-  assert.match(indexMarkup, /css\/app\.css\?v=20260813-5/);
-  assert.match(indexMarkup, /js\/app\.js\?v=20260813-5/);
+  assert.match(indexMarkup, /css\/app\.css\?v=20260813-6/);
+  assert.match(indexMarkup, /js\/app\.js\?v=20260813-6/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
   assert.deepEqual(
     [...hardwareMarkup.matchAll(/<th>([^<]+)<\/th>/g)].map(match => match[1]),
@@ -608,6 +609,8 @@ async function run(){
   assert.match(appSource, /function cpuDetailsForView\(hardware\)/);
   assert.match(appSource, /function cpuLogicalProcessorText\(cpu\)/);
   assert.match(css, /\.hardware-cpu-columns\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.hardware-cpu-info\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
+  assert.match(css, /\.hardware-cpu-info \.hardware-cpu-instruction-row\{grid-column:1\/-1\}/);
   assert.match(css, /#hardwareCpuUsage\.hardware-cpu-usage-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
   assert.match(css, /\.hardware-usage-item\{display:grid;grid-template-columns:minmax\(0,auto\) minmax\(96px,1fr\)/);
   assert.match(css, /\.hardware-memory-grid\{display:grid;grid-template-columns:minmax\(460px,1\.6fr\) minmax\(260px,1fr\) minmax\(220px,\.9fr\)/);
@@ -624,7 +627,8 @@ async function run(){
   assert.match(appSource, /const memoryPlaceholders = Array\.from\(\{length: Math\.max\(0, 12 - memoryRows\.length\)/);
   assert.match(appSource, /\['频率（最低 \/ 最高）'/);
   assert.match(appSource, /\['当前频率', formatMHz\(cpu\.current_mhz\)\]/);
-  assert.match(appSource, /'指令集', escapeHtml\(textOrDash\(cpu\.instruction_sets\)\)/);
+  assert.match(appSource, /function cpuInstructionDetailRow\(value\)/);
+  assert.match(appSource, /hardware-cpu-instruction-row/);
   assert.doesNotMatch(appSource, /\['步进', textOrDash\(cpu\.stepping\)\]/);
   assert.doesNotMatch(appSource, /\['虚拟化', textOrDash\(cpu\.virtualization\)\]/);
   assert.doesNotMatch(appSource, /\['空闲', cpuUsage\.idle_percent\]/);

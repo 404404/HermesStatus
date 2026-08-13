@@ -844,6 +844,10 @@ function hardwareUsageMarkup(label, value){
   return `<article class="hardware-usage-item"><strong>${escapeHtml(label)}</strong>${resourceBar(number, label)}</article>`;
 }
 
+function cpuInstructionDetailRow(value){
+  return `<div class="detail-row hardware-cpu-instruction-row"><dt>指令集</dt><dd class="wrap-value">${escapeHtml(textOrDash(value))}</dd></div>`;
+}
+
 function diskPowerOnText(disk){
   const hours = diskPowerOnHours(disk);
   if(hours === null) return '-';
@@ -884,7 +888,9 @@ function renderHardwareDetails(view){
     ['逻辑处理器', cpuLogicalProcessorText(cpu)],
     ['当前频率', formatMHz(cpu.current_mhz)]
   ];
-  byId('hardwareCpuInfo').innerHTML = cpuInfo.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+  byId('hardwareCpuInfo').innerHTML = cpuInfo
+    .map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value'))
+    .concat(cpuInstructionDetailRow(cpu.instruction_sets)).join('');
 
   const usageItems = [
     ['总使用率', cpuUsage.total_percent], ['I/O 等待', cpuUsage.iowait_percent],
@@ -894,10 +900,6 @@ function renderHardwareDetails(view){
   byId('hardwareCpuUsage').innerHTML = usageItems.length
     ? usageItems.map(([label, value]) => hardwareUsageMarkup(label, value)).join('')
     : '<div class="table-empty">暂无可显示的 CPU 使用率数据</div>';
-  byId('hardwareCpuInstructionSets').innerHTML = detailRow(
-    '指令集', escapeHtml(textOrDash(cpu.instruction_sets)), 'wrap-value'
-  );
-
   const memoryRows = [
     ['物理内存已用 / 可用 / 总量', finiteNumber(memory.used_bytes) === null && finiteNumber(memory.available_bytes) === null && finiteNumber(memory.total_bytes) === null ? '-' : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.available_bytes)} / ${formatBytes(memory.total_bytes)} (${formatPercentage(memoryUsedPercent(memory))})`],
     ['活动 / 非活动', `${formatBytes(memory.active_bytes)} / ${formatBytes(memory.inactive_bytes)}`],
