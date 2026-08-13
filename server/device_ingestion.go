@@ -350,7 +350,8 @@ func extensionHasBusinessError(extension ExtensionStats) bool {
 	for _, extensionError := range extensionErrors {
 		if extensionError != nil &&
 			extensionError.Code != "not_reported" &&
-			extensionError.Code != "not_configured" {
+			extensionError.Code != "not_configured" &&
+			extensionError.Code != "not_installed" {
 			return true
 		}
 	}

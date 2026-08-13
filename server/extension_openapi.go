@@ -74,7 +74,10 @@ func extensionOpenAPISchemas() map[string]any {
 			"written_bytes":     nullableInteger(MaxSafeInteger, "SMART lifetime bytes written"),
 			"read_bytes":        nullableInteger(MaxSafeInteger, "SMART lifetime bytes read"),
 			"smart_source":      nullableString(MaxDiskSmartSourceLength, "Safe SMART collector source label"),
-			"collection_status": map[string]any{"type": "string", "enum": []string{"healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"}},
+			"completeness":      map[string]any{"type": []string{"string", "null"}, "enum": []any{"complete", "partial", "unavailable", nil}},
+			"health_source":     map[string]any{"type": []string{"string", "null"}, "enum": []any{"native_status", "attribute_check", "unknown", nil}},
+			"native_status":     map[string]any{"type": []string{"string", "null"}, "enum": []any{"available", "unavailable", "unknown", nil}},
+			"collection_status": map[string]any{"type": "string", "enum": []string{"healthy", "partial", "unavailable", "unsupported", "permission_denied", "invalid_data"}},
 			"error":             nullableRef("ExtensionError"),
 		},
 	)
@@ -134,6 +137,8 @@ func extensionOpenAPISchemas() map[string]any {
 		},
 	)
 	cpuDetails := requiredObject(
+		// instruction_sets is an additive optional field so older Device v2
+		// clients remain valid while a server upgrade is rolling out.
 		[]string{"architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "usage"},
 		map[string]any{
 			"architecture": nullableString(MaxCPUTextLength, "CPU architecture"), "vendor": nullableString(MaxCPUTextLength, "CPU vendor"),
@@ -144,10 +149,11 @@ func extensionOpenAPISchemas() map[string]any {
 			"l3_cache":     nullableString(MaxCPUTextLength, "L3 cache"),
 			"logical_cpus": nullableInteger(MaxCPUCount, "Logical CPU count"), "sockets": nullableInteger(MaxCPUCount, "CPU socket count"),
 			"cores_per_socket": nullableInteger(MaxCPUCount, "CPU cores per socket"), "threads_per_core": nullableInteger(MaxCPUCount, "CPU threads per core"),
-			"max_mhz":     map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
-			"min_mhz":     map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
-			"current_mhz": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
-			"usage":       nullableRef("CPUUsageStats"),
+			"max_mhz":          map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
+			"min_mhz":          map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
+			"current_mhz":      map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
+			"instruction_sets": nullableString(MaxCPUTextLength, "Bounded CPU instruction-set summary"),
+			"usage":            nullableRef("CPUUsageStats"),
 		},
 	)
 	memoryDetails := requiredObject(

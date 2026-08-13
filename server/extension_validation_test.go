@@ -349,6 +349,7 @@ func TestDecodeErrorDoesNotLeakInput(t *testing.T) {
 func TestCollectorErrorMessagesAreSafeAndStable(t *testing.T) {
 	tests := map[string]string{
 		"smartctl_unavailable":      "SMART data is unavailable",
+		"not_installed":             "Hermes Agent is not installed",
 		"sector_size_unknown":       "Logical sector size is unavailable",
 		"smart_value_invalid":       "One or more SMART values are invalid",
 		"hwmon_unavailable":         "CPU temperature is unavailable",
@@ -366,6 +367,45 @@ func TestCollectorErrorMessagesAreSafeAndStable(t *testing.T) {
 				t.Fatalf("safe message for %q contains secret-like text", code)
 			}
 		})
+	}
+}
+
+func TestDecodeAcceptsOlderCPUDetailsWithoutInstructionSets(t *testing.T) {
+	var payload map[string]any
+	if err := json.Unmarshal(readFixture(t, "update-normal.json"), &payload); err != nil {
+		t.Fatal(err)
+	}
+	payload["hardware"].(map[string]any)["cpu_details"] = map[string]any{
+		"architecture": "x86_64", "vendor": nil, "family": nil, "model_id": nil,
+		"model_name": nil, "stepping": nil, "virtualization": nil,
+		"l1d_cache": nil, "l1i_cache": nil, "l2_cache": nil, "l3_cache": nil,
+		"logical_cpus": nil, "sockets": nil, "cores_per_socket": nil, "threads_per_core": nil,
+		"max_mhz": nil, "min_mhz": nil, "current_mhz": nil,
+		"usage": map[string]any{
+			"user_percent": nil, "nice_percent": nil, "system_percent": nil, "idle_percent": nil,
+			"iowait_percent": nil, "irq_percent": nil, "softirq_percent": nil, "steal_percent": nil,
+			"total_percent": nil,
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stats, err := DecodeExtensionStatsJSON(raw)
+	if err != nil {
+		t.Fatalf("older CPU details without instruction_sets rejected: %v", err)
+	}
+	if stats.Hardware.CPUDetails == nil || stats.Hardware.CPUDetails.InstructionSets != nil {
+		t.Fatalf("missing instruction_sets was not preserved as optional: %#v", stats.Hardware.CPUDetails)
+	}
+}
+
+func TestSanitizePreservesNotInstalledHermesMessage(t *testing.T) {
+	stats := NewNotReportedHermesStats()
+	stats.Error = &ExtensionError{Code: "not_installed", Message: "untrusted", Source: "collector", Retryable: false}
+	sanitized := SanitizeExtensionStats(ExtensionStats{Hermes: &stats})
+	if got := sanitized.Hermes.Error.Message; got != "Hermes Agent is not installed" {
+		t.Fatalf("not_installed message = %q", got)
 	}
 }
 

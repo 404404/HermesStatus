@@ -161,25 +161,26 @@ type HardwareStats struct {
 // raw lscpu payload: capability flags, firmware strings, and arbitrary command
 // output are intentionally excluded.
 type CPUDetails struct {
-	Architecture   *string        `json:"architecture"`
-	Vendor         *string        `json:"vendor"`
-	Family         *string        `json:"family"`
-	ModelID        *string        `json:"model_id"`
-	ModelName      *string        `json:"model_name"`
-	Stepping       *string        `json:"stepping"`
-	Virtualization *string        `json:"virtualization"`
-	L1DCache       *string        `json:"l1d_cache"`
-	L1ICache       *string        `json:"l1i_cache"`
-	L2Cache        *string        `json:"l2_cache"`
-	L3Cache        *string        `json:"l3_cache"`
-	LogicalCPUs    *int           `json:"logical_cpus"`
-	Sockets        *int           `json:"sockets"`
-	CoresPerSocket *int           `json:"cores_per_socket"`
-	ThreadsPerCore *int           `json:"threads_per_core"`
-	MaxMHz         *float64       `json:"max_mhz"`
-	MinMHz         *float64       `json:"min_mhz"`
-	CurrentMHz     *float64       `json:"current_mhz"`
-	Usage          *CPUUsageStats `json:"usage"`
+	Architecture    *string        `json:"architecture"`
+	Vendor          *string        `json:"vendor"`
+	Family          *string        `json:"family"`
+	ModelID         *string        `json:"model_id"`
+	ModelName       *string        `json:"model_name"`
+	Stepping        *string        `json:"stepping"`
+	Virtualization  *string        `json:"virtualization"`
+	L1DCache        *string        `json:"l1d_cache"`
+	L1ICache        *string        `json:"l1i_cache"`
+	L2Cache         *string        `json:"l2_cache"`
+	L3Cache         *string        `json:"l3_cache"`
+	LogicalCPUs     *int           `json:"logical_cpus"`
+	Sockets         *int           `json:"sockets"`
+	CoresPerSocket  *int           `json:"cores_per_socket"`
+	ThreadsPerCore  *int           `json:"threads_per_core"`
+	MaxMHz          *float64       `json:"max_mhz"`
+	MinMHz          *float64       `json:"min_mhz"`
+	CurrentMHz      *float64       `json:"current_mhz"`
+	InstructionSets *string        `json:"instruction_sets"`
+	Usage           *CPUUsageStats `json:"usage"`
 }
 
 // CPUUsageStats is a short sampling-window share of aggregate CPU time.
@@ -242,6 +243,9 @@ type PhysicalDiskStats struct {
 	WrittenBytes     *int64          `json:"written_bytes"`
 	ReadBytes        *int64          `json:"read_bytes"`
 	SMARTSource      *string         `json:"smart_source"`
+	Completeness     *string         `json:"completeness"`
+	HealthSource     *string         `json:"health_source"`
+	NativeStatus     *string         `json:"native_status"`
 	CollectionStatus string          `json:"collection_status"`
 	Error            *ExtensionError `json:"error"`
 }

@@ -202,7 +202,10 @@
         "written_bytes": {"$ref": "#/$defs/nullableCounter"},
         "read_bytes": {"$ref": "#/$defs/nullableCounter"},
         "smart_source": {"type": ["string", "null"], "maxLength": 64},
-        "collection_status": {"enum": ["healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"]},
+        "completeness": {"type": ["string", "null"], "enum": ["complete", "partial", "unavailable", null]},
+        "health_source": {"type": ["string", "null"], "enum": ["native_status", "attribute_check", "unknown", null]},
+        "native_status": {"type": ["string", "null"], "enum": ["available", "unavailable", "unknown", null]},
+        "collection_status": {"enum": ["healthy", "partial", "unavailable", "unsupported", "permission_denied", "invalid_data"]},
         "error": {"$ref": "#/$defs/error"}
       },
       "additionalProperties": false
@@ -288,7 +291,7 @@
         "architecture": {"type": ["string", "null"], "maxLength": 128}, "vendor": {"type": ["string", "null"], "maxLength": 128}, "family": {"type": ["string", "null"], "maxLength": 128}, "model_id": {"type": ["string", "null"], "maxLength": 128}, "model_name": {"type": ["string", "null"], "maxLength": 128}, "stepping": {"type": ["string", "null"], "maxLength": 128}, "virtualization": {"type": ["string", "null"], "maxLength": 128},
         "l1d_cache": {"type": ["string", "null"], "maxLength": 128}, "l1i_cache": {"type": ["string", "null"], "maxLength": 128}, "l2_cache": {"type": ["string", "null"], "maxLength": 128}, "l3_cache": {"type": ["string", "null"], "maxLength": 128},
         "logical_cpus": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536}, "sockets": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536}, "cores_per_socket": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536}, "threads_per_core": {"type": ["integer", "null"], "minimum": 1, "maximum": 65536},
-        "max_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "min_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "current_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "usage": {"$ref": "#/$defs/cpuUsage"}
+        "max_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "min_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "current_mhz": {"type": ["number", "null"], "minimum": 0, "maximum": 1000000}, "instruction_sets": {"type": ["string", "null"], "maxLength": 128}, "usage": {"$ref": "#/$defs/cpuUsage"}
       },
       "additionalProperties": false
     },

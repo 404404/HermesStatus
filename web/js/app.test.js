@@ -75,6 +75,7 @@ async function run(){
   assert.doesNotMatch(indexMarkup, /Lucky Monitoring|luckyHomeSummary|luckyHomeMeta/);
   assert.match(appSource, /<h2>EasyTier运行状态\/版本<\/h2>/);
   assert.match(appSource, /<h2>系统已运行时间<\/h2>/);
+  assert.match(appSource, /<dt>指令集<\/dt>/);
   assert.match(appSource, /<h2>运行中\/容器总数<\/h2>/);
   assert.match(appSource, /<h2>Lucky运行状态\/版本<\/h2>/);
   assert.match(appSource, /EasyTier远端节点数/);
@@ -132,14 +133,8 @@ async function run(){
     ['sda', 'sdb', 'sdc']
   );
   assert.equal(app.filesystemItemsForView(multiDiskHardware).length, 1);
-  assert.equal(app.partitionRowsForDisk(multiDiskHardware.storage.physical_disks[0], multiDiskHardware.storage.filesystems).length, 1);
-  assert.equal(app.partitionRowsForDisk(multiDiskHardware.storage.physical_disks[2], multiDiskHardware.storage.filesystems).length, 0);
-  assert.equal(app.partitionRowsForDisk(
-    {id: 'sda'}, [{source: '/dev/sdaa1', backing_disk_ids: []}]
-  ).length, 0);
-  assert.equal(app.partitionRowsForDisk(
-    {id: 'nvme0n1'}, [{source: '/dev/nvme0n1p2', backing_disk_ids: []}]
-  ).length, 1);
+  assert.deepEqual(app.dataFilesystemItemsForView(multiDiskHardware).map(item => item.mountpoint), ['/']);
+  assert.equal(app.diskPowerOnText({power_on_hours: 1970}), '1,970 h (约82.08天)');
   assert.deepEqual(
     app.maximumTemperature(app.temperatureSensorEntries(multiDiskHardware)),
     {label: 'CPU0', value: 47}
@@ -157,6 +152,10 @@ async function run(){
   assert.equal(legacyDisk.length, 1);
   assert.equal(legacyDisk[0].id, 'sda');
   assert.equal(app.smartHomeMarkup(legacyDisk, {}), '通过');
+  const attributeFallbackDisk = [{
+    id: 'sdu', smart_status: 'passed', completeness: 'partial', health_source: 'attribute_check'
+  }];
+  assert.equal(app.smartHomeMarkup(attributeFallbackDisk, {}), '通过（属性检查）');
   const diagnosticMarkup = app.deviceDiagnosticsMarkup({
     host: {
       device_id: 'device-alpha', display_name: '<script>display</script>', status: 'online',
@@ -185,6 +184,67 @@ async function run(){
   assert.equal(empty.containers.length, 0);
   assert.equal(empty.hardware.cpu_temperature, null);
   assert.equal(app.luckyIsConfigured(empty.lucky), false);
+  assert.deepEqual(app.luckyServiceSummaryItems({status: 'not_configured'}), [
+    ['进程状态', '未配置'], ['API 可用性', '未配置'], ['API 错误', '-']
+  ]);
+  assert.deepEqual(app.luckyServiceSummaryItems({
+    status: 'unavailable', service: {process_running: false, api_reachable: false, error: {code: 'connection_refused'}}
+  }), [['进程状态', '未运行'], ['API 可用性', '不可用'], ['API 错误', 'connection_refused']]);
+
+  const dsmHardware = {
+    system_identity: {distribution: 'Synology DSM', source: 'dsm-version', version: '7.2.1-69057 Update 1'},
+    storage: {
+      physical_disks: [
+        {id: 'sda', device: '/dev/sda', model: 'DSM Disk A', capacity_bytes: 8_000_000_000_000, temperature_c: 37, smart_status: 'passed', power_on_hours: 1970},
+        {id: 'sdb', device: '/dev/sdb', model: 'DSM Disk B', capacity_bytes: 8_000_000_000_000, temperature_c: 38, smart_status: 'passed', power_on_hours: 1971},
+        {id: 'sdc', device: '/dev/sdc', model: 'DSM Disk C', capacity_bytes: 8_000_000_000_000, temperature_c: 39, smart_status: 'passed', power_on_hours: 1972},
+        {id: 'sdd', device: '/dev/sdd', model: 'DSM Disk D', capacity_bytes: 8_000_000_000_000, temperature_c: 40, smart_status: 'passed', power_on_hours: 1973}
+      ],
+      filesystems: [
+        {mountpoint: '/volume1', source: '/dev/md2', fs_type: 'btrfs', total_bytes: 911000000000, used_bytes: 101000000000, usage_percent: 11.1, collection_status: 'healthy', backing_disk_ids: []},
+        {mountpoint: '/volume2', source: '/dev/md3', fs_type: 'ext4', total_bytes: 7930000000000, used_bytes: 4039000000000, usage_percent: 50.9, collection_status: 'healthy', backing_disk_ids: []},
+        {mountpoint: '/var/packages/example', source: 'tmpfs', fs_type: 'tmpfs', total_bytes: 990000000000, collection_status: 'healthy'},
+        {mountpoint: '/dev/shm', source: 'tmpfs', fs_type: 'tmpfs', total_bytes: 1000000000000, collection_status: 'healthy'}
+      ]
+    }
+  };
+  const dsmHost = {hdd_used: 4039000, hdd_total: 7930000, os: 'Synology DSM 7.2.1-69057 Update 1'};
+  const dsmDiskUsage = app.homeDiskUsage(dsmHost, dsmHardware);
+  assert.equal(dsmDiskUsage.text, '4.04 TB / 7.93 TB (vol2)');
+  assert.equal(dsmDiskUsage.valueText, '4.04 TB / 7.93 TB');
+  assert.equal(dsmDiskUsage.label, 'vol2');
+  assert.equal(app.conciseOsVersion(dsmHost, dsmHardware), 'DSM 7.2.1');
+  assert.deepEqual(app.dataFilesystemItemsForView(dsmHardware).map(item => item.mountpoint), ['/volume1', '/volume2']);
+  const dsmFilesystemMarkup = app.renderFilesystemDetails(dsmHardware);
+  assert.match(dsmFilesystemMarkup, /\/volume1/);
+  assert.match(dsmFilesystemMarkup, /\/dev\/md2/);
+  assert.match(dsmFilesystemMarkup, /btrfs/);
+  assert.match(dsmFilesystemMarkup, /\/volume2/);
+  assert.match(dsmFilesystemMarkup, /\/dev\/md3/);
+  assert.match(dsmFilesystemMarkup, /ext4/);
+  assert.match(dsmFilesystemMarkup, /4\.04 TB/);
+  assert.match(dsmFilesystemMarkup, /7\.93 TB/);
+  assert.match(dsmFilesystemMarkup, /50\.9%/);
+  assert.doesNotMatch(dsmFilesystemMarkup, /\/dev\/shm|\/var\/packages/);
+  const dsmPhysicalDiskMarkup = app.renderPhysicalDiskRows(dsmHardware);
+  for(const device of ['sda', 'sdb', 'sdc', 'sdd']) {
+    assert.equal((dsmPhysicalDiskMarkup.match(new RegExp(`/dev/${device}`, 'g')) || []).length, 1);
+  }
+  assert.match(dsmPhysicalDiskMarkup, /1,970 h \(约82\.08天\)/);
+  assert.doesNotMatch(dsmPhysicalDiskMarkup, /\/dev\/md2|分区 \/ 格式|已用 \/ 总容量|使用率/);
+  const incompleteFilesystemMarkup = app.renderFilesystemDetails({storage: {filesystems: [{
+    mountpoint: '/', source: '/dev/mapper/linux-root', fs_type: 'ext4',
+    used_bytes: 1_000_000_000, total_bytes: 10_000_000_000,
+    usage_percent: 10, collection_status: 'partial'
+  }, {
+    mountpoint: '/data', source: '/dev/mapper/linux-data', fs_type: 'xfs',
+    used_bytes: 2_000_000_000, total_bytes: 10_000_000_000, usage_percent: 20
+  }]}});
+  assert.match(incompleteFilesystemMarkup, /部分采集/);
+  assert.match(incompleteFilesystemMarkup, /<td>-<\/td>/);
+  assert.match(appSource, /parenthesizedMeta\(resources\.diskLabel\)/);
+  assert.equal(app.homeDiskUsage({hdd_used: 1, hdd_total: 2}, dsmHardware).label, null);
+  assert.match(appSource, /view\.hermes\?\.error\?\.code === 'not_installed'/);
 
   const degraded = app.buildViewModel(statsDocument('degraded'));
   assert.equal(app.collectWarnings(degraded).length, 5);
@@ -387,6 +447,10 @@ async function run(){
     app.cleanCpuModel('Intel(R) Pentium(R) Silver N5030 CPU @ 1.10GHz'),
     'Intel Pentium Silver N5030'
   );
+  assert.equal(
+    app.cleanCpuModel('Intel(R) Atom(TM) CPU C3538 @ 2.10GHz'),
+    'Intel Atom CPU C3538'
+  );
   assert.equal(app.cleanCpuModel('Intel Celeron J4125'), 'Intel Celeron J4125');
   assert.equal(app.cleanCpuModel('Example(TM) Processor'), 'Example Processor');
 
@@ -486,6 +550,8 @@ async function run(){
   assert.match(indexMarkup, /id="hardwareTab"[^>]*>硬件信息<\/button>/);
   assert.match(indexMarkup, /id="dockerTab"[^>]*>Docker<\/button>/);
   assert.match(indexMarkup, /id="luckyTab"[^>]*>Lucky<\/button>/);
+  assert.match(indexMarkup, /id="luckyServiceSummary"/);
+  assert.match(appSource, /\['API 可用性', service\.api_reachable/);
   assert.doesNotMatch(indexMarkup, /data-page-target="[^"]+"[^>]*>主机<\/button>/);
   assert.match(indexMarkup, /id="homePage"[^>]*data-page="home"/);
   assert.match(indexMarkup, /id="hardwarePage"[^>]*data-page="hardware"[^>]*hidden/);
@@ -501,16 +567,20 @@ async function run(){
   assert.doesNotMatch(homeMarkup, /id="containersBody"/);
   assert.match(hardwareMarkup, /id="hardwareSystemInfo"/);
   assert.match(hardwareMarkup, /id="hardwareCpuInfo"/);
+  assert.doesNotMatch(hardwareMarkup, /hardwareCpuInstructionSets/);
   assert.match(hardwareMarkup, /id="hardwareCpuUsage"/);
   assert.match(hardwareMarkup, /class="hardware-cpu-columns"/);
   assert.match(hardwareMarkup, /class="hardware-cpu-column"/);
   assert.match(hardwareMarkup, /id="hardwareMemoryInfo"/);
   assert.doesNotMatch(hardwareMarkup, /hardwareMemoryPrimary|hardwareMemorySecondary|hardwareMemoryTertiary/);
-  assert.doesNotMatch(hardwareMarkup, /文件系统\s*\/\s*存储卷|hardwareFilesystemsBody/);
+  assert.match(hardwareMarkup, /id="hardwareFilesystemsBody"/);
+  assert.match(hardwareMarkup, /卷 \/ 文件系统/);
+  assert.match(indexMarkup, /css\/app\.css\?v=20260813-6/);
+  assert.match(indexMarkup, /js\/app\.js\?v=20260813-6/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
   assert.deepEqual(
     [...hardwareMarkup.matchAll(/<th>([^<]+)<\/th>/g)].map(match => match[1]),
-    ['设备', '型号', '容量', '温度', 'SMART', '通电时间', '分区 / 格式', '已用 / 总容量', '使用率']
+    ['设备', '型号', '容量', '温度', 'SMART', '通电时间', '挂载点', '来源', '格式', '已用 / 总容量', '使用率', '采集状态']
   );
   assert.match(dockerMarkup, /id="containersBody"/);
   assert.deepEqual(
@@ -549,6 +619,8 @@ async function run(){
   assert.match(appSource, /function cpuDetailsForView\(hardware\)/);
   assert.match(appSource, /function cpuLogicalProcessorText\(cpu\)/);
   assert.match(css, /\.hardware-cpu-columns\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.hardware-cpu-info\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
+  assert.match(css, /\.hardware-cpu-info \.hardware-cpu-instruction-row\{grid-column:1\/-1\}/);
   assert.match(css, /#hardwareCpuUsage\.hardware-cpu-usage-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
   assert.match(css, /\.hardware-usage-item\{display:grid;grid-template-columns:minmax\(0,auto\) minmax\(96px,1fr\)/);
   assert.match(css, /\.hardware-memory-grid\{display:grid;grid-template-columns:minmax\(460px,1\.6fr\) minmax\(260px,1fr\) minmax\(220px,\.9fr\)/);
@@ -565,6 +637,10 @@ async function run(){
   assert.match(appSource, /const memoryPlaceholders = Array\.from\(\{length: Math\.max\(0, 12 - memoryRows\.length\)/);
   assert.match(appSource, /\['频率（最低 \/ 最高）'/);
   assert.match(appSource, /\['当前频率', formatMHz\(cpu\.current_mhz\)\]/);
+  assert.match(appSource, /function cpuInstructionDetailRow\(value\)/);
+  assert.match(appSource, /hardware-cpu-instruction-row/);
+  assert.doesNotMatch(appSource, /\['步进', textOrDash\(cpu\.stepping\)\]/);
+  assert.doesNotMatch(appSource, /\['虚拟化', textOrDash\(cpu\.virtualization\)\]/);
   assert.doesNotMatch(appSource, /\['空闲', cpuUsage\.idle_percent\]/);
   assert.doesNotMatch(appSource, /\['Nice', cpuUsage\.nice_percent\]/);
   assert.doesNotMatch(appSource, /\['Steal', cpuUsage\.steal_percent\]/);
@@ -572,7 +648,11 @@ async function run(){
   assert.doesNotMatch(appSource, /\['软中断 SoftIRQ', cpuUsage\.softirq_percent\]/);
   assert.doesNotMatch(appSource, /发行版.*distribution|发行版本.*release/);
   assert.match(appSource, /I\/O 等待/);
-  assert.match(appSource, /function partitionRowsForDisk\(disk, filesystems\)/);
+  assert.match(appSource, /function renderPhysicalDiskRows\(hardware\)/);
+  assert.match(appSource, /function renderFilesystemDetails\(hardware\)/);
+  assert.doesNotMatch(appSource, /function partitionRowsForDisk\(disk, filesystems\)|function filesystemBelongsToDisk\(filesystem, disk\)/);
+  assert.match(appSource, /function diskSmartMarkup\(disk\)/);
+  assert.match(appSource, /属性检查/);
   assert.doesNotMatch(
     appSource.slice(appSource.indexOf('function deviceDiagnosticsMarkup'), appSource.indexOf('function buildProvenanceMarkup')),
     /source_ip|fqdn|token|digest|credential|Authorization/i

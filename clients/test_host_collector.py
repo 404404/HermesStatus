@@ -31,6 +31,7 @@ from host_collector import (
     not_reported_docker,
     not_reported_hardware,
     not_reported_hermes,
+    preferred_filesystem_usage,
     read_hermes_snapshot,
     resolve_backing_physical_disks,
     smart_candidates,
@@ -118,6 +119,19 @@ class MultiSmartRunner(object):
 
 
 class HostCollectorTests(unittest.TestCase):
+    def test_preferred_filesystem_usage_uses_largest_healthy_authorized_probe(self):
+        hardware = {
+            "storage": {
+                "filesystems": [
+                    {"mountpoint": "/volume1", "collection_status": "healthy", "total_bytes": 877_000_000_000, "used_bytes": 97_200_000_000},
+                    {"mountpoint": "/volume2", "collection_status": "healthy", "total_bytes": 7_930_000_000_000, "used_bytes": 4_039_000_000_000},
+                    {"mountpoint": "/missing", "collection_status": "unavailable", "total_bytes": 9_000_000_000_000, "used_bytes": 1},
+                ]
+            }
+        }
+        self.assertEqual(preferred_filesystem_usage(hardware), (7_930_000, 4_039_000))
+        self.assertIsNone(preferred_filesystem_usage({"storage": {"filesystems": []}}))
+
     def test_easytier_uses_resolved_collector_interval(self):
         class EasyTierFixture(object):
             config = {"interval_seconds": 75}
@@ -143,6 +157,26 @@ class HostCollectorTests(unittest.TestCase):
         name, error = collect_host_os(str(FIXTURES / "missing-os-release"))
         self.assertEqual(name, "unknown")
         self.assertEqual(error["code"], "host_os_unavailable")
+
+    def test_dsm_identity_does_not_degrade_hardware_when_os_release_is_absent(self):
+        with tempfile.TemporaryDirectory() as root:
+            version = Path(root) / "VERSION"
+            version.write_text(
+                "productversion=7.2.1\nbuildnumber=69057\nsmallfixnumber=1\n",
+                encoding="utf-8",
+            )
+            collector = HostExtensionCollector(
+                host_os_release_file=str(Path(root) / "missing-os-release"),
+                dsm_version_file=str(version),
+                status_dir="",
+                command_runner=lambda command, timeout: (1, ""),
+                docker_request=lambda path: [],
+            )
+            self.assertEqual(collector.system_identity["source"], "dsm-version")
+            self.assertFalse(any(
+                item.get("code") == "host_os_unavailable"
+                for item in collector.identity_errors
+            ))
 
     def test_cpu_model_prefers_lscpu(self):
         output = json.dumps(
@@ -170,6 +204,7 @@ class HostCollectorTests(unittest.TestCase):
             {"field": "Thread(s) per core:", "data": "2"},
             {"field": "CPU max MHz:", "data": "3400.0"},
             {"field": "L3 cache:", "data": "4 MiB"},
+            {"field": "Flags:", "data": "sse sse2 avx avx2 vmx"},
         ]})
         with tempfile.TemporaryDirectory() as root:
             cpuinfo = Path(root) / "cpuinfo"
@@ -182,6 +217,7 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(details["logical_cpus"], 4)
         self.assertEqual(details["current_mhz"], 1500.0)
         self.assertEqual(details["l3_cache"], "4 MiB")
+        self.assertEqual(details["instruction_sets"], "SSE, SSE2, AVX, AVX2, VT-x")
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "stat"
             path.write_text("cpu  100 10 20 800 30 4 6 2\n", encoding="utf-8")
@@ -226,6 +262,12 @@ class HostCollectorTests(unittest.TestCase):
 
     def test_hwmon_missing_returns_empty_list(self):
         self.assertEqual(collect_hwmon_temperatures("/does/not/exist"), [])
+
+    def test_missing_hermes_snapshot_is_an_optional_agent_not_an_error(self):
+        snapshot = read_hermes_snapshot("/does/not/exist", exporter_enabled=False)
+        self.assertEqual(snapshot["profiles"], [])
+        self.assertFalse(snapshot["stale"])
+        self.assertEqual(snapshot["error"]["code"], "not_installed")
 
     def test_smart_json_uses_dynamic_logical_sector_size(self):
         runner = SmartRunner(json.dumps(fixture_json("smart-normal.json")))
@@ -290,6 +332,75 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(smart["source"], "smartctl-json")
         self.assertEqual(smart["health"], "passed")
+        self.assertEqual(smart["completeness"], "complete")
+        self.assertEqual(smart["health_source"], "native_status")
+        self.assertEqual(smart["native_status"], "available")
+
+    def test_smart_snapshot_without_health_is_invalid_not_healthy(self):
+        data = fixture_json("smart-normal.json")
+        data.pop("smart_status", None)
+        runner = SmartRunner(json.dumps(data))
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "unknown")
+        self.assertEqual(error["code"], "smart_value_invalid")
+        self.assertEqual(smart["completeness"], "unavailable")
+        self.assertEqual(smart["health_source"], "unknown")
+        self.assertEqual(smart["native_status"], "unknown")
+
+    def test_incomplete_bridge_attribute_fallback_is_partial_passed(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 100, "worst": 100, "thresh": 36}]
+        }
+        runner = SmartRunner(
+            json.dumps(data),
+            "SMART Status not supported: Incomplete response\n"
+            "This result is based on an Attribute check.\n"
+            "SMART overall-health self-assessment test result: PASSED\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "passed")
+        self.assertEqual(smart["completeness"], "partial")
+        self.assertEqual(smart["health_source"], "attribute_check")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertEqual(error["code"], "smart_return_status_unavailable")
+
+    def test_incomplete_bridge_attribute_fallback_can_be_failed(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 1, "worst": 1, "thresh": 36}]
+        }
+        runner = SmartRunner(
+            json.dumps(data),
+            "SMART Status not supported: Incomplete response\n"
+            "This result is based on an Attribute check.\n"
+            "SMART overall-health self-assessment test result: FAILED\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "failed")
+        self.assertEqual(smart["completeness"], "partial")
+        self.assertEqual(smart["health_source"], "attribute_check")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertEqual(error["code"], "smart_return_status_unavailable")
+
+    def test_incomplete_bridge_without_attributes_is_unknown(self):
+        data = fixture_json("smart-normal.json")
+        data.pop("smart_status", None)
+        runner = SmartRunner(
+            json.dumps(data),
+            "=== START OF READ SMART DATA SECTION ===\n"
+            "SMART Status not supported: Incomplete response\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "unknown")
+        self.assertEqual(smart["completeness"], "unavailable")
+        self.assertEqual(smart["health_source"], "unknown")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertEqual(error["code"], "smart_value_invalid")
 
     def test_hardware_combines_hwmon_and_smart(self):
         with tempfile.TemporaryDirectory() as root:
@@ -325,6 +436,7 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(len(records), 2)
         self.assertIsNone(error)
         self.assertEqual([record[1]["device"] for record in records], ["/dev/sda", "/dev/sdb"])
+        self.assertIn(["smartctl", "-x", "-j", "-d", "sat", "/dev/sda"], runner.commands)
 
         payload = collect_hardware(
             "Example CPU", smart_devices=[{"path": "/dev/sda"}, {"path": "/dev/sdb"}],
@@ -335,6 +447,34 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNone(payload["disk_temperature"])
         self.assertEqual(payload["storage"]["summary"]["physical_disk_count"], 2)
         self.assertEqual(payload["storage"]["summary"]["smart_passed"], 2)
+
+    def test_explicit_smart_allowlist_keeps_usb_and_boot_but_excludes_zram(self):
+        smart = fixture_json("smart-normal.json")
+
+        def runner(command, timeout):
+            if command[:1] == ["lsblk"]:
+                return 0, json.dumps({"blockdevices": [
+                    {"name": "sda", "kname": "sda", "type": "disk", "size": 1000},
+                    {"name": "sdb", "kname": "sdb", "type": "disk", "size": 2000},
+                    {"name": "zram0", "kname": "zram0", "type": "disk", "size": 3000},
+                    {"name": "sdu", "kname": "sdu", "type": "disk", "size": 4000, "tran": "usb"},
+                    {"name": "synoboot", "kname": "synoboot", "type": "disk", "size": 5000},
+                ]})
+            if "-j" in command:
+                return 0, json.dumps(smart)
+            return 0, "SMART overall-health self-assessment test result: PASSED\n"
+
+        payload = collect_hardware(
+            "Example CPU",
+            smart_devices=[{"path": "/dev/sda"}],
+            command_runner=runner,
+            sys_block_root="/no-sys-block",
+            now=FIXED_NOW,
+        )
+        self.assertEqual(
+            [disk["id"] for disk in payload["storage"]["physical_disks"]],
+            ["sda", "sdu", "synoboot"],
+        )
 
     def test_explicit_empty_smart_allowlist_keeps_topology_without_an_error(self):
         runner = MultiSmartRunner({})
@@ -790,11 +930,13 @@ class HostCollectorTests(unittest.TestCase):
         self.assertNotIn("received_at", payload)
         self.assertNotIn("unexpected", payload)
 
-    def test_hermes_snapshot_reader_degrades_missing_or_corrupt_data(self):
-        missing = read_hermes_snapshot("/does/not/exist")
+    def test_hermes_snapshot_reader_allows_missing_agent_but_degrades_corrupt_data(self):
+        missing = read_hermes_snapshot("/does/not/exist", exporter_enabled=False)
         self.assertEqual(missing["profiles"], [])
-        self.assertTrue(missing["stale"])
-        self.assertEqual(missing["error"]["code"], "snapshot_unavailable")
+        self.assertFalse(missing["stale"])
+        self.assertEqual(missing["error"]["code"], "not_installed")
+        unavailable = read_hermes_snapshot("/does/not/exist", exporter_enabled=True)
+        self.assertEqual(unavailable["error"]["code"], "snapshot_unavailable")
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "hermes.json"
             path.write_text("{invalid", encoding="utf-8")

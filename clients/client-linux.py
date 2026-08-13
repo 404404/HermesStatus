@@ -562,6 +562,7 @@ def _device_v2_stats_collector(extension_collector):
         load_1, load_5, load_15 = os.getloadavg()
         memory_total, memory_used, swap_total, swap_free = get_memory()
         hdd_total, hdd_used = get_hdd()
+        hdd_total, hdd_used = extension_collector.preferred_disk_usage(hdd_total, hdd_used)
         stats = {
             'uptime': uptime,
             'load_1': load_1,

@@ -80,6 +80,12 @@ _CPU_LSCPU_FLOAT_FIELDS = {
     "cpu min mhz": "min_mhz",
     "cpu mhz": "current_mhz",
 }
+_CPU_INSTRUCTION_SET_FLAGS = (
+    ("sse", "SSE"), ("sse2", "SSE2"), ("sse4_1", "SSE4.1"),
+    ("sse4_2", "SSE4.2"), ("aes", "AES"), ("avx", "AVX"),
+    ("avx2", "AVX2"), ("avx512f", "AVX-512"), ("fma", "FMA"),
+    ("sha_ni", "SHA"), ("vmx", "VT-x"), ("svm", "AMD-V"),
+)
 _CPU_STAT_FIELDS = (
     "user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal",
 )
@@ -126,6 +132,13 @@ def _env_int(name, default, minimum=1):
         return max(minimum, int(os.getenv(name, str(default))))
     except (TypeError, ValueError):
         return default
+
+
+def _env_bool(name, default):
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
 def _truncate(value, limit, empty="-"):
@@ -222,10 +235,28 @@ def not_reported_hermes():
     }
 
 
-def read_hermes_snapshot(path):
+def not_installed_hermes():
+    """A missing optional Hermes Agent is a valid host capability state."""
+    return {
+        "profiles": [],
+        "updated_at": _utc_timestamp(),
+        "stale": False,
+        "error": _error("not_installed", "Hermes Agent is not installed", "hermes", False),
+    }
+
+
+def read_hermes_snapshot(path, exporter_enabled=True):
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as handle:
             payload = json.load(handle)
+    except FileNotFoundError:
+        if not exporter_enabled:
+            return not_installed_hermes()
+        result = not_reported_hermes()
+        result["error"] = _error(
+            "snapshot_unavailable", "Hermes integration snapshot is unavailable", "hermes-snapshot", True
+        )
+        return result
     except (OSError, TypeError, ValueError):
         payload = None
     if not isinstance(payload, dict) or not isinstance(payload.get("profiles"), list):
@@ -513,6 +544,11 @@ def collect_cpu_details(command_runner=None, cpuinfo_path="/proc/cpuinfo"):
     if details["current_mhz"] is None:
         details["current_mhz"] = _cpuinfo_current_mhz(cpuinfo_path)
     details["model_name"] = _nullable_text(values.get("model name"), MAX_CPU_MODEL_LENGTH)
+    # Keep only named, user-meaningful CPU capabilities.  The full lscpu
+    # flags value is intentionally never projected as arbitrary command output.
+    flags = set(str(values.get("flags") or values.get("features") or "").lower().split())
+    instruction_sets = [label for flag, label in _CPU_INSTRUCTION_SET_FLAGS if flag in flags]
+    details["instruction_sets"] = ", ".join(instruction_sets) or None
     return details, None
 
 
@@ -855,6 +891,37 @@ def _smartctl_query_failed(data):
     return bool(exit_status & SMARTCTL_UNUSABLE_STATUS_MASK)
 
 
+def _smart_overall_status_incomplete(data, text):
+    """Return true when a bridge cannot provide a trustworthy SMART verdict."""
+    fragments = [text or ""]
+    metadata = data.get("smartctl") if isinstance(data, dict) else None
+    if isinstance(metadata, dict):
+        for message in metadata.get("messages") or []:
+            if isinstance(message, dict):
+                fragments.append(str(message.get("string") or ""))
+    combined = "\n".join(fragments).lower()
+    return "smart status not supported" in combined or "incomplete response" in combined
+
+
+def _smart_attribute_fallback_available(data, text):
+    """Return true only for a readable SMART attribute/threshold table.
+
+    USB bridges may prevent ATA SMART RETURN STATUS while still allowing the
+    attributes which smartctl uses for its explicit overall-health fallback.
+    A bare ``PASSED`` string is not sufficient evidence: require either the
+    structured table or its bounded text representation as well.
+    """
+    attributes = data.get("ata_smart_attributes") if isinstance(data, dict) else None
+    table = attributes.get("table") if isinstance(attributes, dict) else None
+    if isinstance(table, list) and any(isinstance(item, dict) for item in table):
+        return True
+    normalized = text or ""
+    return bool(
+        re.search(r"^\s*ID#\s+ATTRIBUTE_NAME\b", normalized, re.I | re.M)
+        and re.search(r"^\s*\d+\s+\S+\s+\S+", normalized, re.M)
+    )
+
+
 def _json_nested_value(data, keys):
     if isinstance(data, dict):
         for key, value in data.items():
@@ -985,7 +1052,43 @@ def _collect_smart_candidate(candidate, device_type, command_runner=None):
             "smartctl_unavailable", "SMART data is unavailable", "smartctl", True
         )
     values = _smart_values(data, text)
-    invalid_value = not all(
+    incomplete_health = _smart_overall_status_incomplete(data, text)
+    # Some USB/SATA bridges cannot return ATA SMART RETURN STATUS yet expose
+    # the complete attribute/threshold table.  smartctl explicitly reports
+    # its attribute-check fallback in that case; keep that bounded verdict,
+    # while projecting its lower quality separately from native SMART status.
+    trusted_health = values["health"] in {"passed", "failed"}
+    attribute_fallback = (
+        incomplete_health
+        and trusted_health
+        and _smart_attribute_fallback_available(data, text)
+    )
+    if attribute_fallback:
+        health_source = "attribute_check"
+        native_status = "unavailable"
+        completeness = "partial"
+    elif incomplete_health:
+        # A bridge that cannot perform RETURN STATUS needs independent
+        # attribute/threshold evidence before its health result is trusted.
+        values["health"] = "unknown"
+        health_source = "unknown"
+        native_status = "unavailable"
+        completeness = "unavailable"
+    elif trusted_health:
+        health_source = "native_status"
+        native_status = "available"
+        completeness = "complete"
+    else:
+        # Do not manufacture a quality level when neither native status nor
+        # the attribute-check fallback yielded a bounded health result.
+        health_source = "unknown"
+        native_status = "unavailable" if incomplete_health else "unknown"
+        completeness = "unavailable"
+    # A transport mismatch can produce syntactically valid smartctl output
+    # containing inventory fields but no trustworthy overall-health result.
+    # Retain any bounded observations for the per-disk row, but never label
+    # that partial snapshot healthy or let it hide an unavailable SMART state.
+    invalid_value = values["health"] not in {"passed", "failed"} or not all(
         _valid_temperature(values[key]) for key in ("current", "highest", "lowest")
     ) or not all(
         _valid_counter(values[key])
@@ -1028,10 +1131,20 @@ def _collect_smart_candidate(candidate, device_type, command_runner=None):
         "temperature_source": values["temperature_source"],
         "model": _smart_model(data),
         "capacity_bytes": _smart_capacity_bytes(data),
+        "completeness": completeness,
+        "health_source": health_source,
+        "native_status": native_status,
     }
     if sector_error:
         return result, _error(
             "sector_size_unknown", "Logical sector size is unavailable", "smartctl", False
+        )
+    if attribute_fallback:
+        return result, _error(
+            "smart_return_status_unavailable",
+            "SMART native return status is unavailable; attribute health fallback was used",
+            "smartctl",
+            False,
         )
     if invalid_value:
         return result, _error(
@@ -1089,6 +1202,7 @@ def _append_block_node(graph, value, parent_name=None):
     node["type"] = _nullable_text(value.get("type"), 32)
     node["size"] = _coerce_int(value.get("size"))
     node["model"] = _nullable_text(value.get("model"), MAX_DISK_MODEL_LENGTH)
+    node["transport"] = _nullable_text(value.get("tran"), 32)
     pkname = _block_name(value.get("pkname"))
     if pkname:
         node["parent"] = pkname
@@ -1138,7 +1252,7 @@ def collect_block_device_graph(command_runner=None, sys_block_root="/sys/class/b
     runner = command_runner or _default_command_runner
     command = [
         "lsblk", "--json", "--bytes", "--output",
-        "NAME,KNAME,PKNAME,PATH,TYPE,SIZE,MODEL",
+        "NAME,KNAME,PKNAME,PATH,TYPE,SIZE,MODEL,TRAN",
     ]
     try:
         returncode, output = runner(command, 4)
@@ -1338,7 +1452,9 @@ def collect_filesystems(filesystem_probes, block_graph, command_runner=None, sta
     return filesystems, _select_error(errors)
 
 
-def _physical_disk_ids_for_report(smart_by_id, block_graph, filesystems):
+def _physical_disk_ids_for_report(
+    smart_by_id, block_graph, filesystems, include_topology_inventory=True
+):
     """Select the bounded disk inventory without orphaning probe relations.
 
     Filesystem probes are an explicit operator request. Their resolved backing
@@ -1349,7 +1465,15 @@ def _physical_disk_ids_for_report(smart_by_id, block_graph, filesystems):
     make the server reject the complete hardware domain.
     """
     nodes = block_graph.get("nodes", {}) if isinstance(block_graph, dict) else {}
-    selected = list(smart_by_id)
+    def excluded(disk_id):
+        return str(disk_id).lower().startswith("zram")
+
+    def supported_topology_device(disk_id, node):
+        if excluded(disk_id) or node.get("type") != "disk":
+            return False
+        return disk_id == "synoboot" or str(node.get("transport") or "").lower() == "usb"
+
+    selected = [disk_id for disk_id in smart_by_id if not excluded(disk_id)]
     selected_set = set(selected)
 
     for filesystem in filesystems:
@@ -1357,14 +1481,28 @@ def _physical_disk_ids_for_report(smart_by_id, block_graph, filesystems):
             if (
                 disk_id not in selected_set
                 and nodes.get(disk_id, {}).get("type") == "disk"
+                and not excluded(disk_id)
             ):
                 selected.append(disk_id)
                 selected_set.add(disk_id)
 
-    for disk_id, node in nodes.items():
-        if node.get("type") == "disk" and disk_id not in selected_set:
-            selected.append(disk_id)
-            selected_set.add(disk_id)
+    if include_topology_inventory:
+        for disk_id, node in nodes.items():
+            if (
+                node.get("type") == "disk"
+                and disk_id not in selected_set
+                and not excluded(disk_id)
+            ):
+                selected.append(disk_id)
+                selected_set.add(disk_id)
+    else:
+        # A bounded Device v2 SMART allowlist must not become host-wide
+        # inventory. Keep only the operator-visible removable and boot media
+        # that are part of the device's storage topology.
+        for disk_id, node in nodes.items():
+            if disk_id not in selected_set and supported_topology_device(disk_id, node):
+                selected.append(disk_id)
+                selected_set.add(disk_id)
 
     selected = selected[:MAX_PHYSICAL_DISKS]
     selected_set = set(selected)
@@ -1380,6 +1518,8 @@ def _physical_disk_ids_for_report(smart_by_id, block_graph, filesystems):
 def _smart_collection_status(smart, error):
     if smart is not None and error is None:
         return "healthy"
+    if smart is not None and error and error.get("code") == "smart_return_status_unavailable":
+        return "partial"
     if smart is not None:
         return "invalid_data"
     return "unavailable"
@@ -1408,6 +1548,9 @@ def _physical_disk_record(disk_id, smart=None, smart_error=None, graph_node=None
         "written_bytes": smart.get("written_bytes") if smart else None,
         "read_bytes": smart.get("read_bytes") if smart else None,
         "smart_source": _nullable_text(smart.get("source"), MAX_DISK_SMART_SOURCE_LENGTH) if smart else None,
+        "completeness": smart.get("completeness") if smart else "unavailable",
+        "health_source": smart.get("health_source") if smart else "unknown",
+        "native_status": smart.get("native_status") if smart else "unknown",
         "collection_status": _smart_collection_status(smart, smart_error),
         "error": smart_error,
     }
@@ -1425,6 +1568,46 @@ def _storage_summary(physical_disks, filesystems):
         "temperature_max_c": max(temperatures) if temperatures else None,
         "filesystem_count": len(filesystems),
     }
+
+
+def preferred_filesystem_usage(hardware):
+    """Return the largest healthy configured filesystem as decimal MB.
+
+    Device-v2's legacy-compatible top-level HDD counters are used by the
+    overview cards.  Inside a container, a generic mount scan can include the
+    client root filesystem or an operator's small system volume.  Prefer the
+    largest *explicitly configured* healthy filesystem from the hardware
+    domain instead.  This keeps the overview aligned with the detailed storage
+    view without discovering or reading arbitrary host mounts.
+
+    ``None`` means that the hardware collector has not produced a suitable
+    filesystem yet, so callers must retain their existing compatibility
+    counters.
+    """
+    if not isinstance(hardware, dict):
+        return None
+    storage = hardware.get("storage")
+    if not isinstance(storage, dict):
+        return None
+    candidates = []
+    for filesystem in storage.get("filesystems") or []:
+        if not isinstance(filesystem, dict):
+            continue
+        if filesystem.get("collection_status") != "healthy":
+            continue
+        total = filesystem.get("total_bytes")
+        used = filesystem.get("used_bytes")
+        if not isinstance(total, int) or not isinstance(used, int):
+            continue
+        if total <= 0 or used < 0 or used > total:
+            continue
+        candidates.append((total, used))
+    if not candidates:
+        return None
+    total, used = max(candidates, key=lambda item: item[0])
+    # The established wire counters are decimal megabytes.  Retain that unit
+    # so existing Server validation and clients remain compatible.
+    return total // 1000 // 1000, used // 1000 // 1000
 
 
 def _aggregate_smart_status(records):
@@ -1527,7 +1710,18 @@ def collect_hardware(
         if disk_id and disk_id not in smart_by_id:
             smart_by_id[disk_id] = (smart, record_error)
     physical_ids = _physical_disk_ids_for_report(
-        smart_by_id, block_graph, filesystems
+        smart_by_id,
+        block_graph,
+        filesystems,
+        # A non-empty Device v2 SMART allowlist is an authorization boundary:
+        # do not turn a narrow set of mapped block devices into a host-wide
+        # topology inventory.  An empty allowlist deliberately requests the
+        # existing topology-only view, and automatic discovery retains the
+        # broad compatibility behavior.
+        include_topology_inventory=not (
+            isinstance(configured_smart_devices, (list, tuple))
+            and len(configured_smart_devices) > 0
+        ),
     )
     physical_disks = []
     for disk_id in physical_ids:
@@ -1764,6 +1958,7 @@ class HostExtensionCollector(object):
         docker_interval=None,
         docker_container_limit=None,
         hermes_status_file=None,
+        hermes_export_enabled=None,
         hermes_snapshot_interval=None,
         status_dir=None,
         command_runner=None,
@@ -1802,6 +1997,7 @@ class HostExtensionCollector(object):
         self.hermes_status_file = hermes_status_file or os.getenv(
             "HERMES_STATUS_FILE", "/var/lib/serverstatus-client/hermes/hermes.json"
         )
+        self.hermes_export_enabled = _env_bool("HERMES_EXPORT_ENABLED", True) if hermes_export_enabled is None else bool(hermes_export_enabled)
         self.hermes_snapshot_interval = hermes_snapshot_interval or _env_int(
             "HERMES_SNAPSHOT_INTERVAL", 10
         )
@@ -1831,7 +2027,15 @@ class HostExtensionCollector(object):
         # CPU detail fields are an optional observability enhancement. Their
         # absence must not turn otherwise valid SMART/storage data into a
         # failed hardware domain.
-        self.identity_errors = [item for item in (os_error, cpu_error) if item]
+        # DSM normally exposes /etc.defaults/VERSION instead of os-release.
+        # Its validated identity is authoritative, so a missing os-release
+        # mount is expected and must not degrade an otherwise healthy hardware
+        # report.
+        dsm_identity = self.system_identity.get("source") == "dsm-version"
+        self.identity_errors = [
+            item for item in (os_error, cpu_error)
+            if item and not (dsm_identity and item.get("code") == "host_os_unavailable")
+        ]
         self._hardware = not_reported_hardware()
         self._docker = not_reported_docker()
         self._hermes = not_reported_hermes()
@@ -1895,7 +2099,7 @@ class HostExtensionCollector(object):
         return payload
 
     def collect_hermes_once(self):
-        payload = read_hermes_snapshot(self.hermes_status_file)
+        payload = read_hermes_snapshot(self.hermes_status_file, self.hermes_export_enabled)
         self._store("hermes", payload)
         return payload
 
@@ -1980,6 +2184,13 @@ class HostExtensionCollector(object):
         if self.client_build is not None:
             payload["client_build"] = copy.deepcopy(self.client_build)
         return payload
+
+    def preferred_disk_usage(self, fallback_total, fallback_used):
+        """Return overview disk counters, preferring authorized storage data."""
+        with self._lock:
+            hardware = copy.deepcopy(self._hardware)
+        selected = preferred_filesystem_usage(hardware)
+        return selected if selected is not None else (fallback_total, fallback_used)
 
 
 def add_extension_payload(update, collector):

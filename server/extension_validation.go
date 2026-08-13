@@ -333,7 +333,7 @@ func ValidateCPUDetails(details *CPUDetails) error {
 		"architecture": details.Architecture, "vendor": details.Vendor, "family": details.Family,
 		"model_id": details.ModelID, "model_name": details.ModelName, "stepping": details.Stepping,
 		"virtualization": details.Virtualization, "l1d_cache": details.L1DCache, "l1i_cache": details.L1ICache,
-		"l2_cache": details.L2Cache, "l3_cache": details.L3Cache,
+		"l2_cache": details.L2Cache, "l3_cache": details.L3Cache, "instruction_sets": details.InstructionSets,
 	} {
 		if err := validateOptionalString("hardware.cpu_details."+field, value, MaxCPUTextLength); err != nil {
 			return err
@@ -526,8 +526,26 @@ func validatePhysicalDiskStats(index int, disk *PhysicalDiskStats) error {
 	if err := validateOptionalString(prefix+".smart_source", disk.SMARTSource, MaxDiskSmartSourceLength); err != nil {
 		return err
 	}
+	if err := validateOptionalEnum(prefix+".completeness", disk.Completeness, "complete", "partial", "unavailable"); err != nil {
+		return err
+	}
+	if err := validateOptionalEnum(prefix+".health_source", disk.HealthSource, "native_status", "attribute_check", "unknown"); err != nil {
+		return err
+	}
+	if err := validateOptionalEnum(prefix+".native_status", disk.NativeStatus, "available", "unavailable", "unknown"); err != nil {
+		return err
+	}
 	if !validStorageCollectionStatus(disk.CollectionStatus) {
 		return validationError(validationCodeInvalidValue, prefix+".collection_status", "status is not supported")
+	}
+	if disk.CollectionStatus == "partial" {
+		if disk.Completeness == nil || *disk.Completeness != "partial" ||
+			disk.HealthSource == nil || *disk.HealthSource != "attribute_check" ||
+			disk.NativeStatus == nil || *disk.NativeStatus != "unavailable" ||
+			(disk.SMARTStatus != DiskSMARTPassed && disk.SMARTStatus != DiskSMARTFailed) ||
+			disk.Error == nil || disk.Error.Code != "smart_return_status_unavailable" {
+			return validationError(validationCodeInvalidValue, prefix+".collection_status", "partial SMART requires an attribute-check fallback")
+		}
 	}
 	if err := ValidateExtensionError(prefix+".error", disk.Error); err != nil {
 		return err
@@ -716,7 +734,7 @@ func ValidateClientBuildInfo(build *ClientBuildInfo) error {
 }
 
 func validStorageCollectionStatus(value string) bool {
-	return value == "healthy" || value == "unavailable" || value == "unsupported" || value == "permission_denied" || value == "invalid_data"
+	return value == "healthy" || value == "partial" || value == "unavailable" || value == "unsupported" || value == "permission_denied" || value == "invalid_data"
 }
 
 func validStorageStackType(value string) bool {
@@ -1338,12 +1356,16 @@ func safeErrorMessage(code string) string {
 	switch code {
 	case "not_reported":
 		return "Extension data was not reported"
+	case "not_installed":
+		return "Hermes Agent is not installed"
 	case "smartctl_unavailable":
 		return "SMART data is unavailable"
 	case "sector_size_unknown":
 		return "Logical sector size is unavailable"
 	case "smart_value_invalid":
 		return "One or more SMART values are invalid"
+	case "smart_return_status_unavailable":
+		return "SMART native return status is unavailable; attribute health fallback was used"
 	case "hwmon_unavailable":
 		return "CPU temperature is unavailable"
 	case "host_os_unavailable":
@@ -1445,6 +1467,9 @@ func validateRequiredHardware(raw json.RawMessage) error {
 		return err
 	}
 	if raw, ok := object["cpu_details"]; ok {
+		// instruction_sets was added after the initial Device v2 CPU-details
+		// contract. Keep it optional so an older compatible client does not
+		// lose the entire hardware domain during a rolling server upgrade.
 		if err := validateNullableObjectFields(raw, "hardware.cpu_details", "architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "usage"); err != nil {
 			return err
 		}
@@ -1670,6 +1695,18 @@ func validateOptionalString(field string, value *string, maxLength int) error {
 		return validationError(validationCodeInvalidValue, field, "value contains disallowed content")
 	}
 	return nil
+}
+
+func validateOptionalEnum(field string, value *string, allowed ...string) error {
+	if value == nil {
+		return nil
+	}
+	for _, candidate := range allowed {
+		if *value == candidate {
+			return nil
+		}
+	}
+	return validationError(validationCodeInvalidValue, field, "value is not supported")
 }
 
 func validateStringValue(field, value string, maxLength int) error {

@@ -6,7 +6,7 @@
     <meta name="description" content="HermesStatus 多设备云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260812-1" />
+    <link rel="stylesheet" href="css/app.css?v=20260813-6" />
 </head>
 <body>
     <header class="topbar">
@@ -117,8 +117,18 @@
                     <div class="section-head"><h2 id="hardwareDisksTitle">物理磁盘</h2></div>
                     <div class="table-wrap">
                         <table class="data hardware-disks-table">
-                            <thead><tr><th>设备</th><th>型号</th><th>容量</th><th>温度</th><th>SMART</th><th>通电时间</th><th>分区 / 格式</th><th>已用 / 总容量</th><th>使用率</th></tr></thead>
+                            <thead><tr><th>设备</th><th>型号</th><th>容量</th><th>温度</th><th>SMART</th><th>通电时间</th></tr></thead>
                             <tbody id="hardwareDisksBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="data-section" aria-labelledby="hardwareFilesystemsTitle">
+                    <div class="section-head"><h2 id="hardwareFilesystemsTitle">卷 / 文件系统</h2></div>
+                    <div class="table-wrap">
+                        <table class="data hardware-filesystems-table">
+                            <thead><tr><th>挂载点</th><th>来源</th><th>格式</th><th>已用 / 总容量</th><th>使用率</th><th>采集状态</th></tr></thead>
+                            <tbody id="hardwareFilesystemsBody"></tbody>
                         </table>
                     </div>
                 </section>
@@ -147,6 +157,10 @@
             </div>
 
             <div id="luckyPage" class="page-panel" role="tabpanel" aria-labelledby="luckyTab" data-page="lucky" hidden>
+                <section class="data-section" aria-labelledby="luckyServiceTitle">
+                    <div class="section-head"><h2 id="luckyServiceTitle">Lucky 服务状态</h2></div>
+                    <dl id="luckyServiceSummary" class="detail-list hardware-system-info hardware-three-column-info"></dl>
+                </section>
                 <section class="data-section" aria-labelledby="luckyConfigTitle">
                     <div class="section-head"><h2 id="luckyConfigTitle">配置信息</h2></div>
                     <div class="table-wrap">
@@ -240,6 +254,6 @@
         <button id="aboutButton" type="button" class="footer-button" aria-haspopup="dialog">关于 / 构建信息</button>
     </footer>
 
-    <script src="js/app.js?v=20260812-1" defer></script>
+    <script src="js/app.js?v=20260813-6" defer></script>
 </body>
 </html>

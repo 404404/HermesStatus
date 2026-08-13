@@ -105,6 +105,7 @@ function cleanCpuModel(value){
   return model
     .replace(/\((?:R|TM|C)\)/gi, '')
     .replace(/\s+CPU\s*@\s*[\d.]+\s*(?:[GMK]?Hz)?\s*$/i, '')
+    .replace(/\s+@\s*[\d.]+\s*(?:[GMK]?Hz)?\s*$/i, '')
     .replace(/\s+/g, ' ')
     .trim() || '-';
 }
@@ -214,6 +215,60 @@ function diskReadBytes(disk){
   return valueAt(disk, ['read_bytes', 'bytes_read']);
 }
 
+function isSynologyHost(hardware){
+  const identity = safeObject(hardware?.system_identity);
+  return /synology\s+dsm/i.test(String(identity.distribution || identity.pretty_name || '')) ||
+    String(identity.source || '').toLowerCase() === 'dsm-version';
+}
+
+function largestDiskByCapacity(disks){
+  return maxDiskBy(disks, disk => finiteNumber(disk?.capacity_bytes));
+}
+
+function synologyVolumeLabel(filesystems){
+  const candidate = (Array.isArray(filesystems) ? filesystems : [])
+    .map(filesystem => ({filesystem, total: finiteNumber(filesystem?.total_bytes)}))
+    .filter(item => item.total !== null)
+    .sort((left, right) => right.total - left.total)[0]?.filesystem;
+  const mountpoint = String(candidate?.mountpoint || '');
+  const match = /^\/volume(\d+)(?:\/|$)/.exec(mountpoint);
+  return match ? `vol${match[1]}` : '-';
+}
+
+function homeDiskUsage(host, hardware){
+  const used = finiteNumber(host?.hdd_used);
+  const total = finiteNumber(host?.hdd_total);
+  if(used === null || total === null) return {text: '-', valueText: '-', label: null, percent: null};
+  const filesystems = dataFilesystemItemsForView(hardware);
+  const selectedFilesystem = filesystems
+    .filter(item => item?.collection_status === 'healthy' && finiteNumber(item?.total_bytes) !== null && finiteNumber(item?.used_bytes) !== null)
+    .sort((left, right) => finiteNumber(right.total_bytes) - finiteNumber(left.total_bytes))[0];
+  const reportedTotalBytes = total * 1000 * 1000;
+  const matchesSelectedFilesystem = selectedFilesystem && Math.abs(finiteNumber(selectedFilesystem.total_bytes) - reportedTotalBytes) < 1000 * 1000;
+  const label = matchesSelectedFilesystem
+    ? (isSynologyHost(hardware)
+      ? synologyVolumeLabel([selectedFilesystem])
+      : (filesystemBackingDisks(selectedFilesystem).text))
+    : '-';
+  const valueText = `${formatBytes(used * 1000 * 1000)} / ${formatBytes(total * 1000 * 1000)}`;
+  return {
+    text: `${valueText}${label === '-' ? '' : ` (${label})`}`,
+    valueText,
+    label: label === '-' ? null : label,
+    percent: percentage(used, total)
+  };
+}
+
+function conciseOsVersion(host, hardware){
+  const identity = safeObject(hardware?.system_identity);
+  if(isSynologyHost(hardware)){
+    const version = String(identity.version || host?.os || '');
+    const match = /(?:dsm\s*)?(\d+\.\d+(?:\.\d+)?)/i.exec(version);
+    return match ? `DSM ${match[1]}` : 'DSM';
+  }
+  return textOrDash(host?.os);
+}
+
 function storageState(hardware){
   const storage = safeObject(hardware?.storage);
   const physicalDisks = Array.isArray(storage.physical_disks)
@@ -263,6 +318,14 @@ function filesystemItemsForView(hardware){
   return storageState(hardware).filesystems;
 }
 
+function dataFilesystemItemsForView(hardware){
+  const filesystems = filesystemItemsForView(hardware);
+  if(!isSynologyHost(hardware)) return filesystems;
+  // DSM exposes small internal, boot and package filesystems too. The
+  // explicitly configured /volumeN probes are its operator data volumes.
+  return filesystems.filter(filesystem => /^\/volume\d+(?:\/|$)/.test(String(filesystem?.mountpoint || '')));
+}
+
 function temperatureSensorEntries(hardware){
   const cpuTemperature = safeObject(hardware?.cpu_temperature);
   const groups = [
@@ -308,9 +371,17 @@ function parenthesizedMeta(value){
 }
 
 function smartHomeMarkup(disks, hardware){
-  if(disks.length === 1) return escapeHtml(statusText(disks[0].smart_status ?? hardware?.disk_smart_status));
+  if(disks.length === 1){
+    const disk = disks[0];
+    const state = disk.smart_status ?? hardware?.disk_smart_status;
+    const fallback = disk?.completeness === 'partial' && disk?.health_source === 'attribute_check';
+    return escapeHtml(fallback ? `${statusText(state)}（属性检查）` : statusText(state));
+  }
   if(disks.length > 1){
     const passed = disks.filter(disk => String(disk.smart_status ?? '').toLowerCase() === 'passed');
+    const attributeFallback = passed
+      .filter(disk => disk?.completeness === 'partial' && disk?.health_source === 'attribute_check')
+      .length;
     const failed = disks
       .filter(disk => String(disk.smart_status ?? '').toLowerCase() === 'failed')
       .map(diskName)
@@ -321,10 +392,19 @@ function smartHomeMarkup(disks, hardware){
     }).length;
     const details = failed.length
       ? `${failed.join('、')}故障`
-      : unknown ? `${unknown} 块未知` : '';
+      : unknown ? `${unknown} 块未知`
+      : attributeFallback ? `${attributeFallback} 块属性检查` : '';
     return `${escapeHtml(`${passed.length} / ${disks.length} 通过`)}${parenthesizedMeta(details)}`;
   }
   return escapeHtml(statusText(hardware?.disk_smart_status ?? 'unknown'));
+}
+
+function diskSmartMarkup(disk){
+  const state = String(disk?.smart_status ?? 'unknown').toLowerCase();
+  const fallback = disk?.completeness === 'partial' && disk?.health_source === 'attribute_check';
+  const label = fallback ? `${statusText(state)}（属性检查）` : statusText(state);
+  const detail = fallback ? '原生 SMART RETURN STATUS 不可用；已使用属性阈值检查结果。' : '';
+  return `<span class="badge ${statusTone(state)}"${detail ? ` title="${escapeHtml(detail)}"` : ''}>${escapeHtml(label)}</span>`;
 }
 
 function validDeviceId(value){
@@ -455,7 +535,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
 	const lucky = safeObject(host.lucky);
 	const easytier = safeObject(host.easytier);
   const memoryPercent = percentage(host.memory_used, host.memory_total);
-  const diskPercent = percentage(host.hdd_used, host.hdd_total);
+  const diskUsage = homeDiskUsage(host, hardware);
   const cpuPercent = finiteNumber(host.cpu) === null ? null : clamp(host.cpu, 0, 100);
 
   return {
@@ -473,14 +553,14 @@ function buildViewModel(documentValue, selectedDeviceId = null){
     resources: {
       cpuPercent,
       memoryPercent,
-      diskPercent,
+      diskPercent: diskUsage.percent,
       cpuModel: cleanCpuModel(hardware.cpu_model ?? host.cpu_model),
       memoryText: finiteNumber(host.memory_used) === null || finiteNumber(host.memory_total) === null
         ? '-'
         : `${formatBytes(host.memory_used * 1000)} / ${formatBytes(host.memory_total * 1000)}`,
-      diskText: finiteNumber(host.hdd_used) === null || finiteNumber(host.hdd_total) === null
-        ? '-'
-        : `${formatBytes(host.hdd_used * 1000 * 1000)} / ${formatBytes(host.hdd_total * 1000 * 1000)}`
+      diskText: diskUsage.text,
+      diskValueText: diskUsage.valueText,
+      diskLabel: diskUsage.label
     }
   };
 }
@@ -492,7 +572,7 @@ function collectWarnings(view){
 	if(easytierIsConfigured(view.easytier)) domains.push(view.easytier);
 	return domains
     .map(domain => domain?.error)
-    .filter(error => error && typeof error === 'object')
+    .filter(error => error && typeof error === 'object' && error.code !== 'not_installed')
     .map(error => textOrDash(error.message || error.code))
     .filter(message => message !== '-');
 }
@@ -503,7 +583,7 @@ function statusTone(value){
   if(status.startsWith('exited') || status.startsWith('dead')) return 'err';
   if(status.startsWith('created') || status.startsWith('paused') || status.startsWith('restarting') || status.startsWith('removing')) return 'warn';
 	if(['passed', 'running', 'ok', 'healthy', 'up', 'active', 'valid'].includes(status)) return 'ok';
-	if(['degraded', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error', 'mismatch', 'unsupported', 'unsupported_version'].includes(status)) return 'warn';
+	if(['degraded', 'partial', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error', 'mismatch', 'unsupported', 'unsupported_version'].includes(status)) return 'warn';
 	if(['failed', 'down', 'offline', 'disabled', 'stopped', 'unauthorized', 'timeout', 'dead', 'exited', 'error', 'expired', 'invalid', 'unavailable'].includes(status)) return 'err';
   return 'neutral';
 }
@@ -514,7 +594,7 @@ function statusText(value){
     passed: '通过', failed: '失败', unknown: '未知', unavailable: '不可用',
     running: '运行中', healthy: '正常', ok: '正常', active: '活动',
     stopped: '已停止', down: '离线', unauthorized: '未授权', timeout: '超时',
-		exited: '已退出', dead: '异常', degraded: '部分异常', stale: '已陈旧',
+		exited: '已退出', dead: '异常', degraded: '部分异常', partial: '部分采集', stale: '已陈旧',
 		not_configured: '未配置', error: '异常', valid: '有效', expiring: '即将到期',
 		expired: '已过期', not_yet_valid: '尚未生效', invalid: '无效',
 		supported: '支持', unsupported: '不支持', matched: '匹配', mismatch: '不匹配', not_observable: '未观察到',
@@ -667,7 +747,7 @@ function renderOverview(view){
     </article>
     <article class="summary-card resource-card">
       <h2>硬盘</h2>
-      <div class="card-detail resource-value">${escapeHtml(resources.diskText)}</div>
+      <div class="card-detail resource-value single-line-value" data-fit-single-line="overview-disk" title="${escapeHtml(resources.diskText)}">${escapeHtml(resources.diskValueText)}${parenthesizedMeta(resources.diskLabel)}</div>
       ${resourceBar(resources.diskPercent, '硬盘使用率')}
     </article>
     <article class="summary-card metric-card">
@@ -707,7 +787,7 @@ function renderHardware(view){
     <article class="health-card"><h2>Lucky运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.lucky.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.lucky.version?.current))})</span></div></article>
     <article class="health-card"><h2>EasyTier运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.easytier.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.easytier.node?.version))})</span></div></article>
     <article class="health-card"><h2>系统已运行时间</h2><div class="health-value power-on-value">${uptime === null ? '-' : `${formatInteger(uptime.hours)} h <span class="power-on-days">(约${uptime.days}天)</span>`}</div></article>
-    <article class="health-card"><h2>操作系统版本</h2><div class="health-value health-text" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div></article>`;
+    <article class="health-card"><h2>操作系统版本</h2><div class="health-value health-text" title="${escapeHtml(conciseOsVersion(view.host, view.hardware))}">${escapeHtml(conciseOsVersion(view.host, view.hardware))}</div></article>`;
   requestAnimationFrame(fitOverviewSingleLineValues);
 }
 
@@ -769,27 +849,34 @@ function hardwareUsageMarkup(label, value){
   return `<article class="hardware-usage-item"><strong>${escapeHtml(label)}</strong>${resourceBar(number, label)}</article>`;
 }
 
-function filesystemBelongsToDisk(filesystem, disk){
-  const diskID = diskName(disk);
-  const backing = Array.isArray(filesystem?.backing_disk_ids) ? filesystem.backing_disk_ids : [];
-  if(backing.some(value => deviceShortName(value) === diskID)) return true;
-  const source = deviceShortName(filesystem?.source);
-  if(source === '-' || !/^[A-Za-z0-9._+-]+$/.test(diskID)) return false;
-  const escapedDiskID = diskID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const partitionSuffix = /\d$/.test(diskID) ? 'p\\d+' : '\\d+';
-  return new RegExp(`^${escapedDiskID}(?:${partitionSuffix})?$`).test(source);
+function cpuInstructionDetailRow(value){
+  return `<div class="detail-row hardware-cpu-instruction-row"><dt>指令集</dt><dd class="wrap-value">${escapeHtml(textOrDash(value))}</dd></div>`;
 }
 
-function partitionRowsForDisk(disk, filesystems){
-  return filesystems.filter(filesystem => filesystemBelongsToDisk(filesystem, disk));
+function diskPowerOnText(disk){
+  const hours = diskPowerOnHours(disk);
+  if(hours === null) return '-';
+  return `${formatInteger(hours)} h (约${(hours / 24).toFixed(2)}天)`;
 }
 
-function partitionDisplay(filesystem){
-  if(!filesystem) return '-';
-  const source = textOrDash(filesystem.source);
-  const mountpoint = textOrDash(filesystem.mountpoint);
-  const type = textOrDash(filesystem.fs_type || filesystem.filesystem_type);
-  return `${source} (${mountpoint}) · ${type}`;
+function renderPhysicalDiskRows(hardware){
+  const physicalDisks = physicalDisksForView(hardware);
+  if(!physicalDisks.length) return '<tr><td colspan="6" class="table-empty">暂无可显示的物理磁盘数据</td></tr>';
+  return physicalDisks.map(disk => {
+    const device = textOrDash(disk.device || disk.id);
+    const model = textOrDash(disk.model);
+    return `<tr><td class="mono">${escapeHtml(device)}</td><td class="wide-cell" title="${escapeHtml(model)}">${escapeHtml(model)}</td><td>${escapeHtml(formatBytes(valueAt(disk, ['capacity_bytes', 'size_bytes'])))}</td><td>${escapeHtml(formatCelsius(diskTemperatureC(disk)))}</td><td>${diskSmartMarkup(disk)}</td><td>${escapeHtml(diskPowerOnText(disk))}</td></tr>`;
+  }).join('');
+}
+
+function renderFilesystemDetails(hardware){
+  const filesystems = dataFilesystemItemsForView(hardware);
+  if(!filesystems.length) return '<tr><td colspan="6" class="table-empty">暂无可显示的卷或文件系统数据</td></tr>';
+  return filesystems.map(filesystem => {
+    const usage = valueAt(filesystem, ['usage_percent', 'used_percent']);
+    const status = filesystem?.collection_status;
+    return `<tr><td class="mono">${escapeHtml(textOrDash(filesystem.mountpoint))}</td><td class="wide-cell mono" title="${escapeHtml(textOrDash(filesystem.source))}">${escapeHtml(textOrDash(filesystem.source))}</td><td>${escapeHtml(textOrDash(filesystem.fs_type || filesystem.filesystem_type))}</td><td>${escapeHtml(filesystemUsage(filesystem))}</td><td class="table-usage">${resourceBar(usage, '文件系统使用率')}</td><td>${status === null || status === undefined || status === '' ? '-' : badge(status)}</td></tr>`;
+  }).join('');
 }
 
 function renderHardwareDetails(view){
@@ -802,13 +889,13 @@ function renderHardwareDetails(view){
   const prettyName = textOrDash(system.pretty_name || view.host.os);
   const cpuInfo = [
     ['架构', textOrDash(cpu.architecture)],
-    ['步进', textOrDash(cpu.stepping)],
-    ['逻辑处理器', cpuLogicalProcessorText(cpu)],
-    ['当前频率', formatMHz(cpu.current_mhz)],
     ['频率（最低 / 最高）', `${formatMHz(cpu.min_mhz)} / ${formatMHz(cpu.max_mhz)}`],
-    ['虚拟化', textOrDash(cpu.virtualization)]
+    ['逻辑处理器', cpuLogicalProcessorText(cpu)],
+    ['当前频率', formatMHz(cpu.current_mhz)]
   ];
-  byId('hardwareCpuInfo').innerHTML = cpuInfo.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+  byId('hardwareCpuInfo').innerHTML = cpuInfo
+    .map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value'))
+    .concat(cpuInstructionDetailRow(cpu.instruction_sets)).join('');
 
   const usageItems = [
     ['总使用率', cpuUsage.total_percent], ['I/O 等待', cpuUsage.iowait_percent],
@@ -818,7 +905,6 @@ function renderHardwareDetails(view){
   byId('hardwareCpuUsage').innerHTML = usageItems.length
     ? usageItems.map(([label, value]) => hardwareUsageMarkup(label, value)).join('')
     : '<div class="table-empty">暂无可显示的 CPU 使用率数据</div>';
-
   const memoryRows = [
     ['物理内存已用 / 可用 / 总量', finiteNumber(memory.used_bytes) === null && finiteNumber(memory.available_bytes) === null && finiteNumber(memory.total_bytes) === null ? '-' : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.available_bytes)} / ${formatBytes(memory.total_bytes)} (${formatPercentage(memoryUsedPercent(memory))})`],
     ['活动 / 非活动', `${formatBytes(memory.active_bytes)} / ${formatBytes(memory.inactive_bytes)}`],
@@ -842,19 +928,8 @@ function renderHardwareDetails(view){
     ['内核', textOrDash(system.kernel_release || hardware.kernel_release)]
   ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 
-  const filesystems = filesystemItemsForView(hardware);
-  const physicalDisks = physicalDisksForView(hardware);
-  byId('hardwareDisksBody').innerHTML = physicalDisks.length
-    ? physicalDisks.flatMap(disk => {
-      const device = textOrDash(disk.device || disk.id);
-      const model = textOrDash(disk.model);
-      const partitions = partitionRowsForDisk(disk, filesystems);
-      return (partitions.length ? partitions : [null]).map(filesystem => {
-        const usage = filesystem ? valueAt(filesystem, ['usage_percent', 'used_percent']) : null;
-        return `<tr><td class="mono">${escapeHtml(device)}</td><td class="wide-cell" title="${escapeHtml(model)}">${escapeHtml(model)}</td><td>${escapeHtml(formatBytes(valueAt(disk, ['capacity_bytes', 'size_bytes'])))}</td><td>${escapeHtml(formatCelsius(diskTemperatureC(disk)))}</td><td>${badge(disk.smart_status ?? 'unknown')}</td><td>${escapeHtml(diskPowerOnHours(disk) === null ? '-' : `${formatInteger(diskPowerOnHours(disk))} h`)}</td><td class="wide-cell mono" title="${escapeHtml(partitionDisplay(filesystem))}">${escapeHtml(partitionDisplay(filesystem))}</td><td>${escapeHtml(filesystem ? filesystemUsage(filesystem) : '-')}</td><td class="table-usage">${filesystem ? resourceBar(usage, '分区使用率') : '-'}</td></tr>`;
-      });
-    }).join('')
-    : '<tr><td colspan="9" class="table-empty">暂无可显示的物理磁盘数据</td></tr>';
+  byId('hardwareDisksBody').innerHTML = renderPhysicalDiskRows(hardware);
+  byId('hardwareFilesystemsBody').innerHTML = renderFilesystemDetails(hardware);
 }
 
 function renderLuckyTables(view){
@@ -894,7 +969,26 @@ function sumLuckyValues(items, field){
 	return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
 }
 
+function luckyServiceSummaryItems(lucky){
+	const normalized = safeObject(lucky);
+	if(normalized.status === 'not_configured'){
+		return [['进程状态', '未配置'], ['API 可用性', '未配置'], ['API 错误', '-']];
+	}
+	const service = safeObject(normalized.service);
+	const serviceError = safeObject(service.error);
+	const apiError = serviceError.http_status
+		? `HTTP ${serviceError.http_status}`
+		: textOrDash(serviceError.code || serviceError.message);
+	return [
+		['进程状态', service.process_running === null || service.process_running === undefined ? '未知' : service.process_running ? '运行中' : '未运行'],
+		['API 可用性', service.api_reachable ? '可用' : '不可用'],
+		['API 错误', service.api_reachable ? '-' : apiError]
+	];
+}
+
 function renderLucky(view){
+	byId('luckyServiceSummary').innerHTML = luckyServiceSummaryItems(view.lucky)
+		.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 	renderLuckyTables(view);
 }
 
@@ -995,7 +1089,7 @@ function renderProfiles(view){
       <td>${escapeHtml(formatPair(profile.scheduled_jobs_active, profile.scheduled_jobs_total))}</td>
       <td>${escapeHtml(formatPair(profile.sessions_active, profile.sessions_total))}</td>
       <td class="token-cell">${escapeHtml(tokenBreakdown(profile.usage))}${profile.usage?.estimated ? '<span class="estimate-mark" title="估算值">估算</span>' : ''}</td>
-    </tr>`).join('') : '<tr><td colspan="9" class="table-empty">暂无 Hermes Profile 数据</td></tr>';
+    </tr>`).join('') : `<tr><td colspan="9" class="table-empty">${view.hermes?.error?.code === 'not_installed' ? '未安装 Hermes Agent' : '暂无 Hermes Profile 数据'}</td></tr>`;
 }
 
 function renderContainers(view){
@@ -1624,6 +1718,7 @@ const exported = {
 	buildProvenanceMarkup,
   canonicalDashboardHash,
   cleanCpuModel,
+  conciseOsVersion,
   collectWarnings,
   cpuLogicalProcessorText,
   createRefreshController,
@@ -1638,14 +1733,19 @@ const exported = {
 	formatCelsius,
   formatTrafficBytes,
   formatUptimeHours,
-	filesystemBackingDisks,
+  filesystemBackingDisks,
 	filesystemItemsForView,
-	partitionRowsForDisk,
+	dataFilesystemItemsForView,
+	luckyServiceSummaryItems,
+  diskPowerOnText,
+  homeDiskUsage,
 	memoryDetailsForView,
 	memoryUsedPercent,
 	ipv6UdpDirectText,
   maximumTemperature,
   physicalDisksForView,
+  renderFilesystemDetails,
+  renderPhysicalDiskRows,
   formatPair,
   profileSummary,
   modelBreakdown,
