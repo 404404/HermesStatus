@@ -578,7 +578,7 @@ function statusTone(value){
   if(status.startsWith('exited') || status.startsWith('dead')) return 'err';
   if(status.startsWith('created') || status.startsWith('paused') || status.startsWith('restarting') || status.startsWith('removing')) return 'warn';
 	if(['passed', 'running', 'ok', 'healthy', 'up', 'active', 'valid'].includes(status)) return 'ok';
-	if(['degraded', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error', 'mismatch', 'unsupported', 'unsupported_version'].includes(status)) return 'warn';
+	if(['degraded', 'partial', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error', 'mismatch', 'unsupported', 'unsupported_version'].includes(status)) return 'warn';
 	if(['failed', 'down', 'offline', 'disabled', 'stopped', 'unauthorized', 'timeout', 'dead', 'exited', 'error', 'expired', 'invalid', 'unavailable'].includes(status)) return 'err';
   return 'neutral';
 }
@@ -589,7 +589,7 @@ function statusText(value){
     passed: '通过', failed: '失败', unknown: '未知', unavailable: '不可用',
     running: '运行中', healthy: '正常', ok: '正常', active: '活动',
     stopped: '已停止', down: '离线', unauthorized: '未授权', timeout: '超时',
-		exited: '已退出', dead: '异常', degraded: '部分异常', stale: '已陈旧',
+		exited: '已退出', dead: '异常', degraded: '部分异常', partial: '部分采集', stale: '已陈旧',
 		not_configured: '未配置', error: '异常', valid: '有效', expiring: '即将到期',
 		expired: '已过期', not_yet_valid: '尚未生效', invalid: '无效',
 		supported: '支持', unsupported: '不支持', matched: '匹配', mismatch: '不匹配', not_observable: '未观察到',
@@ -844,27 +844,30 @@ function hardwareUsageMarkup(label, value){
   return `<article class="hardware-usage-item"><strong>${escapeHtml(label)}</strong>${resourceBar(number, label)}</article>`;
 }
 
-function filesystemBelongsToDisk(filesystem, disk){
-  const diskID = diskName(disk);
-  const backing = Array.isArray(filesystem?.backing_disk_ids) ? filesystem.backing_disk_ids : [];
-  if(backing.some(value => deviceShortName(value) === diskID)) return true;
-  const source = deviceShortName(filesystem?.source);
-  if(source === '-' || !/^[A-Za-z0-9._+-]+$/.test(diskID)) return false;
-  const escapedDiskID = diskID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const partitionSuffix = /\d$/.test(diskID) ? 'p\\d+' : '\\d+';
-  return new RegExp(`^${escapedDiskID}(?:${partitionSuffix})?$`).test(source);
+function diskPowerOnText(disk){
+  const hours = diskPowerOnHours(disk);
+  if(hours === null) return '-';
+  return `${formatInteger(hours)} h (约${(hours / 24).toFixed(2)}天)`;
 }
 
-function partitionRowsForDisk(disk, filesystems){
-  return filesystems.filter(filesystem => filesystemBelongsToDisk(filesystem, disk));
+function renderPhysicalDiskRows(hardware){
+  const physicalDisks = physicalDisksForView(hardware);
+  if(!physicalDisks.length) return '<tr><td colspan="6" class="table-empty">暂无可显示的物理磁盘数据</td></tr>';
+  return physicalDisks.map(disk => {
+    const device = textOrDash(disk.device || disk.id);
+    const model = textOrDash(disk.model);
+    return `<tr><td class="mono">${escapeHtml(device)}</td><td class="wide-cell" title="${escapeHtml(model)}">${escapeHtml(model)}</td><td>${escapeHtml(formatBytes(valueAt(disk, ['capacity_bytes', 'size_bytes'])))}</td><td>${escapeHtml(formatCelsius(diskTemperatureC(disk)))}</td><td>${diskSmartMarkup(disk)}</td><td>${escapeHtml(diskPowerOnText(disk))}</td></tr>`;
+  }).join('');
 }
 
-function partitionDisplay(filesystem){
-  if(!filesystem) return '-';
-  const source = textOrDash(filesystem.source);
-  const mountpoint = textOrDash(filesystem.mountpoint);
-  const type = textOrDash(filesystem.fs_type || filesystem.filesystem_type);
-  return `${source} (${mountpoint}) · ${type}`;
+function renderFilesystemDetails(hardware){
+  const filesystems = dataFilesystemItemsForView(hardware);
+  if(!filesystems.length) return '<tr><td colspan="6" class="table-empty">暂无可显示的卷或文件系统数据</td></tr>';
+  return filesystems.map(filesystem => {
+    const usage = valueAt(filesystem, ['usage_percent', 'used_percent']);
+    const status = filesystem?.collection_status;
+    return `<tr><td class="mono">${escapeHtml(textOrDash(filesystem.mountpoint))}</td><td class="wide-cell mono" title="${escapeHtml(textOrDash(filesystem.source))}">${escapeHtml(textOrDash(filesystem.source))}</td><td>${escapeHtml(textOrDash(filesystem.fs_type || filesystem.filesystem_type))}</td><td>${escapeHtml(filesystemUsage(filesystem))}</td><td class="table-usage">${resourceBar(usage, '文件系统使用率')}</td><td>${status === null || status === undefined || status === '' ? '-' : badge(status)}</td></tr>`;
+  }).join('');
 }
 
 function renderHardwareDetails(view){
@@ -877,11 +880,9 @@ function renderHardwareDetails(view){
   const prettyName = textOrDash(system.pretty_name || view.host.os);
   const cpuInfo = [
     ['架构', textOrDash(cpu.architecture)],
-    ['步进', textOrDash(cpu.stepping)],
-    ['逻辑处理器', cpuLogicalProcessorText(cpu)],
-    ['当前频率', formatMHz(cpu.current_mhz)],
     ['频率（最低 / 最高）', `${formatMHz(cpu.min_mhz)} / ${formatMHz(cpu.max_mhz)}`],
-    ['虚拟化', textOrDash(cpu.virtualization)]
+    ['逻辑处理器', cpuLogicalProcessorText(cpu)],
+    ['当前频率', formatMHz(cpu.current_mhz)]
   ];
   byId('hardwareCpuInfo').innerHTML = cpuInfo.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 
@@ -894,7 +895,7 @@ function renderHardwareDetails(view){
     ? usageItems.map(([label, value]) => hardwareUsageMarkup(label, value)).join('')
     : '<div class="table-empty">暂无可显示的 CPU 使用率数据</div>';
   byId('hardwareCpuInstructionSets').innerHTML = detailRow(
-    'CPU 指令集', escapeHtml(textOrDash(cpu.instruction_sets)), 'wrap-value'
+    '指令集', escapeHtml(textOrDash(cpu.instruction_sets)), 'wrap-value'
   );
 
   const memoryRows = [
@@ -920,19 +921,8 @@ function renderHardwareDetails(view){
     ['内核', textOrDash(system.kernel_release || hardware.kernel_release)]
   ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 
-  const filesystems = dataFilesystemItemsForView(hardware);
-  const physicalDisks = physicalDisksForView(hardware);
-  byId('hardwareDisksBody').innerHTML = physicalDisks.length
-    ? physicalDisks.flatMap(disk => {
-      const device = textOrDash(disk.device || disk.id);
-      const model = textOrDash(disk.model);
-      const partitions = partitionRowsForDisk(disk, filesystems);
-      return (partitions.length ? partitions : [null]).map(filesystem => {
-        const usage = filesystem ? valueAt(filesystem, ['usage_percent', 'used_percent']) : null;
-        return `<tr><td class="mono">${escapeHtml(device)}</td><td class="wide-cell" title="${escapeHtml(model)}">${escapeHtml(model)}</td><td>${escapeHtml(formatBytes(valueAt(disk, ['capacity_bytes', 'size_bytes'])))}</td><td>${escapeHtml(formatCelsius(diskTemperatureC(disk)))}</td><td>${diskSmartMarkup(disk)}</td><td>${escapeHtml(diskPowerOnHours(disk) === null ? '-' : `${formatInteger(diskPowerOnHours(disk))} h`)}</td><td class="wide-cell mono" title="${escapeHtml(partitionDisplay(filesystem))}">${escapeHtml(partitionDisplay(filesystem))}</td><td>${escapeHtml(filesystem ? filesystemUsage(filesystem) : '-')}</td><td class="table-usage">${filesystem ? resourceBar(usage, '分区使用率') : '-'}</td></tr>`;
-      });
-    }).join('')
-    : '<tr><td colspan="9" class="table-empty">暂无可显示的物理磁盘数据</td></tr>';
+  byId('hardwareDisksBody').innerHTML = renderPhysicalDiskRows(hardware);
+  byId('hardwareFilesystemsBody').innerHTML = renderFilesystemDetails(hardware);
 }
 
 function renderLuckyTables(view){
@@ -1730,13 +1720,15 @@ const exported = {
   filesystemBackingDisks,
   filesystemItemsForView,
   dataFilesystemItemsForView,
+  diskPowerOnText,
   homeDiskUsage,
-	partitionRowsForDisk,
 	memoryDetailsForView,
 	memoryUsedPercent,
 	ipv6UdpDirectText,
   maximumTemperature,
   physicalDisksForView,
+  renderFilesystemDetails,
+  renderPhysicalDiskRows,
   formatPair,
   profileSummary,
   modelBreakdown,

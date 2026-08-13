@@ -168,7 +168,8 @@ body.light .health-card{background:#fff}
 .hardware-memory-grid .detail-row dt,.hardware-memory-grid .detail-row dd{white-space:nowrap}
 .hardware-memory-grid .detail-row dd.memory-value{overflow:visible;text-overflow:clip}
 .hardware-memory-placeholder{border-bottom:1px solid var(--border)}
-.hardware-disks-table{min-width:1260px!important}
+.hardware-disks-table{min-width:900px!important}
+.hardware-filesystems-table{min-width:980px!important}
 .table-usage{min-width:150px;padding:.45rem .8rem!important}
 .table-usage .usage-bar{margin:0;min-width:130px;height:22px;flex-basis:22px}
 .table-usage .usage-bar span{font-size:11px}
