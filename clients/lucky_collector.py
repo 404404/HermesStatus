@@ -127,7 +127,7 @@ def unavailable_lucky(code="connection_refused", http_status=None,
     error = _error(code, _error_message(code), "lucky", True, http_status)
     result.update({"status": "unavailable", "source": "local_api", "error": error})
     result["service"].update({
-        "state": "running" if process_running is True else "unknown",
+        "state": "running" if process_running is True else "stopped" if process_running is False else "unknown",
         "process_running": process_running,
         "process_pid": process_pid,
         "api_reachable": False,

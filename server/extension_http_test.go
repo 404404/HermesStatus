@@ -73,4 +73,14 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 	if _, ok := statsServer["properties"].(map[string]any)["easytier_expectation"]; !ok {
 		t.Fatalf("StatsServer is missing the emitted easytier_expectation property: %#v", statsServer)
 	}
+	cpuDetails := schemas["CPUDetails"].(map[string]any)
+	required := cpuDetails["required"].([]string)
+	for _, field := range required {
+		if field == "instruction_sets" {
+			t.Fatalf("CPUDetails incorrectly requires additive instruction_sets: %#v", required)
+		}
+	}
+	if _, ok := cpuDetails["properties"].(map[string]any)["instruction_sets"]; !ok {
+		t.Fatalf("CPUDetails is missing the optional instruction_sets property: %#v", cpuDetails)
+	}
 }

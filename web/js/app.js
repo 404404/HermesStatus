@@ -969,17 +969,26 @@ function sumLuckyValues(items, field){
 	return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
 }
 
-function renderLucky(view){
-	const service = safeObject(view.lucky.service);
+function luckyServiceSummaryItems(lucky){
+	const normalized = safeObject(lucky);
+	if(normalized.status === 'not_configured'){
+		return [['进程状态', '未配置'], ['API 可用性', '未配置'], ['API 错误', '-']];
+	}
+	const service = safeObject(normalized.service);
 	const serviceError = safeObject(service.error);
 	const apiError = serviceError.http_status
 		? `HTTP ${serviceError.http_status}`
 		: textOrDash(serviceError.code || serviceError.message);
-	byId('luckyServiceSummary').innerHTML = [
+	return [
 		['进程状态', service.process_running === null || service.process_running === undefined ? '未知' : service.process_running ? '运行中' : '未运行'],
 		['API 可用性', service.api_reachable ? '可用' : '不可用'],
 		['API 错误', service.api_reachable ? '-' : apiError]
-	].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+	];
+}
+
+function renderLucky(view){
+	byId('luckyServiceSummary').innerHTML = luckyServiceSummaryItems(view.lucky)
+		.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 	renderLuckyTables(view);
 }
 
@@ -1725,8 +1734,9 @@ const exported = {
   formatTrafficBytes,
   formatUptimeHours,
   filesystemBackingDisks,
-  filesystemItemsForView,
-  dataFilesystemItemsForView,
+	filesystemItemsForView,
+	dataFilesystemItemsForView,
+	luckyServiceSummaryItems,
   diskPowerOnText,
   homeDiskUsage,
 	memoryDetailsForView,

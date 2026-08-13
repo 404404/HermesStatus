@@ -137,7 +137,9 @@ func extensionOpenAPISchemas() map[string]any {
 		},
 	)
 	cpuDetails := requiredObject(
-		[]string{"architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "instruction_sets", "usage"},
+		// instruction_sets is an additive optional field so older Device v2
+		// clients remain valid while a server upgrade is rolling out.
+		[]string{"architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "usage"},
 		map[string]any{
 			"architecture": nullableString(MaxCPUTextLength, "CPU architecture"), "vendor": nullableString(MaxCPUTextLength, "CPU vendor"),
 			"family": nullableString(MaxCPUTextLength, "CPU family"), "model_id": nullableString(MaxCPUTextLength, "CPU model identifier"),

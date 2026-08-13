@@ -184,6 +184,12 @@ async function run(){
   assert.equal(empty.containers.length, 0);
   assert.equal(empty.hardware.cpu_temperature, null);
   assert.equal(app.luckyIsConfigured(empty.lucky), false);
+  assert.deepEqual(app.luckyServiceSummaryItems({status: 'not_configured'}), [
+    ['进程状态', '未配置'], ['API 可用性', '未配置'], ['API 错误', '-']
+  ]);
+  assert.deepEqual(app.luckyServiceSummaryItems({
+    status: 'unavailable', service: {process_running: false, api_reachable: false, error: {code: 'connection_refused'}}
+  }), [['进程状态', '未运行'], ['API 可用性', '不可用'], ['API 错误', 'connection_refused']]);
 
   const dsmHardware = {
     system_identity: {distribution: 'Synology DSM', source: 'dsm-version', version: '7.2.1-69057 Update 1'},

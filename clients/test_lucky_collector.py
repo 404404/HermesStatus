@@ -357,6 +357,16 @@ class LuckyCollectorTests(unittest.TestCase):
         self.assertNotIn("status", payload["version"])
         self.assertNotIn("fixture-value", json.dumps(payload))
 
+    def test_unavailable_lucky_reports_confirmed_stopped_process(self):
+        payload = LuckyCollector(
+            enabled=True,
+            request_func=lambda path, headers: (_ for _ in ()).throw(LuckyAPIError("connection_refused")),
+            process_state_func=lambda: (False, None),
+        ).collect(FIXED_NOW)
+        self.assertEqual(payload["status"], "unavailable")
+        self.assertFalse(payload["service"]["process_running"])
+        self.assertEqual(payload["service"]["state"], "stopped")
+
     def test_version_redirect_preserves_fixed_info_backend_failure(self):
         def request(path, headers):
             if path == "/version":
