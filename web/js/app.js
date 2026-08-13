@@ -881,6 +881,9 @@ function renderHardwareDetails(view){
   byId('hardwareCpuUsage').innerHTML = usageItems.length
     ? usageItems.map(([label, value]) => hardwareUsageMarkup(label, value)).join('')
     : '<div class="table-empty">暂无可显示的 CPU 使用率数据</div>';
+  byId('hardwareCpuInstructionSets').innerHTML = detailRow(
+    'CPU 指令集', escapeHtml(textOrDash(cpu.instruction_sets)), 'wrap-value'
+  );
 
   const memoryRows = [
     ['物理内存已用 / 可用 / 总量', finiteNumber(memory.used_bytes) === null && finiteNumber(memory.available_bytes) === null && finiteNumber(memory.total_bytes) === null ? '-' : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.available_bytes)} / ${formatBytes(memory.total_bytes)} (${formatPercentage(memoryUsedPercent(memory))})`],

@@ -157,6 +157,7 @@ body.light .health-card{background:#fff}
 .hardware-cpu-column{min-width:0}
 .hardware-cpu-column+.hardware-cpu-column{border-left:1px solid var(--border)}
 .hardware-cpu-info{grid-template-columns:1fr}
+.detail-list.hardware-cpu-instruction-sets{grid-template-columns:minmax(0,1fr) minmax(0,5fr);padding:0 1.35rem 1.35rem}
 #hardwareCpuUsage.hardware-cpu-usage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .hardware-usage-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.9rem;padding:0 1.35rem 1.35rem}
 .hardware-usage-item{display:grid;grid-template-columns:minmax(0,auto) minmax(96px,1fr);align-items:center;gap:.65rem;min-width:0;padding:.9rem 1rem;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--bg-alt) 78%,transparent)}
@@ -295,6 +296,7 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
     .device-select-label{display:block}
     .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list,.easytier-command-grid,.hardware-usage-grid,.hardware-cpu-columns,.hardware-memory-grid{grid-template-columns:1fr}
     .detail-list.hardware-three-column-info{grid-template-columns:1fr}
+    .detail-list.hardware-cpu-instruction-sets{grid-template-columns:1fr}
     .hardware-cpu-column+.hardware-cpu-column{border-top:1px solid var(--border);border-left:0}
     .overview-grid .summary-card:last-child,.health-grid .health-card:last-child{grid-column:auto}
     .section-head{display:block}

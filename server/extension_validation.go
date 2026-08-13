@@ -333,7 +333,7 @@ func ValidateCPUDetails(details *CPUDetails) error {
 		"architecture": details.Architecture, "vendor": details.Vendor, "family": details.Family,
 		"model_id": details.ModelID, "model_name": details.ModelName, "stepping": details.Stepping,
 		"virtualization": details.Virtualization, "l1d_cache": details.L1DCache, "l1i_cache": details.L1ICache,
-		"l2_cache": details.L2Cache, "l3_cache": details.L3Cache,
+		"l2_cache": details.L2Cache, "l3_cache": details.L3Cache, "instruction_sets": details.InstructionSets,
 	} {
 		if err := validateOptionalString("hardware.cpu_details."+field, value, MaxCPUTextLength); err != nil {
 			return err
@@ -1445,7 +1445,7 @@ func validateRequiredHardware(raw json.RawMessage) error {
 		return err
 	}
 	if raw, ok := object["cpu_details"]; ok {
-		if err := validateNullableObjectFields(raw, "hardware.cpu_details", "architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "usage"); err != nil {
+		if err := validateNullableObjectFields(raw, "hardware.cpu_details", "architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "instruction_sets", "usage"); err != nil {
 			return err
 		}
 		if !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {

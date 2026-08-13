@@ -204,6 +204,7 @@ class HostCollectorTests(unittest.TestCase):
             {"field": "Thread(s) per core:", "data": "2"},
             {"field": "CPU max MHz:", "data": "3400.0"},
             {"field": "L3 cache:", "data": "4 MiB"},
+            {"field": "Flags:", "data": "sse sse2 avx avx2 vmx"},
         ]})
         with tempfile.TemporaryDirectory() as root:
             cpuinfo = Path(root) / "cpuinfo"
@@ -216,6 +217,7 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(details["logical_cpus"], 4)
         self.assertEqual(details["current_mhz"], 1500.0)
         self.assertEqual(details["l3_cache"], "4 MiB")
+        self.assertEqual(details["instruction_sets"], "SSE, SSE2, AVX, AVX2, VT-x")
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "stat"
             path.write_text("cpu  100 10 20 800 30 4 6 2\n", encoding="utf-8")

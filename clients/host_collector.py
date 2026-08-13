@@ -80,6 +80,12 @@ _CPU_LSCPU_FLOAT_FIELDS = {
     "cpu min mhz": "min_mhz",
     "cpu mhz": "current_mhz",
 }
+_CPU_INSTRUCTION_SET_FLAGS = (
+    ("sse", "SSE"), ("sse2", "SSE2"), ("sse4_1", "SSE4.1"),
+    ("sse4_2", "SSE4.2"), ("aes", "AES"), ("avx", "AVX"),
+    ("avx2", "AVX2"), ("avx512f", "AVX-512"), ("fma", "FMA"),
+    ("sha_ni", "SHA"), ("vmx", "VT-x"), ("svm", "AMD-V"),
+)
 _CPU_STAT_FIELDS = (
     "user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal",
 )
@@ -538,6 +544,11 @@ def collect_cpu_details(command_runner=None, cpuinfo_path="/proc/cpuinfo"):
     if details["current_mhz"] is None:
         details["current_mhz"] = _cpuinfo_current_mhz(cpuinfo_path)
     details["model_name"] = _nullable_text(values.get("model name"), MAX_CPU_MODEL_LENGTH)
+    # Keep only named, user-meaningful CPU capabilities.  The full lscpu
+    # flags value is intentionally never projected as arbitrary command output.
+    flags = set(str(values.get("flags") or values.get("features") or "").lower().split())
+    instruction_sets = [label for flag, label in _CPU_INSTRUCTION_SET_FLAGS if flag in flags]
+    details["instruction_sets"] = ", ".join(instruction_sets) or None
     return details, None
 
 

@@ -75,6 +75,7 @@ async function run(){
   assert.doesNotMatch(indexMarkup, /Lucky Monitoring|luckyHomeSummary|luckyHomeMeta/);
   assert.match(appSource, /<h2>EasyTier运行状态\/版本<\/h2>/);
   assert.match(appSource, /<h2>系统已运行时间<\/h2>/);
+  assert.match(appSource, /'CPU 指令集'/);
   assert.match(appSource, /<h2>运行中\/容器总数<\/h2>/);
   assert.match(appSource, /<h2>Lucky运行状态\/版本<\/h2>/);
   assert.match(appSource, /EasyTier远端节点数/);
