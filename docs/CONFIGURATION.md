@@ -100,10 +100,19 @@ defines the Hermes root and the named profiles to inspect. The exporter reads
 configuration and status through read-only mounts and writes a sanitized
 snapshot to the Client status directory.
 
-Lucky collection is opt-in. Set `LUCKY_ENABLED=true`, provide
-`LUCKY_BASE_URL`, and use `LUCKY_TOKEN_FILE` rather than embedding a token in a
-Compose file. Keep `LUCKY_VERIFY_TLS=true` for HTTPS endpoints unless an
-explicit, temporary compatibility decision requires otherwise.
+Lucky collection is opt-in. Its local default is
+`https://127.0.0.1:16601`; the Collector accepts only loopback HTTP(S) URLs.
+Set `LUCKY_ENABLED=true` and, when an installation requires authentication, use
+`LUCKY_AUTH_MODE=open_token` or `admin_token` with a protected
+`LUCKY_TOKEN_FILE` instead of embedding a token in Compose. Set
+`LUCKY_AUTH_MODE=none` and leave `LUCKY_TOKEN_FILE` unset when the local API
+does not require authentication.
+
+Keep `LUCKY_VERIFY_TLS=true` for HTTPS endpoints. An explicit
+`LUCKY_VERIFY_TLS=false` is permitted only for a locally administered,
+loopback-only Lucky endpoint whose certificate cannot be validated; it never
+permits a remote Lucky URL and the Collector never falls back to it
+automatically.
 
 ## EasyTier monitoring
 
