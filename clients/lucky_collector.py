@@ -20,6 +20,9 @@ MAX_ITEMS = 256
 MAX_TEXT = 256
 MAX_NAME = 128
 ALLOWED_SOURCES = {"api", "local_api", "config", "cli", "web_fallback", "unavailable"}
+DEFAULT_LUCKY_BASE_URL = "https://127.0.0.1:16601"
+LUCKY_AUTH_MODES = {"none", "open_token", "admin_token"}
+LUCKY_PROCESS_NAMES = {"lucky", "lucky_process"}
 
 _SECRET_PATTERN = re.compile(
     r"(?i)(authorization\s*:|bearer\s+\S+|api[_-]?key\s*[:=]|password\s*[:=]|"
@@ -163,7 +166,7 @@ def lucky_process_state(proc_root="/proc"):
                 process_name = handle.read(129).strip().lower()
         except OSError:
             continue
-        if process_name == "lucky":
+        if process_name in LUCKY_PROCESS_NAMES:
             return True, int(entry)
     return False, None
 
@@ -230,7 +233,9 @@ class LuckyClient(object):
         if parsed.scheme not in ("http", "https") or parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
             raise ValueError("Lucky base URL must use loopback HTTP or HTTPS")
         self.base_url = base_url.rstrip("/")
-        self.auth_mode = auth_mode
+        self.auth_mode = str(auth_mode or "none").strip().lower()
+        if self.auth_mode not in LUCKY_AUTH_MODES:
+            raise ValueError("Lucky authentication mode is invalid")
         self.token_file = token_file
         self.timeout = max(1, min(int(timeout), 30))
         self.verify_tls = bool(verify_tls)
@@ -257,9 +262,9 @@ class LuckyClient(object):
         return self._get_path("/api/webservice/rule/" + urllib.parse.quote(key, safe=""))
 
     def _get_path(self, path):
-        token = self._token()
+        token = self._token() if self.auth_mode != "none" else None
         headers = {"Accept": "application/json"}
-        if token:
+        if token and self.auth_mode != "none":
             header_name = "Lucky-Admin-Token" if self.auth_mode == "admin_token" else "openToken"
             headers[header_name] = token
         if self.request_func:
@@ -709,7 +714,7 @@ def _certificate(row, index, now, warning_days, local_timezone=None):
 
 
 class LuckyCollector(object):
-    def __init__(self, enabled=False, base_url="http://127.0.0.1:16601", auth_mode="open_token",
+    def __init__(self, enabled=False, base_url=DEFAULT_LUCKY_BASE_URL, auth_mode="none",
                  token_file=None, timeout=5, warning_days=30, version_check_ttl=21600,
                  verify_tls=True, request_func=None, local_timezone=None, process_state_func=None):
         self.enabled = bool(enabled)
@@ -917,9 +922,9 @@ def collector_from_environment(request_func=None):
     verify_tls = os.getenv("LUCKY_VERIFY_TLS", "true").strip().lower() not in ("0", "false", "no", "off")
     return LuckyCollector(
         enabled=enabled,
-        base_url=os.getenv("LUCKY_BASE_URL", "http://127.0.0.1:16601"),
-        auth_mode=os.getenv("LUCKY_AUTH_MODE", "open_token"),
-        token_file=os.getenv("LUCKY_TOKEN_FILE", "/run/secrets/lucky-open-token"),
+        base_url=os.getenv("LUCKY_BASE_URL", DEFAULT_LUCKY_BASE_URL),
+        auth_mode=os.getenv("LUCKY_AUTH_MODE", "none"),
+        token_file=os.getenv("LUCKY_TOKEN_FILE") or None,
         timeout=os.getenv("LUCKY_TIMEOUT_SECONDS", "5"),
         warning_days=os.getenv("LUCKY_CERT_WARNING_DAYS", "30"),
         version_check_ttl=os.getenv("LUCKY_VERSION_CHECK_TTL", "21600"),

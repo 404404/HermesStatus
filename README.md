@@ -11,7 +11,7 @@ HermesStatus 是自托管的当前状态面板。Go Server 接收 Client 上报�
 - Hardware 标签页位于主页与 Docker 之间。CPU 信息与 CPU 使用率在桌面端各占 1/2；右侧按两列显示总使用率、I/O 等待、用户态和内核态，条外不重复显示百分比，只保留进度条内数值。内存信息是原三列纵向结构的严格转置：四行三列依次为物理内存/活动-非活动/可回收 Slab、Swap/Buffers/Slab、空闲内存/页面缓存、Swap Cache/Dirty-Writeback，并在常见 16:9 桌面宽度下保持单行；系统信息仅显示操作系统版本、架构和内核。CPU 不显示厂商、系列/型号、拓扑、缓存、空闲、Nice、Steal、IRQ 或 SoftIRQ。独立的“文件系统/存储卷”区块已移除；经配置的只读文件系统 probe 仅用于为物理磁盘行关联分区/格式、已用/总容量和使用率条。LVM、MD RAID 与 device mapper 会列出可安全解析的后端物理磁盘；多设备 Btrfs 无法完整枚举成员时明确保留未知关系，绝不伪造单盘归属。该页不读取目录内容、磁盘序列号或 SMART 原始属性。
 - Docker 页面展示容器数量、名称、镜像、状态与端口摘要。
 - 主页同时展示已配置 Hermes Profile 的网关、运行状态、模型/提供商与用量快照；Profile 表头显示统一 Agent 版本与配置数量（例如 `Agent版本: 0.19.0，3个配置`）。
-- Lucky 页面在显式启用后展示版本、DDNS、Web 服务、端口转发和证书摘要。
+- Lucky 页面在显式启用后展示版本、DDNS、Web 服务、端口转发和证书摘要。Synology Lucky 2.27.2 的本地 Admin/API 使用严格回环的 `https://127.0.0.1:16601`、直接 JSON 与无认证；若其他安装要求认证，仍只支持受保护 token 文件。
 - EasyTier 页面在显式启用后先以独立状态模块显示每项只读采集命令，再展示节点、Configured vs Observed、Peer、Route、Connector 与流量的严格白名单投影。零远端节点是健康的“未观察到”状态：直连、中继和 IPv6 UDP Direct 不会被误报为 0 或 false。
 - 支持 Legacy TCP Agent；可选 Device v2 使用 Registry、digest credential 与受 HTTPS 代理保护的上报端点。
 

@@ -41,7 +41,10 @@ EasyTier health projection.
   model/provider, and usage snapshots. Its section header shows the shared
   Agent version and profile count (for example, `Agent version: 0.19.0, 3 profiles`).
 - Lucky: version, DDNS, web service, forwarding, and certificate summaries when
-  explicitly enabled.
+  explicitly enabled. Synology Lucky 2.27.2 uses the strict loopback
+  `https://127.0.0.1:16601` Admin/API endpoint with direct JSON and no
+  authentication; installations that require authentication still use only a
+  protected token file.
 - EasyTier: an opt-in, strict read-only loopback-RPC projection. Each
   collection command is shown first as an individual status card, followed by
   Node, Configured vs Observed, Peer, Route, Connector, and traffic views.

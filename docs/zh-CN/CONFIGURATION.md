@@ -54,7 +54,16 @@ Device v2 优先在 `client-v2.json` 中使用可选 `hardware` 对象：
 
 `HERMES_EXPORT_CONFIG` 指向 JSON 或 YAML exporter 配置，用于定义 Hermes 根目录和需要检查的 Profile。exporter 通过只读挂载读取配置与状态，并在 Client 状态目录写入脱敏快照。
 
-Lucky 采集为显式启用：设置 `LUCKY_ENABLED=true`、提供 `LUCKY_BASE_URL`，并通过 `LUCKY_TOKEN_FILE` 读取 token，不要将 token 写入 Compose 文件。HTTPS Lucky API 应保持 `LUCKY_VERIFY_TLS=true`。
+Lucky 采集为显式启用，默认本地地址为
+`https://127.0.0.1:16601`；Collector 只接受回环 HTTP(S) URL。设置
+`LUCKY_ENABLED=true` 后，如安装确实需要认证，使用
+`LUCKY_AUTH_MODE=open_token` 或 `admin_token` 并通过受保护的
+`LUCKY_TOKEN_FILE` 读取 token，不能将 token 写入 Compose 文件。若本地 API
+不要求认证，设置 `LUCKY_AUTH_MODE=none` 且不设置 `LUCKY_TOKEN_FILE`。
+
+HTTPS Lucky API 应保持 `LUCKY_VERIFY_TLS=true`。仅当本机管理的、严格回环的
+Lucky endpoint 证书无法验证时，才可显式设置 `LUCKY_VERIFY_TLS=false`；这不会
+允许远程 Lucky URL，Collector 也绝不会自动降级 TLS 验证。
 
 ## EasyTier 监控
 
