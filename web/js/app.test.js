@@ -246,6 +246,15 @@ async function run(){
   assert.equal(app.homeDiskUsage({hdd_used: 1, hdd_total: 2}, dsmHardware).label, null);
   assert.match(appSource, /view\.hermes\?\.error\?\.code === 'not_installed'/);
 
+  const noHermesAgent = statsDocument('normal');
+  noHermesAgent.servers[0].hermes = {
+    profiles: [], updated_at: '2026-08-20T00:00:00Z', stale: false,
+    error: {code: 'not_installed'}
+  };
+  const noHermesAgentView = app.buildViewModel(noHermesAgent);
+  assert.equal(app.collectWarnings(noHermesAgentView).length, 0);
+  assert.equal(app.dashboardCondition(noHermesAgentView).kind, 'ready');
+
   const degraded = app.buildViewModel(statsDocument('degraded'));
   assert.equal(app.collectWarnings(degraded).length, 5);
   assert.equal(degraded.hardware.disk_smart_status, 'unknown');

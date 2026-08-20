@@ -1135,7 +1135,12 @@ def profile_stats(profile, profile_dir, previous=None):
             "api_unavailable": "unavailable",
             "api_disabled": "unavailable",
         }.get(code, "error")
-    current_error = api.get("errors", [None])[0] if api.get("errors") else None
+    # A successful /health response is the authoritative Profile health
+    # signal.  Supplementary reads (jobs, sessions, or toolsets) may time out
+    # independently; preserve their own bounded diagnostic state, but do not
+    # contradict an otherwise healthy Profile with a stale top-level error.
+    api_healthy = api_ok and api.get("status") in ("ok", "healthy")
+    current_error = None if api_healthy else (api.get("errors", [None])[0] if api.get("errors") else None)
     cli_available = bool(cli)
     previous_used = not api_ok and not cli_available and bool(previous)
     updated_at = normalize_timestamp(previous.get("updated_at")) if previous_used else now

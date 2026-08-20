@@ -214,6 +214,14 @@ func TestTopologyOnlyDiskDoesNotDegradeAnOtherwiseHealthyDevice(t *testing.T) {
 	}
 }
 
+func TestNotInstalledHermesAgentDoesNotDegradeDevice(t *testing.T) {
+	if extensionHasBusinessError(ExtensionStats{
+		Hermes: &HermesStats{Error: &ExtensionError{Code: "not_installed", Source: "hermes"}},
+	}) {
+		t.Fatal("optional absent Hermes Agent degraded an otherwise healthy device")
+	}
+}
+
 func TestPartialSMARTAttributeFallbackIsStrictAndPreservesHealth(t *testing.T) {
 	stats := mustDecodeUpdate(t, "update-normal.json")
 	storage := validStorageFixture()
@@ -233,6 +241,21 @@ func TestPartialSMARTAttributeFallbackIsStrictAndPreservesHealth(t *testing.T) {
 	if storage.PhysicalDisks[0].SMARTStatus != DiskSMARTPassed {
 		t.Fatalf("partial fallback health was altered: %#v", storage.PhysicalDisks[0])
 	}
+	storage.Error = &ExtensionError{Code: "partial_failure", Source: "host-collector", Message: "safe"}
+	if extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &storage}}) {
+		t.Fatal("passed partial SMART fallback degraded an otherwise healthy device")
+	}
+
+	disk.SMARTStatus = DiskSMARTFailed
+	if !extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &storage}}) {
+		t.Fatal("failed partial SMART fallback did not degrade the device")
+	}
+	disk.SMARTStatus = DiskSMARTPassed
+	storage.Filesystems[0].CollectionStatus = "partial"
+	if !extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &storage}}) {
+		t.Fatal("partial filesystem state was hidden by SMART fallback handling")
+	}
+	storage.Filesystems[0].CollectionStatus = "healthy"
 
 	disk.NativeStatus = hardwareText("available")
 	if err := ValidateExtensionStats(stats); err == nil {

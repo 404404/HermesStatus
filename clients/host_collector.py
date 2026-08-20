@@ -1169,7 +1169,16 @@ def collect_smart_devices(devices="auto", command_runner=None):
     explicitly_disabled = isinstance(devices, (list, tuple)) and not devices
     if not candidates and not explicitly_disabled:
         errors.append(_error("smartctl_unavailable", "SMART data is unavailable", "smartctl", True))
-    return records, _select_error(errors)
+    # An attribute/threshold health fallback is a usable SMART observation
+    # with explicitly lower completeness.  Keep its per-disk warning so the
+    # Hardware page can explain the source, but do not turn the entire storage
+    # or hardware domain into a failure solely because native RETURN STATUS is
+    # unavailable through a USB bridge.
+    domain_errors = [
+        error for error in errors
+        if error.get("code") != "smart_return_status_unavailable"
+    ]
+    return records, _select_error(domain_errors)
 
 
 def collect_smart(device="auto", command_runner=None):
@@ -1614,7 +1623,9 @@ def _aggregate_smart_status(records):
     if any(smart and smart.get("health") == "failed" for _, smart, _ in records):
         return "failed"
     if records and all(
-        smart is not None and smart.get("health") == "passed" and error is None
+        smart is not None and smart.get("health") == "passed" and (
+            error is None or error.get("code") == "smart_return_status_unavailable"
+        )
         for _, smart, error in records
     ):
         return "passed"

@@ -316,20 +316,55 @@ func evaluateIdentity(
 	return "matched", nil
 }
 
+func usableSMARTAttributeFallback(disk PhysicalDiskStats) bool {
+	return disk.CollectionStatus == "partial" &&
+		disk.SMARTStatus == DiskSMARTPassed &&
+		disk.Error != nil && disk.Error.Code == "smart_return_status_unavailable"
+}
+
+func storageHasOnlyUsableSMARTAttributeFallback(storage *StorageStats) bool {
+	if storage == nil || storage.Error == nil ||
+		(storage.Error.Code != "smart_return_status_unavailable" && storage.Error.Code != "partial_failure") {
+		return false
+	}
+	hasFallback := false
+	for _, disk := range storage.PhysicalDisks {
+		switch {
+		case usableSMARTAttributeFallback(disk):
+			hasFallback = true
+		case disk.CollectionStatus == "healthy":
+		case disk.CollectionStatus == "unsupported" && disk.Error == nil:
+		default:
+			return false
+		}
+	}
+	for _, filesystem := range storage.Filesystems {
+		if filesystem.CollectionStatus != "healthy" {
+			return false
+		}
+	}
+	return hasFallback
+}
+
 func extensionHasBusinessError(extension ExtensionStats) bool {
 	var extensionErrors []*ExtensionError
 	if extension.Hardware != nil {
 		extensionErrors = append(extensionErrors, extension.Hardware.Error)
 		if storage := extension.Hardware.Storage; storage != nil {
-			extensionErrors = append(extensionErrors, storage.Error)
+			if !storageHasOnlyUsableSMARTAttributeFallback(storage) {
+				extensionErrors = append(extensionErrors, storage.Error)
+			}
 			for _, disk := range storage.PhysicalDisks {
 				// A topology-only disk is not necessarily an authorized SMART
 				// target. It is retained for safe physical-disk relationships,
 				// but `unsupported` without a collection error must not make an
-				// otherwise healthy device appear degraded.
+				// otherwise healthy device appear degraded. Likewise, a passed
+				// SMART attribute/threshold fallback is usable data with lower
+				// completeness, not a hardware failure.
 				if disk.SMARTStatus == DiskSMARTFailed ||
 					(disk.CollectionStatus != "healthy" &&
-						!(disk.CollectionStatus == "unsupported" && disk.Error == nil)) {
+						!(disk.CollectionStatus == "unsupported" && disk.Error == nil) &&
+						!usableSMARTAttributeFallback(disk)) {
 					return true
 				}
 			}

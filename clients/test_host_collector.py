@@ -367,6 +367,40 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(smart["native_status"], "unavailable")
         self.assertEqual(error["code"], "smart_return_status_unavailable")
 
+    def test_attribute_fallback_keeps_storage_domain_healthy(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 100, "worst": 100, "thresh": 36}]
+        }
+
+        def runner(command, _timeout):
+            if command[:1] == ["lsblk"]:
+                return 0, json.dumps({"blockdevices": [
+                    {"name": "sdu", "kname": "sdu", "type": "disk", "size": 1000},
+                ]})
+            if "-j" in command:
+                return 0, json.dumps(data)
+            return 0, (
+                "SMART Status not supported: Incomplete response\n"
+                "This result is based on an Attribute check.\n"
+                "SMART overall-health self-assessment test result: PASSED\n"
+            )
+
+        payload = collect_hardware(
+            "Example CPU",
+            smart_devices=[{"path": "/dev/sdu", "type": "sat"}],
+            command_runner=runner,
+            hwmon_root="/missing-hwmon",
+            sys_block_root="/no-sys-block",
+            now=FIXED_NOW,
+        )
+        disk = payload["storage"]["physical_disks"][0]
+        self.assertEqual(disk["collection_status"], "partial")
+        self.assertEqual(disk["smart_status"], "passed")
+        self.assertEqual(disk["error"]["code"], "smart_return_status_unavailable")
+        self.assertIsNone(payload["storage"]["error"])
+        self.assertEqual(payload["disk_smart_status"], "passed")
+
     def test_incomplete_bridge_attribute_fallback_can_be_failed(self):
         data = fixture_json("smart-normal.json")
         data["ata_smart_attributes"] = {
