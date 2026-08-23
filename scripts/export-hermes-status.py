@@ -277,8 +277,7 @@ def profile_config_path_for(profile):
     return _string(profile_config(profile).get("config_path")).strip()
 
 
-def profile_config_refreshed_at(profile):
-    path = profile_config_path_for(profile)
+def profile_config_refreshed_at(path):
     if not path:
         return None
     try:
@@ -1107,12 +1106,18 @@ def profile_stats(profile, profile_dir, previous=None):
     if usage.get("source") == "unavailable" and previous:
         usage = normalize_previous_usage(previous.get("usage"))
 
-    config_summary = summarize_config(
+    config_result = summarize_config(
         profile=profile,
         hermes_root=str(HERMES_ROOT),
         profile_dir=str(profile_dir),
         config_path=profile_config_path_for(profile),
+        return_source=True,
     )
+    if isinstance(config_result, tuple) and len(config_result) == 2:
+        config_summary, config_source_path = config_result
+    else:
+        # Keep compatibility with test doubles and older in-process helpers.
+        config_summary, config_source_path = config_result, None
     current_config_found = config_summary.get("config_found") is True
     if not current_config_found and isinstance(previous.get("config_summary"), dict):
         config_summary = sanitize_summary_snapshot(previous.get("config_summary"))
@@ -1125,11 +1130,8 @@ def profile_stats(profile, profile_dir, previous=None):
     # Only an actively read configuration is authoritative for the main model.
     configured_main_model = _dict(config_summary.get("main_model")) if current_config_found else {}
     configured_model = public_text(configured_main_model.get("model"), MAX_MODEL) or None
-    configured_provider = (
-        public_text(configured_main_model.get("provider"), MAX_PROVIDER)
-        or public_text(profile_configuration.get("provider_label"), MAX_PROVIDER)
-        or None
-    )
+    configured_provider = public_text(configured_main_model.get("provider"), MAX_PROVIDER) or None
+    profile_provider_label = public_text(profile_configuration.get("provider_label"), MAX_PROVIDER) or None
     # The profile configuration is the authoritative main-agent identity.  A
     # CLI status response can lag after an operator switches provider/model,
     # so only use it when the sanitized profile config has no corresponding
@@ -1137,7 +1139,13 @@ def profile_stats(profile, profile_dir, previous=None):
     # profiles.
     model = configured_model or cli.get("model") or first_string(detailed, ("model",)) or first_string(health, ("model",))
     model = fallback_value(model, previous, "model")
-    provider = configured_provider or cli.get("provider") or first_string(detailed, ("provider",)) or first_string(health, ("provider",))
+    provider = (
+        configured_provider
+        or cli.get("provider")
+        or first_string(detailed, ("provider",))
+        or first_string(health, ("provider",))
+        or profile_provider_label
+    )
     provider = fallback_value(provider, previous, "provider")
     configured_identity_selected = current_config_found and bool(configured_model or configured_provider)
     api_version = first_string(detailed, ("agent_version", "version")) or first_string(health, ("agent_version", "version"))
@@ -1192,7 +1200,7 @@ def profile_stats(profile, profile_dir, previous=None):
         usage_mode = provider_usage_mode(provider)
     if usage_mode not in ("api", "auth_provider", "unknown"):
         usage_mode = "unknown"
-    config_refreshed_at = profile_config_refreshed_at(profile)
+    config_refreshed_at = profile_config_refreshed_at(config_source_path or profile_config_path_for(profile))
     if configured_identity_selected:
         # The selected identity came from the active profile configuration;
         # pairing it with a lagging CLI provider refresh would be misleading.

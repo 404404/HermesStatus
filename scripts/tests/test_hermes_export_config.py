@@ -234,6 +234,55 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["provider"], "OpenAI Codex")
         self.assertEqual(payload["usage_mode"], "auth_provider")
 
+    def test_stale_profile_label_does_not_override_live_cli_provider(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root), "status_dir": str(self.status),
+            "profiles": [{"name": "daily", "profile_dir": str(profile_dir), "provider_label": "OpenCode Go"}],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_cli_status = lambda _profile: "◆ Environment\n  Model: gpt-5.6-luna\n  Provider: OpenAI Codex\n"
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({"config_found": False, "docker_volumes": []})
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["provider"], "OpenAI Codex")
+        self.assertEqual(payload["usage_mode"], "auth_provider")
+
+    def test_resolved_fallback_config_path_supplies_identity_timestamp(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        resolved_path = profile_dir / "config.yaml"
+        resolved_path.write_text("model:\n  provider: openai-codex\n  model: gpt-5.6-luna\n", encoding="utf-8")
+        modified = dt.datetime(2026, 8, 24, 1, 2, tzinfo=dt.timezone.utc).timestamp()
+        os.utime(resolved_path, (modified, modified))
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root), "status_dir": str(self.status),
+            "profiles": [{"name": "daily", "profile_dir": str(profile_dir)}],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_cli_status = lambda _profile: ""
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["model"], "gpt-5.6-luna")
+        self.assertEqual(payload["auth_refreshed_at"], "2026-08-24T01:02:00Z")
+
     def test_current_main_provider_overrides_stale_profile_label(self):
         profile_dir = self.root / "daily"
         profile_dir.mkdir()

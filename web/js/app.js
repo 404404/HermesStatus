@@ -1293,7 +1293,7 @@ function deviceDiagnosticsMarkup(view){
     ['EasyTier 预期已配置', expectationConfigured ? '是' : '否'],
     ['预期网络', expectationConfigured ? textOrDash(expected.network_name) : '-'],
     ['预期 Overlay IP', expectationConfigured ? textOrDash(expected.overlay_ipv4) : '-'],
-    ['预期 Proxy CIDRs', proxyCidrs || '-']
+    ['预期 Proxy CIDRs', expectationConfigured ? (proxyCidrs || '-') : '-']
   ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 }
 

@@ -38,6 +38,6 @@ does not create an EasyTier control endpoint.
 ## Current limitation
 
 Some EasyTier 2.6.4 output can include the local node in a peer-list response.
-Current 2.0 may include that row in remote-peer summaries; the planned fix is a
-strict own-peer-ID filter in normalization. Do not use affected summaries as
-topology truth.
+Normalization strictly excludes the row whose peer ID matches the local node
+from remote-peer summaries. Other version-specific raw connection details
+remain insufficient on their own to establish topology truth.

@@ -151,6 +151,12 @@ terminal:
             explicit = MODULE.summarize_config(config_path=str(preferred_path), env={"HOME": tmp})
             self.assertEqual(explicit["main_model"]["model"], "current")
             self.assertNotIn("config_path", explicit)
+            sourced, source_path = MODULE.summarize_config(
+                config_path=str(preferred_path), env={"HOME": tmp}, return_source=True,
+            )
+            self.assertEqual(sourced, explicit)
+            self.assertEqual(source_path, str(preferred_path))
+            self.assertNotIn("config_path", sourced)
 
     def test_missing_and_invalid_config_use_stable_shape(self):
         with tempfile.TemporaryDirectory() as tmp:

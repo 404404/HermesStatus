@@ -194,10 +194,11 @@ async function run(){
   assert.doesNotMatch(diagnosticMarkup, /<script>|<img src=x>|source_ip|192\.0\.2\.1|hidden\.example/);
 	const unconfiguredDiagnostics = app.deviceDiagnosticsMarkup({
 		host: {}, hardware: {},
-		easytierExpectation: {configured: false, expected: {network_name: 'must-not-render'}}
+		easytierExpectation: {configured: false, expected: {network_name: 'must-not-render', proxy_cidrs: ['192.168.68.0/24']}}
 	});
 	assert.match(unconfiguredDiagnostics, /EasyTier 预期已配置[\s\S]*否/);
 	assert.doesNotMatch(unconfiguredDiagnostics, /must-not-render/);
+	assert.doesNotMatch(unconfiguredDiagnostics, /192\.168\.68\.0\/24/);
   const provenanceMarkup = app.buildProvenanceMarkup({
     document: {schema_version: 2, build: {environment: 'preview', version: '2.3-preview', revision: '0123456789abcdef', token: 'must-not-render'}},
     host: {protocol_mode: 'device_v2'},
