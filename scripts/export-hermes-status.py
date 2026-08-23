@@ -1126,8 +1126,8 @@ def profile_stats(profile, profile_dir, previous=None):
     configured_main_model = _dict(config_summary.get("main_model")) if current_config_found else {}
     configured_model = public_text(configured_main_model.get("model"), MAX_MODEL) or None
     configured_provider = (
-        public_text(profile_configuration.get("provider_label"), MAX_PROVIDER)
-        or public_text(configured_main_model.get("provider"), MAX_PROVIDER)
+        public_text(configured_main_model.get("provider"), MAX_PROVIDER)
+        or public_text(profile_configuration.get("provider_label"), MAX_PROVIDER)
         or None
     )
     # The profile configuration is the authoritative main-agent identity.  A

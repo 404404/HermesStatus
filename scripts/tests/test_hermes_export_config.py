@@ -234,6 +234,42 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["provider"], "OpenAI Codex")
         self.assertEqual(payload["usage_mode"], "auth_provider")
 
+    def test_current_main_provider_overrides_stale_profile_label(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root),
+            "status_dir": str(self.status),
+            "profiles": [{
+                "name": "daily",
+                "profile_dir": str(profile_dir),
+                "provider_label": "OpenCode Go",
+            }],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_cli_status = lambda _profile: ""
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {
+                "status": "ok", "health": {"status": "ok"},
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({}),
+            }
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True,
+                "main_model": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
+                "docker_volumes": [],
+            })
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["provider"], "openai-codex")
+        self.assertEqual(payload["usage_mode"], "auth_provider")
+
     def test_unmatched_provider_uses_profile_config_mtime(self):
         profile_dir = self.root / "daily"
         profile_dir.mkdir()
@@ -345,7 +381,7 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["gateway_service"], "running")
         self.assertEqual(payload["manager_mode"], "docker (foreground)")
         self.assertEqual(payload["usage_mode"], "api")
-        self.assertEqual(payload["provider"], "OpenCode Go")
+        self.assertEqual(payload["provider"], "opencode-go")
         self.assertEqual(degraded_payload["gateway_service"], "degraded")
         self.assertIsNone(empty_payload["gateway_service"])
 
