@@ -1,121 +1,30 @@
 # 配置
 
-[English](../CONFIGURATION.md) · [文档目录](README.md)
+配置必须显式给出。不要从 hostname、源地址、端口号或 EasyTier overlay 地址推导身份、环境或权限。
 
-## 服务端配置
+## Server 与 Device Registry
 
-服务端读取包含 `servers`、可选 `monitors` 和可选 `sslcerts` 的 JSON 文档。节点记录至少需要唯一 `username`、显示名 `name`、`type`、`host`、`location`、`password` 与 `monthstart`。不得提交生产配置或真实密码。
+Server 配置定义 Device Registry 与 Device v2 凭据。每台设备设置稳定 ID、操作员维护的展示名称、协议模式与启用状态。Device v2 凭据单独 provision：Server 只保存 digest，Client 通过 root-owned secret 文件获得自己的 token。
 
-| 变量 | 用途 |
-| --- | --- |
-| `CONFIG_PATH` | 服务端 JSON 配置。 |
-| `STATS_PATH` | 可写的当前状态持久化文件。 |
-| `HTTP_ADDR` | WebUI 与 HTTP API 监听地址。 |
-| `AGENT_ADDR` | Legacy TCP Agent 监听地址。 |
-| `ADMIN_TOKEN` | 启用需认证的管理 API。 |
-| `WEB_DIR` | WebUI 静态文件目录。 |
+禁止自动注册设备，也不要将 hostname、peer ID、overlay IP 或源 IP 映射为身份。重启前使用 Server 的设备配置校验命令检查 Registry、凭据与 Legacy 映射。
 
-未设置 `ADMIN_TOKEN` 时，公开状态端点仍可读取，写入配置的管理 API 会被禁用。
+## Client
 
-## 客户端配置
+每个 Client 使用独立的 root-owned JSON 配置。其 Device v2 区段包含 Registry ID、HTTPS Server URL、CA 文件与 token 文件路径。将 token 与 CA 以只读 secret 挂载；不要放入镜像层、环境变量值、命令行、fixture 或文档。
 
-Legacy TCP Client 需要 `SERVER`、`SERVERSTATUS_USER`、`PASSWORD` 与 `PORT`。推荐使用 `SERVERSTATUS_USER`；`USER` 只用于兼容，不应意外继承宿主机用户变量。
+可选域配置也必须显式：
 
-主机采集常用变量包括 `HWMON_ROOT`、`SMART_DEVICE`、`DOCKER_SOCKET`、`HARDWARE_INTERVAL`、`DOCKER_INTERVAL` 与 `CLIENT_STATUS_DIR`。
+- `hardware.smart_devices` 是固定磁盘 allowlist；
+- `hardware.filesystem_probes` 是固定的窄范围只读探针挂载；
+- Lucky 仅允许 loopback URL，TLS 策略与 token 文件均显式配置；
+- EasyTier 使用固定本地 CLI、loopback RPC 与可选 administrative role。省略或空的可选 role 都不是非法 role。
 
-## 硬件采集
+完整设备文件、Compose 映射和参数说明见[设备配置](DEVICE_CONFIGURATION.md)。
 
-硬件详情是有边界的可选观测数据。`hardware.storage` 将物理磁盘与文件系统分开：一个文件系统可以解析到一块、多块或没有已上报的物理盘。这样可支持普通分区、LVM、MD RAID、device mapper 与 Btrfs/EXT4 存储栈，而不会猜测逻辑卷就是磁盘。
+## 硬件权限
 
-Device v2 优先在 `client-v2.json` 中使用可选 `hardware` 对象：
+只授予所需设备和路径。SMART 通常只需列出的设备与 `SYS_RAWIO`；不需要 privileged、`SYS_ADMIN`、整个 `/dev` 或无限制的主机文件系统。DSM 身份与数据卷探针必须由部署显式提供窄范围只读挂载，不能使用宽泛默认挂载。
 
-```json
-"hardware": {
-  "smart_devices": [
-    {"path": "/dev/sda", "type": null, "label": "data-disk-a"},
-    {"path": "/dev/sdb", "type": "sat", "label": "data-disk-b"}
-  ],
-  "primary_smart_device": "/dev/sda",
-  "filesystem_probes": [
-    {"mountpoint": "/data", "probe_path": "/host-storage/data"}
-  ]
-}
-```
+## Lucky 本地 TLS
 
-`smart_devices` 是 0–64 个 Client 容器内可见 `/dev/*` 路径的显式 allowlist。显式空数组会停用 SMART 探测、仅保留安全的拓扑库存，并不代表采集失败。可选 `type` 是有长度限制的 smartctl 设备类型，如 `sat`、`scsi` 或 `nvme`，不是 shell 片段；`label` 是采集器配置元数据，不承诺作为持久化或 UI 展示字段。`primary_smart_device` 可选，在观察到多块盘时选择兼容的单盘 SMART 字段来源。未设置时不会任意取第一块盘，详细的 `storage.physical_disks` 才是权威数据。
-
-`filesystem_probes` 是最多 128 个显式配置的绝对展示 `mountpoint`（最多 512 个字符）与容器 `probe_path` 对。展示挂载点会原样保留，包括合法的重复空白；probe 路径必须是目标宿主机文件系统的只读挂载。Client 只运行 `findmnt` 和 `statvfs`，不会遍历或上传目录内容。bind mount source 会归一化为安全的 `/dev/*` 组件；非设备 source 会被省略而不会上报为端点。只有在能安全证明全部成员时才关联 Btrfs 后端磁盘，否则明确保留未知关系。伪文件系统或不可用 probe 会明确显示不可用，不会被误报为宿主机存储。
-
-配置优先级为 CLI、环境变量、JSON 文件、默认值。环境变量可使用 `HERMESSTATUS_SMART_DEVICES` / `SMART_DEVICES`、`HERMESSTATUS_PRIMARY_SMART_DEVICE` / `PRIMARY_SMART_DEVICE` 与 `HERMESSTATUS_FILESYSTEM_PROBES` / `FILESYSTEM_PROBES`，其中 JSON 值采用 JSON 数组。Legacy `SMART_DEVICE` 仍保留为最低优先级的单设备形式。镜像默认的 `SMART_DEVICE=auto` 是自动发现哨兵，不会覆盖 JSON 的 `smart_devices`（包括有意设置的空数组）。若希望 JSON 多盘 allowlist 为权威，不要在 Compose 覆盖中设置非空的 Legacy `SMART_DEVICE`。
-
-为兼容性保留 `auto`，但它只能发现 Client 容器中已经可见的块设备；不会授予设备权限、修改 cgroup、读取不可见的宿主机路径或扩大 `/dev` 访问范围。数据与安全合同见[硬件监控设计](../design/HARDWARE_MONITORING.md)，Compose 挂载见[设备配置指南](DEVICE_CONFIGURATION.md)。
-
-## Hermes 与 Lucky
-
-`HERMES_EXPORT_CONFIG` 指向 JSON 或 YAML exporter 配置，用于定义 Hermes 根目录和需要检查的 Profile。exporter 通过只读挂载读取配置与状态，并在 Client 状态目录写入脱敏快照。
-
-Lucky 采集为显式启用，默认本地地址为
-`https://127.0.0.1:16601`；Collector 只接受回环 HTTP(S) URL。设置
-`LUCKY_ENABLED=true` 后，如安装确实需要认证，使用
-`LUCKY_AUTH_MODE=open_token` 或 `admin_token` 并通过受保护的
-`LUCKY_TOKEN_FILE` 读取 token，不能将 token 写入 Compose 文件。若本地 API
-不要求认证，设置 `LUCKY_AUTH_MODE=none` 且不设置 `LUCKY_TOKEN_FILE`。
-
-HTTPS Lucky API 应保持 `LUCKY_VERIFY_TLS=true`。仅当本机管理的、严格回环的
-Lucky endpoint 证书无法验证时，才可显式设置 `LUCKY_VERIFY_TLS=false`；这不会
-允许远程 Lucky URL，Collector 也绝不会自动降级 TLS 验证。
-
-## EasyTier 监控
-
-EasyTier 监控默认关闭，必须显式启用。配置优先级从高到低为 EasyTier CLI 参数、环境变量、由 `EASYTIER_CONFIG_FILE` 指定的只读 JSON 文件、默认值。
-
-| 配置 | 默认值 | 约束 |
-| --- | --- | --- |
-| `EASYTIER_ENABLED` | `false` | 必须显式启用。 |
-| `EASYTIER_CLI_PATH` | `/usr/local/bin/easytier-cli` | 必须是绝对路径、可执行普通文件；拒绝符号链接。 |
-| `EASYTIER_RPC_PORTAL` | `127.0.0.1:15888` | 仅接受 `127.0.0.1:15888` 或 `[::1]:15888`。 |
-| `EASYTIER_TIMEOUT_SECONDS` | `5` | 1 到 30 的整数。 |
-| `EASYTIER_INTERVAL_SECONDS` | `30` | 5 到 3600 的整数。 |
-| `EASYTIER_ADMINISTRATIVE_ROLE` | 未设置 | 可选的显式运维声明：`site_router`、`endpoint`、`bootstrap_listener`、`relay_capable` 或 `observer`；它是监控元数据，不是设备身份。 |
-
-JSON 文件只允许 `enabled`、`cli_path`、`rpc_portal`、`timeout_seconds`、`interval_seconds` 与 `administrative_role`，且必须为组和其他用户不可写的普通文件。只读挂载 CLI 二进制到 Client；不要挂载 EasyTier 配置、密钥，或配置非回环 RPC portal。
-
-## Device v2 配置
-
-设备名称、IP/端口、文件路径与 Compose 挂载的完整操作见[设备配置编写指南](DEVICE_CONFIGURATION.md)。浏览器显示名称以 Device Registry 的 `display_name` 为准；Client URL 由运维配置维护。
-
-Device v2 需要四个由操作员管理的路径：
-
-| 变量 | 内容 |
-| --- | --- |
-| `DEVICE_REGISTRY_PATH` | 只读、权威设备 Registry。 |
-| `HERMESSTATUS_DEVICE_CREDENTIALS_DIR` | 每台 v2 设备一份仅含 digest 的 credential 文件。 |
-| `LEGACY_DEVICE_MAPPING_PATH` | 显式 Legacy 用户名到设备 ID 映射。 |
-| `PERSISTENCE_PATH` | 可写 v2 运行状态。 |
-
-只有在设置 `HERMESSTATUS_DEVICE_ENDPOINT_ENABLED=true` 并配置明确可信代理边界时才启用端点。启动前执行：
-
-```bash
-serverstatus --validate-device-config \
-  --device-registry /absolute/path/devices.json \
-  --device-credentials /absolute/path/credentials.d \
-  --legacy-device-mapping /absolute/path/legacy-device-mapping.json
-```
-
-## 可选 EasyTier expectation
-
-仅当运维人员需要比较诊断时，才在现有 Registry 的设备记录中添加 expectation。
-它是可选项，不能创建设备、认证 Client 或选择凭据：
-
-```json
-"easytier_expectation": {
-  "administrative_role": "site_router",
-  "network_name": "home-404",
-  "overlay_ipv4": "10.0.0.1",
-  "proxy_cidrs": ["10.0.0.0/24"]
-}
-```
-
-允许的角色为 `site_router`、`endpoint`、`bootstrap_listener`、
-`relay_capable` 与 `observer`；Overlay 和 Proxy 值必须是内部地址。只填写
-经确认的期望值；尚未观察到数据不是故障，会显示为 `not_observable`。
+Lucky 监控只接受 loopback URL。HTTPS/HTTP 与证书验证必须明确配置，不存在“先验证失败后自动关闭验证”的回退。若本地自签名证书必须关闭验证，该例外必须限制在 loopback-only Lucky 边界内，并在部署配置中记录。

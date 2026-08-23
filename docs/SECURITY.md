@@ -1,95 +1,23 @@
 # Security
 
-[中文](zh-CN/SECURITY.md) · [Documentation index](README.md)
+HermesStatus is intentionally read-only. Its safety model is based on explicit identity, narrow collection allowlists, validation at every boundary and least-privilege deployment.
 
-## Trust boundaries
+## Identity and secrets
 
-The Server is a status projector. It does not mount the Docker socket and does
-not read Hermes or Lucky host secrets. The Client is the high-trust component:
-it reads host files, optional hardware devices, the Docker socket, and selected
-Hermes/Lucky inputs before sending a sanitized extension to the Server.
+Device v2 uses TLS and a per-device token. The Server stores only token digests. Clients read tokens and CA material from root-owned files mounted read-only. Do not log, print, hash for reporting, commit or place credentials in command lines, environment values, fixtures, stats documents or UI text.
 
-Deploy the Client only on a reviewed host. A read-only Docker socket bind does
-not make the Docker API read-only; the collector is constrained in code to the
-container-list request, but socket access remains sensitive.
+## Collection boundaries
 
-## Secrets
+Collectors use fixed source allowlists and argv arrays. They reject arbitrary commands, remote URLs, redirects, raw configuration, credentials and sensitive EasyTier objects. Lucky is limited to loopback endpoints; EasyTier is limited to a configured loopback RPC and read-only CLI queries. No management, credential, routing, port-forward, logging or service-control commands are in the runtime allowlist.
 
-Keep `ADMIN_TOKEN`, Agent passwords, Bearer credentials, Lucky tokens, private
-addresses, and production configuration outside Git. Use protected files or a
-secret mount. Do not put secret values in Compose files, log output, screenshots,
-issues, pull requests, or documentation.
+## Host privileges
 
-The Server stores v2 device credential digests, not raw tokens. Credential
-records support current and next slots for rotation. A Client sends its raw
-Bearer token only to the trusted HTTPS ingress route.
+Do not use privileged containers, `SYS_ADMIN`, a Docker socket, whole `/dev` or the host root. Grant only explicit SMART device mappings and `SYS_RAWIO` where needed. Filesystem and DSM probes use fixed narrow read-only mounts. A controlled deployment helper must offer only fixed subcommands and paths; it must not become generic `sudo`, Docker or shell access.
 
-## EasyTier collector boundary
+## Data handling
 
-EasyTier monitoring permits exactly `node`, `peer`, `connector`, and `stats`,
-through a loopback-only RPC portal. It uses
-an absolute executable and argv-based subprocess invocation with no shell. The
-projection excludes configuration, keys, credentials, RPC addresses, raw JSON,
-and stderr. It retains only bounded, credential-free listener/connector
-endpoints and selected STUN diagnostics. Unknown payload fields are rejected by
-the Server before persistence and UI projection.
+Server validation bounds counts, strings, counters, timestamps, CIDRs and enums. Unknown sensitive fields and raw objects are discarded. HTML uses safe escaping and tests cover malicious values. Persistence applies accepted updates atomically and refuses stale/conflicting mutation.
 
-## Device v2 ingress
+## Reporting vulnerabilities
 
-The endpoint is disabled by default. When enabled, require HTTPS at the proxy,
-trust forwarding headers only from explicitly configured proxy addresses, and
-replace untrusted external forwarding headers. Restrict the proxy to the exact
-POST route. The Server rejects invalid content type, oversized bodies, duplicate
-identity headers, invalid credentials, disabled devices, inactive protocol
-ownership, replay conflicts, and rate-limit excess.
-
-## Safe observability
-
-Use `/api/health` and sanitized `/json/stats.json` for diagnosis. Do not expose
-raw SMART output, Docker API responses, Hermes configuration, `.env` files, or
-authentication headers. The dashboard may report stale or unavailable data;
-that is safer than inventing a healthy value.
-
-## Hardware boundary
-
-Hardware observation is Client-only and read-only. The base Client deployment
-is non-privileged and maps no host block device. SMART requires an explicit
-audited JSON allowlist plus `SYS_RAWIO` and one read-only Compose mapping per
-confirmed device. Never mount full `/dev`, add `SYS_ADMIN`, use a host
-mount-namespace escape, or grant an unseen device merely to make auto-discovery
-convenient.
-
-Filesystem capacity requires an operator-selected, narrow read-only probe mount.
-The collector calls metadata and `statvfs` only; it does not enumerate files.
-Do not mount the host root merely to show capacity. Storage collection retains
-no serial number, WWN, filesystem UUID, raw SMART attribute table, raw command
-output, or directory listing.
-
-All reported device paths, models, mountpoints, filesystem types, operating
-system strings, and build metadata are bounded and rendered as escaped text.
-They are observations only, never Device v2 identity or authentication inputs.
-Per-disk and per-filesystem failure remains unavailable/degraded data rather
-than a fabricated healthy or empty result.
-
-## Read-only diagnostics and provenance
-
-Device diagnostics may expose sanitized status, protocol, timestamps, expected
-EasyTier comparison state, and Server/Client build provenance. They must not
-expose tokens, digests, credential paths, Registry paths, source-IP evidence,
-private CA data, raw host configuration, or headers. Build provenance is
-injected at build time; images must not run Git at runtime, and qualification
-compares the full revision with the OCI revision label.
-
-## EasyTier monitoring
-
-EasyTier monitoring is loopback-RPC and read-only. The runtime command allowlist
-contains only `node`, `peer`, `connector`, and `stats`; it has no
-connector/route/credential/whitelist/port-forward/logger
-or restart operation. It never persists or renders raw config, credential,
-network secret, Noise key, or command stderr. Retained endpoints have no
-credentials, query, or fragment.
-
-All detailed values are server-validated and rendered as escaped text. Public
-CIDRs are rejected; only bounded public IP observations supplied by `node` STUN
-diagnostics are retained. A malformed, partial, or unsupported response is
-safer as unavailable/degraded/unsupported than a false empty or healthy view.
+Do not include secrets or live infrastructure identifiers in an issue. Provide the smallest reproducible, sanitized description through the repository's private security contact or maintainer channel.

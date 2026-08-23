@@ -1,100 +1,70 @@
 # Architecture
 
-[中文](zh-CN/ARCHITECTURE.md) · [Documentation index](README.md)
-
-## Purpose
-
-HermesStatus is a current-state dashboard for explicitly configured hosts. It
-does not control hosts, containers, Hermes, Lucky, or EasyTier. The primary UI
-has five views: Home, Hardware, Docker, Lucky, and EasyTier.
-
-## Components and data flow
+HermesStatus is a small, read-only monitoring system.  A Client collects a
+bounded set of host observations and sends them to the Server; the Server
+validates and persists the accepted state; the web application reads the
+Server's single statistics projection.
 
 ```text
-Host OS / hwmon / SMART / explicit filesystem probes / Docker / Hermes / Lucky / EasyTier
-                         ↓
-                    Python Client
-                         ↓
-     Legacy TCP Agent  or  authenticated HTTPS device update
-                         ↓
-                      Go Server
-                         ↓
-          /json/stats.json · /api/health · WebUI
+host observations -> Client -> Device v2 HTTPS -> Server -> /json/stats.json -> web UI
 ```
 
-The Client collects host data and produces a structured extension with five
-domains: `hardware`, `docker`, `hermes`, `lucky`, and `easytier`. Each domain
-can be stale or unavailable without preventing the remaining domains from being
-reported.
+## Device identity and data flow
 
-The Go Server validates the incoming update, keeps the latest accepted state,
-persists selected state, and projects it as `/json/stats.json`. The browser
-fetches that one document; switching between views does not create a separate
-data request.
+The Device Registry is the authority for `device_id`, `display_name`, enablement
+and protocol.  A Client-reported hostname is observation data only: it cannot
+rename a Registry device.  Device v2 uses per-device credentials stored by the
+Server as digests, TLS, replay/conflict checks and server-authoritative lifecycle
+status.  Legacy reports remain supported where they are explicitly configured.
 
-## Dashboard scope
+Accepted updates are atomic.  Stale, conflicting or invalid reports do not
+replace the last accepted state.  After a Server restart restored data is stale
+until a new accepted report arrives.
 
-The Home view presents device status, CPU, memory, disk capacity, EasyTier
-remote-peer and traffic summaries, physical-disk temperature/SMART information,
-Hermes profiles, and Lucky/EasyTier state and version summaries when configured.
-EasyTier traffic uses one decimal place with automatic units and a single-line
-receive / transmit / forwarded presentation. The Hermes Profile section header
-shows the Agent version and profile count. Hardware follows Home and shows CPU,
-memory, system information, and physical disks. Its filesystem probes only
-associate safe partition data with physical-disk rows; there is no separate
-filesystems/volumes section. Docker has a separate container table; Lucky has
-its own configuration and service summaries; EasyTier presents per-command
-collection-status cards followed by its read-only network summary.
+## Monitoring domains
 
-`hardware.storage.physical_disks` and `hardware.storage.filesystems` are
-separate bounded collections. The Client builds a read-only block-device graph
-to resolve ordinary partitions and generic LVM, MD RAID, and device-mapper
-stacks to zero or more physical disk IDs. A multi-device Btrfs source does not
-prove every member through that graph, so its backing relation is deliberately
-unknown rather than incomplete. A filesystem never gains a made-up temperature
-or SMART value. Only operator-configured physical SMART devices and explicit
-read-only filesystem probe mounts are collected.
+The current projection contains independent read-only domains:
 
-System identity reports sanitized distribution/release, kernel, architecture,
-and source provenance. Build provenance is similarly read-only: the Server
-reports build metadata and the selected Device may report Client build metadata.
-Revision data is injected at build time and is expected to agree with the OCI
-revision; no production image invokes Git at runtime. Environment is an
-operator-supplied deployment label, not a conclusion drawn from a host port.
+- hardware and operating-system observations;
+- Docker;
+- Hermes Agent profiles when the Agent is installed;
+- Lucky;
+- EasyTier.
 
-General host network throughput, cumulative host network traffic, and
-carrier-specific or three-network latency probes are not HermesStatus dashboard
-features and must not be documented as such, even though compatibility fields
-may still exist in the legacy Agent protocol. This does not apply to the
-separate EasyTier receive / transmit / forwarded counters.
+A domain can be fresh, partial, degraded, unavailable or not configured without
+turning unrelated domains into failures.  In particular, an optional Hermes
+Agent reported as `not_installed`, or a usable SMART attribute fallback, does
+not alone make the device offline or unhealthy.
 
-## Ingestion modes
+Hardware separates physical disks from volumes/filesystems.  This allows RAID,
+device-mapper and DSM volumes to be displayed without pretending that a volume
+belongs to one physical disk.
 
-### Legacy TCP
+## Trust boundaries
 
-The existing Agent opens a TCP connection, authenticates with its configured
-username and password, receives monitor definitions, and sends updates. This
-mode remains available for configured legacy devices.
+Collectors use fixed allowlists and parsers.  They do not expose a remote shell,
+arbitrary command runner, configuration editor or control plane.  Sensitive raw
+objects, credentials, private endpoints and EasyTier configuration are not
+persisted or displayed.  The web UI renders untrusted strings safely and shares
+one stats document/fetch path across pages.
 
-### Device v2
+## EasyTier model
 
-Device v2 is disabled unless explicitly enabled. It accepts `POST
-/api/v2/device-updates` only through the configured secure proxy boundary. A
-device supplies an exact `X-HermesStatus-Device-ID`, a Bearer credential, and a
-bounded JSON envelope. The Server matches the device against a startup-only
-registry, validates the credential digest and identity, applies replay and
-rate-limit checks, persists the accepted update, and returns sanitized monitor
-definitions.
+EasyTier is monitoring only.  The Client uses a configured loopback RPC and a
+fixed read-only CLI path.  It has no commands for connectors, routes,
+credentials, port forwarding, logging or service restart.  Profiles and routes
+are normalized from a strict whitelist.  `supported`, `present` and `observed`
+are distinct concepts; they are not inferred from zero RPM, an absent device or
+a missing peer.
 
-The registry supports at most 16 devices. Device discovery, browser-side
-registration, remote control, RBAC, multi-tenancy, database history, WebSocket,
-and SSE are outside the product boundary.
+When no remote peer is observed, Direct, Relay and IPv6-UDP-Direct are
+`not_observable`, not `false` or zero.  Current release limitation: some
+EasyTier 2.6.4 output can include the local node in the peer list.  The remote
+peer summary can therefore be overstated until the planned local-peer filter is
+implemented.
 
-## 2.3 Preview EasyTier boundary
+## Deliberately out of scope
 
-`2.3-preview` integrates 2.3 work and runs independent staging on 21443; it is
-not a promotion to `2.0`. EasyTier reaches the Server only as a validated,
-secret-free extension in the existing stats document. The browser uses the same
-`/json/stats.json` fetch and selected device as the other views—no EasyTier
-endpoint, timer, management channel, or identity mapping exists. Registry
-expectations are comparison-only diagnostics, never authentication or identity.
+HermesStatus is not an EasyTier manager, a remote-execution service, an alerting
+system, a time-series database, a topology editor, or a general network traffic
+or carrier-probing product.
