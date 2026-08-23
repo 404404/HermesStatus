@@ -89,6 +89,7 @@ class ManualDeviceExampleTests(unittest.TestCase):
         for required in (
             "./client-v2.example.json:/etc/hermesstatus/client-v2.json:ro",
             "./compute-01.token:/run/secrets/hermesstatus-device-token:ro",
+            "${DSM_VERSION_FILE_HOST:-/dev/null}:${DSM_VERSION_FILE:-/host/etc.defaults/VERSION}:ro",
         ):
             self.assertIn(required, source)
         base = (ROOT / "docker-compose-client.yml").read_text(encoding="utf-8")
@@ -98,7 +99,10 @@ class ManualDeviceExampleTests(unittest.TestCase):
         self.assertNotIn("\n    devices:\n", base)
         self.assertNotIn("\n    cap_add:\n      - SYS_RAWIO", base)
         self.assertIn('SMART_DEVICE: "${SMART_DEVICE:-auto}"', base)
+        self.assertIn('DSM_VERSION_FILE: "${DSM_VERSION_FILE:-/host/etc.defaults/VERSION}"', base)
+        self.assertIn('${DSM_VERSION_FILE_HOST:-/dev/null}:${DSM_VERSION_FILE:-/host/etc.defaults/VERSION}:ro', base)
         self.assertNotIn("/dev:/dev:ro", base)
+        self.assertNotIn("\n      - /:/host:ro", base)
 
     def test_reverse_proxy_is_an_exact_bounded_tls_ingress(self):
         source = (
