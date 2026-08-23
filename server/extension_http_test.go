@@ -87,8 +87,7 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 	if _, ok := cpuDetails["properties"].(map[string]any)["instruction_sets"]; !ok {
 		t.Fatalf("CPUDetails is missing the optional instruction_sets property: %#v", cpuDetails)
 	}
-	hardware := schemas["HardwareStats"].(map[string]any)
-	storage := hardware["properties"].(map[string]any)["storage"].(map[string]any)
+	storage := schemas["StorageStats"].(map[string]any)
 	filesystems := storage["properties"].(map[string]any)["filesystems"].(map[string]any)
 	filesystem := filesystems["items"].(map[string]any)
 	backingIDs := filesystem["properties"].(map[string]any)["backing_disk_ids"].(map[string]any)
