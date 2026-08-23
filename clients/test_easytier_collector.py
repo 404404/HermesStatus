@@ -181,6 +181,10 @@ class EasyTierCollectorTests(unittest.TestCase):
         os.symlink(self.cli, link)
         self.assertEqual(EasyTierCollector(environ=dict(self.environ, EASYTIER_CLI_PATH=link), runner=Runner()).collect()["status"], "unavailable")
 
+    def test_empty_optional_administrative_role_is_not_invalid_configuration(self):
+        config = load_easytier_config(environ=dict(self.environ, EASYTIER_ADMINISTRATIVE_ROLE=""))
+        self.assertIsNone(config["administrative_role"])
+
     def test_administrative_role_is_explicit_config_not_node_config(self):
         payload = EasyTierCollector(
             environ=dict(self.environ, EASYTIER_ADMINISTRATIVE_ROLE="site_router"),

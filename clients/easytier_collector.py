@@ -291,13 +291,19 @@ def _parse_cli(argv):
 def load_easytier_config(argv=None, environ=None):
     environ = os.environ if environ is None else environ
     file_values = _read_config(environ.get("EASYTIER_CONFIG_FILE"))
+    administrative_role = environ.get("EASYTIER_ADMINISTRATIVE_ROLE")
+    # This field is optional.  Container image defaults commonly represent an
+    # unset optional environment value as an empty string, which must retain
+    # the same meaning as an absent value rather than invalidating monitoring.
+    if administrative_role == "":
+        administrative_role = None
     env_values = {
         "enabled": environ.get("EASYTIER_ENABLED"),
         "cli_path": environ.get("EASYTIER_CLI_PATH"),
         "rpc_portal": environ.get("EASYTIER_RPC_PORTAL"),
         "timeout_seconds": environ.get("EASYTIER_TIMEOUT_SECONDS"),
         "interval_seconds": environ.get("EASYTIER_INTERVAL_SECONDS"),
-        "administrative_role": environ.get("EASYTIER_ADMINISTRATIVE_ROLE"),
+        "administrative_role": administrative_role,
     }
     cli_values = _parse_cli(argv)
     values = {
