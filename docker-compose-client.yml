@@ -15,9 +15,9 @@ services:
       - /tmp:size=32m,mode=1777,nosuid,nodev,noexec
     network_mode: host
     pid: host
-    # Release A keeps the 1.0 SMART access model. This is intentionally broad
-    # and must be narrowed to a device/capability allowlist in a later release.
-    privileged: ${CLIENT_PRIVILEGED:-true}
+    # The base service deliberately maps no host block device. Add SYS_RAWIO
+    # and one confirmed read-only `devices:` entry through an audited override;
+    # never grant the whole /dev tree or privileged mode.
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'python3 /app/client-' >/dev/null"]
       interval: 30s
@@ -59,9 +59,9 @@ services:
       HERMES_API_MAX_PAGES: "${HERMES_API_MAX_PAGES:-100}"
       HERMES_HOST_USER: "${HERMES_HOST_USER:-hermes}"
       LUCKY_ENABLED: "${LUCKY_ENABLED:-false}"
-      LUCKY_BASE_URL: "${LUCKY_BASE_URL:-http://127.0.0.1:16601}"
-      LUCKY_AUTH_MODE: "${LUCKY_AUTH_MODE:-open_token}"
-      LUCKY_TOKEN_FILE: "${LUCKY_TOKEN_FILE:-/run/secrets/lucky-open-token}"
+      LUCKY_BASE_URL: "${LUCKY_BASE_URL:-https://127.0.0.1:16601}"
+      LUCKY_AUTH_MODE: "${LUCKY_AUTH_MODE:-none}"
+      LUCKY_TOKEN_FILE: "${LUCKY_TOKEN_FILE:-}"
       LUCKY_INTERVAL: "${LUCKY_INTERVAL:-600}"
       LUCKY_TIMEOUT_SECONDS: "${LUCKY_TIMEOUT_SECONDS:-5}"
       LUCKY_VERSION_CHECK_TTL: "${LUCKY_VERSION_CHECK_TTL:-21600}"
@@ -72,6 +72,7 @@ services:
       EASYTIER_RPC_PORTAL: "${EASYTIER_RPC_PORTAL:-127.0.0.1:15888}"
       EASYTIER_TIMEOUT_SECONDS: "${EASYTIER_TIMEOUT_SECONDS:-5}"
       EASYTIER_INTERVAL_SECONDS: "${EASYTIER_INTERVAL_SECONDS:-30}"
+      EASYTIER_ADMINISTRATIVE_ROLE: "${EASYTIER_ADMINISTRATIVE_ROLE:-}"
       EASYTIER_CONFIG_FILE: "${EASYTIER_CONFIG_FILE:-}"
     volumes:
       - /etc/localtime:/etc/localtime:ro
@@ -80,8 +81,10 @@ services:
       # A read-only bind does not make the Docker API read-only. The collector
       # is constrained in code to GET /containers/json?all=1 only.
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /dev:/dev:ro
       - ${HERMES_EXPORT_CONFIG_HOST:-./hermes-exporter.json}:${HERMES_EXPORT_CONFIG:-/app/hermes-exporter.json}:ro
       - ${HERMES_ROOT_HOST:-/home/hermes}:${HERMES_ROOT:-/home/hermes}:ro
       - ${CLIENT_STATUS_DIR_HOST:-./client-status}:${CLIENT_STATUS_DIR:-/var/lib/serverstatus-client}
-      - ${LUCKY_TOKEN_FILE_HOST:-/dev/null}:${LUCKY_TOKEN_FILE:-/run/secrets/lucky-open-token}:ro
+      # A disabled token path is genuinely absent to the collector. The
+      # harmless /dev/null mount keeps this optional bind syntactically valid
+      # without creating an empty credential file.
+      - ${LUCKY_TOKEN_FILE_HOST:-/dev/null}:${LUCKY_TOKEN_FILE_MOUNT_PATH:-/run/secrets/lucky-open-token}:ro

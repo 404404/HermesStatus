@@ -48,6 +48,7 @@ func extensionOpenAPISchemas() map[string]any {
 			"value":  map[string]any{"type": "number", "minimum": MinTemperatureCelsius, "maximum": MaxTemperatureCelsius},
 			"unit":   map[string]any{"type": "string", "const": "C"},
 			"source": nullableString(MaxTemperatureSourceLength, "Sanitized sensor label"),
+			"label":  nullableString(MaxTemperatureSourceLength, "Sanitized CPU sensor label"),
 		},
 	)
 	diskTemperature := requiredObject(
@@ -60,10 +61,138 @@ func extensionOpenAPISchemas() map[string]any {
 			"source":  nullableString(MaxTemperatureSourceLength, "Sanitized SMART source label"),
 		},
 	)
+	physicalDisk := requiredObject(
+		[]string{"id", "device", "model", "capacity_bytes", "temperature_c", "smart_status", "power_on_hours", "written_bytes", "read_bytes", "smart_source", "collection_status"},
+		map[string]any{
+			"id":                map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+-]*$"},
+			"device":            map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength, "pattern": "^/dev/[A-Za-z0-9._+/-]+$"},
+			"model":             nullableString(MaxDiskModelLength, "Sanitized disk model without serial or WWN"),
+			"capacity_bytes":    nullableInteger(MaxSafeInteger, "Physical device capacity"),
+			"temperature_c":     nullableNumber("Physical disk temperature in Celsius"),
+			"smart_status":      map[string]any{"type": "string", "enum": []string{"passed", "failed", "unknown"}},
+			"power_on_hours":    nullableInteger(MaxSafeInteger, "SMART power-on hours"),
+			"written_bytes":     nullableInteger(MaxSafeInteger, "SMART lifetime bytes written"),
+			"read_bytes":        nullableInteger(MaxSafeInteger, "SMART lifetime bytes read"),
+			"smart_source":      nullableString(MaxDiskSmartSourceLength, "Safe SMART collector source label"),
+			"completeness":      map[string]any{"type": []string{"string", "null"}, "enum": []any{"complete", "partial", "unavailable", nil}},
+			"health_source":     map[string]any{"type": []string{"string", "null"}, "enum": []any{"native_status", "attribute_check", "unknown", nil}},
+			"native_status":     map[string]any{"type": []string{"string", "null"}, "enum": []any{"available", "unavailable", "unknown", nil}},
+			"collection_status": map[string]any{"type": "string", "enum": []string{"healthy", "partial", "unavailable", "unsupported", "permission_denied", "invalid_data"}},
+			"error":             nullableRef("ExtensionError"),
+		},
+	)
+	filesystem := requiredObject(
+		[]string{"source", "mountpoint", "fs_type", "total_bytes", "used_bytes", "available_bytes", "usage_percent", "backing_disk_ids", "stack_type", "collection_status"},
+		map[string]any{
+			"source":            nullableString(MaxFilesystemSourceLength, "Sanitized backing block-device path when observed"),
+			"mountpoint":        map[string]any{"type": "string", "maxLength": MaxMountpointLength, "pattern": "^/.*$", "description": "Absolute display path; control characters and parent traversal are rejected"},
+			"fs_type":           nullableString(MaxFilesystemTypeLength, "Filesystem type when observed"),
+			"total_bytes":       nullableInteger(MaxSafeInteger, "Filesystem capacity"),
+			"used_bytes":        nullableInteger(MaxSafeInteger, "Filesystem used bytes"),
+			"available_bytes":   nullableInteger(MaxSafeInteger, "Filesystem available bytes"),
+			"usage_percent":     map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100},
+			"backing_disk_ids":  map[string]any{"type": "array", "maxItems": MaxFilesystemBackingDisks, "items": map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength}, "default": []any{}},
+			"stack_type":        map[string]any{"type": "string", "enum": []string{"plain", "lvm", "mdraid", "device_mapper", "btrfs", "unknown"}},
+			"collection_status": map[string]any{"type": "string", "enum": []string{"healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"}},
+			"error":             nullableRef("ExtensionError"),
+		},
+	)
+	storageSummary := requiredObject(
+		[]string{"physical_disk_count", "smart_passed", "smart_failed", "smart_unknown", "temperature_min_c", "temperature_max_c", "filesystem_count"},
+		map[string]any{
+			"physical_disk_count": integerOpenAPISchema(), "smart_passed": integerOpenAPISchema(), "smart_failed": integerOpenAPISchema(), "smart_unknown": integerOpenAPISchema(),
+			"temperature_min_c": nullableNumber("Lowest observed physical disk temperature"), "temperature_max_c": nullableNumber("Highest observed physical disk temperature"), "filesystem_count": integerOpenAPISchema(),
+		},
+	)
+	storageStats := requiredObject(
+		[]string{"physical_disks", "filesystems", "summary", "updated_at", "stale", "error"},
+		map[string]any{
+			"physical_disks": map[string]any{"type": "array", "maxItems": MaxPhysicalDisks, "items": schemaRef("PhysicalDiskStats"), "default": []any{}},
+			"filesystems":    map[string]any{"type": "array", "maxItems": MaxFilesystems, "items": schemaRef("FilesystemStats"), "default": []any{}},
+			"summary":        schemaRef("StorageSummary"),
+			"updated_at":     nullableString(MaxTimestampLength, "Storage collection time in RFC3339"),
+			"stale":          map[string]any{"type": "boolean"},
+			"error":          nullableRef("ExtensionError"),
+		},
+	)
+	systemIdentity := requiredObject(
+		[]string{"distribution", "release_version", "pretty_name", "kernel_release", "architecture", "source"},
+		map[string]any{
+			"distribution":    nullableString(MaxSystemIdentityLength, "Host distribution"),
+			"release_version": nullableString(MaxSystemIdentityLength, "Host release version"),
+			"pretty_name":     nullableString(MaxSystemIdentityLength, "Host operating system display name"),
+			"kernel_release":  nullableString(MaxSystemIdentityLength, "Host kernel release"),
+			"architecture":    nullableString(MaxSystemIdentityLength, "Host architecture"),
+			"source":          map[string]any{"type": "string", "enum": []string{"os-release", "dsm-version", "unknown", "unavailable"}},
+		},
+	)
+	cpuUsage := requiredObject(
+		[]string{"user_percent", "nice_percent", "system_percent", "idle_percent", "iowait_percent", "irq_percent", "softirq_percent", "steal_percent", "total_percent"},
+		map[string]any{
+			"user_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU user-time percentage"}, "nice_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU nice-time percentage"},
+			"system_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU system-time percentage"}, "idle_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU idle-time percentage"},
+			"iowait_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU I/O-wait percentage"}, "irq_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU IRQ percentage"},
+			"softirq_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU soft-IRQ percentage"}, "steal_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate CPU steal-time percentage"},
+			"total_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100, "description": "Aggregate non-idle CPU percentage"},
+		},
+	)
+	cpuDetails := requiredObject(
+		// instruction_sets is an additive optional field so older Device v2
+		// clients remain valid while a server upgrade is rolling out.
+		[]string{"architecture", "vendor", "family", "model_id", "model_name", "stepping", "virtualization", "l1d_cache", "l1i_cache", "l2_cache", "l3_cache", "logical_cpus", "sockets", "cores_per_socket", "threads_per_core", "max_mhz", "min_mhz", "current_mhz", "usage"},
+		map[string]any{
+			"architecture": nullableString(MaxCPUTextLength, "CPU architecture"), "vendor": nullableString(MaxCPUTextLength, "CPU vendor"),
+			"family": nullableString(MaxCPUTextLength, "CPU family"), "model_id": nullableString(MaxCPUTextLength, "CPU model identifier"),
+			"model_name": nullableString(MaxCPUModelLength, "CPU model name"), "stepping": nullableString(MaxCPUTextLength, "CPU stepping"),
+			"virtualization": nullableString(MaxCPUTextLength, "CPU virtualization capability"), "l1d_cache": nullableString(MaxCPUTextLength, "L1 data cache"),
+			"l1i_cache": nullableString(MaxCPUTextLength, "L1 instruction cache"), "l2_cache": nullableString(MaxCPUTextLength, "L2 cache"),
+			"l3_cache":     nullableString(MaxCPUTextLength, "L3 cache"),
+			"logical_cpus": nullableInteger(MaxCPUCount, "Logical CPU count"), "sockets": nullableInteger(MaxCPUCount, "CPU socket count"),
+			"cores_per_socket": nullableInteger(MaxCPUCount, "CPU cores per socket"), "threads_per_core": nullableInteger(MaxCPUCount, "CPU threads per core"),
+			"max_mhz":          map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
+			"min_mhz":          map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
+			"current_mhz":      map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": MaxCPUFrequencyMHz},
+			"instruction_sets": nullableString(MaxCPUTextLength, "Bounded CPU instruction-set summary"),
+			"usage":            nullableRef("CPUUsageStats"),
+		},
+	)
+	memoryDetails := requiredObject(
+		[]string{"total_bytes", "used_bytes", "available_bytes", "free_bytes", "buffers_bytes", "cached_bytes", "reclaimable_bytes", "active_bytes", "inactive_bytes", "dirty_bytes", "writeback_bytes", "slab_bytes", "swap_total_bytes", "swap_used_bytes", "swap_free_bytes", "swap_cached_bytes"},
+		map[string]any{
+			"total_bytes": nullableInteger(MaxSafeInteger, "Total host memory"), "used_bytes": nullableInteger(MaxSafeInteger, "Used host memory"),
+			"available_bytes": nullableInteger(MaxSafeInteger, "Available host memory"), "free_bytes": nullableInteger(MaxSafeInteger, "Free host memory"),
+			"buffers_bytes": nullableInteger(MaxSafeInteger, "Host buffer memory"), "cached_bytes": nullableInteger(MaxSafeInteger, "Host page cache memory"),
+			"reclaimable_bytes": nullableInteger(MaxSafeInteger, "Reclaimable slab memory"), "active_bytes": nullableInteger(MaxSafeInteger, "Active memory"),
+			"inactive_bytes": nullableInteger(MaxSafeInteger, "Inactive memory"), "dirty_bytes": nullableInteger(MaxSafeInteger, "Dirty memory"),
+			"writeback_bytes": nullableInteger(MaxSafeInteger, "Writeback memory"), "slab_bytes": nullableInteger(MaxSafeInteger, "Slab memory"),
+			"swap_total_bytes": nullableInteger(MaxSafeInteger, "Total swap"), "swap_used_bytes": nullableInteger(MaxSafeInteger, "Used swap"),
+			"swap_free_bytes": nullableInteger(MaxSafeInteger, "Free swap"), "swap_cached_bytes": nullableInteger(MaxSafeInteger, "Swap cache"),
+		},
+	)
+	clientBuild := requiredObject(
+		[]string{"version", "revision", "build_time", "protocol"},
+		map[string]any{
+			"version":    map[string]any{"type": "string", "maxLength": MaxBuildVersionLength},
+			"revision":   map[string]any{"type": "string", "maxLength": MaxBuildRevisionLength, "pattern": "^[0-9a-f]{40}$"},
+			"build_time": nullableString(MaxTimestampLength, "Client build time in RFC3339"),
+			"protocol":   map[string]any{"type": "string", "const": "device_v2"},
+		},
+	)
+	serverBuild := requiredObject(
+		[]string{"version", "revision", "build_time", "deployment"},
+		map[string]any{
+			"version":    map[string]any{"type": "string", "maxLength": MaxBuildVersionLength},
+			"revision":   map[string]any{"type": "string", "maxLength": MaxBuildRevisionLength},
+			"build_time": nullableString(MaxTimestampLength, "Server build time in RFC3339"),
+			"deployment": map[string]any{"type": "string", "enum": []string{"production", "preview", "staging", "development", "unknown"}},
+		},
+	)
 	hardware := requiredObject(
 		[]string{"cpu_model", "cpu_temperature", "disk_temperature", "disk_smart_status", "disk_power_on_hours", "disk_written_bytes", "disk_read_bytes", "disk_device", "disk_smart_source", "updated_at", "stale", "error"},
 		map[string]any{
 			"cpu_model":           nullableString(MaxCPUModelLength, "Sanitized CPU model"),
+			"cpu_details":         nullableRef("CPUDetails"),
+			"memory_details":      nullableRef("MemoryDetails"),
 			"cpu_temperature":     nullableRef("TemperatureReading"),
 			"disk_temperature":    nullableRef("DiskTemperature"),
 			"disk_smart_status":   map[string]any{"type": "string", "enum": []string{"passed", "failed", "unknown"}},
@@ -72,6 +201,8 @@ func extensionOpenAPISchemas() map[string]any {
 			"disk_read_bytes":     nullableInteger(MaxSafeInteger, "Lifetime bytes read"),
 			"disk_device":         nullableString(MaxDiskDeviceLength, "Sanitized device label"),
 			"disk_smart_source":   nullableString(MaxDiskSmartSourceLength, "Fixed SMART collector source label"),
+			"storage":             nullableRef("StorageStats"),
+			"system_identity":     nullableRef("SystemIdentity"),
 			"updated_at":          nullableString(MaxTimestampLength, "Client collection time in RFC3339"),
 			"stale":               map[string]any{"type": "boolean", "description": "Recomputed by the Go server using a 900 second threshold"},
 			"error":               nullableRef("ExtensionError"),
@@ -81,6 +212,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"cpu_model": "Example CPU", "cpu_temperature": nil, "disk_temperature": nil,
 		"disk_smart_status": "unknown", "disk_power_on_hours": nil, "disk_written_bytes": nil,
 		"disk_read_bytes": nil, "disk_device": nil, "disk_smart_source": nil,
+		"cpu_details": nil, "memory_details": nil, "storage": nil, "system_identity": nil,
 		"updated_at": nil, "stale": true,
 		"error": map[string]any{"code": "not_reported", "message": "Extension data was not reported", "source": "hardware", "retryable": false, "http_status": nil},
 	}
@@ -334,24 +466,49 @@ func extensionOpenAPISchemas() map[string]any {
 	})
 	easyTierStatus := map[string]any{"type": "string", "enum": []string{"healthy", "degraded", "unavailable", "stale", "not_configured", "unsupported_version", "invalid_data"}}
 	easyTierCommand := requiredObject([]string{"status", "error"}, map[string]any{
-		"status": easyTierStatus, "error": nullableRef("ExtensionError"),
+		"status": easyTierStatus, "last_success_at": nullableString(MaxTimestampLength, "Last successful command collection time"), "collected_at": nullableString(MaxTimestampLength, "Command collection time"), "duration_ms": nullableInteger(30000, "Command duration in milliseconds"), "error": nullableRef("ExtensionError"),
 	})
 	easyTierNode := requiredObject([]string{"state", "instance_name", "network_name", "version", "peer_id"}, map[string]any{
-		"state":         map[string]any{"type": "string", "maxLength": MaxEasyTierTextLength},
-		"instance_name": nullableString(MaxEasyTierTextLength, "Sanitized EasyTier instance name"),
-		"network_name":  nullableString(MaxEasyTierTextLength, "Sanitized EasyTier network name"),
-		"version":       nullableString(MaxEasyTierTextLength, "EasyTier version"),
-		"peer_id":       nullableString(MaxEasyTierTextLength, "EasyTier peer identifier"),
+		"state":                map[string]any{"type": "string", "maxLength": MaxEasyTierTextLength},
+		"instance_name":        nullableString(MaxEasyTierTextLength, "Sanitized EasyTier instance name"),
+		"network_name":         nullableString(MaxEasyTierTextLength, "Sanitized EasyTier network name"),
+		"version":              nullableString(MaxEasyTierTextLength, "EasyTier version"),
+		"peer_id":              nullableString(MaxEasyTierTextLength, "EasyTier peer identifier"),
+		"overlay_ipv4":         nullableString(64, "Internal EasyTier overlay IPv4 only"),
+		"proxy_cidrs":          map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string", "maxLength": 64}},
+		"administrative_role":  map[string]any{"type": []string{"string", "null"}, "enum": []any{"site_router", "endpoint", "bootstrap_listener", "relay_capable", "observer", nil}},
+		"schema_compatibility": map[string]any{"type": "string", "enum": []string{"supported", "unsupported", "unknown"}},
+	})
+	easyTierPeer := requiredObject([]string{"peer_id", "overlay_ipv4", "hostname", "version", "path_state", "transport", "address_family", "locally_initiated", "latency_ms", "loss_rate", "rx_bytes", "tx_bytes", "rx_packets", "tx_packets", "closed"}, map[string]any{
+		"peer_id": nullableString(MaxEasyTierTextLength, "Peer identifier"), "overlay_ipv4": nullableString(64, "Internal overlay IPv4"), "hostname": nullableString(MaxEasyTierTextLength, "Sanitized peer hostname"), "version": nullableString(MaxEasyTierTextLength, "Peer version"), "path_state": map[string]any{"type": "string", "enum": []string{"direct", "relayed", "unknown"}}, "transport": map[string]any{"type": "string", "enum": []string{"udp", "tcp", "quic", "wg", "wss", "unknown"}}, "address_family": map[string]any{"type": "string", "enum": []string{"ipv4", "ipv6", "unknown"}}, "locally_initiated": map[string]any{"type": "boolean"}, "latency_ms": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 600000}, "loss_rate": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100}, "rx_bytes": integerOpenAPISchema(), "tx_bytes": integerOpenAPISchema(), "rx_packets": integerOpenAPISchema(), "tx_packets": integerOpenAPISchema(), "closed": map[string]any{"type": "boolean"},
+	})
+	easyTierRoute := requiredObject([]string{"peer_id", "overlay_ipv4", "hostname", "version", "next_hop_peer_id", "cost", "path_latency_ms", "proxy_cidrs", "path_state", "is_local"}, map[string]any{
+		"peer_id": nullableString(MaxEasyTierTextLength, "Peer identifier"), "overlay_ipv4": nullableString(64, "Internal overlay IPv4"), "hostname": nullableString(MaxEasyTierTextLength, "Sanitized route hostname"), "version": nullableString(MaxEasyTierTextLength, "Route version"), "next_hop_peer_id": nullableString(MaxEasyTierTextLength, "Next hop peer identifier"), "cost": map[string]any{"type": []string{"integer", "null"}, "minimum": 0, "maximum": 1000000}, "path_latency_ms": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 600000}, "proxy_cidrs": map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string", "maxLength": 64}}, "path_state": map[string]any{"type": "string", "enum": []string{"direct", "relayed", "unknown"}}, "is_local": map[string]any{"type": "boolean"},
+	})
+	easyTierConnector := requiredObject([]string{"transport", "address_family", "port", "status"}, map[string]any{
+		"transport": map[string]any{"type": "string", "enum": []string{"udp", "tcp", "quic", "wg", "wss", "unknown"}}, "address_family": map[string]any{"type": "string", "enum": []string{"ipv4", "ipv6", "unknown"}}, "port": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 65535}, "status": map[string]any{"type": "string", "enum": []string{"connected", "connecting", "disconnected", "unknown"}},
 	})
 	easyTierStats := requiredObject([]string{"status", "source", "node", "peers", "routes", "connectors", "traffic", "command_status", "updated_at", "stale", "error"}, map[string]any{
 		"status": easyTierStatus, "source": map[string]any{"type": "string", "enum": []string{"easytier_cli", "unavailable"}},
 		"node":           schemaRef("EasyTierNodeStats"),
-		"peers":          requiredObject([]string{"total", "direct", "relay", "unknown_path"}, map[string]any{"total": integerOpenAPISchema(), "direct": integerOpenAPISchema(), "relay": integerOpenAPISchema(), "unknown_path": integerOpenAPISchema()}),
-		"routes":         requiredObject([]string{"total"}, map[string]any{"total": integerOpenAPISchema()}),
-		"connectors":     requiredObject([]string{"total", "tcp_configured", "tcp_active"}, map[string]any{"total": integerOpenAPISchema(), "tcp_configured": map[string]any{"type": "boolean"}, "tcp_active": map[string]any{"type": "boolean"}}),
+		"peers":          requiredObject([]string{"total", "direct", "relay", "unknown_path"}, map[string]any{"total": integerOpenAPISchema(), "direct": integerOpenAPISchema(), "relay": integerOpenAPISchema(), "unknown_path": integerOpenAPISchema(), "ipv6_udp_direct": map[string]any{"type": []string{"boolean", "null"}}, "items": map[string]any{"type": "array", "maxItems": MaxDockerCount, "items": easyTierPeer}}),
+		"routes":         requiredObject([]string{"total"}, map[string]any{"total": integerOpenAPISchema(), "items": map[string]any{"type": "array", "maxItems": MaxDockerCount, "items": easyTierRoute}}),
+		"connectors":     requiredObject([]string{"total", "tcp_configured", "tcp_active"}, map[string]any{"total": integerOpenAPISchema(), "tcp_configured": map[string]any{"type": "boolean"}, "tcp_active": map[string]any{"type": "boolean"}, "tcp_listener_available": map[string]any{"type": []string{"boolean", "null"}}, "items": map[string]any{"type": "array", "maxItems": MaxDockerCount, "items": easyTierConnector}}),
 		"traffic":        requiredObject([]string{"bytes_rx", "bytes_tx", "bytes_forwarded"}, map[string]any{"bytes_rx": integerOpenAPISchema(), "bytes_tx": integerOpenAPISchema(), "bytes_forwarded": integerOpenAPISchema()}),
 		"command_status": requiredObject([]string{"node_info", "peer_list", "route_list", "connector_list", "stats_show"}, map[string]any{"node_info": schemaRef("EasyTierCommandStatus"), "peer_list": schemaRef("EasyTierCommandStatus"), "route_list": schemaRef("EasyTierCommandStatus"), "connector_list": schemaRef("EasyTierCommandStatus"), "stats_show": schemaRef("EasyTierCommandStatus")}),
 		"updated_at":     nullableString(MaxTimestampLength, "Client collection time in RFC3339"), "stale": map[string]any{"type": "boolean"}, "error": nullableRef("ExtensionError"),
+	})
+	easyTierExpectationValues := requiredObject([]string{"administrative_role", "network_name", "overlay_ipv4", "proxy_cidrs"}, map[string]any{
+		"administrative_role": nullableString(MaxEasyTierTextLength, "Configured or observed EasyTier administrative role"),
+		"network_name":        nullableString(MaxEasyTierTextLength, "Configured or observed EasyTier network name"),
+		"overlay_ipv4":        nullableString(64, "Configured or observed internal EasyTier overlay IPv4"),
+		"proxy_cidrs":         map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string", "maxLength": 64}},
+	})
+	easyTierExpectationProjection := requiredObject([]string{"configured", "result"}, map[string]any{
+		"configured": map[string]any{"type": "boolean"},
+		"result":     map[string]any{"type": "string", "enum": []string{"matched", "mismatch", "not_observable", "not_configured"}},
+		"expected":   schemaRef("EasyTierExpectationValues"),
+		"observed":   schemaRef("EasyTierExpectationValues"),
 	})
 
 	statsServer := requiredObject(
@@ -359,6 +516,7 @@ func extensionOpenAPISchemas() map[string]any {
 		map[string]any{
 			"name": stringOpenAPISchema(), "type": stringOpenAPISchema(), "host": stringOpenAPISchema(), "location": stringOpenAPISchema(),
 			"online4": map[string]any{"type": "boolean"}, "online6": map[string]any{"type": "boolean"},
+			"enabled": map[string]any{"type": "boolean"}, "ingestion_mode": map[string]any{"type": "string", "enum": []string{"legacy", "device_v2", "cutover"}},
 			"uptime": stringOpenAPISchema(), "load_1": numberOpenAPISchema(), "load_5": numberOpenAPISchema(), "load_15": numberOpenAPISchema(),
 			"ping_10010": numberOpenAPISchema(), "ping_189": numberOpenAPISchema(), "ping_10086": numberOpenAPISchema(),
 			"time_10010": integerOpenAPISchema(), "time_189": integerOpenAPISchema(), "time_10086": integerOpenAPISchema(),
@@ -368,13 +526,15 @@ func extensionOpenAPISchemas() map[string]any {
 			"memory_total": integerOpenAPISchema(), "memory_used": integerOpenAPISchema(), "swap_total": integerOpenAPISchema(), "swap_used": integerOpenAPISchema(),
 			"hdd_total": integerOpenAPISchema(), "hdd_used": integerOpenAPISchema(), "last_network_in": integerOpenAPISchema(), "last_network_out": integerOpenAPISchema(),
 			"io_read": integerOpenAPISchema(), "io_write": integerOpenAPISchema(), "custom": stringOpenAPISchema(), "os": stringOpenAPISchema(),
-			"extension_version": map[string]any{"type": "string", "const": ExtensionSchemaVersion, "maxLength": MaxExtensionVersionLength},
-			"received_at":       map[string]any{"type": "string", "format": "date-time", "maxLength": MaxTimestampLength},
-			"hardware":          schemaRef("HardwareStats"),
-			"docker":            schemaRef("DockerStats"),
-			"hermes":            schemaRef("HermesStats"),
-			"lucky":             schemaRef("LuckyStats"),
-			"easytier":          schemaRef("EasyTierStats"),
+			"extension_version":    map[string]any{"type": "string", "const": ExtensionSchemaVersion, "maxLength": MaxExtensionVersionLength},
+			"received_at":          map[string]any{"type": "string", "format": "date-time", "maxLength": MaxTimestampLength},
+			"hardware":             schemaRef("HardwareStats"),
+			"docker":               schemaRef("DockerStats"),
+			"hermes":               schemaRef("HermesStats"),
+			"lucky":                schemaRef("LuckyStats"),
+			"easytier":             schemaRef("EasyTierStats"),
+			"client_build":         nullableRef("ClientBuildInfo"),
+			"easytier_expectation": schemaRef("EasyTierExpectationProjection"),
 		},
 	)
 	statsDocument := requiredObject(
@@ -383,42 +543,55 @@ func extensionOpenAPISchemas() map[string]any {
 			"servers":  map[string]any{"type": "array", "items": schemaRef("StatsServer")},
 			"sslcerts": map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
 			"updated":  map[string]any{"type": "string"},
+			"build":    schemaRef("ServerBuildInfo"),
 			"reload":   map[string]any{"type": "boolean"},
 		},
 	)
 
 	return map[string]any{
-		"ExtensionError":         extensionError,
-		"TemperatureReading":     temperature,
-		"DiskTemperature":        diskTemperature,
-		"HardwareStats":          hardware,
-		"DockerContainerStats":   dockerContainer,
-		"DockerStats":            dockerStats,
-		"TokenUsageStats":        tokenUsage,
-		"ConfigModelSummary":     configModel,
-		"AuxiliaryModelSummary":  auxiliaryModel,
-		"DelegationSummary":      delegation,
-		"SanitizedConfigSummary": configSummary,
-		"MixtureOfAgentsStats":   mixtureOfAgents,
-		"HermesProfileStats":     hermesProfile,
-		"HermesStats":            hermesStats,
-		"LuckyDDNSRecord":        luckyDDNSRecord,
-		"LuckyWebService":        luckyWebService,
-		"LuckyPortForward":       luckyPortForward,
-		"LuckyCertificate":       luckyCertificate,
-		"LuckyServiceStats":      luckyService,
-		"LuckyVersionStats":      luckyVersion,
-		"LuckyIPResolutionStats": luckyIPResolution,
-		"LuckyDynamicDNSStats":   requiredObject([]string{"total", "enabled", "disabled", "healthy", "error_count", "records", "status", "updated_at", "stale", "error"}, luckyModuleProperties("records", "LuckyDDNSRecord")),
-		"LuckyWebServicesStats":  requiredObject([]string{"total", "enabled", "disabled", "healthy", "error_count", "services", "status", "updated_at", "stale", "error"}, luckyModuleProperties("services", "LuckyWebService")),
-		"LuckyPortForwardsStats": requiredObject([]string{"total", "enabled", "disabled", "healthy", "error_count", "rules", "status", "updated_at", "stale", "error"}, luckyModuleProperties("rules", "LuckyPortForward")),
-		"LuckyCertificatesStats": luckyCertificates,
-		"LuckyStats":             luckyStats,
-		"EasyTierCommandStatus":  easyTierCommand,
-		"EasyTierNodeStats":      easyTierNode,
-		"EasyTierStats":          easyTierStats,
-		"StatsServer":            statsServer,
-		"StatsDocument":          statsDocument,
+		"ExtensionError":                extensionError,
+		"TemperatureReading":            temperature,
+		"DiskTemperature":               diskTemperature,
+		"PhysicalDiskStats":             physicalDisk,
+		"FilesystemStats":               filesystem,
+		"StorageSummary":                storageSummary,
+		"StorageStats":                  storageStats,
+		"SystemIdentity":                systemIdentity,
+		"CPUUsageStats":                 cpuUsage,
+		"CPUDetails":                    cpuDetails,
+		"MemoryDetails":                 memoryDetails,
+		"ClientBuildInfo":               clientBuild,
+		"ServerBuildInfo":               serverBuild,
+		"HardwareStats":                 hardware,
+		"DockerContainerStats":          dockerContainer,
+		"DockerStats":                   dockerStats,
+		"TokenUsageStats":               tokenUsage,
+		"ConfigModelSummary":            configModel,
+		"AuxiliaryModelSummary":         auxiliaryModel,
+		"DelegationSummary":             delegation,
+		"SanitizedConfigSummary":        configSummary,
+		"MixtureOfAgentsStats":          mixtureOfAgents,
+		"HermesProfileStats":            hermesProfile,
+		"HermesStats":                   hermesStats,
+		"LuckyDDNSRecord":               luckyDDNSRecord,
+		"LuckyWebService":               luckyWebService,
+		"LuckyPortForward":              luckyPortForward,
+		"LuckyCertificate":              luckyCertificate,
+		"LuckyServiceStats":             luckyService,
+		"LuckyVersionStats":             luckyVersion,
+		"LuckyIPResolutionStats":        luckyIPResolution,
+		"LuckyDynamicDNSStats":          requiredObject([]string{"total", "enabled", "disabled", "healthy", "error_count", "records", "status", "updated_at", "stale", "error"}, luckyModuleProperties("records", "LuckyDDNSRecord")),
+		"LuckyWebServicesStats":         requiredObject([]string{"total", "enabled", "disabled", "healthy", "error_count", "services", "status", "updated_at", "stale", "error"}, luckyModuleProperties("services", "LuckyWebService")),
+		"LuckyPortForwardsStats":        requiredObject([]string{"total", "enabled", "disabled", "healthy", "error_count", "rules", "status", "updated_at", "stale", "error"}, luckyModuleProperties("rules", "LuckyPortForward")),
+		"LuckyCertificatesStats":        luckyCertificates,
+		"LuckyStats":                    luckyStats,
+		"EasyTierCommandStatus":         easyTierCommand,
+		"EasyTierNodeStats":             easyTierNode,
+		"EasyTierStats":                 easyTierStats,
+		"EasyTierExpectationValues":     easyTierExpectationValues,
+		"EasyTierExpectationProjection": easyTierExpectationProjection,
+		"StatsServer":                   statsServer,
+		"StatsDocument":                 statsDocument,
 	}
 }
 

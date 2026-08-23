@@ -6,7 +6,7 @@
     <meta name="description" content="HermesStatus 多设备云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260729-1" />
+    <link rel="stylesheet" href="css/app.css?v=20260813-6" />
 </head>
 <body>
     <header class="topbar">
@@ -20,6 +20,7 @@
         </div>
         <nav class="nav" aria-label="主导航" role="tablist">
             <button id="homeTab" type="button" class="active" role="tab" aria-selected="true" aria-controls="homePage" aria-current="page" data-page-target="home">主页</button>
+            <button id="hardwareTab" type="button" role="tab" aria-selected="false" aria-controls="hardwarePage" tabindex="-1" data-page-target="hardware">硬件信息</button>
             <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
             <button id="luckyTab" type="button" role="tab" aria-selected="false" aria-controls="luckyPage" tabindex="-1" data-page-target="lucky">Lucky</button>
             <button id="easytierTab" type="button" role="tab" aria-selected="false" aria-controls="easytierPage" tabindex="-1" data-page-target="easytier">EasyTier</button>
@@ -37,7 +38,10 @@
         <section id="deviceSelector" class="device-selector" aria-labelledby="deviceSelectorLabel" hidden>
             <div class="device-selector-heading">
                 <strong id="deviceSelectorLabel">设备</strong>
-                <span id="deviceSelectionNotice" class="device-selection-notice" role="status" aria-live="polite" hidden></span>
+                <div class="device-selector-tools">
+                    <span id="deviceSelectionNotice" class="device-selection-notice" role="status" aria-live="polite" hidden></span>
+                    <button id="deviceDiagnosticsButton" type="button" class="tool-button device-diagnostics-button" aria-haspopup="dialog">设备信息</button>
+                </div>
             </div>
             <div id="deviceButtons" class="device-buttons" role="group" aria-labelledby="deviceSelectorLabel"></div>
             <label class="device-select-label" for="deviceSelect">
@@ -85,6 +89,51 @@
                 </section>
             </div>
 
+            <div id="hardwarePage" class="page-panel" role="tabpanel" aria-labelledby="hardwareTab" data-page="hardware" hidden>
+                <section class="data-section" aria-label="CPU 信息与使用率">
+                    <div class="hardware-cpu-columns">
+                        <div class="hardware-cpu-column">
+                            <div class="section-head"><h2 id="hardwareCpuTitle">CPU 信息</h2></div>
+                            <dl id="hardwareCpuInfo" class="detail-list hardware-system-info hardware-cpu-info"></dl>
+                        </div>
+                        <div class="hardware-cpu-column">
+                            <div class="section-head"><h2 id="hardwareCpuUsageTitle">CPU 使用率</h2><span id="hardwareCpuUsageMeta" class="section-meta"></span></div>
+                            <div id="hardwareCpuUsage" class="hardware-usage-grid hardware-cpu-usage-grid"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="data-section" aria-labelledby="hardwareMemoryTitle">
+                    <div class="section-head"><h2 id="hardwareMemoryTitle">内存信息</h2></div>
+                    <dl id="hardwareMemoryInfo" class="hardware-memory-grid hardware-system-info"></dl>
+                </section>
+
+                <section class="data-section" aria-labelledby="hardwareSystemTitle">
+                    <div class="section-head"><h2 id="hardwareSystemTitle">系统信息</h2></div>
+                    <dl id="hardwareSystemInfo" class="detail-list hardware-system-info hardware-three-column-info"></dl>
+                </section>
+
+                <section class="data-section" aria-labelledby="hardwareDisksTitle">
+                    <div class="section-head"><h2 id="hardwareDisksTitle">物理磁盘</h2></div>
+                    <div class="table-wrap">
+                        <table class="data hardware-disks-table">
+                            <thead><tr><th>设备</th><th>型号</th><th>容量</th><th>温度</th><th>SMART</th><th>通电时间</th></tr></thead>
+                            <tbody id="hardwareDisksBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="data-section" aria-labelledby="hardwareFilesystemsTitle">
+                    <div class="section-head"><h2 id="hardwareFilesystemsTitle">卷 / 文件系统</h2></div>
+                    <div class="table-wrap">
+                        <table class="data hardware-filesystems-table">
+                            <thead><tr><th>挂载点</th><th>来源</th><th>格式</th><th>已用 / 总容量</th><th>使用率</th><th>采集状态</th></tr></thead>
+                            <tbody id="hardwareFilesystemsBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
             <div id="dockerPage" class="page-panel" role="tabpanel" aria-labelledby="dockerTab" data-page="docker" hidden>
                 <section class="data-section" aria-labelledby="containersTitle">
                     <div class="section-head">
@@ -108,6 +157,10 @@
             </div>
 
             <div id="luckyPage" class="page-panel" role="tabpanel" aria-labelledby="luckyTab" data-page="lucky" hidden>
+                <section class="data-section" aria-labelledby="luckyServiceTitle">
+                    <div class="section-head"><h2 id="luckyServiceTitle">Lucky 服务状态</h2></div>
+                    <dl id="luckyServiceSummary" class="detail-list hardware-system-info hardware-three-column-info"></dl>
+                </section>
                 <section class="data-section" aria-labelledby="luckyConfigTitle">
                     <div class="section-head"><h2 id="luckyConfigTitle">配置信息</h2></div>
                     <div class="table-wrap">
@@ -144,9 +197,21 @@
                     <div class="section-head"><h2 id="easytierSummaryTitle">EasyTier 状态</h2><span id="easytierMeta" class="section-meta"></span></div>
                     <dl id="easytierSummary" class="detail-list easytier-summary"></dl>
                 </section>
-                <section class="data-section" aria-labelledby="easytierCommandsTitle">
-                    <div class="section-head"><h2 id="easytierCommandsTitle">采集状态</h2></div>
-                    <div class="table-wrap"><table class="data easytier-table"><thead><tr><th>数据源</th><th>状态</th><th>说明</th></tr></thead><tbody id="easytierCommandsBody"></tbody></table></div>
+                <section class="data-section" aria-labelledby="easytierPeersTitle">
+                    <div class="section-head"><h2 id="easytierPeersTitle">EasyTier 节点</h2></div>
+                    <div class="table-wrap"><table class="data easytier-peer-table"><thead><tr><th>Peer</th><th>Overlay IP</th><th>路径</th><th>已建立隧道</th><th>地址族</th><th>延迟</th><th>丢包</th><th>RX</th><th>TX</th><th>版本</th></tr></thead><tbody id="easytierPeersBody"></tbody></table></div>
+                </section>
+                <section class="data-section" aria-labelledby="easytierRoutesTitle">
+                    <div class="section-head"><h2 id="easytierRoutesTitle">EasyTier 路由</h2></div>
+                    <div class="table-wrap"><table class="data easytier-route-table"><thead><tr><th>目标</th><th>Overlay IP</th><th>Proxy CIDRs</th><th>Next Hop</th><th>路径</th><th>延迟</th><th>Cost</th></tr></thead><tbody id="easytierRoutesBody"></tbody></table></div>
+                </section>
+                <section class="data-section" aria-labelledby="easytierConnectorsTitle">
+                    <div class="section-head"><h2 id="easytierConnectorsTitle">EasyTier 连接器</h2></div>
+                    <div class="table-wrap"><table class="data easytier-connector-table"><thead><tr><th>传输</th><th>端点</th><th>状态</th></tr></thead><tbody id="easytierConnectorsBody"></tbody></table></div>
+                </section>
+                <section class="data-section" aria-labelledby="easytierExpectationTitle">
+                    <div class="section-head"><h2 id="easytierExpectationTitle">Expected / Observed</h2></div>
+                    <div class="table-wrap"><table class="data easytier-table"><thead><tr><th>项目</th><th>Expected</th><th>Observed</th><th>结果</th></tr></thead><tbody id="easytierExpectationBody"></tbody></table></div>
                 </section>
             </div>
         </div>
@@ -163,10 +228,28 @@
         </section>
     </div>
 
+    <div id="deviceDiagnosticsModal" class="modal-backdrop" hidden>
+        <section class="modal-box diagnostic-modal-box" role="dialog" aria-modal="true" aria-labelledby="deviceDiagnosticsTitle" aria-describedby="deviceDiagnosticsContent">
+            <button id="deviceDiagnosticsClose" type="button" class="modal-close" title="关闭" aria-label="关闭">×</button>
+            <div class="modal-heading"><h2 id="deviceDiagnosticsTitle">设备信息</h2></div>
+            <dl id="deviceDiagnosticsContent" class="detail-list diagnostic-details"></dl>
+        </section>
+    </div>
+
+    <div id="aboutModal" class="modal-backdrop" hidden>
+        <section class="modal-box diagnostic-modal-box" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" aria-describedby="aboutContent">
+            <button id="aboutClose" type="button" class="modal-close" title="关闭" aria-label="关闭">×</button>
+            <div class="modal-heading"><h2 id="aboutTitle">关于 / 构建信息</h2></div>
+            <dl id="aboutContent" class="detail-list diagnostic-details"></dl>
+        </section>
+    </div>
+
     <footer class="footer">
         <a href="https://github.com/404404/HermesStatus" target="_blank" rel="noopener">HermesStatus</a>
+        <span aria-hidden="true">·</span>
+        <button id="aboutButton" type="button" class="footer-button" aria-haspopup="dialog">关于 / 构建信息</button>
     </footer>
 
-    <script src="js/app.js?v=20260729-1" defer></script>
+    <script src="js/app.js?v=20260813-6" defer></script>
 </body>
 </html>

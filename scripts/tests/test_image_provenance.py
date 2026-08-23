@@ -46,11 +46,35 @@ def validate(payload):
 
 
 class ImageProvenanceTests(unittest.TestCase):
+    def test_publisher_preserves_component_metadata(self):
+        workflow = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / ".github/workflows/publish-preview-images.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("org.opencontainers.image.title=HermesStatus Server", workflow)
+        self.assertIn("org.opencontainers.image.title=HermesStatus Client", workflow)
+        self.assertIn("io.hermesstatus.component=server", workflow)
+        self.assertIn("io.hermesstatus.component=client", workflow)
+        for label in (
+            "org.opencontainers.image.version=${{ steps.provenance.outputs.version }}",
+            "org.opencontainers.image.revision=${{ github.sha }}",
+            "org.opencontainers.image.created=${{ steps.provenance.outputs.build_date }}",
+            "org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}",
+            "org.opencontainers.image.licenses=MIT",
+        ):
+            self.assertEqual(workflow.count(label), 2)
+
     def test_server_dockerfile_copies_multi_device_contract_package(self):
         dockerfile = (
             pathlib.Path(__file__).resolve().parents[2] / "Dockerfile.server"
         ).read_text(encoding="utf-8")
         self.assertIn("COPY server/contracts ./contracts", dockerfile)
+
+    def test_client_dockerfile_sets_client_component_metadata(self):
+        dockerfile = (
+            pathlib.Path(__file__).resolve().parents[2] / "Dockerfile.client"
+        ).read_text(encoding="utf-8")
+        self.assertIn('io.hermesstatus.component="client"', dockerfile)
 
     def test_valid_metadata(self):
         result = validate(valid_inspect())

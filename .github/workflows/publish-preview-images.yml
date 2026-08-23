@@ -1,0 +1,216 @@
+name: Publish 2.3 Preview Images
+
+on:
+  push:
+    branches:
+      - 2.3-preview
+      - codex/2.3-synology-real-qualification
+  workflow_dispatch:
+
+concurrency:
+  group: publish-preview-images-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+  IMAGE_SOURCE: https://github.com/404404/HermesStatus
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python3 scripts/validate_migration_contracts.py
+
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: go mod download
+      - run: test -z "$(gofmt -l .)"
+      - run: go test ./...
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go build ./...
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python3 -m unittest discover -s clients -p 'test_*.py'
+      - run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - run: python3 -m py_compile clients/client-linux.py clients/client-psutil.py clients/host_collector.py scripts/export-hermes-status.py scripts/hermes_config_summary.py
+      - run: sh -n clients/entrypoint.sh && bash -n status.sh
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: find web -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+      - run: node --test web/js/app.test.js
+      - run: python3 scripts/check_release_boundaries.py
+
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - run: ADMIN_TOKEN=ci-placeholder docker compose -f docker-compose-server.yml config --quiet
+      - run: SERVER=192.0.2.10 SERVERSTATUS_USER=ci-node PASSWORD=ci-placeholder CLIENT_PRIVILEGED=false HERMES_ROOT_HOST=/tmp/hermes CLIENT_STATUS_DIR_HOST=/tmp/client-status docker compose -f docker-compose-client.yml config --quiet
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: python3 scripts/check_release_boundaries.py
+
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Prepare image provenance
+        id: provenance
+        shell: bash
+        run: |
+          echo "version=2.3-preview-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.server
+          push: false
+          load: true
+          tags: hermesstatus-server:publish-check
+          build-args: |
+            VERSION=${{ steps.provenance.outputs.version }}
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ steps.provenance.outputs.build_date }}
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.client
+          push: false
+          load: true
+          tags: hermesstatus-client:publish-check
+          build-args: |
+            VERSION=${{ steps.provenance.outputs.version }}
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ steps.provenance.outputs.build_date }}
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}
+      - name: Validate image provenance
+        run: |
+          python3 scripts/validate_image_provenance.py \
+            --server-image hermesstatus-server:publish-check \
+            --client-image hermesstatus-client:publish-check \
+            --version "${{ steps.provenance.outputs.version }}" \
+            --revision "${{ github.sha }}" \
+            --created "${{ steps.provenance.outputs.build_date }}" \
+            --source "${{ env.IMAGE_SOURCE }}"
+
+  publish:
+    needs: [contracts, go, python, frontend, compose, security, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Prepare image provenance
+        id: provenance
+        shell: bash
+        run: |
+          echo "version=2.3-preview-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: server_meta
+        with:
+          images: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/hermesstatus-server
+          tags: |
+            type=raw,value=${{ steps.provenance.outputs.version }}
+            type=raw,value=2.3-preview,enable=${{ github.ref == 'refs/heads/2.3-preview' }}
+      - uses: docker/metadata-action@v5
+        id: client_meta
+        with:
+          images: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/hermesstatus-client
+          tags: |
+            type=raw,value=${{ steps.provenance.outputs.version }}
+            type=raw,value=2.3-preview,enable=${{ github.ref == 'refs/heads/2.3-preview' }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.server
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.server_meta.outputs.tags }}
+          labels: |
+            ${{ steps.server_meta.outputs.labels }}
+            org.opencontainers.image.title=HermesStatus Server
+            org.opencontainers.image.description=HermesStatus device status server
+            org.opencontainers.image.version=${{ steps.provenance.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.build_date }}
+            org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
+            org.opencontainers.image.licenses=MIT
+            io.hermesstatus.component=server
+          build-args: |
+            VERSION=${{ steps.provenance.outputs.version }}
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ steps.provenance.outputs.build_date }}
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.client
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.client_meta.outputs.tags }}
+          labels: |
+            ${{ steps.client_meta.outputs.labels }}
+            org.opencontainers.image.title=HermesStatus Client
+            org.opencontainers.image.description=HermesStatus host and Hermes profile collector
+            org.opencontainers.image.version=${{ steps.provenance.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.build_date }}
+            org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
+            org.opencontainers.image.licenses=MIT
+            io.hermesstatus.component=client
+          build-args: |
+            VERSION=${{ steps.provenance.outputs.version }}
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ steps.provenance.outputs.build_date }}
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}

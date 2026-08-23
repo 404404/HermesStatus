@@ -32,6 +32,67 @@ The Client also accepts paths and intervals for host collection. The important
 ones are `HWMON_ROOT`, `SMART_DEVICE`, `DOCKER_SOCKET`,
 `HARDWARE_INTERVAL`, `DOCKER_INTERVAL`, and `CLIENT_STATUS_DIR`.
 
+## Hardware collection
+
+Hardware details are optional bounded observations. `hardware.storage` separates
+physical disks from filesystems: a filesystem can resolve to one, many, or no
+reported physical disks. This supports ordinary partitions, LVM, MD RAID,
+device mapper, and Btrfs/EXT4 stacks without guessing that a logical volume is
+a disk.
+
+For Device v2, prefer the optional `hardware` object in `client-v2.json`:
+
+```json
+"hardware": {
+  "smart_devices": [
+    {"path": "/dev/sda", "type": null, "label": "data-disk-a"},
+    {"path": "/dev/sdb", "type": "sat", "label": "data-disk-b"}
+  ],
+  "primary_smart_device": "/dev/sda",
+  "filesystem_probes": [
+    {"mountpoint": "/data", "probe_path": "/host-storage/data"}
+  ]
+}
+```
+
+`smart_devices` is an explicit allowlist of 0–64 container-visible `/dev/*`
+paths. An intentional empty array disables SMART probing while retaining only
+safe topology inventory; it is not a collection failure. Optional `type` is a bounded smartctl device type such as `sat`, `scsi`,
+or `nvme`; it is not a shell fragment. `label` is collector configuration
+metadata and is not promised as a persisted or UI display field.
+`primary_smart_device` is optional and selects the compatibility singular SMART
+fields when several disks are observed. Without it, those singular fields are
+not arbitrarily taken from the first disk; detailed `storage.physical_disks`
+remains authoritative.
+
+`filesystem_probes` is an explicit list of up to 128 absolute display
+`mountpoint` (at most 512 characters) and container `probe_path` pairs. The
+configured mountpoint is preserved exactly, including legal repeated whitespace;
+the probe path must be a read-only mount of the intended host filesystem. The
+Client runs `findmnt` and `statvfs` only; it never walks or uploads directory
+contents. Pseudo filesystems and unavailable probes are reported as unavailable
+rather than presented as host storage. A bind-mount source is normalized to its
+safe `/dev/*` component; non-device sources are omitted rather than reported as
+endpoints. A Btrfs backing relation remains unknown unless every member can be
+proven safely.
+
+Configuration precedence is CLI, environment, JSON file, then defaults. The
+environment alternatives are `HERMESSTATUS_SMART_DEVICES` / `SMART_DEVICES`,
+`HERMESSTATUS_PRIMARY_SMART_DEVICE` / `PRIMARY_SMART_DEVICE`, and
+`HERMESSTATUS_FILESYSTEM_PROBES` / `FILESYSTEM_PROBES`; JSON values are JSON
+arrays. Legacy `SMART_DEVICE` remains the lowest-priority single-device form.
+Its image-default value `auto` is an automatic-discovery sentinel and does not
+override JSON `smart_devices`, including an intentional empty array.
+Do not set a legacy non-empty `SMART_DEVICE` in a Compose override that intends
+the JSON multi-disk allowlist to be authoritative.
+
+`auto` is retained for compatibility, but can discover only block devices
+already visible to the Client container. It does not grant devices, change
+cgroups, inspect unavailable host paths, or expand `/dev` access. See
+[Hardware monitoring design](design/HARDWARE_MONITORING.md) for the data and
+safety contract and [the device guide](DEVICE_CONFIGURATION.md) for Compose
+mappings.
+
 ## Hermes and Lucky
 
 `HERMES_EXPORT_CONFIG` points to a JSON or YAML exporter configuration. It
@@ -39,10 +100,19 @@ defines the Hermes root and the named profiles to inspect. The exporter reads
 configuration and status through read-only mounts and writes a sanitized
 snapshot to the Client status directory.
 
-Lucky collection is opt-in. Set `LUCKY_ENABLED=true`, provide
-`LUCKY_BASE_URL`, and use `LUCKY_TOKEN_FILE` rather than embedding a token in a
-Compose file. Keep `LUCKY_VERIFY_TLS=true` for HTTPS endpoints unless an
-explicit, temporary compatibility decision requires otherwise.
+Lucky collection is opt-in. Its local default is
+`https://127.0.0.1:16601`; the Collector accepts only loopback HTTP(S) URLs.
+Set `LUCKY_ENABLED=true` and, when an installation requires authentication, use
+`LUCKY_AUTH_MODE=open_token` or `admin_token` with a protected
+`LUCKY_TOKEN_FILE` instead of embedding a token in Compose. Set
+`LUCKY_AUTH_MODE=none` and leave `LUCKY_TOKEN_FILE` unset when the local API
+does not require authentication.
+
+Keep `LUCKY_VERIFY_TLS=true` for HTTPS endpoints. An explicit
+`LUCKY_VERIFY_TLS=false` is permitted only for a locally administered,
+loopback-only Lucky endpoint whose certificate cannot be validated; it never
+permits a remote Lucky URL and the Collector never falls back to it
+automatically.
 
 ## EasyTier monitoring
 
@@ -58,13 +128,19 @@ then defaults.
 | `EASYTIER_RPC_PORTAL` | `127.0.0.1:15888` | Only `127.0.0.1:15888` or `[::1]:15888` is accepted. |
 | `EASYTIER_TIMEOUT_SECONDS` | `5` | Integer from 1 to 30. |
 | `EASYTIER_INTERVAL_SECONDS` | `30` | Integer from 5 to 3600. |
+| `EASYTIER_ADMINISTRATIVE_ROLE` | unset | Optional explicit operator declaration: `site_router`, `endpoint`, `bootstrap_listener`, `relay_capable`, or `observer`. It is monitoring metadata, not device identity. |
 
 The JSON file may contain only `enabled`, `cli_path`, `rpc_portal`,
-`timeout_seconds`, and `interval_seconds`; it must be a regular file not
+`timeout_seconds`, `interval_seconds`, and `administrative_role`; it must be a regular file not
 writable by group or other users. Mount the CLI binary read-only into the
 Client. Do not mount EasyTier configuration, keys, or a non-loopback RPC portal.
 
 ## Device v2 configuration
+
+For the complete name/IP/port, file-path, and Compose-mount procedure, see the
+[Device configuration guide](DEVICE_CONFIGURATION.md). Device Registry
+`display_name` is the browser display-name authority; keep the Client URL under
+operator control.
 
 Device v2 needs four operator-managed paths:
 
@@ -85,3 +161,23 @@ serverstatus --validate-device-config \
   --device-credentials /absolute/path/credentials.d \
   --legacy-device-mapping /absolute/path/legacy-device-mapping.json
 ```
+
+## Optional EasyTier expectation
+
+Place an expectation only in the existing Registry device record when an
+operator wants comparison diagnostics. It is optional and does not create a
+device, authenticate a Client, or select credentials:
+
+```json
+"easytier_expectation": {
+  "administrative_role": "site_router",
+  "network_name": "home-404",
+  "overlay_ipv4": "10.0.0.1",
+  "proxy_cidrs": ["10.0.0.0/24"]
+}
+```
+
+Allowed roles are `site_router`, `endpoint`, `bootstrap_listener`,
+`relay_capable`, and `observer`; overlay and proxy values must be internal.
+Only configure values deliberately. Missing observations are not failures by
+themselves and display `not_observable`.

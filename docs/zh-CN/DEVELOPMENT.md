@@ -22,4 +22,15 @@ docker compose -f docker-compose-client.yml config --quiet
 
 ## Pull Request
 
-创建聚焦分支并提交，然后向 `2.0` 创建 PR。等待必需 CI 和 Review 反馈；在同一分支修复可操作问题，运行行为改变后重新部署候选验证，并只在操作员确认后合并。
+创建聚焦的 `codex/2.3-*` 分支并提交，然后向 `2.3-preview` 创建 Draft PR。等待
+必需 CI 和 Review 反馈；在同一分支修复可操作问题，运行行为改变后重新部署最终候选，
+并保持 Draft，直到操作员手动合并。不得自动 Mark Ready、Merge 或将 Preview 推进到
+`2.0`。
+
+EasyTier 改动除常规 Python、Go、race、vet、build、Node、Compose、contract 与 secret
+门禁外，还需要 synthetic 状态 Fixture 和真实 loopback GK50 采集检查。Synthetic 拓扑
+状态必须始终明确标记。
+
+硬件改动同样需要上述门禁，并验证 Client 配置优先级、单盘和多盘 SMART 行为、部分失败、block graph 的循环/深度上限、通用 LVM/MD RAID/device-mapper Fixture、文件系统 probe 安全性、Server 校验/持久化以及 WebUI 转义渲染。在桌面和移动尺寸下验证主页、Hardware、Docker、Lucky 与 EasyTier 的 single-stats-fetch 不变量。Synthetic Synology 布局只是合同 Fixture，绝不能描述为真实 DSM 资格验证。
+
+候选镜像必须在构建时注入 Server/Client 版本、完整 revision 和构建时间。资格验证需将页面显示的 revision 与镜像 OCI revision label 比对，将最终 HEAD 部署到隔离的 21443 Preview 项目，并保持 PR 为 Draft，等待人工合并。

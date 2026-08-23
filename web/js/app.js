@@ -16,6 +16,8 @@ const dashboardState = {
   deviceSelectionNotice: '',
   selectedProfileIndex: null,
   modalTrigger: null,
+  deviceDiagnosticsTrigger: null,
+  aboutTrigger: null,
   activePage: 'home',
   pagehideHandler: null,
   hashchangeHandler: null,
@@ -64,6 +66,19 @@ function formatBytes(value){
   return `${size.toFixed(digits)} ${units[unit]}`;
 }
 
+function formatTrafficBytes(value){
+  const number = finiteNumber(value);
+  if(number === null || number < 0) return '-';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let size = number;
+  let unit = 0;
+  while(size >= 1000 && unit < units.length - 1){
+    size /= 1000;
+    unit += 1;
+  }
+  return `${size.toFixed(1)}${units[unit]}`;
+}
+
 function percentage(used, total){
   const usedNumber = finiteNumber(used);
   const totalNumber = finiteNumber(total);
@@ -90,6 +105,7 @@ function cleanCpuModel(value){
   return model
     .replace(/\((?:R|TM|C)\)/gi, '')
     .replace(/\s+CPU\s*@\s*[\d.]+\s*(?:[GMK]?Hz)?\s*$/i, '')
+    .replace(/\s+@\s*[\d.]+\s*(?:[GMK]?Hz)?\s*$/i, '')
     .replace(/\s+/g, ' ')
     .trim() || '-';
 }
@@ -100,6 +116,12 @@ function formatTemperature(value){
   return `${Number.isInteger(number) ? number : number.toFixed(1)} °C`;
 }
 
+function formatCelsius(value){
+  const number = finiteNumber(value);
+  if(number === null) return '-';
+  return `${Number.isInteger(number) ? number : number.toFixed(1)}℃`;
+}
+
 function formatUptime(value){
   if(typeof value === 'string' && value.trim()) return value.trim();
   const seconds = finiteNumber(value);
@@ -108,6 +130,20 @@ function formatUptime(value){
   const hours = Math.floor(seconds % 86400 / 3600);
   const minutes = Math.floor(seconds % 3600 / 60);
   return `${days} 天 ${hours} 小时 ${minutes} 分`;
+}
+
+function formatUptimeHours(seconds){
+  const number = finiteNumber(seconds);
+  if(number === null || number < 0) return '-';
+  const hours = number / 3600;
+  return `${formatInteger(Math.floor(hours))} h (约${(hours / 24).toFixed(2)}天)`;
+}
+
+function uptimeHoursMetric(seconds){
+  const number = finiteNumber(seconds);
+  if(number === null || number < 0) return null;
+  const hours = number / 3600;
+  return {hours: Math.floor(hours), days: (hours / 24).toFixed(2)};
 }
 
 function formatDateTime(value){
@@ -139,7 +175,236 @@ function modelBreakdown(profile){
 }
 
 function normalizePageName(value){
-	return ['docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
+	return ['hardware', 'docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
+}
+
+function valueAt(objectValue, keys){
+  const object = safeObject(objectValue);
+  for(const key of keys){
+    const value = finiteNumber(object[key]);
+    if(value !== null) return value;
+  }
+  return null;
+}
+
+function deviceShortName(value){
+  const text = textOrDash(value);
+  if(text === '-') return text;
+  const segments = text.split('/').filter(Boolean);
+  return segments.length ? segments[segments.length - 1] : text;
+}
+
+function diskName(disk){
+  return textOrDash(disk?.id || deviceShortName(disk?.device));
+}
+
+function diskTemperatureC(disk){
+  return valueAt(disk, ['temperature_c', 'temperature', 'current_temperature_c']) ??
+    valueAt(disk?.temperature, ['current', 'value', 'temperature_c']);
+}
+
+function diskPowerOnHours(disk){
+  return valueAt(disk, ['power_on_hours', 'power_on_time_hours']);
+}
+
+function diskWrittenBytes(disk){
+  return valueAt(disk, ['written_bytes', 'bytes_written']);
+}
+
+function diskReadBytes(disk){
+  return valueAt(disk, ['read_bytes', 'bytes_read']);
+}
+
+function isSynologyHost(hardware){
+  const identity = safeObject(hardware?.system_identity);
+  return /synology\s+dsm/i.test(String(identity.distribution || identity.pretty_name || '')) ||
+    String(identity.source || '').toLowerCase() === 'dsm-version';
+}
+
+function largestDiskByCapacity(disks){
+  return maxDiskBy(disks, disk => finiteNumber(disk?.capacity_bytes));
+}
+
+function synologyVolumeLabel(filesystems){
+  const candidate = (Array.isArray(filesystems) ? filesystems : [])
+    .map(filesystem => ({filesystem, total: finiteNumber(filesystem?.total_bytes)}))
+    .filter(item => item.total !== null)
+    .sort((left, right) => right.total - left.total)[0]?.filesystem;
+  const mountpoint = String(candidate?.mountpoint || '');
+  const match = /^\/volume(\d+)(?:\/|$)/.exec(mountpoint);
+  return match ? `vol${match[1]}` : '-';
+}
+
+function homeDiskUsage(host, hardware){
+  const used = finiteNumber(host?.hdd_used);
+  const total = finiteNumber(host?.hdd_total);
+  if(used === null || total === null) return {text: '-', valueText: '-', label: null, percent: null};
+  const filesystems = dataFilesystemItemsForView(hardware);
+  const selectedFilesystem = filesystems
+    .filter(item => item?.collection_status === 'healthy' && finiteNumber(item?.total_bytes) !== null && finiteNumber(item?.used_bytes) !== null)
+    .sort((left, right) => finiteNumber(right.total_bytes) - finiteNumber(left.total_bytes))[0];
+  const reportedTotalBytes = total * 1000 * 1000;
+  const matchesSelectedFilesystem = selectedFilesystem && Math.abs(finiteNumber(selectedFilesystem.total_bytes) - reportedTotalBytes) < 1000 * 1000;
+  const label = matchesSelectedFilesystem
+    ? (isSynologyHost(hardware)
+      ? synologyVolumeLabel([selectedFilesystem])
+      : (filesystemBackingDisks(selectedFilesystem).text))
+    : '-';
+  const valueText = `${formatBytes(used * 1000 * 1000)} / ${formatBytes(total * 1000 * 1000)}`;
+  return {
+    text: `${valueText}${label === '-' ? '' : ` (${label})`}`,
+    valueText,
+    label: label === '-' ? null : label,
+    percent: percentage(used, total)
+  };
+}
+
+function conciseOsVersion(host, hardware){
+  const identity = safeObject(hardware?.system_identity);
+  if(isSynologyHost(hardware)){
+    const version = String(identity.version || host?.os || '');
+    const match = /(?:dsm\s*)?(\d+\.\d+(?:\.\d+)?)/i.exec(version);
+    return match ? `DSM ${match[1]}` : 'DSM';
+  }
+  return textOrDash(host?.os);
+}
+
+function storageState(hardware){
+  const storage = safeObject(hardware?.storage);
+  const physicalDisks = Array.isArray(storage.physical_disks)
+    ? storage.physical_disks.filter(item => item && typeof item === 'object')
+    : [];
+  const filesystems = Array.isArray(storage.filesystems)
+    ? storage.filesystems.filter(item => item && typeof item === 'object')
+    : [];
+  return {storage, physicalDisks, filesystems};
+}
+
+function legacyPhysicalDisk(hardware){
+  const temperature = safeObject(hardware?.disk_temperature);
+  const hasLegacyValue = [
+    hardware?.disk_device,
+    hardware?.disk_smart_status,
+    hardware?.disk_power_on_hours,
+    hardware?.disk_written_bytes,
+    hardware?.disk_read_bytes,
+    temperature.current,
+    temperature.value
+  ].some(value => value !== null && value !== undefined && value !== 'unknown');
+  if(!hasLegacyValue) return null;
+  const device = textOrDash(hardware?.disk_device);
+  return {
+    id: deviceShortName(device),
+    device: device === '-' ? null : device,
+    model: null,
+    capacity_bytes: null,
+    temperature_c: valueAt(temperature, ['current', 'value', 'highest']),
+    smart_status: hardware?.disk_smart_status,
+    power_on_hours: hardware?.disk_power_on_hours,
+    written_bytes: hardware?.disk_written_bytes,
+    read_bytes: hardware?.disk_read_bytes,
+    smart_source: hardware?.disk_smart_source
+  };
+}
+
+function physicalDisksForView(hardware){
+  const state = storageState(hardware);
+  if(state.physicalDisks.length) return state.physicalDisks;
+  const legacy = legacyPhysicalDisk(hardware);
+  return legacy ? [legacy] : [];
+}
+
+function filesystemItemsForView(hardware){
+  return storageState(hardware).filesystems;
+}
+
+function dataFilesystemItemsForView(hardware){
+  const filesystems = filesystemItemsForView(hardware);
+  if(!isSynologyHost(hardware)) return filesystems;
+  // DSM exposes small internal, boot and package filesystems too. The
+  // explicitly configured /volumeN probes are its operator data volumes.
+  return filesystems.filter(filesystem => /^\/volume\d+(?:\/|$)/.test(String(filesystem?.mountpoint || '')));
+}
+
+function temperatureSensorEntries(hardware){
+  const cpuTemperature = safeObject(hardware?.cpu_temperature);
+  const groups = [
+    hardware?.cpu_temperatures,
+    hardware?.cpu_temperature_sensors,
+    cpuTemperature.sensors,
+    safeObject(hardware?.sensors).cpu
+  ];
+  const entries = groups.flatMap(group => Array.isArray(group) ? group : [])
+    .filter(item => item && typeof item === 'object')
+    .map(item => ({
+      value: valueAt(item, ['value', 'temperature_c', 'temperature', 'current']),
+      label: textOrDash(item.label || item.name || item.sensor || item.id)
+    }))
+    .filter(item => item.value !== null);
+  if(entries.length) return entries;
+  const value = valueAt(cpuTemperature, ['value', 'temperature_c', 'current', 'highest']);
+  if(value === null) return [];
+  return [{value, label: textOrDash(cpuTemperature.label || cpuTemperature.sensor || cpuTemperature.name)}];
+}
+
+function maximumTemperature(entries){
+  const valid = entries.filter(entry => finiteNumber(entry?.value) !== null);
+  if(!valid.length) return null;
+  return valid.reduce((highest, entry) => entry.value > highest.value ? entry : highest);
+}
+
+function maxDiskBy(disks, metric){
+  const candidates = disks
+    .map(disk => ({disk, value: metric(disk)}))
+    .filter(item => item.value !== null);
+  if(!candidates.length) return null;
+  return candidates.reduce((highest, entry) => entry.value > highest.value ? entry : highest).disk;
+}
+
+function diskIoCandidate(disks){
+  return maxDiskBy(disks, diskWrittenBytes) || maxDiskBy(disks, diskReadBytes);
+}
+
+function parenthesizedMeta(value){
+  const text = textOrDash(value);
+  return text === '-' ? '' : `<span class="power-on-days">(${escapeHtml(text)})</span>`;
+}
+
+function smartHomeMarkup(disks, hardware){
+  if(disks.length === 1){
+    const disk = disks[0];
+    const state = disk.smart_status ?? hardware?.disk_smart_status;
+    const fallback = disk?.completeness === 'partial' && disk?.health_source === 'attribute_check';
+    return escapeHtml(fallback ? `${statusText(state)}（属性检查）` : statusText(state));
+  }
+  if(disks.length > 1){
+    const passed = disks.filter(disk => String(disk.smart_status ?? '').toLowerCase() === 'passed');
+    const attributeFallback = passed
+      .filter(disk => disk?.completeness === 'partial' && disk?.health_source === 'attribute_check')
+      .length;
+    const failed = disks
+      .filter(disk => String(disk.smart_status ?? '').toLowerCase() === 'failed')
+      .map(diskName)
+      .filter(name => name !== '-');
+    const unknown = disks.filter(disk => {
+      const status = String(disk.smart_status ?? '').toLowerCase();
+      return status !== 'passed' && status !== 'failed';
+    }).length;
+    const details = failed.length
+      ? `${failed.join('、')}故障`
+      : unknown ? `${unknown} 块未知`
+      : attributeFallback ? `${attributeFallback} 块属性检查` : '';
+    return `${escapeHtml(`${passed.length} / ${disks.length} 通过`)}${parenthesizedMeta(details)}`;
+  }
+  return escapeHtml(statusText(hardware?.disk_smart_status ?? 'unknown'));
+}
+
+function diskSmartMarkup(disk){
+  const state = String(disk?.smart_status ?? 'unknown').toLowerCase();
+  const fallback = disk?.completeness === 'partial' && disk?.health_source === 'attribute_check';
+  const label = fallback ? `${statusText(state)}（属性检查）` : statusText(state);
+  const detail = fallback ? '原生 SMART RETURN STATUS 不可用；已使用属性阈值检查结果。' : '';
+  return `<span class="badge ${statusTone(state)}"${detail ? ` title="${escapeHtml(detail)}"` : ''}>${escapeHtml(label)}</span>`;
 }
 
 function validDeviceId(value){
@@ -262,7 +527,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
   const host = devices.find(device => device.device_id === selectedDeviceId) ||
     (selectedDeviceId === null ? devices[0] : null) ||
     (!hasV2Devices ? selectSingleHost(documentObject.servers) : null);
-	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, profiles: [], containers: [] };
+	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, easytierExpectation: {}, profiles: [], containers: [] };
 
   const hardware = safeObject(host.hardware);
   const docker = safeObject(host.docker);
@@ -270,7 +535,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
 	const lucky = safeObject(host.lucky);
 	const easytier = safeObject(host.easytier);
   const memoryPercent = percentage(host.memory_used, host.memory_total);
-  const diskPercent = percentage(host.hdd_used, host.hdd_total);
+  const diskUsage = homeDiskUsage(host, hardware);
   const cpuPercent = finiteNumber(host.cpu) === null ? null : clamp(host.cpu, 0, 100);
 
   return {
@@ -282,19 +547,20 @@ function buildViewModel(documentValue, selectedDeviceId = null){
 		hermes,
 		lucky,
 		easytier,
+		easytierExpectation: safeObject(host.easytier_expectation),
     profiles: Array.isArray(hermes.profiles) ? hermes.profiles : [],
     containers: Array.isArray(docker.containers) ? docker.containers : [],
     resources: {
       cpuPercent,
       memoryPercent,
-      diskPercent,
+      diskPercent: diskUsage.percent,
       cpuModel: cleanCpuModel(hardware.cpu_model ?? host.cpu_model),
       memoryText: finiteNumber(host.memory_used) === null || finiteNumber(host.memory_total) === null
         ? '-'
         : `${formatBytes(host.memory_used * 1000)} / ${formatBytes(host.memory_total * 1000)}`,
-      diskText: finiteNumber(host.hdd_used) === null || finiteNumber(host.hdd_total) === null
-        ? '-'
-        : `${formatBytes(host.hdd_used * 1000 * 1000)} / ${formatBytes(host.hdd_total * 1000 * 1000)}`
+      diskText: diskUsage.text,
+      diskValueText: diskUsage.valueText,
+      diskLabel: diskUsage.label
     }
   };
 }
@@ -306,7 +572,7 @@ function collectWarnings(view){
 	if(easytierIsConfigured(view.easytier)) domains.push(view.easytier);
 	return domains
     .map(domain => domain?.error)
-    .filter(error => error && typeof error === 'object')
+    .filter(error => error && typeof error === 'object' && error.code !== 'not_installed')
     .map(error => textOrDash(error.message || error.code))
     .filter(message => message !== '-');
 }
@@ -317,7 +583,7 @@ function statusTone(value){
   if(status.startsWith('exited') || status.startsWith('dead')) return 'err';
   if(status.startsWith('created') || status.startsWith('paused') || status.startsWith('restarting') || status.startsWith('removing')) return 'warn';
 	if(['passed', 'running', 'ok', 'healthy', 'up', 'active', 'valid'].includes(status)) return 'ok';
-	if(['degraded', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error'].includes(status)) return 'warn';
+	if(['degraded', 'partial', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error', 'mismatch', 'unsupported', 'unsupported_version'].includes(status)) return 'warn';
 	if(['failed', 'down', 'offline', 'disabled', 'stopped', 'unauthorized', 'timeout', 'dead', 'exited', 'error', 'expired', 'invalid', 'unavailable'].includes(status)) return 'err';
   return 'neutral';
 }
@@ -328,9 +594,10 @@ function statusText(value){
     passed: '通过', failed: '失败', unknown: '未知', unavailable: '不可用',
     running: '运行中', healthy: '正常', ok: '正常', active: '活动',
     stopped: '已停止', down: '离线', unauthorized: '未授权', timeout: '超时',
-		exited: '已退出', dead: '异常', degraded: '部分异常', stale: '已陈旧',
+		exited: '已退出', dead: '异常', degraded: '部分异常', partial: '部分采集', stale: '已陈旧',
 		not_configured: '未配置', error: '异常', valid: '有效', expiring: '即将到期',
 		expired: '已过期', not_yet_valid: '尚未生效', invalid: '无效',
+		supported: '支持', unsupported: '不支持', matched: '匹配', mismatch: '不匹配', not_observable: '未观察到',
     online: '在线', offline: '离线', never_seen: '从未上线', disabled: '已禁用',
     identity_error: '身份异常', matched: '身份匹配', missing_fqdn: '缺少身份信息',
     fqdn_mismatch: '身份不匹配'
@@ -340,6 +607,11 @@ function statusText(value){
 
 function badge(value){
   return `<span class="badge ${statusTone(value)}">${escapeHtml(statusText(value))}</span>`;
+}
+
+function expectationBadge(value){
+  const labels = {matched: '匹配', mismatch: '不匹配', not_observable: '未观察到', not_configured: '未配置'};
+  return `<span class="badge ${statusTone(value)}">${escapeHtml(labels[value] || textOrDash(value))}</span>`;
 }
 
 function domainIsUnknown(value){
@@ -373,7 +645,11 @@ function dashboardCondition(view, refreshError = null){
   if(deviceStatus === 'degraded'){
     return {kind: 'error', title: '设备部分数据不可用', message: '该设备仍在线，但至少一个业务域异常。'};
   }
-  if(view.host.online4 === false && view.host.online6 === false){
+  // Device v2 has an authoritative server-side lifecycle status. Its legacy
+  // IPv4/IPv6 probe fields are informational and must not mark an online
+  // authenticated device as offline.
+  const isDeviceV2 = String(view.host.protocol_mode ?? '').toLowerCase() === 'device_v2';
+  if(!isDeviceV2 && view.host.online4 === false && view.host.online6 === false){
     return {kind: 'offline', title: '主机离线', message: '当前显示最后一次可用的状态数据。'};
   }
   const warnings = collectWarnings(view);
@@ -419,11 +695,9 @@ function fittedFontSize(preferredSize, minimumSize, availableWidth, naturalWidth
   return Math.max(minimumSize, Math.floor(preferredSize * availableWidth / naturalWidth * 10) / 10);
 }
 
-function fitCpuModelToSingleLine(){
-  const element = document.querySelector('[data-fit-single-line="cpu-model"]');
+function fitSingleLineValue(selector, preferredSize = 23, minimumSize = 10){
+  const element = document.querySelector(selector);
   if(!element || element.clientWidth <= 0) return;
-  const preferredSize = 23;
-  const minimumSize = 11;
   element.style.fontSize = `${preferredSize}px`;
   if(element.scrollWidth <= element.clientWidth) return;
   let size = fittedFontSize(preferredSize, minimumSize, element.clientWidth, element.scrollWidth);
@@ -434,9 +708,32 @@ function fitCpuModelToSingleLine(){
   }
 }
 
+function fitSingleLineValues(selector, preferredSize = 23, minimumSize = 10){
+  for(const element of document.querySelectorAll(selector)){
+    if(element.clientWidth <= 0) continue;
+    element.style.fontSize = `${preferredSize}px`;
+    if(element.scrollWidth <= element.clientWidth) continue;
+    let size = fittedFontSize(preferredSize, minimumSize, element.clientWidth, element.scrollWidth);
+    element.style.fontSize = `${size}px`;
+    while(size > minimumSize && element.scrollWidth > element.clientWidth){
+      size = Math.max(minimumSize, size - 0.5);
+      element.style.fontSize = `${size}px`;
+    }
+  }
+}
+
+function fitOverviewSingleLineValues(){
+  fitSingleLineValue('[data-fit-single-line="cpu-model"]', 23, 11);
+  fitSingleLineValue('[data-fit-single-line="easytier-traffic"]', 23, 10);
+  fitSingleLineValues('[data-fit-single-line="hardware-home"]', 23, 10);
+}
+
 function renderOverview(view){
   const resources = view.resources;
-  const hardware = view.hardware;
+  const peers = safeObject(view.easytier.peers);
+  const traffic = safeObject(view.easytier.traffic);
+  const peerText = `${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)}`;
+  const trafficText = `${formatTrafficBytes(traffic.bytes_rx)} / ${formatTrafficBytes(traffic.bytes_tx)} / ${formatTrafficBytes(traffic.bytes_forwarded)}`;
   byId('overviewCards').innerHTML = `
     <article class="summary-card resource-card">
       <h2>CPU</h2>
@@ -450,38 +747,189 @@ function renderOverview(view){
     </article>
     <article class="summary-card resource-card">
       <h2>硬盘</h2>
-      <div class="card-detail resource-value">${escapeHtml(resources.diskText)}</div>
+      <div class="card-detail resource-value single-line-value" data-fit-single-line="overview-disk" title="${escapeHtml(resources.diskText)}">${escapeHtml(resources.diskValueText)}${parenthesizedMeta(resources.diskLabel)}</div>
       ${resourceBar(resources.diskPercent, '硬盘使用率')}
     </article>
-    <article class="summary-card stacked-card temperature-card">
-      <h2>CPU温度/硬盘温度</h2>
-      <div class="card-value">${escapeHtml(formatTemperature(hardware.cpu_temperature?.value))}</div>
-      <div class="card-subvalue">${escapeHtml(formatTemperature(hardware.disk_temperature?.current))}</div>
+    <article class="summary-card metric-card">
+      <h2>EasyTier远端节点数</h2>
+      <div class="card-value">${escapeHtml(peerText)}</div>
+      <div class="card-mini-meta">直连 / 中继 / 未知</div>
     </article>
-    <article class="summary-card stacked-card uptime-system-card">
-      <h2>已运行时间/操作系统</h2>
-      <div class="card-value">${escapeHtml(formatUptime(view.host.uptime))}</div>
-      <div class="card-subvalue" title="${escapeHtml(textOrDash(view.host.os))}">${escapeHtml(textOrDash(view.host.os))}</div>
+    <article class="summary-card metric-card">
+      <h2>EasyTier流量统计</h2>
+      <div class="card-value traffic-value" data-fit-single-line="easytier-traffic" title="${escapeHtml(trafficText)}">${escapeHtml(trafficText)}</div>
+      <div class="card-mini-meta">接收 / 发送 / 转发</div>
     </article>`;
-  requestAnimationFrame(fitCpuModelToSingleLine);
+  requestAnimationFrame(fitOverviewSingleLineValues);
 }
 
 function renderHardware(view){
   const hardware = view.hardware;
   const docker = view.docker;
-  const lucky = view.lucky;
-  const smartStatus = hardware.disk_smart_status ?? 'unknown';
-  const powerOnHours = finiteNumber(hardware.disk_power_on_hours);
+  const physicalDisks = physicalDisksForView(hardware);
+  const ioDisk = diskIoCandidate(physicalDisks);
+  const powerOnDisk = maxDiskBy(physicalDisks, diskPowerOnHours);
+  const hottestDisk = maxDiskBy(physicalDisks, diskTemperatureC);
+  const hottestCpuSensor = maximumTemperature(temperatureSensorEntries(hardware));
+  const readWrite = ioDisk
+    ? `${formatBytes(diskWrittenBytes(ioDisk))} / ${formatBytes(diskReadBytes(ioDisk))}`
+    : '-';
+  const powerOnHours = powerOnDisk ? diskPowerOnHours(powerOnDisk) : null;
   const powerOnDays = approximateDays(powerOnHours);
-  const readWrite = finiteNumber(hardware.disk_written_bytes) === null && finiteNumber(hardware.disk_read_bytes) === null
-    ? '-'
-    : `${formatBytes(hardware.disk_written_bytes)} / ${formatBytes(hardware.disk_read_bytes)}`;
+  const uptime = uptimeHoursMetric(view.host.uptime_seconds);
   byId('hardwareHealth').innerHTML = `
+    <article class="health-card"><h2>硬盘 SMART 状态</h2><div class="health-value single-line-value" data-fit-single-line="hardware-home">${smartHomeMarkup(physicalDisks, hardware)}</div></article>
+    <article class="health-card"><h2>硬盘写入/读取量</h2><div class="health-value power-on-value single-line-value" data-fit-single-line="hardware-home" title="${escapeHtml(ioDisk ? `${readWrite} (${diskName(ioDisk)})` : readWrite)}">${escapeHtml(readWrite)}${parenthesizedMeta(ioDisk ? diskName(ioDisk) : null)}</div></article>
+    <article class="health-card"><h2>硬盘通电时间</h2><div class="health-value power-on-value single-line-value" data-fit-single-line="hardware-home" title="${escapeHtml(powerOnDisk ? `${formatInteger(powerOnHours)} h (约${formatInteger(powerOnDays)}天，${diskName(powerOnDisk)})` : '-')}">${powerOnHours === null ? '-' : `${formatInteger(powerOnHours)} h <span class="power-on-days">(约${formatInteger(powerOnDays)}天，${escapeHtml(diskName(powerOnDisk))})</span>`}</div></article>
+    <article class="health-card"><h2>CPU温度</h2><div class="health-value power-on-value single-line-value" data-fit-single-line="hardware-home">${hottestCpuSensor === null ? '-' : `${escapeHtml(formatCelsius(hottestCpuSensor.value))}${parenthesizedMeta(hottestCpuSensor.label)}`}</div></article>
+    <article class="health-card"><h2>硬盘温度</h2><div class="health-value power-on-value single-line-value" data-fit-single-line="hardware-home">${hottestDisk === null ? '-' : `${escapeHtml(formatCelsius(diskTemperatureC(hottestDisk)))}${parenthesizedMeta(diskName(hottestDisk))}`}</div></article>
     <article class="health-card"><h2>运行中/容器总数</h2><div class="health-value">${escapeHtml(formatPair(docker.running, docker.total))}</div></article>
-    <article class="health-card"><h2>Lucky运行状态/版本</h2><div class="health-value lucky-home-value">${escapeHtml(statusText(lucky.status))}<span class="health-inline-meta">(${escapeHtml(textOrDash(lucky.version?.current))})</span></div></article>
-    <article class="health-card"><h2>硬盘 SMART 状态</h2><div class="health-value">${badge(smartStatus)}</div></article>
-    <article class="health-card"><h2>硬盘通电时间</h2><div class="health-value power-on-value">${powerOnHours === null ? '-' : `${formatInteger(powerOnHours)} h <span class="power-on-days">(约${formatInteger(powerOnDays)}天)</span>`}</div></article>
-    <article class="health-card"><h2>硬盘写入/读取量</h2><div class="health-value">${escapeHtml(readWrite)}</div></article>`;
+    <article class="health-card"><h2>Lucky运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.lucky.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.lucky.version?.current))})</span></div></article>
+    <article class="health-card"><h2>EasyTier运行状态/版本</h2><div class="health-value power-on-value">${escapeHtml(statusText(view.easytier.status))}<span class="power-on-days">(${escapeHtml(textOrDash(view.easytier.node?.version))})</span></div></article>
+    <article class="health-card"><h2>系统已运行时间</h2><div class="health-value power-on-value">${uptime === null ? '-' : `${formatInteger(uptime.hours)} h <span class="power-on-days">(约${uptime.days}天)</span>`}</div></article>
+    <article class="health-card"><h2>操作系统版本</h2><div class="health-value health-text" title="${escapeHtml(conciseOsVersion(view.host, view.hardware))}">${escapeHtml(conciseOsVersion(view.host, view.hardware))}</div></article>`;
+  requestAnimationFrame(fitOverviewSingleLineValues);
+}
+
+function filesystemBackingDisks(filesystem){
+  const ids = Array.isArray(filesystem?.backing_disk_ids)
+    ? filesystem.backing_disk_ids.map(value => deviceShortName(value)).filter(value => value !== '-')
+    : [];
+  if(!ids.length) return {text: '-', title: '-'};
+  return {
+    text: ids.length === 1 ? ids[0] : `${ids.length} 块磁盘`,
+    title: ids.join(' / ')
+  };
+}
+
+function filesystemUsage(filesystem){
+  const used = valueAt(filesystem, ['used_bytes']);
+  const total = valueAt(filesystem, ['total_bytes', 'capacity_bytes']);
+  if(used === null && total === null) return '-';
+  return `${formatBytes(used)} / ${formatBytes(total)}`;
+}
+
+function cpuDetailsForView(hardware){
+  return safeObject(hardware?.cpu_details);
+}
+
+function memoryDetailsForView(hardware){
+  return safeObject(hardware?.memory_details);
+}
+
+function formatMHz(value){
+  const number = finiteNumber(value);
+  if(number === null) return '-';
+  return `${Number.isInteger(number) ? number : number.toFixed(1)} MHz`;
+}
+
+function cpuLogicalProcessorText(cpu){
+  const logical = finiteNumber(cpu.logical_cpus);
+  const sockets = finiteNumber(cpu.sockets);
+  const coresPerSocket = finiteNumber(cpu.cores_per_socket);
+  const threadsPerCore = finiteNumber(cpu.threads_per_core);
+  if(logical === null && sockets === null && coresPerSocket === null && threadsPerCore === null) return '-';
+  const cores = sockets !== null && coresPerSocket !== null ? sockets * coresPerSocket : null;
+  const threads = logical ?? (cores !== null && threadsPerCore !== null ? cores * threadsPerCore : null);
+  const parts = [
+    sockets === null ? null : `${formatInteger(sockets)} 插槽`,
+    cores === null ? null : `${formatInteger(cores)} 核心`,
+    threads === null ? null : `${formatInteger(threads)} 线程`
+  ].filter(Boolean);
+  const topology = parts.length ? `（${parts.join(' / ')}）` : '';
+  return logical === null ? (parts.join(' / ') || '-') : `${formatInteger(logical)}${topology}`;
+}
+
+function memoryUsedPercent(memory){
+  return percentage(memory?.used_bytes, memory?.total_bytes);
+}
+
+function hardwareUsageMarkup(label, value){
+  const number = finiteNumber(value);
+  return `<article class="hardware-usage-item"><strong>${escapeHtml(label)}</strong>${resourceBar(number, label)}</article>`;
+}
+
+function cpuInstructionDetailRow(value){
+  return `<div class="detail-row hardware-cpu-instruction-row"><dt>指令集</dt><dd class="wrap-value">${escapeHtml(textOrDash(value))}</dd></div>`;
+}
+
+function diskPowerOnText(disk){
+  const hours = diskPowerOnHours(disk);
+  if(hours === null) return '-';
+  return `${formatInteger(hours)} h (约${(hours / 24).toFixed(2)}天)`;
+}
+
+function renderPhysicalDiskRows(hardware){
+  const physicalDisks = physicalDisksForView(hardware);
+  if(!physicalDisks.length) return '<tr><td colspan="6" class="table-empty">暂无可显示的物理磁盘数据</td></tr>';
+  return physicalDisks.map(disk => {
+    const device = textOrDash(disk.device || disk.id);
+    const model = textOrDash(disk.model);
+    return `<tr><td class="mono">${escapeHtml(device)}</td><td class="wide-cell" title="${escapeHtml(model)}">${escapeHtml(model)}</td><td>${escapeHtml(formatBytes(valueAt(disk, ['capacity_bytes', 'size_bytes'])))}</td><td>${escapeHtml(formatCelsius(diskTemperatureC(disk)))}</td><td>${diskSmartMarkup(disk)}</td><td>${escapeHtml(diskPowerOnText(disk))}</td></tr>`;
+  }).join('');
+}
+
+function renderFilesystemDetails(hardware){
+  const filesystems = dataFilesystemItemsForView(hardware);
+  if(!filesystems.length) return '<tr><td colspan="6" class="table-empty">暂无可显示的卷或文件系统数据</td></tr>';
+  return filesystems.map(filesystem => {
+    const usage = valueAt(filesystem, ['usage_percent', 'used_percent']);
+    const status = filesystem?.collection_status;
+    return `<tr><td class="mono">${escapeHtml(textOrDash(filesystem.mountpoint))}</td><td class="wide-cell mono" title="${escapeHtml(textOrDash(filesystem.source))}">${escapeHtml(textOrDash(filesystem.source))}</td><td>${escapeHtml(textOrDash(filesystem.fs_type || filesystem.filesystem_type))}</td><td>${escapeHtml(filesystemUsage(filesystem))}</td><td class="table-usage">${resourceBar(usage, '文件系统使用率')}</td><td>${status === null || status === undefined || status === '' ? '-' : badge(status)}</td></tr>`;
+  }).join('');
+}
+
+function renderHardwareDetails(view){
+  const hardware = view.hardware;
+  const cpu = cpuDetailsForView(hardware);
+  const cpuUsage = safeObject(cpu.usage);
+  const memory = memoryDetailsForView(hardware);
+  const identity = safeObject(hardware.system_identity);
+  const system = Object.keys(identity).length ? identity : safeObject(hardware.system);
+  const prettyName = textOrDash(system.pretty_name || view.host.os);
+  const cpuInfo = [
+    ['架构', textOrDash(cpu.architecture)],
+    ['频率（最低 / 最高）', `${formatMHz(cpu.min_mhz)} / ${formatMHz(cpu.max_mhz)}`],
+    ['逻辑处理器', cpuLogicalProcessorText(cpu)],
+    ['当前频率', formatMHz(cpu.current_mhz)]
+  ];
+  byId('hardwareCpuInfo').innerHTML = cpuInfo
+    .map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value'))
+    .concat(cpuInstructionDetailRow(cpu.instruction_sets)).join('');
+
+  const usageItems = [
+    ['总使用率', cpuUsage.total_percent], ['I/O 等待', cpuUsage.iowait_percent],
+    ['用户态', cpuUsage.user_percent], ['内核态', cpuUsage.system_percent]
+  ].filter(([, value]) => finiteNumber(value) !== null);
+  byId('hardwareCpuUsageMeta').textContent = usageItems.length ? '短时采样' : '数据不可用';
+  byId('hardwareCpuUsage').innerHTML = usageItems.length
+    ? usageItems.map(([label, value]) => hardwareUsageMarkup(label, value)).join('')
+    : '<div class="table-empty">暂无可显示的 CPU 使用率数据</div>';
+  const memoryRows = [
+    ['物理内存已用 / 可用 / 总量', finiteNumber(memory.used_bytes) === null && finiteNumber(memory.available_bytes) === null && finiteNumber(memory.total_bytes) === null ? '-' : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.available_bytes)} / ${formatBytes(memory.total_bytes)} (${formatPercentage(memoryUsedPercent(memory))})`],
+    ['活动 / 非活动', `${formatBytes(memory.active_bytes)} / ${formatBytes(memory.inactive_bytes)}`],
+    ['可回收 Slab', formatBytes(memory.reclaimable_bytes)],
+    ['Swap 内存已用 / 可用 / 总量', finiteNumber(memory.swap_used_bytes) === null && finiteNumber(memory.swap_free_bytes) === null && finiteNumber(memory.swap_total_bytes) === null ? '-' : `${formatBytes(memory.swap_used_bytes)} / ${formatBytes(memory.swap_free_bytes)} / ${formatBytes(memory.swap_total_bytes)} (${formatPercentage(percentage(memory.swap_used_bytes, memory.swap_total_bytes))})`],
+    ['Buffers', formatBytes(memory.buffers_bytes)],
+    ['Slab', formatBytes(memory.slab_bytes)],
+    ['空闲内存', formatBytes(memory.free_bytes)],
+    ['页面缓存', formatBytes(memory.cached_bytes)],
+    ['Swap Cache', formatBytes(memory.swap_cached_bytes)],
+    ['Dirty / Writeback', `${formatBytes(memory.dirty_bytes)} / ${formatBytes(memory.writeback_bytes)}`]
+  ];
+  const memoryPlaceholders = Array.from({length: Math.max(0, 12 - memoryRows.length)}, () => '<div class="hardware-memory-placeholder" aria-hidden="true"></div>');
+  byId('hardwareMemoryInfo').innerHTML = memoryRows
+    .map(([label, value]) => detailRow(label, escapeHtml(value), 'memory-value'))
+    .concat(memoryPlaceholders).join('');
+
+  byId('hardwareSystemInfo').innerHTML = [
+    ['操作系统版本', prettyName],
+    ['架构', textOrDash(system.architecture || hardware.architecture)],
+    ['内核', textOrDash(system.kernel_release || hardware.kernel_release)]
+  ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+
+  byId('hardwareDisksBody').innerHTML = renderPhysicalDiskRows(hardware);
+  byId('hardwareFilesystemsBody').innerHTML = renderFilesystemDetails(hardware);
 }
 
 function renderLuckyTables(view){
@@ -521,8 +969,34 @@ function sumLuckyValues(items, field){
 	return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
 }
 
+function luckyServiceSummaryItems(lucky){
+	const normalized = safeObject(lucky);
+	if(normalized.status === 'not_configured'){
+		return [['进程状态', '未配置'], ['API 可用性', '未配置'], ['API 错误', '-']];
+	}
+	const service = safeObject(normalized.service);
+	const serviceError = safeObject(service.error);
+	const apiError = serviceError.http_status
+		? `HTTP ${serviceError.http_status}`
+		: textOrDash(serviceError.code || serviceError.message);
+	return [
+		['进程状态', service.process_running === null || service.process_running === undefined ? '未知' : service.process_running ? '运行中' : '未运行'],
+		['API 可用性', service.api_reachable ? '可用' : '不可用'],
+		['API 错误', service.api_reachable ? '-' : apiError]
+	];
+}
+
 function renderLucky(view){
+	byId('luckyServiceSummary').innerHTML = luckyServiceSummaryItems(view.lucky)
+		.map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 	renderLuckyTables(view);
+}
+
+function ipv6UdpDirectText(peers, peerListAvailable){
+	if(!peerListAvailable) return '数据不可用';
+	return peers.ipv6_udp_direct === null || peers.ipv6_udp_direct === undefined
+		? '未观察到'
+		: peers.ipv6_udp_direct ? '是' : '否';
 }
 
 function renderEasyTier(view){
@@ -532,31 +1006,73 @@ function renderEasyTier(view){
 	const routes = safeObject(easytier.routes);
 	const connectors = safeObject(easytier.connectors);
 	const traffic = safeObject(easytier.traffic);
+	const commands = safeObject(easytier.command_status);
+	const commandAvailable = name => safeObject(commands[name]).status === 'healthy';
+	const tcpListenerText = commandAvailable('node_info') || commandAvailable('stats_show')
+		? booleanText(connectors.tcp_listener_available)
+		: '数据不可用';
+	const tcpConnectorText = commandAvailable('connector_list')
+		? booleanText(connectors.tcp_configured)
+		: '数据不可用';
+	const tcpActiveText = commandAvailable('connector_list')
+		? booleanText(connectors.tcp_active)
+		: '数据不可用';
+	const trafficText = commandAvailable('stats_show')
+		? `${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`
+		: '数据不可用';
+	const peerSummary = !commandAvailable('peer_list')
+		? '数据不可用'
+		: peers.total === 0
+		? '0（直连：— / 中继：— / 未知：—）'
+		: `${formatInteger(peers.total)}（直连：${formatInteger(peers.direct)} / 中继：${formatInteger(peers.relay)} / 未知：${formatInteger(peers.unknown_path)}）`;
 	const details = [
-		['总体状态', badge(easytier.status)],
-		['实例', escapeHtml(textOrDash(node.instance_name))],
 		['网络', escapeHtml(textOrDash(node.network_name))],
-		['版本', escapeHtml(textOrDash(node.version))],
-		['节点 ID', escapeHtml(textOrDash(node.peer_id))],
+		['Overlay IPv4', escapeHtml(textOrDash(node.overlay_ipv4))],
 		['节点状态', badge(node.state)],
-		['远端节点（直连/中继/未知）', escapeHtml(`${formatInteger(peers.total)} (${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)})`)],
-		['路由数', escapeHtml(formatInteger(routes.total))],
-		['连接器（TCP 已配置/活动）', escapeHtml(`${formatInteger(connectors.total)} (${booleanText(connectors.tcp_configured)} / ${booleanText(connectors.tcp_active)})`)],
-		['接收 / 发送 / 转发', escapeHtml(`${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`)],
-		['更新时间', escapeHtml(formatDateTime(easytier.updated_at))]
+		['版本兼容性', escapeHtml(easyTierCompatibilityText(node.schema_compatibility))],
+		['远端节点', escapeHtml(peerSummary)],
+		['IPv6 UDP Direct', escapeHtml(ipv6UdpDirectText(peers, commandAvailable('peer_list')))],
+		['路由数', escapeHtml(commandAvailable('route_list') ? formatInteger(routes.total) : '数据不可用')],
+		['TCP Listener / Connector / Active', escapeHtml(`${tcpListenerText} / ${tcpConnectorText} / ${tcpActiveText}`)],
+		['接收 / 发送 / 转发', escapeHtml(trafficText)]
 	];
 	byId('easytierSummary').innerHTML = details.map(([label, value]) => detailRow(label, value)).join('');
-	byId('easytierMeta').textContent = easytier.error ? textOrDash(easytier.error.message || easytier.error.code) : '';
-	const names = {node_info: '节点信息', peer_list: '节点列表', route_list: '路由列表', connector_list: '连接器列表', stats_show: '流量统计'};
-	const commands = safeObject(easytier.command_status);
-	byId('easytierCommandsBody').innerHTML = Object.keys(names).map(key => {
-		const command = safeObject(commands[key]);
-		return `<tr><td class="strong-cell">${escapeHtml(names[key])}</td><td>${badge(command.status)}</td><td class="wide-cell">${escapeHtml(textOrDash(command.error?.message || command.error?.code))}</td></tr>`;
-	}).join('');
+	byId('easytierMeta').textContent = `更新时间：${formatDateTime(easytier.updated_at)}${easytier.error ? ` · ${textOrDash(easytier.error.message || easytier.error.code)}` : ''}`;
+	const expectation = safeObject(view.easytierExpectation);
+	const expected = safeObject(expectation.expected);
+	const observed = safeObject(expectation.observed);
+	const expectationRows = expectation.configured === true ? [
+		['Network', textOrDash(expected.network_name), textOrDash(observed.network_name)],
+		['Overlay IP', textOrDash(expected.overlay_ipv4), textOrDash(observed.overlay_ipv4)],
+		['Proxy CIDRs', listText(expected.proxy_cidrs), listText(observed.proxy_cidrs)],
+		['Administrative Role', textOrDash(expected.administrative_role), textOrDash(observed.administrative_role)]
+	] : [['EasyTier expectation', '未配置', '—']];
+	byId('easytierExpectationBody').innerHTML = expectationRows.map(([label, expectedValue, observedValue], index) => `<tr><td class="strong-cell">${escapeHtml(label)}</td><td>${escapeHtml(expectedValue)}</td><td>${escapeHtml(observedValue)}</td>${index === 0 ? `<td rowspan="${expectationRows.length}">${expectationBadge(expectation.result || 'not_configured')}</td>` : ''}</tr>`).join('');
+	const peerItems = Array.isArray(peers.items) ? peers.items : [];
+	byId('easytierPeersBody').innerHTML = !commandAvailable('peer_list') ? '<tr><td colspan="10" class="table-empty">节点数据当前不可用。</td></tr>' : peerItems.length ? peerItems.map(peer => `<tr><td>${escapeHtml(textOrDash(peer.hostname || peer.peer_id))}</td><td>${escapeHtml(textOrDash(peer.overlay_ipv4))}</td><td>${escapeHtml(easyTierPathText(peer.path_state))}</td><td>${escapeHtml(listText(peer.established_tunnels))}</td><td>${escapeHtml(textOrDash(peer.address_family))}</td><td>${escapeHtml(formatLatency(peer.latency_ms))}</td><td>${escapeHtml(formatLoss(peer.loss_rate))}</td><td>${escapeHtml(textOrDash(peer.rx_display || formatBytes(peer.rx_bytes)))}</td><td>${escapeHtml(textOrDash(peer.tx_display || formatBytes(peer.tx_bytes)))}</td><td>${escapeHtml(textOrDash(peer.version))}</td></tr>`).join('') : '<tr><td colspan="10" class="table-empty">当前未观察到 EasyTier 节点。</td></tr>';
+	const routeItems = Array.isArray(routes.items) ? routes.items : [];
+	byId('easytierRoutesBody').innerHTML = !commandAvailable('route_list') ? '<tr><td colspan="7" class="table-empty">路由数据当前不可用。</td></tr>' : routeItems.length ? routeItems.map(route => `<tr><td>${escapeHtml(route.is_local ? '本地' : textOrDash(route.hostname || route.peer_id))}</td><td>${escapeHtml(textOrDash(route.overlay_ipv4))}</td><td>${escapeHtml(listText(route.proxy_cidrs))}</td><td class="mono">${escapeHtml(textOrDash(route.next_hop_peer_id))}</td><td>${escapeHtml(easyTierPathText(route.path_state))}</td><td>${escapeHtml(formatLatency(route.path_latency_ms))}</td><td>${escapeHtml(formatInteger(route.cost))}</td></tr>`).join('') : '<tr><td colspan="7" class="table-empty">当前未观察到 EasyTier 路由。</td></tr>';
+	const connectorItems = Array.isArray(connectors.items) ? connectors.items : [];
+	byId('easytierConnectorsBody').innerHTML = !commandAvailable('connector_list') ? '<tr><td colspan="3" class="table-empty">连接器数据当前不可用。</td></tr>' : connectorItems.length ? connectorItems.map(connector => `<tr><td>${escapeHtml(textOrDash(connector.transport))}</td><td>${escapeHtml(textOrDash(connector.endpoint || connector.url))}</td><td>${badge(connector.status)}</td></tr>`).join('') : '<tr><td colspan="3" class="table-empty">未配置出站连接器。</td></tr>';
+}
+
+function listText(value){ return Array.isArray(value) && value.length ? value.map(textOrDash).join('、') : '-'; }
+function easyTierPathText(value){ return ({direct: '直连', relayed: '中继', unknown: '未观察到'})[String(value || '').toLowerCase()] || '-'; }
+function easyTierCompatibilityText(value){ return ({supported: '支持', unsupported: '不支持', unknown: '未知'})[String(value || '').toLowerCase()] || '未知'; }
+function formatLatency(value){ const number = finiteNumber(value); return number === null ? '-' : `${number.toFixed(1)} ms`; }
+function formatLoss(value){ const number = finiteNumber(value); return number === null ? '-' : `${number.toFixed(2)}%`; }
+
+function profileSummary(profiles){
+  if(!profiles.length) return '';
+  const versions = [...new Set(profiles
+    .map(profile => textOrDash(profile.agent_version))
+    .filter(version => version !== '-'))];
+  const version = versions.length === 1 ? versions[0] : versions.length > 1 ? '多个版本' : '-';
+  return `Agent版本: ${version}，${profiles.length}个配置`;
 }
 
 function renderProfiles(view){
-  byId('profilesMeta').textContent = view.profiles.length ? `${view.profiles.length} 个配置` : '';
+  byId('profilesMeta').textContent = profileSummary(view.profiles);
   byId('profilesBody').innerHTML = view.profiles.length ? view.profiles.map((profile, index) => `
     <tr class="profile-row" data-profile-index="${index}" tabindex="0" role="button" aria-label="查看 ${escapeHtml(textOrDash(profile.profile))} 详情">
       <td class="strong-cell">${escapeHtml(textOrDash(profile.profile))}</td>
@@ -568,7 +1084,7 @@ function renderProfiles(view){
       <td>${escapeHtml(formatPair(profile.scheduled_jobs_active, profile.scheduled_jobs_total))}</td>
       <td>${escapeHtml(formatPair(profile.sessions_active, profile.sessions_total))}</td>
       <td class="token-cell">${escapeHtml(tokenBreakdown(profile.usage))}${profile.usage?.estimated ? '<span class="estimate-mark" title="估算值">估算</span>' : ''}</td>
-    </tr>`).join('') : '<tr><td colspan="9" class="table-empty">暂无 Hermes Profile 数据</td></tr>';
+    </tr>`).join('') : `<tr><td colspan="9" class="table-empty">${view.hermes?.error?.code === 'not_installed' ? '未安装 Hermes Agent' : '暂无 Hermes Profile 数据'}</td></tr>`;
 }
 
 function renderContainers(view){
@@ -599,7 +1115,8 @@ function renderDeviceSelector(view){
   const buttons = byId('deviceButtons');
   const select = byId('deviceSelect');
   const notice = byId('deviceSelectionNotice');
-  if(!selector || !buttons || !select || !notice) return;
+  const diagnosticsButton = byId('deviceDiagnosticsButton');
+  if(!selector || !buttons || !select || !notice || !diagnosticsButton) return;
   buttons.replaceChildren();
   select.replaceChildren();
   const devices = view.devices || [];
@@ -632,6 +1149,7 @@ function renderDeviceSelector(view){
   select.disabled = devices.length < 2;
   notice.textContent = dashboardState.deviceSelectionNotice;
   notice.hidden = !dashboardState.deviceSelectionNotice;
+  diagnosticsButton.disabled = !view.host;
 }
 
 function renderDashboard(view){
@@ -641,15 +1159,20 @@ function renderDashboard(view){
   byId('dashboard').hidden = !hasHost;
   if(!hasHost){
     closeProfileModal();
+		closeDeviceDiagnostics();
+		closeAbout();
     setPageState(dashboardCondition(view));
     return;
   }
   renderOverview(view);
 	renderHardware(view);
+  renderHardwareDetails(view);
   renderProfiles(view);
 	renderContainers(view);
 	renderLucky(view);
 	renderEasyTier(view);
+  if(!byId('deviceDiagnosticsModal').hidden) renderDeviceDiagnostics(view);
+  if(!byId('aboutModal').hidden) renderBuildProvenance(view);
   applyPageVisibility();
   setPageState(dashboardCondition(view));
   if(dashboardState.selectedProfileIndex !== null){
@@ -684,7 +1207,7 @@ function selectDevice(deviceId, options = {}){
 function applyPageVisibility(){
   const activePage = normalizePageName(dashboardState.activePage);
   dashboardState.activePage = activePage;
-	for(const page of ['home', 'docker', 'lucky', 'easytier']){
+	for(const page of ['home', 'hardware', 'docker', 'lucky', 'easytier']){
     const active = page === activePage;
     const tab = byId(`${page}Tab`);
     const panel = byId(`${page}Page`);
@@ -707,12 +1230,76 @@ function setActivePage(page, options = {}){
   if(options.updateHash !== false && typeof window !== 'undefined'){
     replaceDashboardHash();
   }
-  if(nextPage === 'home') requestAnimationFrame(fitCpuModelToSingleLine);
+  if(nextPage === 'home') requestAnimationFrame(fitOverviewSingleLineValues);
   return nextPage;
 }
 
 function detailRow(label, value, extraClass = ''){
   return `<div class="detail-row"><dt>${escapeHtml(label)}</dt><dd class="${extraClass}">${value}</dd></div>`;
+}
+
+function shortRevision(value){
+  const revision = textOrDash(value);
+  return revision === '-' ? revision : [...revision].slice(0, 12).join('');
+}
+
+function revisionMarkup(value){
+  const revision = textOrDash(value);
+  return revision === '-'
+    ? '-'
+    : `<span class="mono" title="${escapeHtml(revision)}">${escapeHtml(shortRevision(revision))}</span>`;
+}
+
+function deviceDiagnosticsMarkup(view){
+  const host = safeObject(view?.host);
+  const expectation = safeObject(view?.easytierExpectation);
+  const proxyCidrs = Array.isArray(expectation.proxy_cidrs)
+    ? expectation.proxy_cidrs.map(textOrDash).join(' / ')
+    : '-';
+  const expectationConfigured = Object.keys(expectation).length > 0;
+  const lastSeen = host.last_seen_at || host.last_seen || host.received_at;
+  const lastAccepted = host.last_accepted_at || host.accepted_at || host.collected_at || host.last_collected_at || view?.hardware?.updated_at;
+  return [
+    ['Device ID', textOrDash(host.device_id)],
+    ['显示名称', deviceDisplayName(host)],
+    ['状态', statusText(normalizedDeviceStatus(host))],
+    ['身份状态', statusText(host.identity_status)],
+    ['协议模式', textOrDash(host.protocol_mode)],
+    ['已启用', host.enabled === false || host.disabled === true ? '否' : '是'],
+    ['接入模式', textOrDash(host.ingestion_mode)],
+    ['最后上线', formatDateTime(lastSeen)],
+    ['最后接受 / 采集', formatDateTime(lastAccepted)],
+    ['EasyTier 预期已配置', expectationConfigured ? '是' : '否'],
+    ['预期网络', textOrDash(expectation.network_name)],
+    ['预期 Overlay IP', textOrDash(expectation.overlay_ipv4)],
+    ['预期 Proxy CIDRs', proxyCidrs || '-']
+  ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
+}
+
+function buildProvenanceMarkup(view){
+  const build = safeObject(view?.document?.build);
+  const server = Object.keys(safeObject(build.server)).length ? safeObject(build.server) : build;
+  const client = safeObject(view?.hardware?.client_build || view?.host?.client_build);
+  const environment = textOrDash(build.deployment || build.environment || build.deployment_env || server.environment);
+  const protocol = textOrDash(client.protocol || view?.host?.protocol_mode || server.protocol);
+  const schema = textOrDash(build.stats_schema || build.schema_version || view?.document?.schema_version);
+  return [
+    ['环境', escapeHtml(environment)],
+    ['服务端版本', escapeHtml(textOrDash(server.version || server.server_version))],
+    ['服务端 Revision', revisionMarkup(server.revision || server.server_revision)],
+    ['客户端版本', escapeHtml(textOrDash(client.version || client.client_version))],
+    ['客户端 Revision', revisionMarkup(client.revision || client.client_revision)],
+    ['协议', escapeHtml(protocol)],
+    ['Stats Schema', escapeHtml(schema)]
+  ].map(([label, value]) => detailRow(label, value, 'wrap-value')).join('');
+}
+
+function renderDeviceDiagnostics(view){
+  byId('deviceDiagnosticsContent').innerHTML = deviceDiagnosticsMarkup(view);
+}
+
+function renderBuildProvenance(view){
+  byId('aboutContent').innerHTML = buildProvenanceMarkup(view);
 }
 
 function booleanText(value){
@@ -851,6 +1438,8 @@ function renderProfileModal(profile){
 function openProfileModal(index, trigger){
   const profile = dashboardState.view?.profiles?.[index];
   if(!profile) return;
+	closeDeviceDiagnostics();
+	closeAbout();
   dashboardState.selectedProfileIndex = index;
   dashboardState.modalTrigger = trigger || document.activeElement;
   renderProfileModal(profile);
@@ -867,6 +1456,45 @@ function closeProfileModal(){
   dashboardState.selectedProfileIndex = null;
   dashboardState.modalTrigger?.focus?.();
   dashboardState.modalTrigger = null;
+}
+
+function openDeviceDiagnostics(trigger){
+  if(!dashboardState.view?.host) return;
+  closeProfileModal();
+  closeAbout();
+  dashboardState.deviceDiagnosticsTrigger = trigger || document.activeElement;
+  renderDeviceDiagnostics(dashboardState.view);
+  byId('deviceDiagnosticsModal').hidden = false;
+  document.body.classList.add('modal-open');
+  byId('deviceDiagnosticsClose').focus();
+}
+
+function closeDeviceDiagnostics(){
+  const modal = typeof document === 'undefined' ? null : byId('deviceDiagnosticsModal');
+  if(!modal || modal.hidden) return;
+  modal.hidden = true;
+  document.body.classList.remove('modal-open');
+  dashboardState.deviceDiagnosticsTrigger?.focus?.();
+  dashboardState.deviceDiagnosticsTrigger = null;
+}
+
+function openAbout(trigger){
+  closeProfileModal();
+  closeDeviceDiagnostics();
+  dashboardState.aboutTrigger = trigger || document.activeElement;
+  renderBuildProvenance(dashboardState.view || {document: {}, host: {}, hardware: {}});
+  byId('aboutModal').hidden = false;
+  document.body.classList.add('modal-open');
+  byId('aboutClose').focus();
+}
+
+function closeAbout(){
+  const modal = typeof document === 'undefined' ? null : byId('aboutModal');
+  if(!modal || modal.hidden) return;
+  modal.hidden = true;
+  document.body.classList.remove('modal-open');
+  dashboardState.aboutTrigger?.focus?.();
+  dashboardState.aboutTrigger = null;
 }
 
 function statsUrl(){
@@ -963,12 +1591,14 @@ function applyRefreshError(error){
 
 function bindInteractions(){
   byId('refreshButton').addEventListener('click', () => dashboardState.controller?.refresh('manual'));
+  byId('deviceDiagnosticsButton').addEventListener('click', event => openDeviceDiagnostics(event.currentTarget));
+  byId('aboutButton').addEventListener('click', event => openAbout(event.currentTarget));
   for(const tab of document.querySelectorAll('[data-page-target]')){
     tab.addEventListener('click', () => setActivePage(tab.dataset.pageTarget));
     tab.addEventListener('keydown', event => {
       if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-			const pages = ['home', 'docker', 'lucky', 'easytier'];
+			const pages = ['home', 'hardware', 'docker', 'lucky', 'easytier'];
 			const current = pages.indexOf(dashboardState.activePage);
 			const nextPage = event.key === 'Home' ? pages[0] : event.key === 'End' ? pages[pages.length - 1] : event.key === 'ArrowLeft' ? pages[(current - 1 + pages.length) % pages.length] : pages[(current + 1) % pages.length];
       setActivePage(nextPage);
@@ -997,8 +1627,20 @@ function bindInteractions(){
   byId('profileModal').addEventListener('click', event => {
     if(event.target === byId('profileModal')) closeProfileModal();
   });
+  byId('deviceDiagnosticsClose').addEventListener('click', closeDeviceDiagnostics);
+  byId('deviceDiagnosticsModal').addEventListener('click', event => {
+    if(event.target === byId('deviceDiagnosticsModal')) closeDeviceDiagnostics();
+  });
+  byId('aboutClose').addEventListener('click', closeAbout);
+  byId('aboutModal').addEventListener('click', event => {
+    if(event.target === byId('aboutModal')) closeAbout();
+  });
   document.addEventListener('keydown', event => {
-    if(event.key === 'Escape') closeProfileModal();
+    if(event.key === 'Escape'){
+      if(!byId('deviceDiagnosticsModal').hidden) closeDeviceDiagnostics();
+      else if(!byId('aboutModal').hidden) closeAbout();
+      else closeProfileModal();
+    }
   });
 }
 
@@ -1022,7 +1664,7 @@ function initDashboard(){
     if(dashboardState.resizeFrame !== null) cancelAnimationFrame(dashboardState.resizeFrame);
     dashboardState.resizeFrame = requestAnimationFrame(() => {
       dashboardState.resizeFrame = null;
-      fitCpuModelToSingleLine();
+      fitOverviewSingleLineValues();
     });
   };
   window.addEventListener('resize', dashboardState.resizeHandler);
@@ -1068,17 +1710,39 @@ const exported = {
   MAX_UI_DEVICES,
   approximateDays,
   buildViewModel,
+	buildProvenanceMarkup,
   canonicalDashboardHash,
   cleanCpuModel,
+  conciseOsVersion,
   collectWarnings,
+  cpuLogicalProcessorText,
   createRefreshController,
   dashboardCondition,
   deviceDisplayName,
+	deviceDiagnosticsMarkup,
+	deviceShortName,
 	luckyIsConfigured,
 	easytierIsConfigured,
   fittedFontSize,
   formatBytes,
+	formatCelsius,
+  formatTrafficBytes,
+  formatUptimeHours,
+  filesystemBackingDisks,
+	filesystemItemsForView,
+	dataFilesystemItemsForView,
+	luckyServiceSummaryItems,
+  diskPowerOnText,
+  homeDiskUsage,
+	memoryDetailsForView,
+	memoryUsedPercent,
+	ipv6UdpDirectText,
+  maximumTemperature,
+  physicalDisksForView,
+  renderFilesystemDetails,
+  renderPhysicalDiskRows,
   formatPair,
+  profileSummary,
   modelBreakdown,
   normalizeStatsPayload,
   normalizedDeviceStatus,
@@ -1093,8 +1757,10 @@ const exported = {
   selectSingleHost,
   statsUrl,
   statusTone,
+	smartHomeMarkup,
   tokenSourceText,
   tokenBreakdown,
+	temperatureSensorEntries,
   usageBand,
   validDeviceId,
   writeStoredDeviceId

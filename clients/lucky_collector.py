@@ -20,6 +20,9 @@ MAX_ITEMS = 256
 MAX_TEXT = 256
 MAX_NAME = 128
 ALLOWED_SOURCES = {"api", "local_api", "config", "cli", "web_fallback", "unavailable"}
+DEFAULT_LUCKY_BASE_URL = "https://127.0.0.1:16601"
+LUCKY_AUTH_MODES = {"none", "open_token", "admin_token"}
+LUCKY_PROCESS_NAMES = {"lucky", "lucky_process"}
 
 _SECRET_PATTERN = re.compile(
     r"(?i)(authorization\s*:|bearer\s+\S+|api[_-]?key\s*[:=]|password\s*[:=]|"
@@ -121,15 +124,51 @@ def not_configured_lucky():
     }
 
 
-def unavailable_lucky(code="connection_refused", http_status=None):
+def unavailable_lucky(code="connection_refused", http_status=None,
+                      process_running=None, process_pid=None):
     result = not_configured_lucky()
     error = _error(code, _error_message(code), "lucky", True, http_status)
     result.update({"status": "unavailable", "source": "local_api", "error": error})
-    result["service"].update({"error": error})
+    result["service"].update({
+        "state": "running" if process_running is True else "stopped" if process_running is False else "unknown",
+        "process_running": process_running,
+        "process_pid": process_pid,
+        "api_reachable": False,
+        "web_reachable": False,
+        "error": error,
+    })
     for name in ("version", "ip_resolution", "dynamic_dns", "web_services", "port_forwards", "certificates"):
-        result[name]["status"] = "unavailable" if "status" in result[name] else result[name].get("status")
+        # Version has no collection-status field in the strict Device v2
+        # contract.  Do not manufacture one while marking an API outage, or
+        # the Server will safely reject the entire Lucky projection.
+        if "status" in result[name]:
+            result[name]["status"] = "unavailable"
         result[name]["error"] = error
     return result
+
+
+def lucky_process_state(proc_root="/proc"):
+    """Return the Lucky process state without collecting command lines.
+
+    The local API may fail while its SPK process remains running.  Inspect only
+    bounded `/proc/<pid>/comm` names so no arguments, environment variables,
+    credentials, or package configuration can enter the extension payload.
+    """
+    try:
+        entries = sorted(os.listdir(proc_root))[:65536]
+    except OSError:
+        return None, None
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        try:
+            with open(os.path.join(proc_root, entry, "comm"), "r", encoding="utf-8", errors="replace") as handle:
+                process_name = handle.read(129).strip().lower()
+        except OSError:
+            continue
+        if process_name in LUCKY_PROCESS_NAMES:
+            return True, int(entry)
+    return False, None
 
 
 def _empty_collection(key, status="unknown", error=None):
@@ -194,7 +233,9 @@ class LuckyClient(object):
         if parsed.scheme not in ("http", "https") or parsed.hostname not in ("127.0.0.1", "localhost", "::1"):
             raise ValueError("Lucky base URL must use loopback HTTP or HTTPS")
         self.base_url = base_url.rstrip("/")
-        self.auth_mode = auth_mode
+        self.auth_mode = str(auth_mode or "none").strip().lower()
+        if self.auth_mode not in LUCKY_AUTH_MODES:
+            raise ValueError("Lucky authentication mode is invalid")
         self.token_file = token_file
         self.timeout = max(1, min(int(timeout), 30))
         self.verify_tls = bool(verify_tls)
@@ -221,9 +262,9 @@ class LuckyClient(object):
         return self._get_path("/api/webservice/rule/" + urllib.parse.quote(key, safe=""))
 
     def _get_path(self, path):
-        token = self._token()
+        token = self._token() if self.auth_mode != "none" else None
         headers = {"Accept": "application/json"}
-        if token:
+        if token and self.auth_mode != "none":
             header_name = "Lucky-Admin-Token" if self.auth_mode == "admin_token" else "openToken"
             headers[header_name] = token
         if self.request_func:
@@ -673,14 +714,15 @@ def _certificate(row, index, now, warning_days, local_timezone=None):
 
 
 class LuckyCollector(object):
-    def __init__(self, enabled=False, base_url="http://127.0.0.1:16601", auth_mode="open_token",
+    def __init__(self, enabled=False, base_url=DEFAULT_LUCKY_BASE_URL, auth_mode="none",
                  token_file=None, timeout=5, warning_days=30, version_check_ttl=21600,
-                 verify_tls=True, request_func=None, local_timezone=None):
+                 verify_tls=True, request_func=None, local_timezone=None, process_state_func=None):
         self.enabled = bool(enabled)
         self.warning_days = _bounded_config_int(warning_days, 30, 1, 365)
         self.version_check_ttl = _bounded_config_int(version_check_ttl, 21600, 3600, 86400)
         self._latest_cache = None
         self.local_timezone = local_timezone or _local_timezone()
+        self.process_state_func = process_state_func or lucky_process_state
         self.client = None
         self.configuration_error = None
         if self.enabled:
@@ -779,9 +821,25 @@ class LuckyCollector(object):
         now_dt = now or datetime.datetime.now(datetime.timezone.utc)
         collected_at = _timestamp(now_dt)
         try:
+            process_running, process_pid = self.process_state_func()
+        except Exception:
+            process_running, process_pid = None, None
+        try:
             version_payload = self.client.get("version")
         except LuckyAPIError as exc:
-            return unavailable_lucky(exc.code, exc.http_status)
+            # Lucky's fixed version endpoint may redirect before its local
+            # backend error is exposed.  The fixed info endpoint is already
+            # part of the read-only allowlist; use it only to retain the
+            # bounded backend failure (for example HTTP 502), never to follow
+            # a redirect or turn a failed API into healthy data.
+            if exc.code == "invalid_response" and exc.http_status in (301, 302, 303, 307, 308):
+                try:
+                    self.client.get("info")
+                except LuckyAPIError as diagnostic_error:
+                    exc = diagnostic_error
+            return unavailable_lucky(
+                exc.code, exc.http_status, process_running, process_pid
+            )
 
         current = _safe_text(_pick(version_payload, "version", "Version"), 64)
         build_info = _safe_text(_pick(version_payload, "buildTime", "BuildTime", "build_info"), 128)
@@ -802,8 +860,9 @@ class LuckyCollector(object):
         }
         service_error = source_errors.get("status")
         service = {
-            "state": "running", "process_running": True,
-            "process_pid": _safe_int(_pick(status_payload, "PID", "pid")),
+            "state": "running" if process_running is not False else "stopped",
+            "process_running": process_running,
+            "process_pid": process_pid or _safe_int(_pick(status_payload, "PID", "pid")),
             "uptime_seconds": _safe_int(_pick(status_payload, "Uptime", "uptime", "uptime_seconds")),
             "api_reachable": "status" not in source_errors, "web_reachable": True, "error": service_error,
         }
@@ -863,9 +922,9 @@ def collector_from_environment(request_func=None):
     verify_tls = os.getenv("LUCKY_VERIFY_TLS", "true").strip().lower() not in ("0", "false", "no", "off")
     return LuckyCollector(
         enabled=enabled,
-        base_url=os.getenv("LUCKY_BASE_URL", "http://127.0.0.1:16601"),
-        auth_mode=os.getenv("LUCKY_AUTH_MODE", "open_token"),
-        token_file=os.getenv("LUCKY_TOKEN_FILE", "/run/secrets/lucky-open-token"),
+        base_url=os.getenv("LUCKY_BASE_URL", DEFAULT_LUCKY_BASE_URL),
+        auth_mode=os.getenv("LUCKY_AUTH_MODE", "none"),
+        token_file=os.getenv("LUCKY_TOKEN_FILE") or None,
         timeout=os.getenv("LUCKY_TIMEOUT_SECONDS", "5"),
         warning_days=os.getenv("LUCKY_CERT_WARNING_DAYS", "30"),
         version_check_ttl=os.getenv("LUCKY_VERSION_CHECK_TTL", "21600"),

@@ -75,6 +75,17 @@ class ManualDeviceExampleTests(unittest.TestCase):
         for key in ("SERVER", "SERVERSTATUS_USER", "USER", "PORT", "PASSWORD"):
             self.assertNotIn(f"{key}:", environment)
         self.assertIn("environment: !override", source)
+        self.assertIn("privileged: false", source)
+        self.assertIn("cap_add:\n      - SYS_RAWIO", source)
+        self.assertIn("devices: !override", source)
+        for device in (
+            "- ${SMART_DEVICE_A_HOST:-/dev/sda}:${SMART_DEVICE_A_CONTAINER:-/dev/sda}:r",
+            "- ${SMART_DEVICE_B_HOST:-/dev/sdb}:${SMART_DEVICE_B_CONTAINER:-/dev/sdb}:r",
+        ):
+            self.assertIn(device, source)
+        self.assertIn('SMART_DEVICE: ""', source)
+        self.assertIn("volumes: !override", source)
+        self.assertNotIn("/dev:/dev:ro", source)
         for required in (
             "./client-v2.example.json:/etc/hermesstatus/client-v2.json:ro",
             "./compute-01.token:/run/secrets/hermesstatus-device-token:ro",
@@ -84,6 +95,10 @@ class ManualDeviceExampleTests(unittest.TestCase):
         self.assertIn("read_only: true", base)
         self.assertIn("no-new-privileges:true", base)
         self.assertIn("/tmp:size=32m,mode=1777,nosuid,nodev,noexec", base)
+        self.assertNotIn("\n    devices:\n", base)
+        self.assertNotIn("\n    cap_add:\n      - SYS_RAWIO", base)
+        self.assertIn('SMART_DEVICE: "${SMART_DEVICE:-auto}"', base)
+        self.assertNotIn("/dev:/dev:ro", base)
 
     def test_reverse_proxy_is_an_exact_bounded_tls_ingress(self):
         source = (

@@ -41,7 +41,7 @@ func decodeAgentUpdate(data []byte) (AgentStats, ExtensionStats, []extensionDeco
 
 	extension := newNotReportedExtensionStats()
 	issues := make([]extensionDecodeIssue, 0, 3)
-	hasStructured := hasAnyField(fields, "hardware", "docker", "hermes", "lucky", "easytier")
+	hasStructured := hasAnyField(fields, "hardware", "docker", "hermes", "lucky", "easytier", "client_build")
 	versionCode := ""
 	if raw, ok := fields["extension_version"]; ok {
 		var version string
@@ -85,7 +85,42 @@ func decodeAgentUpdate(data []byte) (AgentStats, ExtensionStats, []extensionDeco
 			extension.EasyTier = decodeDomainPayload("easytier", raw, MaxEasyTierPayloadBytes, DecodeEasyTierStatsJSON, newDegradedEasyTierStats, &issues)
 		}
 	}
+	if raw, ok := fields["client_build"]; ok {
+		if versionCode != "" {
+			issues = append(issues, extensionDecodeIssue{Domain: "client_build", Code: versionCode, PayloadLength: len(raw)})
+		} else {
+			extension.ClientBuild = decodeClientBuildPayload(raw, &issues)
+		}
+	}
 	return native, extension, issues, nil
+}
+
+func decodeClientBuildPayload(data []byte, issues *[]extensionDecodeIssue) *ClientBuildInfo {
+	if len(data) > 4*1024 {
+		*issues = append(*issues, extensionDecodeIssue{Domain: "client_build", Code: validationCodePayloadTooLarge, PayloadLength: len(data)})
+		return nil
+	}
+	stats, err := decodeExtensionClientBuild(data)
+	if err != nil {
+		*issues = append(*issues, extensionDecodeIssue{Domain: "client_build", Code: extensionValidationCode(err), PayloadLength: len(data)})
+		return nil
+	}
+	return stats
+}
+
+func decodeExtensionClientBuild(data []byte) (*ClientBuildInfo, error) {
+	if err := validateRequiredClientBuild(data); err != nil {
+		return nil, err
+	}
+	var build ClientBuildInfo
+	if err := decodeStrictJSON(data, &build); err != nil {
+		return nil, err
+	}
+	sanitized := SanitizeExtensionStats(ExtensionStats{ClientBuild: &build})
+	if err := ValidateClientBuildInfo(sanitized.ClientBuild); err != nil {
+		return nil, err
+	}
+	return sanitized.ClientBuild, nil
 }
 
 func decodeWireDomain[T any](
@@ -241,6 +276,7 @@ func extensionSnapshotAt(stats ExtensionStats, receivedAt time.Time) ExtensionSn
 		Hermes:           stats.Hermes,
 		Lucky:            stats.Lucky,
 		EasyTier:         stats.EasyTier,
+		ClientBuild:      stats.ClientBuild,
 	}
 }
 
@@ -252,6 +288,7 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 		Hermes:           input.Hermes,
 		Lucky:            input.Lucky,
 		EasyTier:         input.EasyTier,
+		ClientBuild:      input.ClientBuild,
 	})
 	if stats.ExtensionVersion != ExtensionSchemaVersion {
 		stats.ExtensionVersion = ExtensionSchemaVersion
@@ -277,6 +314,9 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 	}
 
 	applyDomainFreshness("hardware", stats.Hardware.UpdatedAt, hardwareStaleAfter, now, &stats.Hardware.Stale, &stats.Hardware.Error)
+	if stats.Hardware.Storage != nil {
+		applyDomainFreshness("hardware.storage", stats.Hardware.Storage.UpdatedAt, hardwareStaleAfter, now, &stats.Hardware.Storage.Stale, &stats.Hardware.Storage.Error)
+	}
 	applyDomainFreshness("docker", stats.Docker.UpdatedAt, dockerStaleAfter, now, &stats.Docker.Stale, &stats.Docker.Error)
 	applyDomainFreshness("hermes", stats.Hermes.UpdatedAt, hermesStaleAfter, now, &stats.Hermes.Stale, &stats.Hermes.Error)
 	applyDomainFreshness("lucky", stats.Lucky.UpdatedAt, luckyStaleAfter, now, &stats.Lucky.Stale, &stats.Lucky.Error)
@@ -300,6 +340,7 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 		Hermes:           stats.Hermes,
 		Lucky:            stats.Lucky,
 		EasyTier:         stats.EasyTier,
+		ClientBuild:      stats.ClientBuild,
 	}
 }
 

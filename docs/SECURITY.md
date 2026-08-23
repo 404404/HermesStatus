@@ -26,12 +26,13 @@ Bearer token only to the trusted HTTPS ingress route.
 
 ## EasyTier collector boundary
 
-EasyTier monitoring permits exactly `node info`, `peer list`, `route list`,
-`connector list`, and `stats show`, through a loopback-only RPC portal. It uses
+EasyTier monitoring permits exactly `node`, `peer`, `connector`, and `stats`,
+through a loopback-only RPC portal. It uses
 an absolute executable and argv-based subprocess invocation with no shell. The
-projection excludes configuration, keys, credentials, RPC addresses, STUN data,
-public/listener endpoints, raw JSON, and stderr. Unknown payload fields are
-rejected by the Server before persistence and UI projection.
+projection excludes configuration, keys, credentials, RPC addresses, raw JSON,
+and stderr. It retains only bounded, credential-free listener/connector
+endpoints and selected STUN diagnostics. Unknown payload fields are rejected by
+the Server before persistence and UI projection.
 
 ## Device v2 ingress
 
@@ -48,3 +49,47 @@ Use `/api/health` and sanitized `/json/stats.json` for diagnosis. Do not expose
 raw SMART output, Docker API responses, Hermes configuration, `.env` files, or
 authentication headers. The dashboard may report stale or unavailable data;
 that is safer than inventing a healthy value.
+
+## Hardware boundary
+
+Hardware observation is Client-only and read-only. The base Client deployment
+is non-privileged and maps no host block device. SMART requires an explicit
+audited JSON allowlist plus `SYS_RAWIO` and one read-only Compose mapping per
+confirmed device. Never mount full `/dev`, add `SYS_ADMIN`, use a host
+mount-namespace escape, or grant an unseen device merely to make auto-discovery
+convenient.
+
+Filesystem capacity requires an operator-selected, narrow read-only probe mount.
+The collector calls metadata and `statvfs` only; it does not enumerate files.
+Do not mount the host root merely to show capacity. Storage collection retains
+no serial number, WWN, filesystem UUID, raw SMART attribute table, raw command
+output, or directory listing.
+
+All reported device paths, models, mountpoints, filesystem types, operating
+system strings, and build metadata are bounded and rendered as escaped text.
+They are observations only, never Device v2 identity or authentication inputs.
+Per-disk and per-filesystem failure remains unavailable/degraded data rather
+than a fabricated healthy or empty result.
+
+## Read-only diagnostics and provenance
+
+Device diagnostics may expose sanitized status, protocol, timestamps, expected
+EasyTier comparison state, and Server/Client build provenance. They must not
+expose tokens, digests, credential paths, Registry paths, source-IP evidence,
+private CA data, raw host configuration, or headers. Build provenance is
+injected at build time; images must not run Git at runtime, and qualification
+compares the full revision with the OCI revision label.
+
+## EasyTier monitoring
+
+EasyTier monitoring is loopback-RPC and read-only. The runtime command allowlist
+contains only `node`, `peer`, `connector`, and `stats`; it has no
+connector/route/credential/whitelist/port-forward/logger
+or restart operation. It never persists or renders raw config, credential,
+network secret, Noise key, or command stderr. Retained endpoints have no
+credentials, query, or fragment.
+
+All detailed values are server-validated and rendered as escaped text. Public
+CIDRs are rejected; only bounded public IP observations supplied by `node` STUN
+diagnostics are retained. A malformed, partial, or unsupported response is
+safer as unavailable/degraded/unsupported than a false empty or healthy view.

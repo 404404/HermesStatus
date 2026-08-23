@@ -316,10 +316,59 @@ func evaluateIdentity(
 	return "matched", nil
 }
 
+func usableSMARTAttributeFallback(disk PhysicalDiskStats) bool {
+	return disk.CollectionStatus == "partial" &&
+		disk.SMARTStatus == DiskSMARTPassed &&
+		disk.Error != nil && disk.Error.Code == "smart_return_status_unavailable"
+}
+
+func storageHasOnlyUsableSMARTAttributeFallback(storage *StorageStats) bool {
+	if storage == nil || storage.Error == nil ||
+		(storage.Error.Code != "smart_return_status_unavailable" && storage.Error.Code != "partial_failure") {
+		return false
+	}
+	hasFallback := false
+	for _, disk := range storage.PhysicalDisks {
+		switch {
+		case usableSMARTAttributeFallback(disk):
+			hasFallback = true
+		case disk.CollectionStatus == "healthy":
+		case disk.CollectionStatus == "unsupported" && disk.Error == nil:
+		default:
+			return false
+		}
+	}
+	for _, filesystem := range storage.Filesystems {
+		if filesystem.CollectionStatus != "healthy" {
+			return false
+		}
+	}
+	return hasFallback
+}
+
 func extensionHasBusinessError(extension ExtensionStats) bool {
 	var extensionErrors []*ExtensionError
 	if extension.Hardware != nil {
 		extensionErrors = append(extensionErrors, extension.Hardware.Error)
+		if storage := extension.Hardware.Storage; storage != nil {
+			if !storageHasOnlyUsableSMARTAttributeFallback(storage) {
+				extensionErrors = append(extensionErrors, storage.Error)
+			}
+			for _, disk := range storage.PhysicalDisks {
+				// A topology-only disk is not necessarily an authorized SMART
+				// target. It is retained for safe physical-disk relationships,
+				// but `unsupported` without a collection error must not make an
+				// otherwise healthy device appear degraded. Likewise, a passed
+				// SMART attribute/threshold fallback is usable data with lower
+				// completeness, not a hardware failure.
+				if disk.SMARTStatus == DiskSMARTFailed ||
+					(disk.CollectionStatus != "healthy" &&
+						!(disk.CollectionStatus == "unsupported" && disk.Error == nil) &&
+						!usableSMARTAttributeFallback(disk)) {
+					return true
+				}
+			}
+		}
 	}
 	if extension.Docker != nil {
 		extensionErrors = append(extensionErrors, extension.Docker.Error)
@@ -336,7 +385,8 @@ func extensionHasBusinessError(extension ExtensionStats) bool {
 	for _, extensionError := range extensionErrors {
 		if extensionError != nil &&
 			extensionError.Code != "not_reported" &&
-			extensionError.Code != "not_configured" {
+			extensionError.Code != "not_configured" &&
+			extensionError.Code != "not_installed" {
 			return true
 		}
 	}
@@ -394,6 +444,13 @@ func forceExtensionStale(extension *ExtensionSnapshot) {
 		value := *extension.Hardware
 		extension.Hardware = &value
 		extension.Hardware.Stale = true
+		if value.Storage != nil {
+			storage := *value.Storage
+			storage.PhysicalDisks = append([]PhysicalDiskStats(nil), value.Storage.PhysicalDisks...)
+			storage.Filesystems = append([]FilesystemStats(nil), value.Storage.Filesystems...)
+			storage.Stale = true
+			value.Storage = &storage
+		}
 	}
 	if extension.Docker != nil {
 		value := *extension.Docker
@@ -419,6 +476,12 @@ func forceExtensionStale(extension *ExtensionSnapshot) {
 		extension.Lucky.PortForwards.Stale = true
 		extension.Lucky.Certificates.Stale = true
 		extension.Lucky.Version.Stale = true
+	}
+	if extension.EasyTier != nil {
+		value := *extension.EasyTier
+		extension.EasyTier = &value
+		extension.EasyTier.Stale = true
+		extension.EasyTier.Status = EasyTierStale
 	}
 }
 

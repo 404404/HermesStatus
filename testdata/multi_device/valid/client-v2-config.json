@@ -15,5 +15,14 @@
   },
   "collection": {
     "interval_seconds": 60
+  },
+  "hardware": {
+    "smart_devices": [
+      {"path": "/dev/disk+1", "type": null, "label": "synthetic-disk"}
+    ],
+    "primary_smart_device": "/dev/disk+1",
+    "filesystem_probes": [
+      {"mountpoint": "/data", "probe_path": "/host-storage/data"}
+    ]
   }
 }

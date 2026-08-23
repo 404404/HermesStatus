@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"sort"
@@ -30,12 +31,18 @@ const (
 )
 
 var (
-	deviceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
-	labelPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
-	digestPattern   = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	safeTextPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	credentialIDSet = map[string]bool{"current": true, "next": true}
-	statsKeys       = map[string]bool{
+	deviceIDPattern      = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
+	labelPattern         = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+	digestPattern        = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	safeTextPattern      = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	credentialIDSet      = map[string]bool{"current": true, "next": true}
+	internalCIDRPrefixes = []netip.Prefix{
+		netip.MustParsePrefix("10.0.0.0/8"),
+		netip.MustParsePrefix("172.16.0.0/12"),
+		netip.MustParsePrefix("192.168.0.0/16"),
+		netip.MustParsePrefix("fc00::/7"),
+	}
+	statsKeys = map[string]bool{
 		"uptime": true, "load_1": true, "load_5": true, "load_15": true,
 		"ping_10010": true, "ping_189": true, "ping_10086": true,
 		"time_10010": true, "time_189": true, "time_10086": true,
@@ -45,7 +52,7 @@ var (
 		"hdd_total": true, "hdd_used": true, "io_read": true, "io_write": true,
 		"cpu": true, "cpu_cores": true, "cpu_model": true, "custom": true, "os": true,
 		"online4": true, "online6": true,
-		"extension_version": true, "hardware": true, "docker": true, "hermes": true, "lucky": true, "easytier": true,
+		"extension_version": true, "hardware": true, "docker": true, "hermes": true, "lucky": true, "easytier": true, "client_build": true,
 		"hardware_json": true, "docker_json": true, "hermes_json": true,
 	}
 )
@@ -76,14 +83,24 @@ type RegistryDefaults struct {
 }
 
 type RegistryDevice struct {
-	ID           string             `json:"id"`
-	DisplayName  string             `json:"display_name"`
-	ExpectedFQDN *string            `json:"expected_fqdn"`
-	Enabled      *bool              `json:"enabled"`
-	Order        int                `json:"order"`
-	Tags         []string           `json:"tags"`
-	Group        *string            `json:"group"`
-	Ingestion    IngestionOwnership `json:"ingestion"`
+	ID                  string               `json:"id"`
+	DisplayName         string               `json:"display_name"`
+	ExpectedFQDN        *string              `json:"expected_fqdn"`
+	Enabled             *bool                `json:"enabled"`
+	Order               int                  `json:"order"`
+	Tags                []string             `json:"tags"`
+	Group               *string              `json:"group"`
+	Ingestion           IngestionOwnership   `json:"ingestion"`
+	EasyTierExpectation *EasyTierExpectation `json:"easytier_expectation,omitempty"`
+}
+
+// EasyTierExpectation is an operator-authored comparison target. It is never
+// used for device identity, authentication, registration, or credential lookup.
+type EasyTierExpectation struct {
+	AdministrativeRole string   `json:"administrative_role"`
+	NetworkName        string   `json:"network_name"`
+	OverlayIPv4        string   `json:"overlay_ipv4"`
+	ProxyCIDRs         []string `json:"proxy_cidrs"`
 }
 
 type DeviceRegistry struct {
@@ -329,6 +346,9 @@ func ValidateRegistry(registry *DeviceRegistry, now time.Time) error {
 		if err := ValidateIngestionOwnership(device.Ingestion, now); err != nil {
 			return contractError(prefix+".ingestion", err.Error())
 		}
+		if err := ValidateEasyTierExpectation(device.EasyTierExpectation); err != nil {
+			return contractError(prefix+".easytier_expectation", err.Error())
+		}
 		if device.ID == registry.Defaults.DefaultDeviceID {
 			defaultFound = true
 			defaultEnabled = *device.Enabled
@@ -343,7 +363,65 @@ func ValidateRegistry(registry *DeviceRegistry, now time.Time) error {
 	return nil
 }
 
+func ValidateEasyTierExpectation(expectation *EasyTierExpectation) error {
+	if expectation == nil {
+		return nil
+	}
+	switch expectation.AdministrativeRole {
+	case "site_router", "endpoint", "bootstrap_listener", "relay_capable", "observer":
+	default:
+		return errors.New("administrative_role is invalid")
+	}
+	if !validHumanText(strings.TrimSpace(expectation.NetworkName), 128) {
+		return errors.New("network_name is invalid")
+	}
+	ip := net.ParseIP(expectation.OverlayIPv4)
+	if ip == nil || ip.To4() == nil || !ip.IsPrivate() {
+		return errors.New("overlay_ipv4 must be an internal IPv4 address")
+	}
+	if len(expectation.ProxyCIDRs) > 16 {
+		return errors.New("proxy_cidrs is too large")
+	}
+	seen := map[string]bool{}
+	for _, value := range expectation.ProxyCIDRs {
+		canonical, err := canonicalInternalCIDR(value)
+		if err != nil || seen[canonical] {
+			return errors.New("proxy_cidrs contains an invalid internal CIDR")
+		}
+		seen[canonical] = true
+	}
+	return nil
+}
+
+func canonicalInternalCIDR(value string) (string, error) {
+	prefix, err := netip.ParsePrefix(value)
+	if err != nil {
+		return "", err
+	}
+	prefix = prefix.Masked()
+	for _, allowed := range internalCIDRPrefixes {
+		if prefix.Addr().BitLen() == allowed.Addr().BitLen() && allowed.Bits() <= prefix.Bits() && allowed.Contains(prefix.Addr()) {
+			return prefix.String(), nil
+		}
+	}
+	return "", errors.New("not an internal CIDR")
+}
+
 func NormalizeRegistry(registry *DeviceRegistry) {
+	for index := range registry.Devices {
+		expectation := registry.Devices[index].EasyTierExpectation
+		if expectation == nil {
+			continue
+		}
+		canonical := make([]string, 0, len(expectation.ProxyCIDRs))
+		for _, value := range expectation.ProxyCIDRs {
+			prefix, _ := canonicalInternalCIDR(value)
+			canonical = append(canonical, prefix)
+		}
+		expectation.NetworkName = strings.TrimSpace(expectation.NetworkName)
+		sort.Strings(canonical)
+		expectation.ProxyCIDRs = canonical
+	}
 	sort.SliceStable(registry.Devices, func(i, j int) bool {
 		if registry.Devices[i].Order == registry.Devices[j].Order {
 			return registry.Devices[i].ID < registry.Devices[j].ID

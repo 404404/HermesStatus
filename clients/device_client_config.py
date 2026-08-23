@@ -27,7 +27,13 @@ from secure_file import (
 
 
 CONFIG_FILE_ENV = "HERMESSTATUS_CONFIG_FILE"
-KNOWN_V2_ENV = set(ENV_TO_FIELD) | {CONFIG_FILE_ENV}
+CLIENT_BUILD_ENV = {
+    "HERMESSTATUS_CLIENT_VERSION",
+    "HERMESSTATUS_CLIENT_REVISION",
+    "HERMESSTATUS_CLIENT_BUILD_TIME",
+    "HERMESSTATUS_CLIENT_PROTOCOL",
+}
+KNOWN_V2_ENV = set(ENV_TO_FIELD) | {CONFIG_FILE_ENV} | CLIENT_BUILD_ENV
 LEGACY_TRANSPORT_KEYS = {"SERVER", "PORT", "SERVERSTATUS_USER", "PASSWORD"}
 MAX_CONFIG_FILE_BYTES = 64 << 10
 MAX_CA_FILE_BYTES = 1 << 20
@@ -56,7 +62,8 @@ def load_client_selection(
     environment = dict(os.environ if environ is None else environ)
     cli_v2, cli_legacy = _parse_cli(arguments)
     environment_v2_keys = {
-        key for key in environment if key.startswith("HERMESSTATUS_")
+        key for key in environment
+        if key.startswith("HERMESSTATUS_") and key not in CLIENT_BUILD_ENV
     }
     has_v2_signal = bool(cli_v2 or environment_v2_keys)
     if not has_v2_signal:
@@ -167,7 +174,7 @@ def _parse_cli(arguments: Sequence[str]) -> tuple[dict[str, str], set[str]]:
                 raise ClientContractError("v2 CLI argument is invalid")
             continue
         if key.startswith("HERMESSTATUS_"):
-            if key not in KNOWN_V2_ENV:
+            if key not in KNOWN_V2_ENV or key in CLIENT_BUILD_ENV:
                 raise ClientContractError("CLI contains unknown v2 fields")
             if value == "":
                 raise ClientContractError("CLI contains empty v2 fields")

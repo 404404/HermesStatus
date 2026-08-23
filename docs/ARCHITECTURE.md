@@ -5,13 +5,13 @@
 ## Purpose
 
 HermesStatus is a current-state dashboard for explicitly configured hosts. It
-does not control hosts, containers, Hermes, or Lucky. The primary UI has three
-views: Home, Docker, and Lucky.
+does not control hosts, containers, Hermes, Lucky, or EasyTier. The primary UI
+has five views: Home, Hardware, Docker, Lucky, and EasyTier.
 
 ## Components and data flow
 
 ```text
-Host OS / hwmon / SMART / Docker / Hermes / Lucky
+Host OS / hwmon / SMART / explicit filesystem probes / Docker / Hermes / Lucky / EasyTier
                          ↓
                     Python Client
                          ↓
@@ -22,26 +22,51 @@ Host OS / hwmon / SMART / Docker / Hermes / Lucky
           /json/stats.json · /api/health · WebUI
 ```
 
-The Client collects host data and produces a structured extension with four
-domains: `hardware`, `docker`, `hermes`, and `lucky`. Each domain can be stale
-or unavailable without preventing the remaining domains from being reported.
+The Client collects host data and produces a structured extension with five
+domains: `hardware`, `docker`, `hermes`, `lucky`, and `easytier`. Each domain
+can be stale or unavailable without preventing the remaining domains from being
+reported.
 
 The Go Server validates the incoming update, keeps the latest accepted state,
 persists selected state, and projects it as `/json/stats.json`. The browser
-fetches that one document; switching between Home, Docker, and Lucky does not
-create a separate data request.
+fetches that one document; switching between views does not create a separate
+data request.
 
 ## Dashboard scope
 
-The Home view presents device status, CPU, memory, disk capacity, host and CPU
-identity, hardware temperature/SMART information, Hermes profiles, and a Lucky
-summary when Lucky is configured. Docker has a separate container table. Lucky
-has its own configuration and service summaries.
+The Home view presents device status, CPU, memory, disk capacity, EasyTier
+remote-peer and traffic summaries, physical-disk temperature/SMART information,
+Hermes profiles, and Lucky/EasyTier state and version summaries when configured.
+EasyTier traffic uses one decimal place with automatic units and a single-line
+receive / transmit / forwarded presentation. The Hermes Profile section header
+shows the Agent version and profile count. Hardware follows Home and shows CPU,
+memory, system information, and physical disks. Its filesystem probes only
+associate safe partition data with physical-disk rows; there is no separate
+filesystems/volumes section. Docker has a separate container table; Lucky has
+its own configuration and service summaries; EasyTier presents per-command
+collection-status cards followed by its read-only network summary.
 
-Network throughput, cumulative network traffic, and carrier-specific or
-three-network latency probes are not HermesStatus dashboard features and must
-not be documented as such, even though compatibility fields may still exist in
-the legacy Agent protocol.
+`hardware.storage.physical_disks` and `hardware.storage.filesystems` are
+separate bounded collections. The Client builds a read-only block-device graph
+to resolve ordinary partitions and generic LVM, MD RAID, and device-mapper
+stacks to zero or more physical disk IDs. A multi-device Btrfs source does not
+prove every member through that graph, so its backing relation is deliberately
+unknown rather than incomplete. A filesystem never gains a made-up temperature
+or SMART value. Only operator-configured physical SMART devices and explicit
+read-only filesystem probe mounts are collected.
+
+System identity reports sanitized distribution/release, kernel, architecture,
+and source provenance. Build provenance is similarly read-only: the Server
+reports build metadata and the selected Device may report Client build metadata.
+Revision data is injected at build time and is expected to agree with the OCI
+revision; no production image invokes Git at runtime. Environment is an
+operator-supplied deployment label, not a conclusion drawn from a host port.
+
+General host network throughput, cumulative host network traffic, and
+carrier-specific or three-network latency probes are not HermesStatus dashboard
+features and must not be documented as such, even though compatibility fields
+may still exist in the legacy Agent protocol. This does not apply to the
+separate EasyTier receive / transmit / forwarded counters.
 
 ## Ingestion modes
 
@@ -64,3 +89,12 @@ definitions.
 The registry supports at most 16 devices. Device discovery, browser-side
 registration, remote control, RBAC, multi-tenancy, database history, WebSocket,
 and SSE are outside the product boundary.
+
+## 2.3 Preview EasyTier boundary
+
+`2.3-preview` integrates 2.3 work and runs independent staging on 21443; it is
+not a promotion to `2.0`. EasyTier reaches the Server only as a validated,
+secret-free extension in the existing stats document. The browser uses the same
+`/json/stats.json` fetch and selected device as the other views—no EasyTier
+endpoint, timer, management channel, or identity mapping exists. Registry
+expectations are comparison-only diagnostics, never authentication or identity.

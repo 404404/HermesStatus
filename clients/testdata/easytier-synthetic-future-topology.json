@@ -1,0 +1,15 @@
+{
+  "fixture_kind": "synthetic",
+  "description": "Future two-site topology qualification only; not real-network evidence.",
+  "scenarios": {
+    "direct_ipv6_udp": {"peer_id": "peer-b", "overlay_ipv4": "10.250.250.2", "path_state": "direct", "transport": "udp", "address_family": "ipv6"},
+    "relayed": {"peer_id": "peer-c", "overlay_ipv4": "10.250.250.3", "path_state": "relayed", "transport": "udp", "address_family": "ipv6"},
+    "tcp_active": {"transport": "tcp", "address_family": "ipv6", "port": 11010, "status": "connected"},
+    "tcp_disconnected": {"transport": "tcp", "address_family": "ipv4", "port": 11010, "status": "disconnected"},
+    "remote_site_route": {"overlay_ipv4": "10.250.250.2", "proxy_cidrs": ["192.168.88.0/24"], "path_state": "direct"},
+    "partial_route_timeout": {"route_list_status": "unavailable", "routes": "data_unavailable"},
+    "unsupported_version": {"version": "3.0.0-synthetic", "schema_compatibility": "unsupported"},
+    "expectation_mismatch": {"expected_overlay_ipv4": "10.250.250.1", "observed_overlay_ipv4": "10.250.250.9"},
+    "malicious_strings": {"hostname": "<script>alert(1)</script>", "network_name": "<img src=x onerror=alert(1)>"}
+  }
+}

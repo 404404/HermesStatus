@@ -277,6 +277,38 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(degraded_payload["gateway_service"], "degraded")
         self.assertIsNone(empty_payload["gateway_service"])
 
+    def test_healthy_profile_does_not_inherit_supplementary_api_timeout(self):
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        profile_dir = self.root / "daily"
+        original = (
+            module.service_status, module.hermes_cli_status, module.hermes_agent_version,
+            module.summarize_config, module.collect_local_usage, module.collect_api,
+        )
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_cli_status = lambda _profile: ""
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({"config_found": False, "docker_volumes": []})
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {
+                "status": "ok",
+                "health": {"status": "ok"},
+                "errors": [module.safe_error("api_timeout", "Hermes API request timed out", "hermes-api", True)],
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({"error": "api_timeout"}),
+            }
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (
+                module.service_status, module.hermes_cli_status, module.hermes_agent_version,
+                module.summarize_config, module.collect_local_usage, module.collect_api,
+            ) = original
+
+        self.assertEqual(payload["api_status"], "ok")
+        self.assertFalse(payload["stale"])
+        self.assertIsNone(payload["error"])
+
     def test_local_usage_preserves_recursive_1_0_window(self):
         self.write_registry(["daily"])
         module = load_exporter(self.config)

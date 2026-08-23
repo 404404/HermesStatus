@@ -17,9 +17,24 @@ const (
 	MaxHTTPStatus         = 599
 
 	MaxCPUModelLength          = 128
+	MaxCPUTextLength           = 128
+	MaxCPUCount                = 65536
+	MaxCPUFrequencyMHz         = 1000000.0
 	MaxTemperatureSourceLength = 128
 	MaxDiskDeviceLength        = 128
 	MaxDiskSmartSourceLength   = 64
+	MaxPhysicalDisks           = 64
+	MaxFilesystems             = 128
+	MaxFilesystemBackingDisks  = 16
+	MaxDiskModelLength         = 256
+	MaxFilesystemSourceLength  = 256
+	MaxMountpointLength        = 512
+	MaxFilesystemTypeLength    = 64
+	MaxStorageStackTypeLength  = 32
+	MaxSystemIdentityLength    = 256
+	MaxBuildVersionLength      = 64
+	MaxBuildRevisionLength     = 64
+	MaxDeploymentLength        = 32
 
 	MaxDockerContainers   = 256
 	MaxDockerCount        = 100000
@@ -52,11 +67,13 @@ const (
 	MaxLegacyHermesJSONBytes   = 32 * 1024
 
 	MaxExtensionPayloadBytes = 1 << 20
-	MaxHardwarePayloadBytes  = 8 * 1024
-	MaxDockerPayloadBytes    = 512 * 1024
-	MaxHermesPayloadBytes    = 1 << 20
-	MaxEasyTierPayloadBytes  = 64 * 1024
-	MaxEasyTierTextLength    = 128
+	// Storage inventory is bounded independently (64 physical disks and 128
+	// filesystems), so the former single-disk hardware limit is too small.
+	MaxHardwarePayloadBytes = 256 * 1024
+	MaxDockerPayloadBytes   = 512 * 1024
+	MaxHermesPayloadBytes   = 1 << 20
+	MaxEasyTierPayloadBytes = 64 * 1024
+	MaxEasyTierTextLength   = 128
 )
 
 type DiskSMARTStatus string
@@ -103,20 +120,26 @@ type ExtensionStats struct {
 	Hermes           *HermesStats   `json:"hermes"`
 	Lucky            *LuckyStats    `json:"lucky,omitempty"`
 	EasyTier         *EasyTierStats `json:"easytier,omitempty"`
+	// ClientBuild is an optional build provenance report. It is not an
+	// identity input and is intentionally absent for older clients.
+	ClientBuild *ClientBuildInfo `json:"client_build,omitempty"`
 }
 
 type ExtensionSnapshot struct {
-	ExtensionVersion string         `json:"extension_version"`
-	ReceivedAt       string         `json:"received_at"`
-	Hardware         *HardwareStats `json:"hardware"`
-	Docker           *DockerStats   `json:"docker"`
-	Hermes           *HermesStats   `json:"hermes"`
-	Lucky            *LuckyStats    `json:"lucky"`
-	EasyTier         *EasyTierStats `json:"easytier"`
+	ExtensionVersion string           `json:"extension_version"`
+	ReceivedAt       string           `json:"received_at"`
+	Hardware         *HardwareStats   `json:"hardware"`
+	Docker           *DockerStats     `json:"docker"`
+	Hermes           *HermesStats     `json:"hermes"`
+	Lucky            *LuckyStats      `json:"lucky"`
+	EasyTier         *EasyTierStats   `json:"easytier"`
+	ClientBuild      *ClientBuildInfo `json:"client_build,omitempty"`
 }
 
 type HardwareStats struct {
 	CPUModel         *string               `json:"cpu_model"`
+	CPUDetails       *CPUDetails           `json:"cpu_details,omitempty"`
+	MemoryDetails    *MemoryDetails        `json:"memory_details,omitempty"`
 	CPUTemperature   *TemperatureReading   `json:"cpu_temperature"`
 	DiskTemperature  *DiskTemperatureStats `json:"disk_temperature"`
 	DiskSMARTStatus  DiskSMARTStatus       `json:"disk_smart_status"`
@@ -125,15 +148,167 @@ type HardwareStats struct {
 	DiskReadBytes    *int64                `json:"disk_read_bytes"`
 	DiskDevice       *string               `json:"disk_device"`
 	DiskSMARTSource  *string               `json:"disk_smart_source"`
-	UpdatedAt        *string               `json:"updated_at"`
-	Stale            bool                  `json:"stale"`
-	Error            *ExtensionError       `json:"error"`
+	// Storage separates physical disks from mounted filesystems. It remains
+	// optional so existing single-disk and older clients stay compatible.
+	Storage        *StorageStats   `json:"storage,omitempty"`
+	SystemIdentity *SystemIdentity `json:"system_identity,omitempty"`
+	UpdatedAt      *string         `json:"updated_at"`
+	Stale          bool            `json:"stale"`
+	Error          *ExtensionError `json:"error"`
+}
+
+// CPUDetails is a bounded allowlist of host CPU topology fields. It is not a
+// raw lscpu payload: capability flags, firmware strings, and arbitrary command
+// output are intentionally excluded.
+type CPUDetails struct {
+	Architecture    *string        `json:"architecture"`
+	Vendor          *string        `json:"vendor"`
+	Family          *string        `json:"family"`
+	ModelID         *string        `json:"model_id"`
+	ModelName       *string        `json:"model_name"`
+	Stepping        *string        `json:"stepping"`
+	Virtualization  *string        `json:"virtualization"`
+	L1DCache        *string        `json:"l1d_cache"`
+	L1ICache        *string        `json:"l1i_cache"`
+	L2Cache         *string        `json:"l2_cache"`
+	L3Cache         *string        `json:"l3_cache"`
+	LogicalCPUs     *int           `json:"logical_cpus"`
+	Sockets         *int           `json:"sockets"`
+	CoresPerSocket  *int           `json:"cores_per_socket"`
+	ThreadsPerCore  *int           `json:"threads_per_core"`
+	MaxMHz          *float64       `json:"max_mhz"`
+	MinMHz          *float64       `json:"min_mhz"`
+	CurrentMHz      *float64       `json:"current_mhz"`
+	InstructionSets *string        `json:"instruction_sets"`
+	Usage           *CPUUsageStats `json:"usage"`
+}
+
+// CPUUsageStats is a short sampling-window share of aggregate CPU time.
+// IOWait is separate from idle so operators can distinguish storage pressure.
+type CPUUsageStats struct {
+	UserPercent    *float64 `json:"user_percent"`
+	NicePercent    *float64 `json:"nice_percent"`
+	SystemPercent  *float64 `json:"system_percent"`
+	IdlePercent    *float64 `json:"idle_percent"`
+	IOWaitPercent  *float64 `json:"iowait_percent"`
+	IRQPercent     *float64 `json:"irq_percent"`
+	SoftIRQPercent *float64 `json:"softirq_percent"`
+	StealPercent   *float64 `json:"steal_percent"`
+	TotalPercent   *float64 `json:"total_percent"`
+}
+
+// MemoryDetails provides host memory accounting from a bounded /proc/meminfo
+// allowlist. It does not include process-level memory or page contents.
+type MemoryDetails struct {
+	TotalBytes       *int64 `json:"total_bytes"`
+	UsedBytes        *int64 `json:"used_bytes"`
+	AvailableBytes   *int64 `json:"available_bytes"`
+	FreeBytes        *int64 `json:"free_bytes"`
+	BuffersBytes     *int64 `json:"buffers_bytes"`
+	CachedBytes      *int64 `json:"cached_bytes"`
+	ReclaimableBytes *int64 `json:"reclaimable_bytes"`
+	ActiveBytes      *int64 `json:"active_bytes"`
+	InactiveBytes    *int64 `json:"inactive_bytes"`
+	DirtyBytes       *int64 `json:"dirty_bytes"`
+	WritebackBytes   *int64 `json:"writeback_bytes"`
+	SlabBytes        *int64 `json:"slab_bytes"`
+	SwapTotalBytes   *int64 `json:"swap_total_bytes"`
+	SwapUsedBytes    *int64 `json:"swap_used_bytes"`
+	SwapFreeBytes    *int64 `json:"swap_free_bytes"`
+	SwapCachedBytes  *int64 `json:"swap_cached_bytes"`
+}
+
+// StorageStats is a bounded, read-only storage inventory. Physical disks and
+// filesystems intentionally do not have a one-to-one relationship: LVM, MD
+// RAID, device mapper, and Btrfs stacks can map a filesystem to many disks.
+type StorageStats struct {
+	PhysicalDisks []PhysicalDiskStats `json:"physical_disks"`
+	Filesystems   []FilesystemStats   `json:"filesystems"`
+	Summary       StorageSummary      `json:"summary"`
+	UpdatedAt     *string             `json:"updated_at"`
+	Stale         bool                `json:"stale"`
+	Error         *ExtensionError     `json:"error"`
+}
+
+// PhysicalDiskStats deliberately omits serials, WWNs, UUIDs, SMART raw JSON,
+// and SMART attribute tables. ID is a runtime kernel device identifier only.
+type PhysicalDiskStats struct {
+	ID               string          `json:"id"`
+	Device           string          `json:"device"`
+	Model            *string         `json:"model"`
+	CapacityBytes    *int64          `json:"capacity_bytes"`
+	TemperatureC     *float64        `json:"temperature_c"`
+	SMARTStatus      DiskSMARTStatus `json:"smart_status"`
+	PowerOnHours     *int64          `json:"power_on_hours"`
+	WrittenBytes     *int64          `json:"written_bytes"`
+	ReadBytes        *int64          `json:"read_bytes"`
+	SMARTSource      *string         `json:"smart_source"`
+	Completeness     *string         `json:"completeness"`
+	HealthSource     *string         `json:"health_source"`
+	NativeStatus     *string         `json:"native_status"`
+	CollectionStatus string          `json:"collection_status"`
+	Error            *ExtensionError `json:"error"`
+}
+
+type FilesystemStats struct {
+	Source           *string         `json:"source"`
+	Mountpoint       string          `json:"mountpoint"`
+	FSType           *string         `json:"fs_type"`
+	TotalBytes       *int64          `json:"total_bytes"`
+	UsedBytes        *int64          `json:"used_bytes"`
+	AvailableBytes   *int64          `json:"available_bytes"`
+	UsagePercent     *float64        `json:"usage_percent"`
+	BackingDiskIDs   []string        `json:"backing_disk_ids"`
+	StackType        string          `json:"stack_type"`
+	CollectionStatus string          `json:"collection_status"`
+	Error            *ExtensionError `json:"error"`
+}
+
+type StorageSummary struct {
+	PhysicalDiskCount int      `json:"physical_disk_count"`
+	SMARTPassed       int      `json:"smart_passed"`
+	SMARTFailed       int      `json:"smart_failed"`
+	SMARTUnknown      int      `json:"smart_unknown"`
+	TemperatureMinC   *float64 `json:"temperature_min_c"`
+	TemperatureMaxC   *float64 `json:"temperature_max_c"`
+	FilesystemCount   int      `json:"filesystem_count"`
+}
+
+// SystemIdentity carries only operating-system facts, never a hostname,
+// FQDN, device identifier, or authentication evidence.
+type SystemIdentity struct {
+	Distribution   *string `json:"distribution"`
+	ReleaseVersion *string `json:"release_version"`
+	PrettyName     *string `json:"pretty_name"`
+	KernelRelease  *string `json:"kernel_release"`
+	Architecture   *string `json:"architecture"`
+	Source         string  `json:"source"`
+}
+
+// ClientBuildInfo is image/build provenance reported by a Device v2 client.
+// Revision must be a complete Git object ID when the optional object is sent.
+type ClientBuildInfo struct {
+	Version   string  `json:"version"`
+	Revision  string  `json:"revision"`
+	BuildTime *string `json:"build_time"`
+	Protocol  string  `json:"protocol"`
+}
+
+// ServerBuildInfo is server-owned metadata. It is populated exclusively from
+// build-time linker variables and a tightly allowlisted deployment setting;
+// it never executes Git at runtime.
+type ServerBuildInfo struct {
+	Version    string  `json:"version"`
+	Revision   string  `json:"revision"`
+	BuildTime  *string `json:"build_time"`
+	Deployment string  `json:"deployment"`
 }
 
 type TemperatureReading struct {
 	Value  float64 `json:"value"`
 	Unit   string  `json:"unit"`
 	Source *string `json:"source"`
+	Label  *string `json:"label,omitempty"`
 }
 
 type DiskTemperatureStats struct {

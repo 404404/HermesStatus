@@ -32,7 +32,7 @@ import threading
 import platform
 from queue import Queue
 
-from host_collector import HostExtensionCollector, add_extension_payload
+from host_collector import HostExtensionCollector, add_extension_payload, collect_client_build
 from device_client_config import ClientMode, load_client_selection
 from device_client_transport import (
     create_device_v2_runner,
@@ -562,6 +562,7 @@ def _device_v2_stats_collector(extension_collector):
         load_1, load_5, load_15 = os.getloadavg()
         memory_total, memory_used, swap_total, swap_free = get_memory()
         hdd_total, hdd_used = get_hdd()
+        hdd_total, hdd_used = extension_collector.preferred_disk_usage(hdd_total, hdd_used)
         stats = {
             'uptime': uptime,
             'load_1': load_1,
@@ -627,6 +628,26 @@ def _run_device_v2(config, extension_collector):
     runner.run_forever()
 
 
+def _device_v2_extension_collector(config, arguments):
+    smart_devices = None
+    if config.smart_devices is not None:
+        smart_devices = [
+            {"path": device.path, "type": device.type, "label": device.label}
+            for device in config.smart_devices
+        ]
+    filesystem_probes = [
+        {"mountpoint": probe.mountpoint, "probe_path": probe.probe_path}
+        for probe in config.filesystem_probes
+    ]
+    return HostExtensionCollector(
+        smart_devices=smart_devices,
+        primary_smart_device=config.primary_smart_device,
+        filesystem_probes=filesystem_probes,
+        client_build=collect_client_build(protocol="device_v2"),
+        easytier_args=arguments,
+    )
+
+
 if __name__ == '__main__':
     try:
         client_selection = load_client_selection(sys.argv[1:])
@@ -635,7 +656,10 @@ if __name__ == '__main__':
         sys.exit(2)
     if client_selection.mode is ClientMode.DEVICE_V2:
         try:
-            _run_device_v2(client_selection.device_v2, HostExtensionCollector(easytier_args=sys.argv[1:]))
+            _run_device_v2(
+                client_selection.device_v2,
+                _device_v2_extension_collector(client_selection.device_v2, sys.argv[1:]),
+            )
         except ClientContractError:
             print("Client configuration error: invalid_device_v2_configuration", file=sys.stderr)
             sys.exit(2)
@@ -648,7 +672,9 @@ if __name__ == '__main__':
     PASSWORD = cli_args.get('PASSWORD', PASSWORD)
     INTERVAL = int(cli_args.get('INTERVAL', INTERVAL))
     socket.setdefaulttimeout(30)
-    extension_collector = HostExtensionCollector(easytier_args=sys.argv[1:])
+    extension_collector = HostExtensionCollector(
+        easytier_args=sys.argv[1:], collect_build_metadata=False
+    )
     extension_collector.start()
     get_realtime_data()
     while True:

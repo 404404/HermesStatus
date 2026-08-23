@@ -15,16 +15,25 @@ from host_collector import (
     _docker_request,
     add_extension_payload,
     atomic_write_json,
+    build_block_device_graph,
+    collect_client_build,
+    collect_cpu_details,
     collect_cpu_model,
+    collect_cpu_usage,
     collect_docker,
+    collect_filesystems,
     collect_hardware,
     collect_host_os,
     collect_hwmon_temperatures,
+    collect_memory_details,
     collect_smart,
+    collect_smart_devices,
     not_reported_docker,
     not_reported_hardware,
     not_reported_hermes,
+    preferred_filesystem_usage,
     read_hermes_snapshot,
+    resolve_backing_physical_disks,
     smart_candidates,
 )
 from lucky_collector import not_configured_lucky
@@ -43,6 +52,17 @@ def fixture_text(name):
 
 def fixture_json(name):
     return json.loads(fixture_text(name))
+
+
+def set_smart_temperature(payload, value):
+    for page in payload.get("ata_device_statistics", {}).get("pages", []):
+        if page.get("number") != 5:
+            continue
+        for item in page.get("table", []):
+            if item.get("offset") == 8:
+                item["value"] = value
+                return
+    raise AssertionError("fixture has no current temperature")
 
 
 class SmartRunner(object):
@@ -72,7 +92,46 @@ class SmartRunner(object):
         return self.text_returncode, self.text_output or ""
 
 
+class MultiSmartRunner(object):
+    def __init__(self, payloads, unavailable=()):
+        self.payloads = dict(payloads)
+        self.unavailable = set(unavailable)
+        self.commands = []
+
+    def __call__(self, command, timeout):
+        self.commands.append(list(command))
+        if command[:2] == ["smartctl", "--scan"]:
+            return 0, ""
+        if command[:1] == ["lsblk"]:
+            return 0, json.dumps(
+                {
+                    "blockdevices": [
+                        {"name": "sda", "kname": "sda", "type": "disk", "size": 1000},
+                        {"name": "sdb", "kname": "sdb", "type": "disk", "size": 2000},
+                    ]
+                }
+            )
+        candidate = command[-1]
+        if candidate in self.unavailable:
+            raise OSError("synthetic unavailable")
+        payload = self.payloads[candidate]
+        return 0, payload if "-j" in command else "SMART overall-health self-assessment test result: PASSED\n"
+
+
 class HostCollectorTests(unittest.TestCase):
+    def test_preferred_filesystem_usage_uses_largest_healthy_authorized_probe(self):
+        hardware = {
+            "storage": {
+                "filesystems": [
+                    {"mountpoint": "/volume1", "collection_status": "healthy", "total_bytes": 877_000_000_000, "used_bytes": 97_200_000_000},
+                    {"mountpoint": "/volume2", "collection_status": "healthy", "total_bytes": 7_930_000_000_000, "used_bytes": 4_039_000_000_000},
+                    {"mountpoint": "/missing", "collection_status": "unavailable", "total_bytes": 9_000_000_000_000, "used_bytes": 1},
+                ]
+            }
+        }
+        self.assertEqual(preferred_filesystem_usage(hardware), (7_930_000, 4_039_000))
+        self.assertIsNone(preferred_filesystem_usage({"storage": {"filesystems": []}}))
+
     def test_easytier_uses_resolved_collector_interval(self):
         class EasyTierFixture(object):
             config = {"interval_seconds": 75}
@@ -99,6 +158,26 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(name, "unknown")
         self.assertEqual(error["code"], "host_os_unavailable")
 
+    def test_dsm_identity_does_not_degrade_hardware_when_os_release_is_absent(self):
+        with tempfile.TemporaryDirectory() as root:
+            version = Path(root) / "VERSION"
+            version.write_text(
+                "productversion=7.2.1\nbuildnumber=69057\nsmallfixnumber=1\n",
+                encoding="utf-8",
+            )
+            collector = HostExtensionCollector(
+                host_os_release_file=str(Path(root) / "missing-os-release"),
+                dsm_version_file=str(version),
+                status_dir="",
+                command_runner=lambda command, timeout: (1, ""),
+                docker_request=lambda path: [],
+            )
+            self.assertEqual(collector.system_identity["source"], "dsm-version")
+            self.assertFalse(any(
+                item.get("code") == "host_os_unavailable"
+                for item in collector.identity_errors
+            ))
+
     def test_cpu_model_prefers_lscpu(self):
         output = json.dumps(
             {"lscpu": [{"field": "Model name:", "data": "Example CPU from lscpu"}]}
@@ -113,6 +192,60 @@ class HostCollectorTests(unittest.TestCase):
         )
         self.assertEqual(model, "Example Processor 4125 @ 2.00GHz")
         self.assertIsNone(error)
+
+    def test_cpu_details_and_usage_are_bounded_and_include_iowait(self):
+        lscpu = json.dumps({"lscpu": [
+            {"field": "Architecture:", "data": "x86_64"},
+            {"field": "Vendor ID:", "data": "ExampleVendor"},
+            {"field": "Model name:", "data": "Example CPU"},
+            {"field": "CPU(s):", "data": "4"},
+            {"field": "Socket(s):", "data": "1"},
+            {"field": "Core(s) per socket:", "data": "2"},
+            {"field": "Thread(s) per core:", "data": "2"},
+            {"field": "CPU max MHz:", "data": "3400.0"},
+            {"field": "L3 cache:", "data": "4 MiB"},
+            {"field": "Flags:", "data": "sse sse2 avx avx2 vmx"},
+        ]})
+        with tempfile.TemporaryDirectory() as root:
+            cpuinfo = Path(root) / "cpuinfo"
+            cpuinfo.write_text("cpu MHz\t\t: 1200.0\ncpu MHz\t\t: 1800.0\n", encoding="utf-8")
+            details, error = collect_cpu_details(
+                lambda command, timeout: (0, lscpu), str(cpuinfo)
+            )
+        self.assertIsNone(error)
+        self.assertEqual(details["architecture"], "x86_64")
+        self.assertEqual(details["logical_cpus"], 4)
+        self.assertEqual(details["current_mhz"], 1500.0)
+        self.assertEqual(details["l3_cache"], "4 MiB")
+        self.assertEqual(details["instruction_sets"], "SSE, SSE2, AVX, AVX2, VT-x")
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "stat"
+            path.write_text("cpu  100 10 20 800 30 4 6 2\n", encoding="utf-8")
+
+            def advance(_seconds):
+                path.write_text("cpu  130 10 40 860 45 5 10 5\n", encoding="utf-8")
+
+            usage, usage_error = collect_cpu_usage(str(path), advance)
+        self.assertIsNone(usage_error)
+        self.assertGreater(usage["iowait_percent"], 0)
+        self.assertAlmostEqual(usage["total_percent"], 100 - usage["idle_percent"], places=1)
+
+    def test_memory_details_reports_buffers_cache_and_swap(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "meminfo"
+            path.write_text(
+                "MemTotal:       1000 kB\nMemAvailable:    400 kB\nMemFree: 200 kB\n"
+                "Buffers: 100 kB\nCached: 250 kB\nSReclaimable: 50 kB\nShmem: 20 kB\n"
+                "SwapTotal: 500 kB\nSwapFree: 300 kB\nSwapCached: 10 kB\n",
+                encoding="utf-8",
+            )
+            memory, error = collect_memory_details(str(path))
+        self.assertIsNone(error)
+        self.assertEqual(memory["total_bytes"], 1000 * 1024)
+        self.assertEqual(memory["used_bytes"], 600 * 1024)
+        self.assertEqual(memory["buffers_bytes"], 100 * 1024)
+        self.assertEqual(memory["cached_bytes"], 280 * 1024)
+        self.assertEqual(memory["swap_used_bytes"], 200 * 1024)
 
     def test_hwmon_skips_damaged_sensor_and_selects_cpu(self):
         with tempfile.TemporaryDirectory() as root:
@@ -129,6 +262,12 @@ class HostCollectorTests(unittest.TestCase):
 
     def test_hwmon_missing_returns_empty_list(self):
         self.assertEqual(collect_hwmon_temperatures("/does/not/exist"), [])
+
+    def test_missing_hermes_snapshot_is_an_optional_agent_not_an_error(self):
+        snapshot = read_hermes_snapshot("/does/not/exist", exporter_enabled=False)
+        self.assertEqual(snapshot["profiles"], [])
+        self.assertFalse(snapshot["stale"])
+        self.assertEqual(snapshot["error"]["code"], "not_installed")
 
     def test_smart_json_uses_dynamic_logical_sector_size(self):
         runner = SmartRunner(json.dumps(fixture_json("smart-normal.json")))
@@ -193,6 +332,109 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(smart["source"], "smartctl-json")
         self.assertEqual(smart["health"], "passed")
+        self.assertEqual(smart["completeness"], "complete")
+        self.assertEqual(smart["health_source"], "native_status")
+        self.assertEqual(smart["native_status"], "available")
+
+    def test_smart_snapshot_without_health_is_invalid_not_healthy(self):
+        data = fixture_json("smart-normal.json")
+        data.pop("smart_status", None)
+        runner = SmartRunner(json.dumps(data))
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "unknown")
+        self.assertEqual(error["code"], "smart_value_invalid")
+        self.assertEqual(smart["completeness"], "unavailable")
+        self.assertEqual(smart["health_source"], "unknown")
+        self.assertEqual(smart["native_status"], "unknown")
+
+    def test_incomplete_bridge_attribute_fallback_is_partial_passed(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 100, "worst": 100, "thresh": 36}]
+        }
+        runner = SmartRunner(
+            json.dumps(data),
+            "SMART Status not supported: Incomplete response\n"
+            "This result is based on an Attribute check.\n"
+            "SMART overall-health self-assessment test result: PASSED\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "passed")
+        self.assertEqual(smart["completeness"], "partial")
+        self.assertEqual(smart["health_source"], "attribute_check")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertEqual(error["code"], "smart_return_status_unavailable")
+
+    def test_attribute_fallback_keeps_storage_domain_healthy(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 100, "worst": 100, "thresh": 36}]
+        }
+
+        def runner(command, _timeout):
+            if command[:1] == ["lsblk"]:
+                return 0, json.dumps({"blockdevices": [
+                    {"name": "sdu", "kname": "sdu", "type": "disk", "size": 1000},
+                ]})
+            if "-j" in command:
+                return 0, json.dumps(data)
+            return 0, (
+                "SMART Status not supported: Incomplete response\n"
+                "This result is based on an Attribute check.\n"
+                "SMART overall-health self-assessment test result: PASSED\n"
+            )
+
+        payload = collect_hardware(
+            "Example CPU",
+            smart_devices=[{"path": "/dev/sdu", "type": "sat"}],
+            command_runner=runner,
+            hwmon_root="/missing-hwmon",
+            sys_block_root="/no-sys-block",
+            now=FIXED_NOW,
+        )
+        disk = payload["storage"]["physical_disks"][0]
+        self.assertEqual(disk["collection_status"], "partial")
+        self.assertEqual(disk["smart_status"], "passed")
+        self.assertEqual(disk["error"]["code"], "smart_return_status_unavailable")
+        self.assertIsNone(payload["storage"]["error"])
+        self.assertEqual(payload["disk_smart_status"], "passed")
+
+    def test_incomplete_bridge_attribute_fallback_can_be_failed(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 1, "worst": 1, "thresh": 36}]
+        }
+        runner = SmartRunner(
+            json.dumps(data),
+            "SMART Status not supported: Incomplete response\n"
+            "This result is based on an Attribute check.\n"
+            "SMART overall-health self-assessment test result: FAILED\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "failed")
+        self.assertEqual(smart["completeness"], "partial")
+        self.assertEqual(smart["health_source"], "attribute_check")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertEqual(error["code"], "smart_return_status_unavailable")
+
+    def test_incomplete_bridge_without_attributes_is_unknown(self):
+        data = fixture_json("smart-normal.json")
+        data.pop("smart_status", None)
+        runner = SmartRunner(
+            json.dumps(data),
+            "=== START OF READ SMART DATA SECTION ===\n"
+            "SMART Status not supported: Incomplete response\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertIsNotNone(smart)
+        self.assertEqual(smart["health"], "unknown")
+        self.assertEqual(smart["completeness"], "unavailable")
+        self.assertEqual(smart["health_source"], "unknown")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertEqual(error["code"], "smart_value_invalid")
 
     def test_hardware_combines_hwmon_and_smart(self):
         with tempfile.TemporaryDirectory() as root:
@@ -213,6 +455,423 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(payload["updated_at"], "2026-07-15T00:00:00Z")
         self.assertFalse(payload["stale"])
         self.assertIsNone(payload["error"])
+
+    def test_multiple_smart_devices_are_independent_and_do_not_pick_legacy_first(self):
+        first = fixture_json("smart-normal.json")
+        second = fixture_json("smart-normal.json")
+        set_smart_temperature(second, 44)
+        runner = MultiSmartRunner({
+            "/dev/sda": json.dumps(first),
+            "/dev/sdb": json.dumps(second),
+        })
+        records, error = collect_smart_devices(
+            [{"path": "/dev/sda", "type": "sat"}, {"path": "/dev/sdb"}], runner
+        )
+        self.assertEqual(len(records), 2)
+        self.assertIsNone(error)
+        self.assertEqual([record[1]["device"] for record in records], ["/dev/sda", "/dev/sdb"])
+        self.assertIn(["smartctl", "-x", "-j", "-d", "sat", "/dev/sda"], runner.commands)
+
+        payload = collect_hardware(
+            "Example CPU", smart_devices=[{"path": "/dev/sda"}, {"path": "/dev/sdb"}],
+            command_runner=runner, sys_block_root="/no-sys-block", now=FIXED_NOW,
+        )
+        self.assertEqual(payload["disk_smart_status"], "passed")
+        self.assertIsNone(payload["disk_device"])
+        self.assertIsNone(payload["disk_temperature"])
+        self.assertEqual(payload["storage"]["summary"]["physical_disk_count"], 2)
+        self.assertEqual(payload["storage"]["summary"]["smart_passed"], 2)
+
+    def test_explicit_smart_allowlist_keeps_usb_and_boot_but_excludes_zram(self):
+        smart = fixture_json("smart-normal.json")
+
+        def runner(command, timeout):
+            if command[:1] == ["lsblk"]:
+                return 0, json.dumps({"blockdevices": [
+                    {"name": "sda", "kname": "sda", "type": "disk", "size": 1000},
+                    {"name": "sdb", "kname": "sdb", "type": "disk", "size": 2000},
+                    {"name": "zram0", "kname": "zram0", "type": "disk", "size": 3000},
+                    {"name": "sdu", "kname": "sdu", "type": "disk", "size": 4000, "tran": "usb"},
+                    {"name": "synoboot", "kname": "synoboot", "type": "disk", "size": 5000},
+                ]})
+            if "-j" in command:
+                return 0, json.dumps(smart)
+            return 0, "SMART overall-health self-assessment test result: PASSED\n"
+
+        payload = collect_hardware(
+            "Example CPU",
+            smart_devices=[{"path": "/dev/sda"}],
+            command_runner=runner,
+            sys_block_root="/no-sys-block",
+            now=FIXED_NOW,
+        )
+        self.assertEqual(
+            [disk["id"] for disk in payload["storage"]["physical_disks"]],
+            ["sda", "sdu", "synoboot"],
+        )
+
+    def test_explicit_empty_smart_allowlist_keeps_topology_without_an_error(self):
+        runner = MultiSmartRunner({})
+        records, error = collect_smart_devices([], runner)
+        self.assertEqual(records, [])
+        self.assertIsNone(error)
+
+        payload = collect_hardware(
+            "Example CPU", smart_devices=[], command_runner=runner,
+            sys_block_root="/no-sys-block", now=FIXED_NOW,
+        )
+        self.assertIsNone(payload["storage"]["error"])
+        self.assertEqual(payload["storage"]["summary"]["physical_disk_count"], 2)
+        self.assertTrue(all(
+            disk["collection_status"] == "unsupported"
+            for disk in payload["storage"]["physical_disks"]
+        ))
+
+    def test_explicit_primary_smart_device_restores_legacy_projection(self):
+        first = fixture_json("smart-normal.json")
+        second = fixture_json("smart-normal.json")
+        set_smart_temperature(second, 44)
+        runner = MultiSmartRunner({
+            "/dev/sda": json.dumps(first),
+            "/dev/sdb": json.dumps(second),
+        })
+        payload = collect_hardware(
+            "Example CPU", smart_devices=[{"path": "/dev/sda"}, {"path": "/dev/sdb"}],
+            primary_smart_device="/dev/sdb", command_runner=runner,
+            sys_block_root="/no-sys-block", now=FIXED_NOW,
+        )
+        self.assertEqual(payload["disk_device"], "/dev/sdb")
+        self.assertEqual(payload["disk_temperature"]["current"], 44.0)
+
+    def test_block_graph_resolves_synthetic_lvm_without_name_heuristics(self):
+        graph = build_block_device_graph(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sda", "kname": "sda", "type": "disk", "size": 1000,
+                        "children": [{
+                            "name": "sda3", "kname": "sda3", "pkname": "sda", "type": "part",
+                            "children": [{
+                                "name": "dm-0", "kname": "dm-0", "pkname": "sda3", "type": "lvm",
+                            }],
+                        }],
+                    }
+                ]
+            },
+            sys_block_root="/no-sys-block",
+        )
+        self.assertEqual(resolve_backing_physical_disks("/dev/dm-0", graph), ["sda"])
+
+    def test_explicit_filesystem_probe_reports_usage_and_lvm_backing_disk(self):
+        graph = build_block_device_graph(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sda", "kname": "sda", "type": "disk", "size": 1000,
+                        "children": [{
+                            "name": "sda3", "kname": "sda3", "pkname": "sda", "type": "part",
+                            "children": [{
+                                "name": "dm-0", "kname": "dm-0", "pkname": "sda3", "type": "lvm",
+                            }],
+                        }],
+                    }
+                ]
+            },
+            sys_block_root="/no-sys-block",
+        )
+
+        def runner(command, timeout):
+            self.assertEqual(command[:3], ["findmnt", "--json", "--target"])
+            return 0, json.dumps({
+                "filesystems": [{"source": "/dev/dm-0", "fstype": "ext4"}]
+            })
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+            f_bfree = 250
+
+        filesystems, error = collect_filesystems(
+            [{"mountpoint": "/", "probe_path": "/host-storage/root"}],
+            graph,
+            command_runner=runner,
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(filesystems[0]["backing_disk_ids"], ["sda"])
+        self.assertEqual(filesystems[0]["stack_type"], "lvm")
+        self.assertEqual(filesystems[0]["used_bytes"], 750 * 1024)
+        self.assertEqual(filesystems[0]["usage_percent"], 75.0)
+
+    def test_filesystem_probe_normalizes_bind_mount_source_to_its_block_device(self):
+        graph = build_block_device_graph(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sda", "kname": "sda", "type": "disk", "size": 1000,
+                        "children": [{"name": "sda1", "kname": "sda1", "pkname": "sda", "type": "part"}],
+                    }
+                ]
+            },
+            sys_block_root="/no-sys-block",
+        )
+
+        def runner(command, timeout):
+            self.assertEqual(command[:3], ["findmnt", "--json", "--target"])
+            return 0, json.dumps({
+                "filesystems": [{"source": "/dev/sda1[/srv/data]", "fstype": "ext4"}]
+            })
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+            f_bfree = 250
+
+        filesystems, error = collect_filesystems(
+            [{"mountpoint": "/data", "probe_path": "/host-storage/data"}],
+            graph,
+            command_runner=runner,
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(filesystems[0]["source"], "/dev/sda1")
+        self.assertEqual(filesystems[0]["backing_disk_ids"], ["sda"])
+        self.assertEqual(filesystems[0]["stack_type"], "plain")
+
+    def test_filesystem_usage_counts_reserved_blocks_as_used(self):
+        graph = build_block_device_graph(
+            {"blockdevices": [{"name": "sda", "kname": "sda", "type": "disk", "size": 1000}]},
+            sys_block_root="/no-sys-block",
+        )
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+            f_bfree = 300
+
+        filesystems, error = collect_filesystems(
+            [{"mountpoint": "/data", "probe_path": "/host-storage/data"}], graph,
+            command_runner=lambda command, timeout: (0, json.dumps({"filesystems": [{"source": "/dev/sda", "fstype": "ext4"}]})),
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(filesystems[0]["available_bytes"], 250 * 1024)
+        self.assertEqual(filesystems[0]["used_bytes"], 700 * 1024)
+        self.assertEqual(filesystems[0]["usage_percent"], 70.0)
+
+    def test_filesystem_probe_retains_safe_nested_device_mapper_source(self):
+        graph = build_block_device_graph(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sda", "kname": "sda", "type": "disk", "size": 1000,
+                        "children": [{
+                            "name": "vg-root", "kname": "dm-0",
+                            "path": "/dev/mapper/vg-root", "pkname": "sda", "type": "lvm",
+                        }],
+                    }
+                ]
+            },
+            sys_block_root="/no-sys-block",
+        )
+
+        def runner(command, timeout):
+            self.assertEqual(command[:3], ["findmnt", "--json", "--target"])
+            return 0, json.dumps({
+                "filesystems": [{"source": "/dev/mapper/vg-root", "fstype": "ext4"}]
+            })
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+            f_bfree = 250
+
+        filesystems, error = collect_filesystems(
+            [{"mountpoint": "/mnt/My Drive/数据", "probe_path": "/host-storage/data"}],
+            graph,
+            command_runner=runner,
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(filesystems[0]["source"], "/dev/mapper/vg-root")
+        self.assertEqual(filesystems[0]["backing_disk_ids"], ["sda"])
+        self.assertEqual(filesystems[0]["stack_type"], "lvm")
+
+    def test_filesystem_probe_caps_backing_disks_and_classifies_btrfs(self):
+        graph = {
+            "aliases": {"/dev/md0": "md0", "/dev/sda1": "sda1"},
+            "nodes": {
+                "md0": {"type": "raid1", "slaves": ["disk%02d" % index for index in range(17)]},
+                "sda1": {"type": "part", "parent": "sda"},
+                "sda": {"type": "disk"},
+                **{"disk%02d" % index: {"type": "disk"} for index in range(17)},
+            },
+        }
+
+        def runner(command, timeout):
+            source = "/dev/md0" if command[-1].endswith("raid") else "/dev/sda1"
+            fs_type = "ext4" if source == "/dev/md0" else "btrfs"
+            return 0, json.dumps({"filesystems": [{"source": source, "fstype": fs_type}]})
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+            f_bfree = 250
+
+        filesystems, error = collect_filesystems(
+            [
+                {"mountpoint": "/raid", "probe_path": "/host-storage/raid"},
+                {"mountpoint": "/btrfs", "probe_path": "/host-storage/btrfs"},
+            ],
+            graph,
+            command_runner=runner,
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(len(filesystems[0]["backing_disk_ids"]), 16)
+        self.assertEqual(filesystems[0]["stack_type"], "mdraid")
+        self.assertEqual(filesystems[1]["stack_type"], "btrfs")
+        self.assertEqual(filesystems[1]["backing_disk_ids"], [])
+
+    def test_filesystem_probe_preserves_configured_mountpoint_spacing(self):
+        graph = build_block_device_graph(
+            {"blockdevices": [{"name": "sda", "kname": "sda", "type": "disk"}]},
+            sys_block_root="/no-sys-block",
+        )
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+            f_bfree = 250
+
+        filesystems, error = collect_filesystems(
+            [{"mountpoint": "/mnt/My  Drive", "probe_path": "/host-storage/data"}],
+            graph,
+            command_runner=lambda command, timeout: (0, json.dumps({"filesystems": [{
+                "source": "/dev/sda", "fstype": "ext4"
+            }]})),
+            statvfs_func=lambda path: SyntheticStatvfs(),
+        )
+        self.assertIsNone(error)
+        self.assertEqual(filesystems[0]["mountpoint"], "/mnt/My  Drive")
+
+    def test_hardware_keeps_probed_backing_disk_inside_bounded_inventory(self):
+        disks = [
+            {"name": "disk%02d" % index, "kname": "disk%02d" % index, "type": "disk"}
+            for index in range(65)
+        ]
+
+        def runner(command, timeout):
+            if command[:1] == ["lsblk"]:
+                return 0, json.dumps({"blockdevices": disks})
+            if command[:3] == ["findmnt", "--json", "--target"]:
+                return 0, json.dumps({"filesystems": [{
+                    "source": "/dev/disk64", "fstype": "ext4"
+                }]})
+            raise AssertionError("unexpected command: %r" % (command,))
+
+        class SyntheticStatvfs(object):
+            f_frsize = 1024
+            f_bsize = 1024
+            f_blocks = 1000
+            f_bavail = 250
+            f_bfree = 250
+
+        payload = collect_hardware(
+            "Example CPU", smart_devices=[], command_runner=runner,
+            filesystem_probes=[{"mountpoint": "/data", "probe_path": "/host-storage/data"}],
+            sys_block_root="/no-sys-block", statvfs_func=lambda path: SyntheticStatvfs(),
+            now=FIXED_NOW,
+        )
+        reported = {disk["id"] for disk in payload["storage"]["physical_disks"]}
+        self.assertEqual(len(reported), 64)
+        self.assertIn("disk64", reported)
+        self.assertEqual(
+            payload["storage"]["filesystems"][0]["backing_disk_ids"], ["disk64"]
+        )
+
+    def test_nvme_controller_smart_target_reuses_its_namespace_topology_disk(self):
+        smart = fixture_json("smart-normal.json")
+
+        def runner(command, timeout):
+            if command[:1] == ["lsblk"]:
+                return 0, json.dumps({
+                    "blockdevices": [{
+                        "name": "nvme0n1", "kname": "nvme0n1", "type": "disk", "size": 1000,
+                    }]
+                })
+            if "-j" in command:
+                return 0, json.dumps(smart)
+            return 0, "SMART overall-health self-assessment test result: PASSED\n"
+
+        payload = collect_hardware(
+            "Example CPU", smart_devices=[{"path": "/dev/nvme0", "type": "nvme"}],
+            command_runner=runner, sys_block_root="/no-sys-block", now=FIXED_NOW,
+        )
+        disks = payload["storage"]["physical_disks"]
+        self.assertEqual([disk["id"] for disk in disks], ["nvme0n1"])
+        self.assertEqual(disks[0]["device"], "/dev/nvme0n1")
+        self.assertEqual(payload["storage"]["summary"]["physical_disk_count"], 1)
+        self.assertEqual(payload["storage"]["summary"]["smart_passed"], 1)
+
+    def test_client_build_only_projects_explicit_build_environment(self):
+        self.assertIsNone(collect_client_build({}))
+        self.assertEqual(
+            collect_client_build({
+                "HERMESSTATUS_CLIENT_VERSION": "2.3-preview",
+                "HERMESSTATUS_CLIENT_REVISION": "abcdef0123abcdef0123abcdef0123abcdef0123",
+                "HERMESSTATUS_CLIENT_BUILD_TIME": "2026-08-11T00:00:00Z",
+                "HERMESSTATUS_CLIENT_PROTOCOL": "device_v2",
+            }),
+            {
+                "version": "2.3-preview",
+                "revision": "abcdef0123abcdef0123abcdef0123abcdef0123",
+                "build_time": "2026-08-11T00:00:00Z",
+                "protocol": "device_v2",
+            },
+        )
+        self.assertIsNone(
+            collect_client_build({
+                "HERMESSTATUS_CLIENT_VERSION": "2.3-preview",
+                "HERMESSTATUS_CLIENT_REVISION": "unknown",
+                "HERMESSTATUS_CLIENT_PROTOCOL": "device_v2",
+            })
+        )
+
+    def test_extension_payload_exposes_client_build_at_the_root(self):
+        build = {"version": "2.3-preview", "revision": "abcdef012345", "protocol": "device_v2", "build_time": None}
+        collector = HostExtensionCollector(
+            host_os_release_file=str(FIXTURES / "os-release"),
+            client_build=build,
+            status_dir="",
+            command_runner=lambda command, timeout: (0, ""),
+            docker_request=lambda path: [],
+        )
+        payload = collector.extension_payload()
+        self.assertEqual(payload["client_build"], build)
+        self.assertNotIn("client_build", payload["hardware"])
+
+    def test_extension_payload_omits_unavailable_client_build(self):
+        collector = HostExtensionCollector(
+            host_os_release_file=str(FIXTURES / "os-release"),
+            client_build=None,
+            status_dir="",
+            command_runner=lambda command, timeout: (0, ""),
+            docker_request=lambda path: [],
+        )
+        self.assertNotIn("client_build", collector.extension_payload())
 
     def test_docker_normal_list_uses_release_c_allowlist(self):
         rows = fixture_json("docker-containers.json")
@@ -305,11 +964,13 @@ class HostCollectorTests(unittest.TestCase):
         self.assertNotIn("received_at", payload)
         self.assertNotIn("unexpected", payload)
 
-    def test_hermes_snapshot_reader_degrades_missing_or_corrupt_data(self):
-        missing = read_hermes_snapshot("/does/not/exist")
+    def test_hermes_snapshot_reader_allows_missing_agent_but_degrades_corrupt_data(self):
+        missing = read_hermes_snapshot("/does/not/exist", exporter_enabled=False)
         self.assertEqual(missing["profiles"], [])
-        self.assertTrue(missing["stale"])
-        self.assertEqual(missing["error"]["code"], "snapshot_unavailable")
+        self.assertFalse(missing["stale"])
+        self.assertEqual(missing["error"]["code"], "not_installed")
+        unavailable = read_hermes_snapshot("/does/not/exist", exporter_enabled=True)
+        self.assertEqual(unavailable["error"]["code"], "snapshot_unavailable")
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "hermes.json"
             path.write_text("{invalid", encoding="utf-8")
@@ -391,6 +1052,7 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(update["hardware"], not_reported_hardware())
         self.assertEqual(update["docker"], not_reported_docker())
         self.assertEqual(update["lucky"], not_configured_lucky())
+        self.assertNotIn("client_build", update)
 
     def test_collector_starts_with_stable_empty_hermes(self):
         collector = HostExtensionCollector(
@@ -459,6 +1121,21 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNotNone(payload["hardware"]["updated_at"])
         self.assertIsNotNone(payload["docker"]["updated_at"])
         self.assertEqual(docker_calls, ["/containers/json?all=1"])
+
+    def test_start_collects_every_extension_before_background_intervals(self):
+        collector = HostExtensionCollector(status_dir="")
+        calls = []
+        for name in (
+            "collect_hardware_once", "collect_docker_once", "collect_hermes_once",
+            "collect_lucky_once", "collect_easytier_once",
+        ):
+            setattr(collector, name, lambda name=name: calls.append(name))
+        collector.start()
+        collector.stop()
+        self.assertEqual(calls, [
+            "collect_hardware_once", "collect_docker_once", "collect_hermes_once",
+            "collect_lucky_once", "collect_easytier_once",
+        ])
 
 
 if __name__ == "__main__":
