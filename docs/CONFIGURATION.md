@@ -128,9 +128,10 @@ then defaults.
 | `EASYTIER_RPC_PORTAL` | `127.0.0.1:15888` | Only `127.0.0.1:15888` or `[::1]:15888` is accepted. |
 | `EASYTIER_TIMEOUT_SECONDS` | `5` | Integer from 1 to 30. |
 | `EASYTIER_INTERVAL_SECONDS` | `30` | Integer from 5 to 3600. |
+| `EASYTIER_ADMINISTRATIVE_ROLE` | unset | Optional explicit operator declaration: `site_router`, `endpoint`, `bootstrap_listener`, `relay_capable`, or `observer`. It is monitoring metadata, not device identity. |
 
 The JSON file may contain only `enabled`, `cli_path`, `rpc_portal`,
-`timeout_seconds`, and `interval_seconds`; it must be a regular file not
+`timeout_seconds`, `interval_seconds`, and `administrative_role`; it must be a regular file not
 writable by group or other users. Mount the CLI binary read-only into the
 Client. Do not mount EasyTier configuration, keys, or a non-loopback RPC portal.
 

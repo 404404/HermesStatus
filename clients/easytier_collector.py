@@ -1,6 +1,6 @@
 """Strict, read-only EasyTier collector for HermesStatus 2.3.
 
-The module deliberately accepts only the four inspection commands documented in
+The module deliberately accepts only the five inspection commands documented in
 the 2.3 contract. It never asks EasyTier for its configuration or credentials,
 and it never returns command stderr.
 """
@@ -28,12 +28,13 @@ MAX_ITEMS = 16
 MAX_STATS_ITEMS = 64
 SAFE_TEXT_LIMIT = 128
 MAX_COMMAND_DURATION_MS = 30000
-# EasyTier 2.6.4 exposes these four stable, read-only JSON commands. Route
-# remains in the wire model solely for compatibility with existing persisted
-# projections and UI; it is intentionally not a periodic collection source.
+# EasyTier 2.6.4 exposes these five stable, read-only JSON commands. Route is
+# collected independently so a transient route failure cannot poison node,
+# peer, connector, or traffic observations.
 COMMANDS = (
     ("node_info", ("node",)),
     ("peer_list", ("peer",)),
+    ("route_list", ("route",)),
     ("connector_list", ("connector",)),
     ("stats_show", ("stats",)),
 )
@@ -214,11 +215,6 @@ def _command_duration_ms(started, ended=None):
 
 def _empty_payload(status="not_configured", error=None):
     command_status = {name: _empty_command(status, error) for name in COMMAND_STATUS_NAMES}
-    # Route is no longer a periodic source. Keep the field for old persisted
-    # snapshots and the current UI, but make its unavailability explicit and
-    # never let it degrade the four-source collector health.
-    if status != "not_configured":
-        command_status["route_list"] = _empty_command("not_configured", _error("not_configured", "easytier.route"))
     return {
         "status": status,
         "source": "easytier_cli" if status != "not_configured" else "unavailable",
@@ -275,7 +271,7 @@ def _read_config(path):
     finally:
         os.close(descriptor)
     value = json.loads(data.decode("utf-8"))
-    if not isinstance(value, dict) or set(value) - {"enabled", "cli_path", "rpc_portal", "timeout_seconds", "interval_seconds"}:
+    if not isinstance(value, dict) or set(value) - {"enabled", "cli_path", "rpc_portal", "timeout_seconds", "interval_seconds", "administrative_role"}:
         raise ValueError("invalid configuration file")
     return value
 
@@ -287,6 +283,7 @@ def _parse_cli(argv):
     parser.add_argument("--easytier-rpc-portal")
     parser.add_argument("--easytier-timeout-seconds")
     parser.add_argument("--easytier-interval-seconds")
+    parser.add_argument("--easytier-administrative-role")
     values, _ = parser.parse_known_args(argv or [])
     return {key: value for key, value in vars(values).items() if value is not None}
 
@@ -300,6 +297,7 @@ def load_easytier_config(argv=None, environ=None):
         "rpc_portal": environ.get("EASYTIER_RPC_PORTAL"),
         "timeout_seconds": environ.get("EASYTIER_TIMEOUT_SECONDS"),
         "interval_seconds": environ.get("EASYTIER_INTERVAL_SECONDS"),
+        "administrative_role": environ.get("EASYTIER_ADMINISTRATIVE_ROLE"),
     }
     cli_values = _parse_cli(argv)
     values = {
@@ -308,6 +306,7 @@ def load_easytier_config(argv=None, environ=None):
         "rpc_portal": DEFAULT_RPC_PORTAL,
         "timeout_seconds": 5,
         "interval_seconds": 30,
+        "administrative_role": None,
     }
     values.update({key: value for key, value in file_values.items() if value is not None})
     values.update({key: value for key, value in env_values.items() if value is not None})
@@ -321,6 +320,8 @@ def load_easytier_config(argv=None, environ=None):
         raise ValueError("rpc portal is not loopback")
     if not isinstance(values["cli_path"], str) or not os.path.isabs(values["cli_path"]):
         raise ValueError("CLI path must be absolute")
+    if values["administrative_role"] not in {None, "site_router", "endpoint", "bootstrap_listener", "relay_capable", "observer"}:
+        raise ValueError("invalid EasyTier administrative role")
     return values
 
 
@@ -402,6 +403,15 @@ def _valid_command_payload(name, value):
     if name == "peer_list":
         items = _list_payload(value, ("peers", "data", "items"))
         return items is not None and len(items) <= MAX_ITEMS and all(isinstance(item, dict) and _safe_text(_lookup(item, "peer_id", "virtual_peer_id", "id"), 32) is not None for item in items)
+    if name == "route_list":
+        items = _list_payload(value, ("routes", "data", "items"))
+        return items is not None and len(items) <= MAX_ITEMS and all(
+            isinstance(item, dict) and (
+                _safe_text(_lookup(item, "peer_id", "virtual_peer_id", "id"), 32) is not None
+                or _internal_ip(_lookup(item, "overlay_ipv4", "virtual_ipv4", "ipv4")) is not None
+            )
+            for item in items
+        )
     if name == "connector_list":
         items = _list_payload(value, ("connectors", "data", "items"))
         return items is not None and len(items) <= MAX_ITEMS and all(isinstance(item, dict) for item in items)
@@ -512,6 +522,7 @@ class EasyTierCollector(object):
             return _empty_payload("unavailable", _error("rpc_unavailable"))
         self._apply_node(payload, values.get("node_info"))
         self._apply_peers(payload, values.get("peer_list"), payload["node"]["peer_id"])
+        self._apply_routes(payload, values.get("route_list"), payload["node"]["peer_id"], payload["node"]["overlay_ipv4"])
         self._apply_connectors(payload, values.get("connector_list"))
         self._apply_stats(payload, values.get("stats_show"), self.clock())
         payload["updated_at"] = _now()
@@ -527,8 +538,7 @@ class EasyTierCollector(object):
             payload["error"] = _error("partial_failure")
         return payload
 
-    @staticmethod
-    def _apply_node(payload, value):
+    def _apply_node(self, payload, value):
         if not isinstance(value, dict):
             return
         node = payload["node"]
@@ -544,6 +554,10 @@ class EasyTierCollector(object):
         node["peer_id"] = _safe_text(peer_id, 32)
         node["overlay_ipv4"] = _internal_ip(_lookup(value, "ipv4_addr"))
         node["proxy_cidrs"] = _internal_cidrs(_lookup(value, "proxy_cidrs", "proxy_cidr"))
+        # The role is an explicit operator declaration from the Client's
+        # non-secret monitoring config. It never comes from node.config, which
+        # contains the EasyTier network_secret.
+        node["administrative_role"] = self.config["administrative_role"]
         node["listeners"] = [item for item in (_safe_listener(item) for item in _as_list(_lookup(value, "listeners"))) if item]
         stun = _lookup(value, "stun_info")
         if isinstance(stun, dict):
@@ -619,7 +633,7 @@ class EasyTierCollector(object):
         for route in _as_list(value):
             peer_id = _safe_text(_lookup(route, "peer_id", "virtual_peer_id", "id"), 32)
             overlay_ipv4 = _internal_ip(_lookup(route, "overlay_ipv4", "virtual_ipv4", "ipv4"))
-            next_hop = _safe_text(_lookup(route, "next_hop_peer_id", "next_hop"), 32)
+            next_hop = _safe_text(_lookup(route, "next_hop_peer_id", "next_hop", "next_hop_hostname", "next_hop_ipv4"), 128)
             evidence = str(_lookup(route, "connection_type", "path", "route_type") or "").lower()
             path_state = "unknown"
             if peer_id and next_hop and peer_id == next_hop and ("direct" in evidence or "p2p" in evidence):
@@ -637,7 +651,7 @@ class EasyTierCollector(object):
                     "hostname": _safe_text(_lookup(route, "hostname", "name")),
                     "version": _safe_text(_lookup(route, "version")),
                     "next_hop_peer_id": next_hop,
-                    "cost": _bounded_number(_lookup(route, "cost"), 1000000),
+                    "cost": _bounded_number(_lookup(route, "cost", "path_len"), 1000000),
                     "path_latency_ms": _bounded_number(_lookup(route, "path_latency_ms", "path_latency", "latency_ms"), 600000, True),
                     "proxy_cidrs": _internal_cidrs(_lookup(route, "proxy_cidrs", "proxy_cidr", "cidrs")),
                     "path_state": path_state,

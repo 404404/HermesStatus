@@ -15,7 +15,7 @@ port.
 ```text
 easytier-core loopback RPC
         ↓
-easytier-cli JSON (four fixed read-only commands)
+easytier-cli JSON (five fixed read-only commands)
         ↓
 strict Python projection
         ↓ authenticated Device v2 update
@@ -33,6 +33,7 @@ argv list and `shell=False`. Its command allowlist is exactly:
 ```text
 node
 peer
+route
 connector
 stats
 ```
@@ -75,7 +76,7 @@ remain valid. Persistence writes the extra domain atomically when present.
 
 - Unit fixtures cover zero peer, direct/relay peers, TCP connector, partial
   command failure, configuration precedence, and secret/unknown-field rejection.
-- The real-host qualification uses only the four commands above and records a
+- The real-host qualification uses only the five commands above and records a
   sanitized projection.
 - Preview must bind only its independent loopback host port and must prove the
   2.2 containers, configuration, and state were not changed.
@@ -83,8 +84,8 @@ remain valid. Persistence writes the extra domain atomically when present.
 ## Detailed preview projection
 
 The detailed view is still monitoring only. It projects bounded Node, Peer,
-Connector, and stats records from the four permitted loopback-RPC CLI commands:
-`node`, `peer`, `connector`, and `stats`. Only internal overlay IPv4 and
+Route, Connector, and stats records from the five permitted loopback-RPC CLI commands:
+`node`, `peer`, `route`, `connector`, and `stats`. Only internal overlay IPv4 and
 RFC1918/RFC4193 proxy CIDRs may be retained. URL queries, credentials, raw
 command output, and raw configuration are deliberately rejected.
 

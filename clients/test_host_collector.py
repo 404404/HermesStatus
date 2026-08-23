@@ -1122,6 +1122,21 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNotNone(payload["docker"]["updated_at"])
         self.assertEqual(docker_calls, ["/containers/json?all=1"])
 
+    def test_start_collects_every_extension_before_background_intervals(self):
+        collector = HostExtensionCollector(status_dir="")
+        calls = []
+        for name in (
+            "collect_hardware_once", "collect_docker_once", "collect_hermes_once",
+            "collect_lucky_once", "collect_easytier_once",
+        ):
+            setattr(collector, name, lambda name=name: calls.append(name))
+        collector.start()
+        collector.stop()
+        self.assertEqual(calls, [
+            "collect_hardware_once", "collect_docker_once", "collect_hermes_once",
+            "collect_lucky_once", "collect_easytier_once",
+        ])
+
 
 if __name__ == "__main__":
     unittest.main()

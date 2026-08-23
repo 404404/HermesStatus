@@ -41,7 +41,7 @@ EasyTier 监控只允许通过仅回环 RPC 执行 `node`、`peer`、`connector`
 ## EasyTier 监控
 
 EasyTier 只使用 loopback RPC 的只读监控。运行时命令白名单仅包含 `node`、
-`peer`、`connector` 和 `stats`；没有 connector/route/
+`peer`、`route`、`connector` 和 `stats`；没有 connector/route/
 credential/whitelist/port-forward/logger 或 restart 操作。原始配置、端点、凭据、
 network secret、Noise key、STUN 地址与命令 stderr 都不会被持久化或渲染。
 

@@ -76,8 +76,9 @@ EasyTier 监控默认关闭，必须显式启用。配置优先级从高到低�
 | `EASYTIER_RPC_PORTAL` | `127.0.0.1:15888` | 仅接受 `127.0.0.1:15888` 或 `[::1]:15888`。 |
 | `EASYTIER_TIMEOUT_SECONDS` | `5` | 1 到 30 的整数。 |
 | `EASYTIER_INTERVAL_SECONDS` | `30` | 5 到 3600 的整数。 |
+| `EASYTIER_ADMINISTRATIVE_ROLE` | 未设置 | 可选的显式运维声明：`site_router`、`endpoint`、`bootstrap_listener`、`relay_capable` 或 `observer`；它是监控元数据，不是设备身份。 |
 
-JSON 文件只允许 `enabled`、`cli_path`、`rpc_portal`、`timeout_seconds` 与 `interval_seconds`，且必须为组和其他用户不可写的普通文件。只读挂载 CLI 二进制到 Client；不要挂载 EasyTier 配置、密钥，或配置非回环 RPC portal。
+JSON 文件只允许 `enabled`、`cli_path`、`rpc_portal`、`timeout_seconds`、`interval_seconds` 与 `administrative_role`，且必须为组和其他用户不可写的普通文件。只读挂载 CLI 二进制到 Client；不要挂载 EasyTier 配置、密钥，或配置非回环 RPC portal。
 
 ## Device v2 配置
 

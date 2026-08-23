@@ -1038,11 +1038,6 @@ function renderEasyTier(view){
 	];
 	byId('easytierSummary').innerHTML = details.map(([label, value]) => detailRow(label, value)).join('');
 	byId('easytierMeta').textContent = `更新时间：${formatDateTime(easytier.updated_at)}${easytier.error ? ` · ${textOrDash(easytier.error.message || easytier.error.code)}` : ''}`;
-	const names = {node_info: '节点信息', peer_list: '节点列表', route_list: '路由列表', connector_list: '连接器列表', stats_show: '流量统计'};
-	byId('easytierCommandsBody').innerHTML = Object.keys(names).map(key => {
-		const command = safeObject(commands[key]);
-		return `<article class="summary-card easytier-command-card"><h2>${escapeHtml(names[key])}</h2><div class="card-value">${badge(command.status)}</div></article>`;
-	}).join('');
 	const expectation = safeObject(view.easytierExpectation);
 	const expected = safeObject(expectation.expected);
 	const observed = safeObject(expectation.observed);
@@ -1054,11 +1049,11 @@ function renderEasyTier(view){
 	] : [['EasyTier expectation', '未配置', '—']];
 	byId('easytierExpectationBody').innerHTML = expectationRows.map(([label, expectedValue, observedValue], index) => `<tr><td class="strong-cell">${escapeHtml(label)}</td><td>${escapeHtml(expectedValue)}</td><td>${escapeHtml(observedValue)}</td>${index === 0 ? `<td rowspan="${expectationRows.length}">${expectationBadge(expectation.result || 'not_configured')}</td>` : ''}</tr>`).join('');
 	const peerItems = Array.isArray(peers.items) ? peers.items : [];
-	byId('easytierPeersBody').innerHTML = !commandAvailable('peer_list') ? '<tr><td colspan="10" class="table-empty">节点数据当前不可用。</td></tr>' : peerItems.length ? peerItems.map(peer => `<tr><td class="mono">${escapeHtml(textOrDash(peer.peer_id))}</td><td>${escapeHtml(textOrDash(peer.overlay_ipv4))}</td><td>${escapeHtml(easyTierPathText(peer.path_state))}</td><td>${escapeHtml(textOrDash(peer.transport))}</td><td>${escapeHtml(textOrDash(peer.address_family))}</td><td>${escapeHtml(formatLatency(peer.latency_ms))}</td><td>${escapeHtml(formatLoss(peer.loss_rate))}</td><td>${escapeHtml(formatBytes(peer.rx_bytes))}</td><td>${escapeHtml(formatBytes(peer.tx_bytes))}</td><td>${escapeHtml(textOrDash(peer.version))}</td></tr>`).join('') : '<tr><td colspan="10" class="table-empty">当前未观察到远端 EasyTier 节点。</td></tr>';
+	byId('easytierPeersBody').innerHTML = !commandAvailable('peer_list') ? '<tr><td colspan="10" class="table-empty">节点数据当前不可用。</td></tr>' : peerItems.length ? peerItems.map(peer => `<tr><td>${escapeHtml(textOrDash(peer.hostname || peer.peer_id))}</td><td>${escapeHtml(textOrDash(peer.overlay_ipv4))}</td><td>${escapeHtml(easyTierPathText(peer.path_state))}</td><td>${escapeHtml(listText(peer.established_tunnels))}</td><td>${escapeHtml(textOrDash(peer.address_family))}</td><td>${escapeHtml(formatLatency(peer.latency_ms))}</td><td>${escapeHtml(formatLoss(peer.loss_rate))}</td><td>${escapeHtml(textOrDash(peer.rx_display || formatBytes(peer.rx_bytes)))}</td><td>${escapeHtml(textOrDash(peer.tx_display || formatBytes(peer.tx_bytes)))}</td><td>${escapeHtml(textOrDash(peer.version))}</td></tr>`).join('') : '<tr><td colspan="10" class="table-empty">当前未观察到 EasyTier 节点。</td></tr>';
 	const routeItems = Array.isArray(routes.items) ? routes.items : [];
 	byId('easytierRoutesBody').innerHTML = !commandAvailable('route_list') ? '<tr><td colspan="7" class="table-empty">路由数据当前不可用。</td></tr>' : routeItems.length ? routeItems.map(route => `<tr><td>${escapeHtml(route.is_local ? '本地' : textOrDash(route.hostname || route.peer_id))}</td><td>${escapeHtml(textOrDash(route.overlay_ipv4))}</td><td>${escapeHtml(listText(route.proxy_cidrs))}</td><td class="mono">${escapeHtml(textOrDash(route.next_hop_peer_id))}</td><td>${escapeHtml(easyTierPathText(route.path_state))}</td><td>${escapeHtml(formatLatency(route.path_latency_ms))}</td><td>${escapeHtml(formatInteger(route.cost))}</td></tr>`).join('') : '<tr><td colspan="7" class="table-empty">当前未观察到 EasyTier 路由。</td></tr>';
 	const connectorItems = Array.isArray(connectors.items) ? connectors.items : [];
-	byId('easytierConnectorsBody').innerHTML = !commandAvailable('connector_list') ? '<tr><td colspan="4" class="table-empty">连接器数据当前不可用。</td></tr>' : connectorItems.length ? connectorItems.map(connector => `<tr><td>${escapeHtml(textOrDash(connector.transport))}</td><td>${escapeHtml(textOrDash(connector.address_family))}</td><td>${escapeHtml(formatInteger(connector.port))}</td><td>${badge(connector.status)}</td></tr>`).join('') : '<tr><td colspan="4" class="table-empty">未配置出站连接器。</td></tr>';
+	byId('easytierConnectorsBody').innerHTML = !commandAvailable('connector_list') ? '<tr><td colspan="3" class="table-empty">连接器数据当前不可用。</td></tr>' : connectorItems.length ? connectorItems.map(connector => `<tr><td>${escapeHtml(textOrDash(connector.transport))}</td><td>${escapeHtml(textOrDash(connector.endpoint || connector.url))}</td><td>${badge(connector.status)}</td></tr>`).join('') : '<tr><td colspan="3" class="table-empty">未配置出站连接器。</td></tr>';
 }
 
 function listText(value){ return Array.isArray(value) && value.length ? value.map(textOrDash).join('、') : '-'; }

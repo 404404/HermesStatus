@@ -24,7 +24,7 @@ docker compose --env-file /secure/path/client.env \
 
 ## EasyTier Preview 与发布
 
-启用 EasyTier 的候选版本必须使用独立 Compose 项目、Registry、credential 目录、状态目录、Client 状态目录以及 HTTPS 主机端口。该端口必须显式绑定到 overlay 或局域网所用的私有网卡（例如 EasyTier 网卡），不得绑定到 `0.0.0.0` 或公网地址。只读挂载 EasyTier CLI 二进制到 Client；不要挂载其配置或秘密。若 Device v2 使用 TLS 代理，Server 的受信代理 CIDR 只能包含该代理，后端 HTTP 必须保持在 Compose 网络内。提升前，在 `/json/stats.json` 中确认选定设备、`easytier.status` 与四个常规命令状态；单节点 overlay 的远端节点数为零是有效状态。
+启用 EasyTier 的候选版本必须使用独立 Compose 项目、Registry、credential 目录、状态目录、Client 状态目录以及 HTTPS 主机端口。该端口必须显式绑定到 overlay 或局域网所用的私有网卡（例如 EasyTier 网卡），不得绑定到 `0.0.0.0` 或公网地址。只读挂载 EasyTier CLI 二进制到 Client；不要挂载其配置或秘密。若 Device v2 使用 TLS 代理，Server 的受信代理 CIDR 只能包含该代理，后端 HTTP 必须保持在 Compose 网络内。提升前，在 `/json/stats.json` 中确认选定设备、`easytier.status` 与五个常规命令状态；单节点 overlay 的远端节点数为零是有效状态。
 
 ## 硬件、SMART 与文件系统访问
 

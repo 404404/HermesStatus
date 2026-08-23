@@ -2144,7 +2144,9 @@ class HostExtensionCollector(object):
         self._store("easytier", payload)
         return payload
 
-    def _run_periodically(self, function, interval):
+    def _run_periodically(self, function, interval, initial_delay=False):
+        if initial_delay and self._stop.wait(interval):
+            return
         while not self._stop.is_set():
             try:
                 function()
@@ -2156,16 +2158,25 @@ class HostExtensionCollector(object):
         if self._started:
             return
         self._started = True
-        for function, interval, name in (
+        tasks = (
             (self.collect_hardware_once, self.hardware_interval, "hardware-collector"),
             (self.collect_docker_once, self.docker_interval, "docker-collector"),
             (self.collect_hermes_once, self.hermes_snapshot_interval, "hermes-snapshot-reader"),
             (self.collect_lucky_once, self.lucky_interval, "lucky-collector"),
             (self.collect_easytier_once, self.easytier_interval, "easytier-collector"),
-        ):
+        )
+        # Device v2 can send an update immediately after start(). Populate every
+        # independent domain synchronously first so a fresh container never
+        # publishes a partially initialised extension snapshot.
+        for function, _, _ in tasks:
+            try:
+                function()
+            except Exception:
+                pass
+        for function, interval, name in tasks:
             thread = threading.Thread(
                 target=self._run_periodically,
-                args=(function, interval),
+                args=(function, interval, True),
                 name=name,
             )
             thread.daemon = True

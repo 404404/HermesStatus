@@ -58,6 +58,10 @@ class Runner(object):
                 {"id": 12345, "cidr": "10.250.250.1/24", "ipv4": "10.250.250.1", "cost": "Local", "lat_ms": "-", "loss_rate": "-", "rx_bytes": "0 B", "tx_bytes": "0 B", "tunnel_proto": "", "nat_type": "Unknown", "version": "2.6.4"},
                 {"id": 54321, "cidr": "10.250.250.2/24", "ipv4": "10.250.250.2", "hostname": "remote", "cost": "p2p", "lat_ms": "10.09", "loss_rate": "0.0%", "rx_bytes": "814.06 kB", "tx_bytes": "6.97 MB", "tunnel_proto": "tcp6,udp", "nat_type": "Cone", "version": "2.6.4"},
             ],
+            ("route",): [
+                {"ipv4": "10.250.250.1/24", "hostname": "fixture-node", "next_hop_hostname": "Local", "path_latency": 0, "path_len": 0, "proxy_cidrs": ["192.168.68.0/24"], "version": "2.6.4"},
+                {"ipv4": "10.250.250.2/24", "hostname": "remote", "next_hop_hostname": "remote", "path_latency": 10, "path_len": 1, "proxy_cidrs": ["192.168.88.0/24"], "version": "2.6.4"},
+            ],
             ("connector",): [{"url": {"url": "udp://bootstrap.example:11010"}, "status": 0}],
         }
         return Result(values[command])
@@ -89,12 +93,13 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertEqual(payload["status"], "not_configured")
         self.assertEqual(set(payload["command_status"]), {"node_info", "peer_list", "route_list", "connector_list", "stats_show"})
 
-    def test_collects_four_stable_sources_and_drops_node_config(self):
+    def test_collects_five_stable_sources_and_drops_node_config(self):
         runner = Runner()
         payload = EasyTierCollector(environ=self.environ, runner=runner).collect()
         self.assertEqual(payload["status"], "healthy")
-        self.assertEqual([call[0][5:] for call in runner.calls], [["node"], ["peer"], ["connector"], ["stats"]])
-        self.assertEqual(payload["command_status"]["route_list"]["status"], "not_configured")
+        self.assertEqual([call[0][5:] for call in runner.calls], [["node"], ["peer"], ["route"], ["connector"], ["stats"]])
+        self.assertEqual(payload["command_status"]["route_list"]["status"], "healthy")
+        self.assertEqual(payload["routes"]["items"][1]["next_hop_peer_id"], "remote")
         self.assertEqual(payload["node"]["hostname"], "fixture-node")
         self.assertEqual(payload["node"]["listeners"], ["udp://[::]:11010"])
         self.assertNotIn("config", payload["node"])
@@ -162,6 +167,10 @@ class EasyTierCollectorTests(unittest.TestCase):
         malformed = EasyTierCollector(environ=self.environ, runner=MalformedRunner()).collect()
         self.assertEqual(malformed["status"], "degraded")
         self.assertEqual(malformed["command_status"]["stats_show"]["status"], "invalid_data")
+        route_timeout = EasyTierCollector(environ=self.environ, runner=Runner({("route",)})).collect()
+        self.assertEqual(route_timeout["status"], "degraded")
+        self.assertEqual(route_timeout["command_status"]["route_list"]["status"], "unavailable")
+        self.assertEqual(route_timeout["routes"]["items"], [])
 
     def test_command_duration_and_secure_configuration(self):
         self.assertEqual(_command_duration_ms(0, 30.001), 30000)
@@ -171,6 +180,15 @@ class EasyTierCollectorTests(unittest.TestCase):
         link = os.path.join(self.directory.name, "link")
         os.symlink(self.cli, link)
         self.assertEqual(EasyTierCollector(environ=dict(self.environ, EASYTIER_CLI_PATH=link), runner=Runner()).collect()["status"], "unavailable")
+
+    def test_administrative_role_is_explicit_config_not_node_config(self):
+        payload = EasyTierCollector(
+            environ=dict(self.environ, EASYTIER_ADMINISTRATIVE_ROLE="site_router"),
+            runner=Runner(),
+        ).collect()
+        self.assertEqual(payload["node"]["administrative_role"], "site_router")
+        with self.assertRaises(ValueError):
+            load_easytier_config(environ=dict(self.environ, EASYTIER_ADMINISTRATIVE_ROLE="invalid"))
 
 
 if __name__ == "__main__":

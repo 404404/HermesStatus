@@ -80,7 +80,7 @@ async function run(){
   assert.match(appSource, /<h2>Lucky运行状态\/版本<\/h2>/);
   assert.match(appSource, /EasyTier远端节点数/);
   assert.match(appSource, /EasyTier流量统计/);
-  assert.match(appSource, /easytier-command-card/);
+	assert.doesNotMatch(appSource, /easytierCommandsBody/);
   assert.match(appSource, /easytierPeersBody/);
   assert.match(appSource, /easytierExpectationBody/);
   assert.match(appSource, /function expectationBadge\(value\)/);
@@ -88,10 +88,17 @@ async function run(){
   assert.match(appSource, /const peerSummary = !commandAvailable\('peer_list'\)/);
 	assert.match(appSource, /const tcpConnectorText = commandAvailable\('connector_list'\)/);
 	assert.match(appSource, /const trafficText = commandAvailable\('stats_show'\)/);
-  assert.match(appSource, /escapeHtml\(textOrDash\(peer\.peer_id\)\)/);
+	assert.match(appSource, /peer\.established_tunnels/);
   assert.doesNotMatch(appSource, /CPU温度\/硬盘温度/);
   assert.doesNotMatch(appSource, /已运行时间\/操作系统/);
-  assert.match(indexMarkup, /<h2 id="easytierCommandsTitle">采集状态<\/h2>/);
+	assert.doesNotMatch(indexMarkup, /easytierCommandsTitle/);
+	assert.match(indexMarkup, /<th>已建立隧道<\/th>/);
+	assert.ok(
+		indexMarkup.indexOf('easytierSummaryTitle') < indexMarkup.indexOf('easytierPeersTitle')
+		&& indexMarkup.indexOf('easytierPeersTitle') < indexMarkup.indexOf('easytierRoutesTitle')
+		&& indexMarkup.indexOf('easytierRoutesTitle') < indexMarkup.indexOf('easytierConnectorsTitle')
+		&& indexMarkup.indexOf('easytierConnectorsTitle') < indexMarkup.indexOf('easytierExpectationTitle')
+	);
   assert.doesNotMatch(indexMarkup, /<th>说明<\/th>/);
   assert.equal(app.formatUptimeHours(90061), '25 h (约1.04天)');
   assert.equal(app.formatCelsius(47), '47℃');
