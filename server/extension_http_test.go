@@ -89,7 +89,10 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 	}
 	storage := schemas["StorageStats"].(map[string]any)
 	filesystems := storage["properties"].(map[string]any)["filesystems"].(map[string]any)
-	filesystem := filesystems["items"].(map[string]any)
+	if filesystems["items"].(map[string]any)["$ref"] != "#/components/schemas/FilesystemStats" {
+		t.Fatalf("StorageStats filesystems does not reference FilesystemStats: %#v", filesystems)
+	}
+	filesystem := schemas["FilesystemStats"].(map[string]any)
 	backingIDs := filesystem["properties"].(map[string]any)["backing_disk_ids"].(map[string]any)
 	backingID := backingIDs["items"].(map[string]any)
 	if backingID["pattern"] != "^[A-Za-z0-9][A-Za-z0-9_.+-]*$" {
