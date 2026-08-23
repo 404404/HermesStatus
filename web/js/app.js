@@ -738,7 +738,9 @@ function easytierOverviewText(easytier){
   const traffic = safeObject(easytier?.traffic);
   return {
     peers: easytierCommandAvailable(easytier, 'peer_list')
-      ? `${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)}`
+      ? finiteNumber(peers.total) === 0
+        ? '0（— / — / —）'
+        : `${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)}`
       : '数据不可用',
     traffic: easytierCommandAvailable(easytier, 'stats_show')
       ? `${formatTrafficBytes(traffic.bytes_rx)} / ${formatTrafficBytes(traffic.bytes_tx)} / ${formatTrafficBytes(traffic.bytes_forwarded)}`

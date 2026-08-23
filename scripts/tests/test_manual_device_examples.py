@@ -75,6 +75,7 @@ class ManualDeviceExampleTests(unittest.TestCase):
         for key in ("SERVER", "SERVERSTATUS_USER", "USER", "PORT", "PASSWORD"):
             self.assertNotIn(f"{key}:", environment)
         self.assertIn("environment: !override", source)
+        self.assertIn('DSM_VERSION_FILE: "${DSM_VERSION_FILE:-/host/etc.defaults/VERSION}"', source)
         self.assertIn("privileged: false", source)
         self.assertIn("cap_add:\n      - SYS_RAWIO", source)
         self.assertIn("devices: !override", source)

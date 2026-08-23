@@ -144,6 +144,16 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertEqual(payload["peers"]["unknown_path"], 0)
         self.assertIsNone(payload["peers"]["ipv6_udp_direct"])
 
+    def test_local_marker_is_excluded_when_node_info_is_unavailable(self):
+        payload = EasyTierCollector(
+            environ=self.environ,
+            runner=Runner({("node",)}),
+        ).collect()
+        self.assertEqual(payload["command_status"]["node_info"]["status"], "unavailable")
+        self.assertEqual(payload["command_status"]["peer_list"]["status"], "healthy")
+        self.assertEqual(payload["peers"]["total"], 1)
+        self.assertEqual(payload["peers"]["items"][0]["peer_id"], "54321")
+
     def test_unknown_connector_status_is_not_guessed(self):
         class UnknownConnectorRunner(Runner):
             def __call__(self, argv, **kwargs):

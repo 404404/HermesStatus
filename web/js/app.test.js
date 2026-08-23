@@ -111,9 +111,9 @@ async function run(){
   assert.equal(app.formatTrafficBytes(1000000), '1.0MB');
 	assert.deepEqual(app.easytierOverviewText({
 		command_status: {peer_list: {status: 'healthy'}, stats_show: {status: 'healthy'}},
-		peers: {direct: 0, relay: 0, unknown_path: 0},
+		peers: {total: 0, direct: 0, relay: 0, unknown_path: 0},
 		traffic: {bytes_rx: 0, bytes_tx: 0, bytes_forwarded: 0}
-	}), {peers: '0 / 0 / 0', traffic: '0.0B / 0.0B / 0.0B'});
+	}), {peers: '0（— / — / —）', traffic: '0.0B / 0.0B / 0.0B'});
 	assert.deepEqual(app.easytierOverviewText({
 		command_status: {peer_list: {status: 'unavailable'}, stats_show: {status: 'invalid_data'}},
 		peers: {direct: 0, relay: 0, unknown_path: 0},
