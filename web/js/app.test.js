@@ -159,6 +159,9 @@ async function run(){
   assert.deepEqual(app.filesystemBackingDisks(multiDiskHardware.storage.filesystems[0]), {
     text: '2 块磁盘', title: 'sda / sdb'
   });
+  const linkedFilesystemMarkup = app.renderFilesystemDetails(multiDiskHardware);
+  assert.match(linkedFilesystemMarkup, /2 块磁盘/);
+  assert.match(linkedFilesystemMarkup, /title="sda \/ sdb"/);
   assert.match(app.smartHomeMarkup(multiDiskHardware.storage.physical_disks, multiDiskHardware), /2 \/ 3 通过/);
   assert.match(app.smartHomeMarkup(multiDiskHardware.storage.physical_disks, multiDiskHardware), /sdb故障/);
   const legacyDisk = app.physicalDisksForView({
