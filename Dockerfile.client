@@ -16,7 +16,8 @@ LABEL org.opencontainers.image.title="HermesStatus Client" \
     org.opencontainers.image.revision="${VCS_REF}" \
     org.opencontainers.image.created="${BUILD_DATE}" \
     org.opencontainers.image.source="${SOURCE_URL}" \
-    org.opencontainers.image.licenses="MIT"
+    org.opencontainers.image.licenses="MIT" \
+    io.hermesstatus.component="client"
 
 WORKDIR /app
 

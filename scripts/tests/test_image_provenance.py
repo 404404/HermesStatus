@@ -70,6 +70,12 @@ class ImageProvenanceTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("COPY server/contracts ./contracts", dockerfile)
 
+    def test_client_dockerfile_sets_client_component_metadata(self):
+        dockerfile = (
+            pathlib.Path(__file__).resolve().parents[2] / "Dockerfile.client"
+        ).read_text(encoding="utf-8")
+        self.assertIn('io.hermesstatus.component="client"', dockerfile)
+
     def test_valid_metadata(self):
         result = validate(valid_inspect())
         self.assertEqual(result["revision"], REVISION)
