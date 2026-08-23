@@ -1,36 +1,25 @@
 # 开发
 
-[English](../DEVELOPMENT.md) · [文档目录](README.md)
+从当前远端基线创建聚焦的 `codex/*` 分支。先读取远端状态，保留无关工作区变更，避免对已评审分支 rebase 或 force-push。使用小而可评审的 commit，在受保护分支合并前创建 Draft PR。只有用户明确授权才能更新 `2.0`。
 
-## 本地检查
+## 必要检查
 
-在已审查工作树中执行：
+推送前按适用范围执行：
 
 ```bash
-(cd server && go test ./...)
-(cd clients && python3 -m unittest discover)
-(cd scripts/tests && python3 -m unittest discover)
-docker compose -f docker-compose-server.yml config --quiet
-docker compose -f docker-compose-client.yml config --quiet
+git diff --check
+python3 -m unittest discover -s clients/tests
+python3 -m unittest discover -s scripts/tests
+go test ./...
+go test -race ./...
+go vet ./...
+go build ./...
+node --test web/js
+docker compose config --quiet
 ```
 
-开发时先运行最小相关测试，创建 PR 前运行受影响范围的完整检查。需要 Unix socket 或 Docker daemon 的测试必须在允许这些本地能力的环境执行。
+同时运行仓库的合同、release-boundary 与 secret 检查。不得通过削弱校验器、跳过失败测试或修改分支保护来获得绿色结果。
 
-## 变更边界
+## Review 与发布
 
-源代码、部署配置和文档应保持可审查。不要将运行环境修复与无关的 UI 或文档改写混在同一个 commit。生产类候选必须具备可识别的源代码 revision 和镜像溯源。
-
-## Pull Request
-
-创建聚焦的 `codex/2.3-*` 分支并提交，然后向 `2.3-preview` 创建 Draft PR。等待
-必需 CI 和 Review 反馈；在同一分支修复可操作问题，运行行为改变后重新部署最终候选，
-并保持 Draft，直到操作员手动合并。不得自动 Mark Ready、Merge 或将 Preview 推进到
-`2.0`。
-
-EasyTier 改动除常规 Python、Go、race、vet、build、Node、Compose、contract 与 secret
-门禁外，还需要 synthetic 状态 Fixture 和真实 loopback GK50 采集检查。Synthetic 拓扑
-状态必须始终明确标记。
-
-硬件改动同样需要上述门禁，并验证 Client 配置优先级、单盘和多盘 SMART 行为、部分失败、block graph 的循环/深度上限、通用 LVM/MD RAID/device-mapper Fixture、文件系统 probe 安全性、Server 校验/持久化以及 WebUI 转义渲染。在桌面和移动尺寸下验证主页、Hardware、Docker、Lucky 与 EasyTier 的 single-stats-fetch 不变量。Synthetic Synology 布局只是合同 Fixture，绝不能描述为真实 DSM 资格验证。
-
-候选镜像必须在构建时注入 Server/Client 版本、完整 revision 和构建时间。资格验证需将页面显示的 revision 与镜像 OCI revision label 比对，将最终 HEAD 部署到隔离的 21443 Preview 项目，并保持 PR 为 Draft，等待人工合并。
+修复有效的安全、数据完整性、身份、持久化、兼容性与 XSS 问题。Review 修复后需重新构建最终镜像；preview 或生产部署必须使用最终已评审 commit，而不是早期候选。受控部署 helper 除非其源码被有意纳入评审，否则应与产品源码分离。

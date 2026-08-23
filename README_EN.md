@@ -1,139 +1,46 @@
-# HermesStatus 2.3 Preview
+# HermesStatus
 
 [中文](README.md) · [English docs](docs/README.md) · [中文文档](docs/zh-CN/README.md)
 
-HermesStatus is a self-hosted current-state dashboard. The Go Server receives
-Client updates and serves the WebUI and status API. The Python Client collects
-host, hardware/SMART, Docker, Hermes, optional Lucky data, and an optional
-EasyTier health projection.
+HermesStatus is a self-hosted, multi-device status dashboard. The Python Client collects authorized host and local-service observations with least privilege; the Go Server validates, persists, and projects them; the browser renders Home, Hardware, Docker, Lucky, and EasyTier from one `/json/stats.json` document.
 
-## Current capabilities
+## Scope
 
-- Device names are configuration-driven by the Device Registry and never
-  accept a Client hostname override. Production names should be stable (for
-  example, `GK50`) and must not include Preview or temporary-environment text;
-  each Client keeps its endpoint IP and port in a separate Client configuration
-  file.
-- Home first shows CPU, memory, disk capacity, EasyTier remote-peer counts, and
-  EasyTier traffic. Its hardware area shows the highest CPU-sensor temperature,
-  highest physical-disk temperature, SMART, read/write volume, power-on hours,
-  system uptime, physical-host OS version, Docker, Lucky, and EasyTier
-  state/version. Multi-disk summaries are calculated only from physical disks:
-  temperature, I/O, and hours identify the selected device, while SMART shows
-  passed counts and failed devices; a logical volume is never presented as one
-  physical disk.
-- Hardware sits between Home and Docker. On desktop, CPU facts and CPU use each
-  occupy one half; the right side uses two columns for total, I/O wait, user,
-  and system CPU use, with no duplicate percentage outside the bar. Memory is a
-  transposition of the prior vertical columns: physical/active-reclaimable,
-  Swap/buffers-Slab, free/page-cache, and Swap-cache/dirty-writeback. It
-  remains single-line at normal 16:9 desktop widths. System information contains only OS version,
-  architecture, and kernel. Vendor, family/model, topology, caches, idle, Nice,
-  Steal, IRQ, and SoftIRQ are not displayed. The separate Filesystems / volumes
-  section is removed: configured read-only filesystem probes only associate
-  partition/format, used/total capacity, and a usage bar with physical-disk
-  rows. LVM, MD RAID, and device mapper list safely resolved backing disks;
-  multi-device Btrfs keeps the relation unknown when all members cannot be
-  proven. The page never reads directory contents, disk serial numbers, or raw
-  SMART attributes.
-- Docker: container counts, names, images, state, and port summaries.
-- Home also includes configured Hermes profiles with gateway, runtime,
-  model/provider, and usage snapshots. Its section header shows the shared
-  Agent version and profile count (for example, `Agent version: 0.19.0, 3 profiles`).
-- Lucky: version, DDNS, web service, forwarding, and certificate summaries when
-  explicitly enabled. Synology Lucky 2.27.2 uses the strict loopback
-  `https://127.0.0.1:16601` Admin/API endpoint with direct JSON and no
-  authentication; installations that require authentication still use only a
-  protected token file.
-- EasyTier: an opt-in, strict read-only loopback-RPC projection. Each
-  collection command is shown first as an individual status card, followed by
-  Node, Configured vs Observed, Peer, Route, Connector, and traffic views.
-  With zero remote peers, direct, relay, and IPv6 UDP Direct are
-  not-observable—not misleading zero or false values.
-- Legacy TCP Agents and optional Device v2 ingestion.
+- **Multi-device** — Device v2 uses an explicit Registry, per-device credential digest, and HTTPS ingestion. Registry `display_name` is the authoritative browser name; a Client hostname cannot replace it.
+- **Host and hardware** — CPU, memory, uptime, OS, disks, SMART, temperatures, power-on hours, filesystems, and volumes. Devices and filesystems are explicitly authorized; the Client never scans host `/` or the whole `/dev` tree.
+- **Docker** — read-only Docker-socket collection of bounded container summaries.
+- **Hermes** — Profile summaries when installed. `not_installed` is a usable optional state, not a device failure.
+- **Lucky** — loopback-only, read-only HTTP(S) collection of version, DDNS, web services, port forwards, and certificate summaries. Tokens are read only from protected files.
+- **EasyTier** — read-only CLI and loopback RPC collection of node, peer, route, connector, traffic, and configured-vs-observed state. No remote peers, unobserved direct/relay paths, and unconfigured optional capabilities are not failures.
 
-Network traffic, network throughput, and carrier-specific or three-network
-latency probes are not HermesStatus dashboard features.
+Network throughput, carrier probing, EasyTier management, remote command execution, auto-registration, history storage, and alerting are out of scope.
 
 ## Architecture
 
 ```text
-Host / hwmon / SMART / read-only filesystem probes / Docker / Hermes / Lucky / EasyTier
-                       ↓
+authorized host inputs / Docker / Hermes / Lucky / EasyTier
+                         ↓
                   Python Client
-                       ↓
-      Legacy TCP Agent or authenticated HTTPS Device v2 update
-                       ↓
-                    Go Server
-                       ↓
-        /json/stats.json · /api/health · WebUI
+                         ↓
+      Device v2 HTTPS or compatible Legacy TCP transport
+                         ↓
+                     Go Server
+                         ↓
+        /json/stats.json · /api/health · Web UI
 ```
 
-The browser reads only `/json/stats.json`. The Server does not mount the Docker
-socket or read Hermes/Lucky secrets; that high-trust work belongs to the Client.
-EasyTier CLI is likewise Client-only; neither the Server nor browser sees its
-configuration, credentials, RPC portal, or raw CLI output.
+The Server never reads a Docker socket, Lucky credential, EasyTier configuration, or raw CLI output. Inputs are allowlisted, bounded, typed, and secret-filtered at the Client boundary; the Server accepts only strict projections.
 
-## Local start
+## Quick start
+
+Server and Client have separate Compose configuration. Never commit production configuration, tokens, passwords, private CA material, or private addresses.
 
 ```bash
-docker compose --env-file /secure/path/server.env \
-  -f docker-compose-server.yml up -d --build
-
-docker compose --env-file /secure/path/client.env \
-  -f docker-compose-client.yml up -d --build
+docker compose --env-file /secure/path/server.env -f docker-compose-server.yml up -d --build
+docker compose --env-file /secure/path/client.env -f docker-compose-client.yml up -d --build
 ```
 
-The default Server address is `http://127.0.0.1:8080/`. Health is at
-`/api/health`, status is `/json/stats.json`, and Legacy Agent TCP listens on
-`35601`. Prefer `SERVERSTATUS_USER`; `USER` exists only for compatibility.
-
-## Minimum hardware and SMART permissions
-
-Do not use `privileged` or mount the full `/dev` tree solely to collect SMART.
-For a confirmed `/dev/sda` disk:
-
-```yaml
-cap_add:
-  - SYS_RAWIO
-devices:
-  - /dev/sda:/dev/sda:r
-environment:
-  SMART_DEVICE: /dev/sda
-```
-
-The repository base `docker-compose-client.yml` is non-privileged and maps no
-host block device by default, so it starts on SATA, NVMe, virtio, and similar
-hosts. Use an audited override to add `SYS_RAWIO` and one read-only `devices:`
-mapping per confirmed physical disk when SMART collection is required.
-`config/examples/docker-compose-client.override.example.yml` contains a
-complete minimum-permission Device v2 example.
-
-Keep the read-only root filesystem and `no-new-privileges`. For multiple disks,
-list every device explicitly in Client JSON `hardware.smart_devices` and grant
-each one a separate read-only Compose `devices:` mapping. Do not restore
-`privileged`, a full `/dev` mount, or `SYS_ADMIN`. `SMART_DEVICE` remains
-compatible with single-disk deployments; `SMART_DEVICES` is an optional JSON
-environment override. `auto` discovers only devices already visible and
-authorized to the Client container.
-
-Filesystem capacity is not an automatic host scan either: only a
-`hardware.filesystem_probes` entry with a read-only mount at its explicit
-`probe_path` is checked through `statvfs`. This prevents a container-namespace
-capacity from being reported as host capacity and does not require mounting the
-full host root. Device, mountpoint, path, and model values are bounded and
-escaped observations; none can become device identity.
-
-See the [Hardware monitoring design](docs/design/HARDWARE_MONITORING.md) and
-[device configuration guide](docs/DEVICE_CONFIGURATION.md) for fields,
-precedence, mappings, and diagnostics.
-
-## Device v2
-
-Device v2 is disabled by default. It needs a read-only registry, one
-SHA-256-digest credential document per device, a Legacy mapping when needed,
-and a writable runtime-state file. Expose `POST /api/v2/device-updates` only
-behind a fixed HTTPS reverse-proxy route.
+The default Web address is `http://127.0.0.1:8080/`; the status document is `/json/stats.json` and health is `/api/health`. Put production Device v2 only behind a fixed HTTPS reverse-proxy route and validate configuration before startup:
 
 ```bash
 serverstatus --validate-device-config \
@@ -142,36 +49,29 @@ serverstatus --validate-device-config \
   --legacy-device-mapping /absolute/path/legacy-device-mapping.json
 ```
 
-## Documentation and validation
+## Least-privilege hardware collection
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Configuration](docs/CONFIGURATION.md)
-- [Deployment](docs/DEPLOYMENT.md)
-- [Security](docs/SECURITY.md)
-- [Operations](docs/OPERATIONS.md)
-- [Development and testing](docs/DEVELOPMENT.md)
-- [EasyTier 2.3 design](docs/design/EASYTIER_MONITORING.md)
-- [Hardware monitoring design](docs/design/HARDWARE_MONITORING.md)
-- [Device configuration guide](docs/DEVICE_CONFIGURATION.md)
+Do not use `privileged`, `SYS_ADMIN`, all of `/dev`, or the host root directory for SMART or filesystem observation. Map each confirmed disk read-only, for example:
 
-```bash
-(cd server && go test ./...)
-(cd clients && python3 -m unittest discover)
-(cd scripts/tests && python3 -m unittest discover)
+```yaml
+cap_add: [SYS_RAWIO]
+devices: [/dev/sda:/dev/sda:r]
+environment:
+  SMART_DEVICE: /dev/sda
 ```
 
-`2.3-preview` is the sole 2.3 integration and 21443 staging branch; it is not
-automatically promoted to `2.0`. The 21443 environment label comes from
-deployment configuration; the port itself does not define an environment. Only
-real GK50 zero-peer EasyTier collection is currently qualified. Synology DSM
-multi-disk/MD RAID/LVM/Btrfs structures have contract qualification using
-secret-free synthetic fixtures and still await real-device qualification. Real
-Synology dual-site, IPv6 UDP Direct, TCP fallback, a future remote private
-CIDR, and real Direct/Relay behavior also remain pending. Synthetic fixtures
-qualify preview states only and are never real-network verification.
+Use `hardware.smart_devices` for multi-disk allowlists and `hardware.filesystem_probes` for fixed read-only filesystem probe paths. See the [Device configuration guide](docs/DEVICE_CONFIGURATION.md) and [hardware design](docs/design/HARDWARE_MONITORING.md).
 
-Never commit real tokens, passwords, credentials, private addresses, or
-production configuration.
+## Known limitation
+
+Some EasyTier 2.6.4 CLI output includes the local node in the peer list. The current release can include it in the remote-peer summary; this recorded P1 will be corrected in the next product-code change.
+
+## Documentation and validation
+
+- [Architecture](docs/ARCHITECTURE.md) · [Configuration](docs/CONFIGURATION.md) · [Deployment](docs/DEPLOYMENT.md)
+- [Security](docs/SECURITY.md) · [Operations](docs/OPERATIONS.md) · [Development](docs/DEVELOPMENT.md)
+- [Device configuration guide](docs/DEVICE_CONFIGURATION.md)
+- [EasyTier monitoring](docs/design/EASYTIER_MONITORING.md) · [Hardware monitoring](docs/design/HARDWARE_MONITORING.md)
 
 ## License
 

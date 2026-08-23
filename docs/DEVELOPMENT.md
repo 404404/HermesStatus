@@ -1,51 +1,35 @@
 # Development
 
-[中文](zh-CN/DEVELOPMENT.md) · [Documentation index](README.md)
+Create focused `codex/*` branches from the current remote base.  Read remote
+state first, preserve unrelated working-tree changes and avoid rebasing or
+force-pushing a reviewed branch.  Use small, reviewable commits and create a
+Draft PR before a protected-branch merge.  Only a user-authorized merge may
+update `2.0`.
 
-## Local checks
+## Required checks
 
-Run checks from the reviewed worktree:
+Run applicable checks before pushing:
 
 ```bash
-(cd server && go test ./...)
-(cd clients && python3 -m unittest discover)
-(cd scripts/tests && python3 -m unittest discover)
-docker compose -f docker-compose-server.yml config --quiet
-docker compose -f docker-compose-client.yml config --quiet
+git diff --check
+python3 -m unittest discover -s clients/tests
+python3 -m unittest discover -s scripts/tests
+go test ./...
+go test -race ./...
+go vet ./...
+go build ./...
+node --test web/js
+docker compose config --quiet
 ```
 
-Run the smallest relevant test while developing, then the broader affected
-suite before opening a pull request. Tests that need a Unix socket or Docker
-daemon must run where those local primitives are permitted.
+Run the repository's contract, release-boundary and secret checks as well.
+Do not weaken validators, skip failing tests or change branch protection to get
+a green result.
 
-## Change boundaries
+## Reviews and releases
 
-Keep source changes, deployment configuration, and documentation reviewable.
-Do not mix an operational deployment repair with unrelated UI or documentation
-rewrites in one commit. A production-like candidate needs an identifiable source
-revision and image provenance.
-
-## Pull requests
-
-Create a focused `codex/2.3-*` branch and commit, then open a Draft pull request
-against `2.3-preview`. Wait for required CI and review feedback. Fix actionable
-findings on the same branch, redeploy a final candidate when runtime behavior
-changes, and leave the PR Draft until the operator merges it manually. Do not
-mark ready, merge, or promote Preview work to `2.0` automatically.
-
-EasyTier changes require the normal Python, Go, race, vet, build, Node, Compose,
-contract, and secret gates, plus synthetic state fixtures and a real loopback
-GK50 collection check. Synthetic topology states must remain clearly labelled.
-
-Hardware changes require the same gates plus Client configuration precedence,
-single- and multi-disk SMART behavior, partial failure, block-graph cycle/depth
-bounds, generic LVM/MD RAID/device-mapper fixtures, filesystem probe safety,
-Server validation/persistence, and escaped WebUI rendering. Verify the
-single-stats-fetch invariant for Home, Hardware, Docker, Lucky, and EasyTier at
-desktop and mobile sizes. Synthetic Synology layouts are contract fixtures only;
-do not describe them as real DSM qualification.
-
-Candidate images must receive Server/Client version, full revision, and build
-time at build time. Qualify the displayed revisions against the image OCI
-revision labels, deploy the final HEAD to the isolated 21443 Preview project,
-and leave the resulting pull request Draft for manual merge.
+Address valid security, data-integrity, identity, persistence, compatibility
+and XSS findings.  Rebuild final images after review fixes; a preview or
+production deployment must run the final reviewed commit, not an earlier
+candidate.  Keep deployment-only controlled helpers separate from product
+source unless their source is intentionally tracked and reviewed.
