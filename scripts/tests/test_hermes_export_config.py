@@ -270,6 +270,43 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["provider"], "openai-codex")
         self.assertEqual(payload["usage_mode"], "auth_provider")
 
+    def test_configured_identity_uses_config_refresh_time_not_lagging_cli(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        config_path = self.root / "daily-config.yaml"
+        config_path.write_text("model: gpt-5.6-luna\nprovider: openai-codex\n", encoding="utf-8")
+        modified = dt.datetime(2026, 8, 23, 16, 30, tzinfo=dt.timezone.utc).timestamp()
+        os.utime(config_path, (modified, modified))
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root), "status_dir": str(self.status),
+            "profiles": [{"name": "daily", "profile_dir": str(profile_dir), "config_path": str(config_path)}],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            module.hermes_cli_status = lambda _profile: """
+◆ Environment
+  Model: deepseek-v4-pro
+  Provider: OpenCode Go
+◆ Auth Providers
+  OpenCode Go ✓ logged in
+    Refreshed: 2026-08-22T00:00:00Z
+"""
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True,
+                "main_model": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
+                "docker_volumes": [],
+            })
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["auth_refreshed_at"], "2026-08-23T16:30:00Z")
+
     def test_unmatched_provider_uses_profile_config_mtime(self):
         profile_dir = self.root / "daily"
         profile_dir.mkdir()

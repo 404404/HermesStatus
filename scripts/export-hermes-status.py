@@ -1139,6 +1139,7 @@ def profile_stats(profile, profile_dir, previous=None):
     model = fallback_value(model, previous, "model")
     provider = configured_provider or cli.get("provider") or first_string(detailed, ("provider",)) or first_string(health, ("provider",))
     provider = fallback_value(provider, previous, "provider")
+    configured_identity_selected = current_config_found and bool(configured_model or configured_provider)
     api_version = first_string(detailed, ("agent_version", "version")) or first_string(health, ("agent_version", "version"))
     version = fallback_value(api_version or hermes_agent_version(), previous, "agent_version")
     api_status = api.get("status", "unknown")
@@ -1192,7 +1193,11 @@ def profile_stats(profile, profile_dir, previous=None):
     if usage_mode not in ("api", "auth_provider", "unknown"):
         usage_mode = "unknown"
     config_refreshed_at = profile_config_refreshed_at(profile)
-    if cli_available:
+    if configured_identity_selected:
+        # The selected identity came from the active profile configuration;
+        # pairing it with a lagging CLI provider refresh would be misleading.
+        model_refreshed_at = config_refreshed_at
+    elif cli_available:
         model_refreshed_at = normalize_timestamp(cli.get("auth_refreshed_at")) or config_refreshed_at
     elif previous_used:
         model_refreshed_at = normalize_timestamp(previous.get("auth_refreshed_at"))
