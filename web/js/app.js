@@ -729,7 +729,8 @@ function fitOverviewSingleLineValues(){
 }
 
 function easytierCommandAvailable(easytier, name){
-  return safeObject(safeObject(easytier).command_status[name]).status === 'healthy';
+  const commands = safeObject(safeObject(easytier).command_status);
+  return safeObject(commands[name]).status === 'healthy';
 }
 
 function easytierOverviewText(easytier){

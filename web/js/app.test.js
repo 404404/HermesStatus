@@ -119,6 +119,7 @@ async function run(){
 		peers: {direct: 0, relay: 0, unknown_path: 0},
 		traffic: {bytes_rx: 0, bytes_tx: 0, bytes_forwarded: 0}
 	}), {peers: '数据不可用', traffic: '数据不可用'});
+	assert.deepEqual(app.easytierOverviewText({}), {peers: '数据不可用', traffic: '数据不可用'});
 	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: null}, true), '未观察到');
 	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: true}, true), '是');
 	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: null}, false), '数据不可用');
@@ -613,7 +614,7 @@ async function run(){
   assert.match(hardwareMarkup, /id="hardwareFilesystemsBody"/);
   assert.match(hardwareMarkup, /卷 \/ 文件系统/);
   assert.match(indexMarkup, /css\/app\.css\?v=20260813-6/);
-  assert.match(indexMarkup, /js\/app\.js\?v=20260813-6/);
+  assert.match(indexMarkup, /js\/app\.js\?v=20260823-1/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
   assert.deepEqual(
     [...hardwareMarkup.matchAll(/<th>([^<]+)<\/th>/g)].map(match => match[1]),
