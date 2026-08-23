@@ -162,6 +162,39 @@ class RegistryTests(unittest.TestCase):
         finally:
             (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
 
+    def test_configured_main_model_overrides_lagging_cli_identity(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {
+                "status": "ok", "health": {"status": "ok"},
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({}),
+            }
+            module.hermes_cli_status = lambda _profile: """
+◆ Environment
+  Model: deepseek-v4-pro
+  Provider: OpenCode Go
+"""
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True,
+                "main_model": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
+                "docker_volumes": [],
+            })
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["model"], "gpt-5.6-luna")
+        self.assertEqual(payload["provider"], "openai-codex")
+        self.assertEqual(payload["usage_mode"], "auth_provider")
+
     def test_unmatched_provider_uses_profile_config_mtime(self):
         profile_dir = self.root / "daily"
         profile_dir.mkdir()

@@ -1119,11 +1119,22 @@ def profile_stats(profile, profile_dir, previous=None):
         config_summary = sanitize_summary_snapshot(config_summary)
 
     profile_configuration = profile_config(profile)
-    model = cli.get("model") or first_string(detailed, ("model",)) or first_string(health, ("model",))
-    model = fallback_value(model, previous, "model", _dict(config_summary.get("main_model")).get("model") or None)
-    configured_provider = public_text(profile_configuration.get("provider_label"), MAX_PROVIDER) or None
-    provider = cli.get("provider") or first_string(detailed, ("provider",)) or first_string(health, ("provider",)) or configured_provider
-    provider = fallback_value(provider, previous, "provider", _dict(config_summary.get("main_model")).get("provider") or None)
+    configured_main_model = _dict(config_summary.get("main_model"))
+    configured_model = public_text(configured_main_model.get("model"), MAX_MODEL) or None
+    configured_provider = (
+        public_text(profile_configuration.get("provider_label"), MAX_PROVIDER)
+        or public_text(configured_main_model.get("provider"), MAX_PROVIDER)
+        or None
+    )
+    # The profile configuration is the authoritative main-agent identity.  A
+    # CLI status response can lag after an operator switches provider/model,
+    # so only use it when the sanitized profile config has no corresponding
+    # value.  Runtime/API data remains useful as the fallback for unconfigured
+    # profiles.
+    model = configured_model or cli.get("model") or first_string(detailed, ("model",)) or first_string(health, ("model",))
+    model = fallback_value(model, previous, "model")
+    provider = configured_provider or cli.get("provider") or first_string(detailed, ("provider",)) or first_string(health, ("provider",))
+    provider = fallback_value(provider, previous, "provider")
     api_version = first_string(detailed, ("agent_version", "version")) or first_string(health, ("agent_version", "version"))
     version = fallback_value(api_version or hermes_agent_version(), previous, "agent_version")
     api_status = api.get("status", "unknown")
@@ -1163,7 +1174,10 @@ def profile_stats(profile, profile_dir, previous=None):
         gateway_value = state
     manager_value = cli.get("manager_mode") or profile_configuration.get("manager_mode")
     configured_usage_mode = _string(profile_configuration.get("usage_mode")).strip().lower()
-    if cli_available:
+    configured_provider_usage_mode = provider_usage_mode(configured_provider)
+    if configured_provider_usage_mode != "unknown":
+        usage_mode = configured_provider_usage_mode
+    elif cli_available:
         usage_mode = cli.get("usage_mode") or "unknown"
     elif configured_usage_mode in ("api", "auth_provider"):
         usage_mode = configured_usage_mode
