@@ -195,6 +195,45 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["provider"], "openai-codex")
         self.assertEqual(payload["usage_mode"], "auth_provider")
 
+    def test_cached_config_summary_does_not_override_live_cli_identity(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        previous = profile_payload(module, "daily")
+        previous["config_summary"] = module.sanitize_summary_snapshot({
+            "config_found": True,
+            "main_model": {"provider": "openai-codex", "model": "gpt-5.5"},
+            "docker_volumes": [],
+        })
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {
+                "status": "ok", "health": {"status": "ok"},
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({}),
+            }
+            module.hermes_cli_status = lambda _profile: """
+◆ Environment
+  Model: gpt-5.6-luna
+  Provider: OpenAI Codex
+◆ Auth Providers
+  OpenAI Codex ✓ logged in
+"""
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": False, "docker_volumes": [],
+            })
+            payload = module.profile_stats("daily", profile_dir, previous)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["model"], "gpt-5.6-luna")
+        self.assertEqual(payload["provider"], "OpenAI Codex")
+        self.assertEqual(payload["usage_mode"], "auth_provider")
+
     def test_unmatched_provider_uses_profile_config_mtime(self):
         profile_dir = self.root / "daily"
         profile_dir.mkdir()

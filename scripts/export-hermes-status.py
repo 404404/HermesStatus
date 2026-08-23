@@ -1113,13 +1113,17 @@ def profile_stats(profile, profile_dir, previous=None):
         profile_dir=str(profile_dir),
         config_path=profile_config_path_for(profile),
     )
-    if not config_summary.get("config_found") and isinstance(previous.get("config_summary"), dict):
+    current_config_found = config_summary.get("config_found") is True
+    if not current_config_found and isinstance(previous.get("config_summary"), dict):
         config_summary = sanitize_summary_snapshot(previous.get("config_summary"))
     else:
         config_summary = sanitize_summary_snapshot(config_summary)
 
     profile_configuration = profile_config(profile)
-    configured_main_model = _dict(config_summary.get("main_model"))
+    # A retained summary is useful context for a temporarily unreadable
+    # configuration file, but must never override a live CLI/API identity.
+    # Only an actively read configuration is authoritative for the main model.
+    configured_main_model = _dict(config_summary.get("main_model")) if current_config_found else {}
     configured_model = public_text(configured_main_model.get("model"), MAX_MODEL) or None
     configured_provider = (
         public_text(profile_configuration.get("provider_label"), MAX_PROVIDER)
