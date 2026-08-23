@@ -41,7 +41,7 @@ never to `0.0.0.0` or a public address. Mount only the EasyTier CLI binary into
 the Client, read-only; do not mount its configuration or secrets. If Device v2
 uses a TLS proxy, set the Server's trusted-proxy CIDR to that proxy only and
 keep backend HTTP private to the Compose network. Confirm `easytier.status`,
-all five command statuses, and the selected device in `/json/stats.json` before
+all four periodic command statuses, and the selected device in `/json/stats.json` before
 any promotion. A zero remote-peer count is valid for a single-node overlay.
 
 ## Hardware, SMART, and filesystem access

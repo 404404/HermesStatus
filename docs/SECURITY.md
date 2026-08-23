@@ -26,12 +26,13 @@ Bearer token only to the trusted HTTPS ingress route.
 
 ## EasyTier collector boundary
 
-EasyTier monitoring permits exactly `node info`, `peer list`, `route list`,
-`connector list`, and `stats show`, through a loopback-only RPC portal. It uses
+EasyTier monitoring permits exactly `node`, `peer`, `connector`, and `stats`,
+through a loopback-only RPC portal. It uses
 an absolute executable and argv-based subprocess invocation with no shell. The
-projection excludes configuration, keys, credentials, RPC addresses, STUN data,
-public/listener endpoints, raw JSON, and stderr. Unknown payload fields are
-rejected by the Server before persistence and UI projection.
+projection excludes configuration, keys, credentials, RPC addresses, raw JSON,
+and stderr. It retains only bounded, credential-free listener/connector
+endpoints and selected STUN diagnostics. Unknown payload fields are rejected by
+the Server before persistence and UI projection.
 
 ## Device v2 ingress
 
@@ -82,12 +83,13 @@ compares the full revision with the OCI revision label.
 ## EasyTier monitoring
 
 EasyTier monitoring is loopback-RPC and read-only. The runtime command allowlist
-contains only `node info`, `peer list`, `route list`, `connector list`, and
-`stats show`; it has no connector/route/credential/whitelist/port-forward/logger
-or restart operation. It never persists or renders raw config, endpoint,
-credential, network secret, Noise key, STUN address, or command stderr.
+contains only `node`, `peer`, `connector`, and `stats`; it has no
+connector/route/credential/whitelist/port-forward/logger
+or restart operation. It never persists or renders raw config, credential,
+network secret, Noise key, or command stderr. Retained endpoints have no
+credentials, query, or fragment.
 
 All detailed values are server-validated and rendered as escaped text. Public
-addresses and CIDRs are rejected from the projection. A malformed, partial, or
-unsupported response is safer as unavailable/degraded/unsupported than a false
-empty or healthy view.
+CIDRs are rejected; only bounded public IP observations supplied by `node` STUN
+diagnostics are retained. A malformed, partial, or unsupported response is
+safer as unavailable/degraded/unsupported than a false empty or healthy view.

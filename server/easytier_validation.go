@@ -3,6 +3,9 @@ package main
 import (
 	"encoding/json"
 	"net/netip"
+	"net/url"
+	"sort"
+	"strings"
 )
 
 var internalEasyTierCIDRPrefixes = []netip.Prefix{
@@ -42,6 +45,8 @@ func ValidateEasyTierStats(stats *EasyTierStats) error {
 		"easytier.node.network_name":  stats.Node.NetworkName,
 		"easytier.node.version":       stats.Node.Version,
 		"easytier.node.peer_id":       stats.Node.PeerID,
+		"easytier.node.hostname":      stats.Node.Hostname,
+		"easytier.node.inst_id":       stats.Node.InstanceID,
 	} {
 		if err := validateOptionalString(field, value, MaxEasyTierTextLength); err != nil {
 			return err
@@ -51,6 +56,9 @@ func ValidateEasyTierStats(stats *EasyTierStats) error {
 		return err
 	}
 	if err := validateInternalCIDRs("easytier.node.proxy_cidrs", stats.Node.ProxyCIDRs); err != nil {
+		return err
+	}
+	if err := validateEasyTierNodeDetails(&stats.Node); err != nil {
 		return err
 	}
 	if stats.Node.AdministrativeRole != nil && !validEasyTierAdministrativeRole(*stats.Node.AdministrativeRole) {
@@ -98,6 +106,31 @@ func ValidateEasyTierStats(stats *EasyTierStats) error {
 			return validationError(validationCodeInvalidValue, field, "counter is invalid")
 		}
 	}
+	for field, value := range map[string]int64{
+		"easytier.traffic.packets_rx": stats.Traffic.PacketsRX,
+		"easytier.traffic.packets_tx": stats.Traffic.PacketsTX,
+	} {
+		if value < 0 || value > MaxSafeInteger {
+			return validationError(validationCodeInvalidValue, field, "counter is invalid")
+		}
+	}
+	if err := validateOptionalBoundedFloat("easytier.traffic.rx_bps", stats.Traffic.RXBPS, float64(MaxSafeInteger)); err != nil {
+		return err
+	}
+	if err := validateOptionalBoundedFloat("easytier.traffic.tx_bps", stats.Traffic.TXBPS, float64(MaxSafeInteger)); err != nil {
+		return err
+	}
+	if len(stats.Traffic.ByInstance) > 16 || len(stats.Traffic.Samples) > 64 {
+		return validationError(validationCodeInvalidValue, "easytier.traffic", "contains too many bounded detail items")
+	}
+	for index := range stats.Traffic.ByInstance {
+		if err := validateEasyTierInstanceTraffic(&stats.Traffic.ByInstance[index]); err != nil {
+			return err
+		}
+	}
+	if err := validateEasyTierMetricSamples(stats.Traffic.Samples); err != nil {
+		return err
+	}
 	for _, command := range []EasyTierCommandStatus{stats.CommandStatus.NodeInfo, stats.CommandStatus.PeerList, stats.CommandStatus.RouteList, stats.CommandStatus.ConnectorList, stats.CommandStatus.StatsShow} {
 		if !validEasyTierStatus(command.Status) {
 			return validationError(validationCodeInvalidValue, "easytier.command_status", "contains an unsupported status")
@@ -124,6 +157,32 @@ func ValidateEasyTierStats(stats *EasyTierStats) error {
 	return validatePayloadSize("easytier", stats, MaxEasyTierPayloadBytes)
 }
 
+func validateEasyTierNodeDetails(node *EasyTierNodeStats) error {
+	if len(node.Listeners) > 16 || len(node.STUNInfo.PublicIPs) > 16 {
+		return validationError(validationCodeInvalidValue, "easytier.node", "contains too many detail values")
+	}
+	for _, listener := range node.Listeners {
+		if err := validateEasyTierListener("easytier.node.listeners", listener); err != nil {
+			return err
+		}
+	}
+	for _, address := range node.STUNInfo.PublicIPs {
+		if _, err := netip.ParseAddr(address); err != nil {
+			return validationError(validationCodeInvalidValue, "easytier.node.stun_info.public_ips", "contains an invalid address")
+		}
+	}
+	for field, value := range map[string]*string{
+		"easytier.node.stun_info.udp_nat_type":     node.STUNInfo.UDPNATType,
+		"easytier.node.stun_info.tcp_nat_type":     node.STUNInfo.TCPNATType,
+		"easytier.node.stun_info.last_update_time": node.STUNInfo.LastUpdateTime,
+	} {
+		if err := validateOptionalString(field, value, MaxEasyTierTextLength); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validEasyTierStatus(value EasyTierStatus) bool {
 	switch value {
 	case EasyTierHealthy, EasyTierDegraded, EasyTierUnavailable, EasyTierStale, EasyTierNotConfigured, EasyTierUnsupportedVersion, EasyTierInvalidData:
@@ -145,7 +204,7 @@ func validateEasyTierPeer(peer *EasyTierPeer) error {
 	if peer == nil || !validEasyTierPathState(peer.PathState) || !validEasyTierTransport(peer.Transport) || !validEasyTierAddressFamily(peer.AddressFamily) {
 		return validationError(validationCodeInvalidValue, "easytier.peers.items", "contains an invalid enum")
 	}
-	for field, value := range map[string]*string{"peer_id": peer.PeerID, "hostname": peer.Hostname, "version": peer.Version} {
+	for field, value := range map[string]*string{"peer_id": peer.PeerID, "hostname": peer.Hostname, "version": peer.Version, "cost": peer.Cost, "nat_type": peer.NATType, "rx_display": peer.RXDisplay, "tx_display": peer.TXDisplay} {
 		if err := validateOptionalString("easytier.peers.items."+field, value, MaxEasyTierTextLength); err != nil {
 			return err
 		}
@@ -162,6 +221,14 @@ func validateEasyTierPeer(peer *EasyTierPeer) error {
 	for field, value := range map[string]int64{"rx_bytes": peer.RXBytes, "tx_bytes": peer.TXBytes, "rx_packets": peer.RXPackets, "tx_packets": peer.TXPackets} {
 		if value < 0 || value > MaxSafeInteger {
 			return validationError(validationCodeInvalidValue, "easytier.peers.items."+field, "is invalid")
+		}
+	}
+	if len(peer.EstablishedTunnels) > 8 {
+		return validationError(validationCodeInvalidValue, "easytier.peers.items.established_tunnels", "is too large")
+	}
+	for _, tunnel := range peer.EstablishedTunnels {
+		if len(tunnel) == 0 || len(tunnel) > 16 || !isEasyTierIdentifier(tunnel) {
+			return validationError(validationCodeInvalidValue, "easytier.peers.items.established_tunnels", "contains an invalid tunnel")
 		}
 	}
 	return nil
@@ -195,7 +262,80 @@ func validateEasyTierConnector(connector *EasyTierConnector) error {
 	if connector.Port != nil && (*connector.Port < 1 || *connector.Port > 65535) {
 		return validationError(validationCodeInvalidValue, "easytier.connectors.items.port", "is invalid")
 	}
+	if connector.RawStatus != nil && (*connector.RawStatus < 0 || *connector.RawStatus > 2147483647) {
+		return validationError(validationCodeInvalidValue, "easytier.connectors.items.raw_status", "is invalid")
+	}
+	if connector.URL != nil {
+		if err := validateEasyTierListener("easytier.connectors.items.url", *connector.URL); err != nil {
+			return err
+		}
+	}
+	if err := validateOptionalString("easytier.connectors.items.endpoint", connector.Endpoint, MaxEasyTierTextLength); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateEasyTierListener(field, value string) error {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "" || !validEasyTierTransport(parsed.Scheme) || parsed.Port() == "" {
+		return validationError(validationCodeInvalidValue, field, "contains an invalid listener")
+	}
+	return validateRequiredString(field, value, MaxEasyTierTextLength)
+}
+
+func validateEasyTierInstanceTraffic(item *EasyTierInstanceTraffic) error {
+	if item == nil {
+		return validationError(validationCodeInvalidValue, "easytier.traffic.by_instance", "contains a nil item")
+	}
+	for field, value := range map[string]*string{
+		"network_name": item.NetworkName, "from_instance_id": item.FromInstanceID, "to_instance_id": item.ToInstanceID,
+	} {
+		if err := validateOptionalString("easytier.traffic.by_instance."+field, value, MaxEasyTierTextLength); err != nil {
+			return err
+		}
+	}
+	for field, value := range map[string]*int64{"bytes_rx": item.BytesRX, "bytes_tx": item.BytesTX, "packets_rx": item.PacketsRX, "packets_tx": item.PacketsTX} {
+		if value != nil && (*value < 0 || *value > MaxSafeInteger) {
+			return validationError(validationCodeInvalidValue, "easytier.traffic.by_instance."+field, "is invalid")
+		}
+	}
+	return nil
+}
+
+func validateEasyTierMetricSamples(samples []EasyTierMetricSample) error {
+	identities := map[string]bool{}
+	for _, sample := range samples {
+		if sample.Value < 0 || sample.Value > MaxSafeInteger || len(sample.Labels) > 8 || !isEasyTierIdentifier(sample.Name) {
+			return validationError(validationCodeInvalidValue, "easytier.traffic.samples", "contains an invalid metric")
+		}
+		labels := make([]string, 0, len(sample.Labels))
+		for key, value := range sample.Labels {
+			if !isEasyTierIdentifier(key) || validateRequiredString("easytier.traffic.samples.labels", value, MaxEasyTierTextLength) != nil {
+				return validationError(validationCodeInvalidValue, "easytier.traffic.samples.labels", "contains an invalid label")
+			}
+			labels = append(labels, key+"="+value)
+		}
+		sort.Strings(labels)
+		identity := sample.Name + "\x00" + strings.Join(labels, "\x00")
+		if identities[identity] {
+			return validationError(validationCodeInvalidValue, "easytier.traffic.samples", "contains duplicate name and labels")
+		}
+		identities[identity] = true
+	}
+	return nil
+}
+
+func isEasyTierIdentifier(value string) bool {
+	if len(value) == 0 || len(value) > 64 {
+		return false
+	}
+	for _, character := range value {
+		if !(character >= 'a' && character <= 'z' || character >= '0' && character <= '9' || character == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func validateOptionalInternalIPv4(field string, value *string) error {
@@ -312,6 +452,17 @@ func SanitizeEasyTierStats(input EasyTierStats) EasyTierStats {
 	result.Node.Version = sanitizeStringPointer(result.Node.Version)
 	result.Node.PeerID = sanitizeStringPointer(result.Node.PeerID)
 	result.Node.OverlayIPv4 = sanitizeStringPointer(result.Node.OverlayIPv4)
+	result.Node.Hostname = sanitizeStringPointer(result.Node.Hostname)
+	result.Node.InstanceID = sanitizeStringPointer(result.Node.InstanceID)
+	result.Node.STUNInfo.UDPNATType = sanitizeStringPointer(result.Node.STUNInfo.UDPNATType)
+	result.Node.STUNInfo.TCPNATType = sanitizeStringPointer(result.Node.STUNInfo.TCPNATType)
+	result.Node.STUNInfo.LastUpdateTime = sanitizeStringPointer(result.Node.STUNInfo.LastUpdateTime)
+	for index := range result.Node.Listeners {
+		result.Node.Listeners[index] = SanitizeText(result.Node.Listeners[index])
+	}
+	for index := range result.Node.STUNInfo.PublicIPs {
+		result.Node.STUNInfo.PublicIPs[index] = SanitizeText(result.Node.STUNInfo.PublicIPs[index])
+	}
 	for index := range result.Node.ProxyCIDRs {
 		result.Node.ProxyCIDRs[index] = canonicalEasyTierCIDR(result.Node.ProxyCIDRs[index])
 	}
@@ -329,6 +480,13 @@ func SanitizeEasyTierStats(input EasyTierStats) EasyTierStats {
 		peer.OverlayIPv4 = sanitizeStringPointer(peer.OverlayIPv4)
 		peer.Hostname = sanitizeStringPointer(peer.Hostname)
 		peer.Version = sanitizeStringPointer(peer.Version)
+		peer.Cost = sanitizeStringPointer(peer.Cost)
+		peer.NATType = sanitizeStringPointer(peer.NATType)
+		peer.RXDisplay = sanitizeStringPointer(peer.RXDisplay)
+		peer.TXDisplay = sanitizeStringPointer(peer.TXDisplay)
+		for tunnelIndex := range peer.EstablishedTunnels {
+			peer.EstablishedTunnels[tunnelIndex] = SanitizeText(peer.EstablishedTunnels[tunnelIndex])
+		}
 	}
 	for index := range result.Routes.Items {
 		route := &result.Routes.Items[index]
@@ -342,6 +500,26 @@ func SanitizeEasyTierStats(input EasyTierStats) EasyTierStats {
 			cleanCIDRs = append(cleanCIDRs, canonicalEasyTierCIDR(cidr))
 		}
 		route.ProxyCIDRs = cleanCIDRs
+	}
+	for index := range result.Connectors.Items {
+		connector := &result.Connectors.Items[index]
+		connector.URL = sanitizeStringPointer(connector.URL)
+		connector.Endpoint = sanitizeStringPointer(connector.Endpoint)
+	}
+	for index := range result.Traffic.ByInstance {
+		item := &result.Traffic.ByInstance[index]
+		item.NetworkName = sanitizeStringPointer(item.NetworkName)
+		item.FromInstanceID = sanitizeStringPointer(item.FromInstanceID)
+		item.ToInstanceID = sanitizeStringPointer(item.ToInstanceID)
+	}
+	for index := range result.Traffic.Samples {
+		sample := &result.Traffic.Samples[index]
+		sample.Name = SanitizeText(sample.Name)
+		cleanLabels := make(map[string]string, len(sample.Labels))
+		for key, value := range sample.Labels {
+			cleanLabels[SanitizeText(key)] = SanitizeText(value)
+		}
+		sample.Labels = cleanLabels
 	}
 	return result
 }

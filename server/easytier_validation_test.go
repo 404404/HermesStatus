@@ -142,25 +142,21 @@ func TestEasyTierExpectationIsDiagnosticOnlyAndRequiresObservedRole(t *testing.T
 	}
 }
 
-func TestEasyTierExpectationRequiresSuccessfulSourcesAndUsesOnlyLocalRoutes(t *testing.T) {
+func TestEasyTierExpectationUsesNodeProxyCIDRsWithoutPeriodicRoutes(t *testing.T) {
 	expectation := &contracts.EasyTierExpectation{AdministrativeRole: "site_router", NetworkName: "home-404", OverlayIPv4: "10.250.250.1", ProxyCIDRs: []string{"192.168.68.0/24"}}
 	overlay, network, role := "10.250.250.1", "home-404", "site_router"
 	stats := validEasyTierFixture()
 	stats.Stale = false
 	stats.Node.OverlayIPv4, stats.Node.NetworkName, stats.Node.AdministrativeRole = &overlay, &network, &role
 	stats.Node.ProxyCIDRs = []string{"192.168.68.0/24"}
-	stats.Routes.Items = []EasyTierRoute{
-		{ProxyCIDRs: []string{"192.168.68.0/24"}, IsLocal: true},
-		{ProxyCIDRs: []string{"192.168.88.0/24"}, IsLocal: false},
-	}
 	projection := projectEasyTierExpectation(expectation, &stats).(map[string]any)
 	if projection["result"] != "matched" {
-		t.Fatalf("remote route contaminated local expectation: %#v", projection)
+		t.Fatalf("node proxy CIDRs did not produce the expected comparison: %#v", projection)
 	}
 	stats.CommandStatus.RouteList.Status = EasyTierUnavailable
 	projection = projectEasyTierExpectation(expectation, &stats).(map[string]any)
-	if projection["result"] != "not_observable" {
-		t.Fatalf("failed route source became a comparison result: %#v", projection)
+	if projection["result"] != "matched" {
+		t.Fatalf("non-periodic route status affected node observation: %#v", projection)
 	}
 	stats.CommandStatus.RouteList.Status = EasyTierHealthy
 	stats.CommandStatus.NodeInfo.Status = EasyTierUnavailable
@@ -206,10 +202,38 @@ func TestEasyTierExpectationBoundsObservedCIDRProjection(t *testing.T) {
 	for index := 0; index < 16; index++ {
 		stats.Node.ProxyCIDRs = append(stats.Node.ProxyCIDRs, fmt.Sprintf("192.168.%d.0/24", index))
 	}
-	stats.Routes.Items = []EasyTierRoute{{ProxyCIDRs: []string{"10.0.0.0/8"}, IsLocal: true}}
 	projection := projectEasyTierExpectation(expectation, &stats).(map[string]any)
 	observed := projection["observed"].(map[string]any)["proxy_cidrs"].([]string)
 	if len(observed) != 16 {
 		t.Fatalf("observed CIDR projection exceeds its contract bound: %#v", observed)
+	}
+}
+
+func TestEasyTierMetricSamplesPreserveLabelIdentityAndRejectSecrets(t *testing.T) {
+	stats := validEasyTierFixture()
+	stats.Traffic.Samples = []EasyTierMetricSample{
+		{Name: "peer_rpc_client_rx", Value: 1, Labels: map[string]string{"method_name": "first"}},
+		{Name: "peer_rpc_client_rx", Value: 2, Labels: map[string]string{"method_name": "second"}},
+	}
+	if err := ValidateEasyTierStats(&stats); err != nil {
+		t.Fatalf("same metric name with distinct labels was rejected: %v", err)
+	}
+	stats.Traffic.Samples = append(stats.Traffic.Samples, EasyTierMetricSample{Name: "peer_rpc_client_rx", Value: 3, Labels: map[string]string{"method_name": "first"}})
+	if err := ValidateEasyTierStats(&stats); err == nil {
+		t.Fatal("duplicate name and labels was accepted")
+	}
+	stats = validEasyTierFixture()
+	secret := "token=must-not-appear"
+	stats.Node.Hostname = &secret
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeEasyTierStatsJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Node.Hostname == nil || *decoded.Node.Hostname != RedactedValue {
+		t.Fatalf("secret-like node value was not redacted: %#v", decoded.Node.Hostname)
 	}
 }

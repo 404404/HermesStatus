@@ -5,21 +5,21 @@
 ## 范围与安全边界
 
 EasyTier 仅提供只读监控，不提供管理能力。Client 只允许通过 loopback RPC
-调用五个 CLI 检查命令：`node info`、`peer list`、`route list`、`connector list`
-和 `stats show`。RPC portal 只接受 `127.0.0.0/8` 或 `::1`；子进程使用 argv
+调用四个 CLI 检查命令：`node`、`peer`、`connector` 和 `stats`。RPC portal 只接受 `127.0.0.0/8` 或 `::1`；子进程使用 argv
 数组且 `shell=False`。不允许连接器、路由、白名单、端口转发、凭据、日志或
 服务重启命令。
 
-数据投影只保留有界的 Node、Peer、Route、Connector 和 EasyTier 自身流量
-计数。仅允许内部 Overlay IPv4 与 RFC1918/RFC4193 proxy CIDR。公网端点、DDNS
-主机名、URL query、STUN、凭据、原始配置、原始命令输出和 stderr 都不会进入
-Server、持久化或浏览器。
+数据投影只保留有界的 Node、Peer、Connector 和 EasyTier 自身流量计数。仅允许
+内部 Overlay IPv4 与 RFC1918/RFC4193 proxy CIDR。受限 listener/connector 地址会
+在移除认证信息、query 与 fragment 后保留；Node 的 NAT 类型、public IP 与更新时间
+可作为详情。凭据、原始配置、原始命令输出和 stderr 都不会进入 Server、持久化或浏览器。
 
 ## 语义
 
-`direct` 需要目标 peer ID 与 next-hop peer ID 相同并且存在直接连接证据；
-next hop 不同才是 `relayed`，证据不足为 `unknown`。远端 Peer 为 0 时，Direct、
-Relay 以及 IPv6 UDP Direct 都为 `not_observable`，不是 0 或 false。
+Peer 的 `cost` 保留 CLI 原始值；仅当其为 `p2p` 时投影 `direct`，包含 relay 的
+值投影 `relayed`，其他值为 `unknown`。`tunnel_proto` 表示已建立隧道集合，不能
+推断当前业务实际承载协议。Peer 为 0 时，Direct、Relay 以及 IPv6 UDP Direct
+都为 `not_observable`，不是 0 或 false。
 
 TCP Listener Available、TCP Connector Configured 与 TCP Active 是三个独立
 字段。当前支持基线为 `2.6.4-8428a89d`；兼容性按字段、类型、枚举和边界的

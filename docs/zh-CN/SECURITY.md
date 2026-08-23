@@ -16,7 +16,7 @@ Server 保存 v2 设备 credential digest，而非原始 token。credential 文�
 
 ## EasyTier 采集边界
 
-EasyTier 监控只允许通过仅回环 RPC 执行 `node info`、`peer list`、`route list`、`connector list` 与 `stats show`。采集器使用绝对可执行路径和 argv 子进程调用，不使用 shell。投影不包含配置、密钥、credential、RPC 地址、STUN 数据、公网或监听端点、原始 JSON 和 stderr。服务端会在持久化和 UI 投影前拒绝未知字段。
+EasyTier 监控只允许通过仅回环 RPC 执行 `node`、`peer`、`connector` 与 `stats`。采集器使用绝对可执行路径和 argv 子进程调用，不使用 shell。投影不包含配置、密钥、credential、RPC 地址、原始 JSON 和 stderr。服务端会在持久化和 UI 投影前拒绝未知字段。
 
 ## Device v2 入口
 
@@ -40,8 +40,8 @@ EasyTier 监控只允许通过仅回环 RPC 执行 `node info`、`peer list`、`
 
 ## EasyTier 监控
 
-EasyTier 只使用 loopback RPC 的只读监控。运行时命令白名单仅包含 `node info`、
-`peer list`、`route list`、`connector list` 和 `stats show`；没有 connector/route/
+EasyTier 只使用 loopback RPC 的只读监控。运行时命令白名单仅包含 `node`、
+`peer`、`connector` 和 `stats`；没有 connector/route/
 credential/whitelist/port-forward/logger 或 restart 操作。原始配置、端点、凭据、
 network secret、Noise key、STUN 地址与命令 stderr 都不会被持久化或渲染。
 

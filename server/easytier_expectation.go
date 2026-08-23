@@ -14,21 +14,10 @@ func projectEasyTierExpectation(expectation *contracts.EasyTierExpectation, stat
 		return map[string]any{"configured": false, "result": "not_configured"}
 	}
 	nodeObserved := stats != nil && !stats.Stale && stats.CommandStatus.NodeInfo.Status == EasyTierHealthy
-	routesObserved := stats != nil && !stats.Stale && stats.CommandStatus.RouteList.Status == EasyTierHealthy
 	observedCIDRs := map[string]bool{}
 	if nodeObserved {
 		for _, cidr := range stats.Node.ProxyCIDRs {
 			observedCIDRs[cidr] = true
-		}
-	}
-	if routesObserved {
-		for _, route := range stats.Routes.Items {
-			if !route.IsLocal {
-				continue
-			}
-			for _, cidr := range route.ProxyCIDRs {
-				observedCIDRs[cidr] = true
-			}
 		}
 	}
 	observedAll := make([]string, 0, len(observedCIDRs))
@@ -41,7 +30,7 @@ func projectEasyTierExpectation(expectation *contracts.EasyTierExpectation, stat
 		observed = observed[:16]
 	}
 	result := "not_observable"
-	if nodeObserved && routesObserved && stats.Node.NetworkName != nil && stats.Node.OverlayIPv4 != nil && stats.Node.AdministrativeRole != nil {
+	if nodeObserved && stats.Node.NetworkName != nil && stats.Node.OverlayIPv4 != nil && stats.Node.AdministrativeRole != nil {
 		result = "matched"
 		if *stats.Node.NetworkName != expectation.NetworkName || *stats.Node.OverlayIPv4 != expectation.OverlayIPv4 || *stats.Node.AdministrativeRole != expectation.AdministrativeRole || !sameStringSet(observedAll, expectation.ProxyCIDRs) {
 			result = "mismatch"
