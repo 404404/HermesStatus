@@ -582,7 +582,11 @@ class EasyTierCollector(object):
         peers = _as_list(value)
         result = payload["peers"]
         for peer in peers:
-            peer_id = _safe_text(_lookup(peer, "id"), 32)
+            peer_id = _safe_text(_lookup(peer, "peer_id", "virtual_peer_id", "id"), 32)
+            # EasyTier 2.6 peer output may include the local node.  It is a
+            # useful CLI row, but never a remote peer observation.
+            if own_peer_id is not None and peer_id == own_peer_id:
+                continue
             overlay_ipv4 = _internal_ip(_lookup(peer, "ipv4"))
             cost = _safe_text(_lookup(peer, "cost"), 64)
             normalized_cost = (cost or "").lower()
