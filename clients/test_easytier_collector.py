@@ -108,8 +108,8 @@ class EasyTierCollectorTests(unittest.TestCase):
 
     def test_peer_connector_and_empty_connector_semantics(self):
         payload = EasyTierCollector(environ=self.environ, runner=Runner()).collect()
-        local, peer = payload["peers"]["items"]
-        self.assertIsNone(local["latency_ms"])
+        self.assertEqual(payload["peers"]["total"], 1)
+        peer = payload["peers"]["items"][0]
         self.assertEqual(peer["cost"], "p2p")
         self.assertEqual(peer["established_tunnels"], ["tcp6", "udp"])
         self.assertEqual(peer["rx_display"], "814.06 kB")
@@ -123,6 +123,36 @@ class EasyTierCollectorTests(unittest.TestCase):
         empty = EasyTierCollector(environ=self.environ, runner=EmptyConnectorRunner()).collect()
         self.assertEqual(empty["connectors"]["total"], 0)
         self.assertEqual(empty["status"], "healthy")
+
+    def test_local_peer_is_excluded_from_remote_peer_aggregates(self):
+        class SingleNodeRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                if tuple(argv[5:]) == ("peer",):
+                    self.calls.append((list(argv), kwargs))
+                    return Result([{
+                        "id": 12345, "ipv4": "10.250.250.1", "cost": "Local",
+                        "rx_bytes": "0 B", "tx_bytes": "0 B",
+                    }])
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=SingleNodeRunner()).collect()
+        self.assertEqual(payload["command_status"]["peer_list"]["status"], "healthy")
+        self.assertEqual(payload["peers"]["items"], [])
+        self.assertEqual(payload["peers"]["total"], 0)
+        self.assertEqual(payload["peers"]["direct"], 0)
+        self.assertEqual(payload["peers"]["relay"], 0)
+        self.assertEqual(payload["peers"]["unknown_path"], 0)
+        self.assertIsNone(payload["peers"]["ipv6_udp_direct"])
+
+    def test_local_marker_is_excluded_when_node_info_is_unavailable(self):
+        payload = EasyTierCollector(
+            environ=self.environ,
+            runner=Runner({("node",)}),
+        ).collect()
+        self.assertEqual(payload["command_status"]["node_info"]["status"], "unavailable")
+        self.assertEqual(payload["command_status"]["peer_list"]["status"], "healthy")
+        self.assertEqual(payload["peers"]["total"], 1)
+        self.assertEqual(payload["peers"]["items"][0]["peer_id"], "54321")
 
     def test_unknown_connector_status_is_not_guessed(self):
         class UnknownConnectorRunner(Runner):

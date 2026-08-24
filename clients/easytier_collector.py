@@ -582,10 +582,15 @@ class EasyTierCollector(object):
         peers = _as_list(value)
         result = payload["peers"]
         for peer in peers:
-            peer_id = _safe_text(_lookup(peer, "id"), 32)
-            overlay_ipv4 = _internal_ip(_lookup(peer, "ipv4"))
+            peer_id = _safe_text(_lookup(peer, "peer_id", "virtual_peer_id", "id"), 32)
             cost = _safe_text(_lookup(peer, "cost"), 64)
             normalized_cost = (cost or "").lower()
+            # EasyTier 2.6 peer output may include the local node.  It is a
+            # useful CLI row, but never a remote peer observation.  The
+            # explicit Local marker is also safe when node-info is unavailable.
+            if (own_peer_id is not None and peer_id == own_peer_id) or normalized_cost == "local":
+                continue
+            overlay_ipv4 = _internal_ip(_lookup(peer, "ipv4"))
             path_state = "direct" if normalized_cost == "p2p" else "relayed" if "relay" in normalized_cost else "unknown"
             tunnels = []
             raw_tunnels = _safe_text(_lookup(peer, "tunnel_proto"), 128)

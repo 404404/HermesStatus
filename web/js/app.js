@@ -728,12 +728,31 @@ function fitOverviewSingleLineValues(){
   fitSingleLineValues('[data-fit-single-line="hardware-home"]', 23, 10);
 }
 
+function easytierCommandAvailable(easytier, name){
+  const commands = safeObject(safeObject(easytier).command_status);
+  return safeObject(commands[name]).status === 'healthy';
+}
+
+function easytierOverviewText(easytier){
+  const peers = safeObject(easytier?.peers);
+  const traffic = safeObject(easytier?.traffic);
+  return {
+    peers: easytierCommandAvailable(easytier, 'peer_list')
+      ? finiteNumber(peers.total) === 0
+        ? '0（— / — / —）'
+        : `${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)}`
+      : '数据不可用',
+    traffic: easytierCommandAvailable(easytier, 'stats_show')
+      ? `${formatTrafficBytes(traffic.bytes_rx)} / ${formatTrafficBytes(traffic.bytes_tx)} / ${formatTrafficBytes(traffic.bytes_forwarded)}`
+      : '数据不可用'
+  };
+}
+
 function renderOverview(view){
   const resources = view.resources;
-  const peers = safeObject(view.easytier.peers);
-  const traffic = safeObject(view.easytier.traffic);
-  const peerText = `${formatInteger(peers.direct)} / ${formatInteger(peers.relay)} / ${formatInteger(peers.unknown_path)}`;
-  const trafficText = `${formatTrafficBytes(traffic.bytes_rx)} / ${formatTrafficBytes(traffic.bytes_tx)} / ${formatTrafficBytes(traffic.bytes_forwarded)}`;
+  const easytierOverview = easytierOverviewText(view.easytier);
+  const peerText = easytierOverview.peers;
+  const trafficText = easytierOverview.traffic;
   byId('overviewCards').innerHTML = `
     <article class="summary-card resource-card">
       <h2>CPU</h2>
@@ -871,11 +890,12 @@ function renderPhysicalDiskRows(hardware){
 
 function renderFilesystemDetails(hardware){
   const filesystems = dataFilesystemItemsForView(hardware);
-  if(!filesystems.length) return '<tr><td colspan="6" class="table-empty">暂无可显示的卷或文件系统数据</td></tr>';
+  if(!filesystems.length) return '<tr><td colspan="7" class="table-empty">暂无可显示的卷或文件系统数据</td></tr>';
   return filesystems.map(filesystem => {
     const usage = valueAt(filesystem, ['usage_percent', 'used_percent']);
     const status = filesystem?.collection_status;
-    return `<tr><td class="mono">${escapeHtml(textOrDash(filesystem.mountpoint))}</td><td class="wide-cell mono" title="${escapeHtml(textOrDash(filesystem.source))}">${escapeHtml(textOrDash(filesystem.source))}</td><td>${escapeHtml(textOrDash(filesystem.fs_type || filesystem.filesystem_type))}</td><td>${escapeHtml(filesystemUsage(filesystem))}</td><td class="table-usage">${resourceBar(usage, '文件系统使用率')}</td><td>${status === null || status === undefined || status === '' ? '-' : badge(status)}</td></tr>`;
+    const backing = filesystemBackingDisks(filesystem);
+    return `<tr><td class="mono">${escapeHtml(textOrDash(filesystem.mountpoint))}</td><td class="wide-cell mono" title="${escapeHtml(textOrDash(filesystem.source))}">${escapeHtml(textOrDash(filesystem.source))}</td><td>${escapeHtml(textOrDash(filesystem.fs_type || filesystem.filesystem_type))}</td><td title="${escapeHtml(backing.title)}">${escapeHtml(backing.text)}</td><td>${escapeHtml(filesystemUsage(filesystem))}</td><td class="table-usage">${resourceBar(usage, '文件系统使用率')}</td><td>${status === null || status === undefined || status === '' ? '-' : badge(status)}</td></tr>`;
   }).join('');
 }
 
@@ -1007,7 +1027,7 @@ function renderEasyTier(view){
 	const connectors = safeObject(easytier.connectors);
 	const traffic = safeObject(easytier.traffic);
 	const commands = safeObject(easytier.command_status);
-	const commandAvailable = name => safeObject(commands[name]).status === 'healthy';
+	const commandAvailable = name => easytierCommandAvailable(easytier, name);
 	const tcpListenerText = commandAvailable('node_info') || commandAvailable('stats_show')
 		? booleanText(connectors.tcp_listener_available)
 		: '数据不可用';
@@ -1253,10 +1273,11 @@ function revisionMarkup(value){
 function deviceDiagnosticsMarkup(view){
   const host = safeObject(view?.host);
   const expectation = safeObject(view?.easytierExpectation);
-  const proxyCidrs = Array.isArray(expectation.proxy_cidrs)
-    ? expectation.proxy_cidrs.map(textOrDash).join(' / ')
+  const expected = safeObject(expectation.expected);
+  const proxyCidrs = Array.isArray(expected.proxy_cidrs)
+    ? expected.proxy_cidrs.map(textOrDash).join(' / ')
     : '-';
-  const expectationConfigured = Object.keys(expectation).length > 0;
+  const expectationConfigured = expectation.configured === true;
   const lastSeen = host.last_seen_at || host.last_seen || host.received_at;
   const lastAccepted = host.last_accepted_at || host.accepted_at || host.collected_at || host.last_collected_at || view?.hardware?.updated_at;
   return [
@@ -1270,9 +1291,9 @@ function deviceDiagnosticsMarkup(view){
     ['最后上线', formatDateTime(lastSeen)],
     ['最后接受 / 采集', formatDateTime(lastAccepted)],
     ['EasyTier 预期已配置', expectationConfigured ? '是' : '否'],
-    ['预期网络', textOrDash(expectation.network_name)],
-    ['预期 Overlay IP', textOrDash(expectation.overlay_ipv4)],
-    ['预期 Proxy CIDRs', proxyCidrs || '-']
+    ['预期网络', expectationConfigured ? textOrDash(expected.network_name) : '-'],
+    ['预期 Overlay IP', expectationConfigured ? textOrDash(expected.overlay_ipv4) : '-'],
+    ['预期 Proxy CIDRs', expectationConfigured ? (proxyCidrs || '-') : '-']
   ].map(([label, value]) => detailRow(label, escapeHtml(value), 'wrap-value')).join('');
 }
 
@@ -1728,7 +1749,9 @@ const exported = {
 	formatCelsius,
   formatTrafficBytes,
   formatUptimeHours,
-  filesystemBackingDisks,
+	filesystemBackingDisks,
+	easytierCommandAvailable,
+	easytierOverviewText,
 	filesystemItemsForView,
 	dataFilesystemItemsForView,
 	luckyServiceSummaryItems,

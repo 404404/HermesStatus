@@ -277,8 +277,7 @@ def profile_config_path_for(profile):
     return _string(profile_config(profile).get("config_path")).strip()
 
 
-def profile_config_refreshed_at(profile):
-    path = profile_config_path_for(profile)
+def profile_config_refreshed_at(path):
     if not path:
         return None
     try:
@@ -532,6 +531,18 @@ def provider_usage_mode(provider):
         "stepfunstepplan": "api",
         "opencodezen": "api",
     }.get(identity, "unknown")
+
+
+def providers_match(left, right):
+    """Return whether two public provider labels identify the same source.
+
+    This deliberately uses a conservative normalized equality check.  A
+    configured identity must not be supplemented by a similarly named but
+    different runtime provider.
+    """
+    left_id = re.sub(r"[^a-z0-9]+", "", _string(left).lower())
+    right_id = re.sub(r"[^a-z0-9]+", "", _string(right).lower())
+    return bool(left_id and right_id and left_id == right_id)
 
 
 def parse_cli_status(text):
@@ -1107,23 +1118,71 @@ def profile_stats(profile, profile_dir, previous=None):
     if usage.get("source") == "unavailable" and previous:
         usage = normalize_previous_usage(previous.get("usage"))
 
-    config_summary = summarize_config(
+    config_result = summarize_config(
         profile=profile,
         hermes_root=str(HERMES_ROOT),
         profile_dir=str(profile_dir),
         config_path=profile_config_path_for(profile),
+        return_source=True,
     )
-    if not config_summary.get("config_found") and isinstance(previous.get("config_summary"), dict):
+    if isinstance(config_result, tuple) and len(config_result) == 2:
+        config_summary, config_source_path = config_result
+    else:
+        # Keep compatibility with test doubles and older in-process helpers.
+        config_summary, config_source_path = config_result, None
+    current_config_found = config_summary.get("config_found") is True
+    if not current_config_found and isinstance(previous.get("config_summary"), dict):
         config_summary = sanitize_summary_snapshot(previous.get("config_summary"))
     else:
         config_summary = sanitize_summary_snapshot(config_summary)
 
     profile_configuration = profile_config(profile)
-    model = cli.get("model") or first_string(detailed, ("model",)) or first_string(health, ("model",))
-    model = fallback_value(model, previous, "model", _dict(config_summary.get("main_model")).get("model") or None)
-    configured_provider = public_text(profile_configuration.get("provider_label"), MAX_PROVIDER) or None
-    provider = cli.get("provider") or first_string(detailed, ("provider",)) or first_string(health, ("provider",)) or configured_provider
-    provider = fallback_value(provider, previous, "provider", _dict(config_summary.get("main_model")).get("provider") or None)
+    # A retained summary is useful context for a temporarily unreadable
+    # configuration file, but must never override a live CLI/API identity.
+    # Only an actively read configuration is authoritative for the main model.
+    configured_main_model = _dict(config_summary.get("main_model")) if current_config_found else {}
+    configured_model = public_text(configured_main_model.get("model"), MAX_MODEL) or None
+    profile_provider_label = public_text(profile_configuration.get("provider_label"), MAX_PROVIDER) or None
+    configured_provider = public_text(configured_main_model.get("provider"), MAX_PROVIDER) or None
+    # A registry label belongs to the current profile only while its current
+    # config was successfully read.  When the config is unavailable, it is a
+    # last-resort label and must remain behind fresh runtime identity.
+    if current_config_found and not configured_provider:
+        configured_provider = profile_provider_label
+
+    live_provider = (
+        cli.get("provider")
+        or first_string(detailed, ("provider",))
+        or first_string(health, ("provider",))
+    )
+    live_model = (
+        cli.get("model")
+        or first_string(detailed, ("model",))
+        or first_string(health, ("model",))
+    )
+    cached_provider = public_text(previous.get("provider"), MAX_PROVIDER) or None
+    cached_model = public_text(previous.get("model"), MAX_MODEL) or None
+
+    # A readable configuration is authoritative, but only provider-compatible
+    # runtime or cached observations may fill an omitted configured model.
+    # This prevents a new provider from being paired with a stale provider's
+    # CLI model or usage mode during a configuration transition.
+    if configured_provider:
+        provider = configured_provider
+        if configured_model:
+            model = configured_model
+        elif providers_match(configured_provider, live_provider):
+            model = live_model
+        elif providers_match(configured_provider, cached_provider):
+            model = cached_model
+        else:
+            model = None
+    else:
+        provider = live_provider or profile_provider_label
+        provider = fallback_value(provider, previous, "provider")
+        model = configured_model or live_model
+        model = fallback_value(model, previous, "model")
+    configured_identity_selected = current_config_found and bool(configured_model or configured_provider)
     api_version = first_string(detailed, ("agent_version", "version")) or first_string(health, ("agent_version", "version"))
     version = fallback_value(api_version or hermes_agent_version(), previous, "agent_version")
     api_status = api.get("status", "unknown")
@@ -1163,7 +1222,17 @@ def profile_stats(profile, profile_dir, previous=None):
         gateway_value = state
     manager_value = cli.get("manager_mode") or profile_configuration.get("manager_mode")
     configured_usage_mode = _string(profile_configuration.get("usage_mode")).strip().lower()
-    if cli_available:
+    configured_provider_usage_mode = provider_usage_mode(configured_provider)
+    if configured_provider:
+        if configured_usage_mode in ("api", "auth_provider"):
+            usage_mode = configured_usage_mode
+        elif configured_provider_usage_mode != "unknown":
+            usage_mode = configured_provider_usage_mode
+        elif providers_match(configured_provider, cli.get("provider")):
+            usage_mode = cli.get("usage_mode") or "unknown"
+        else:
+            usage_mode = "unknown"
+    elif cli_available:
         usage_mode = cli.get("usage_mode") or "unknown"
     elif configured_usage_mode in ("api", "auth_provider"):
         usage_mode = configured_usage_mode
@@ -1173,8 +1242,12 @@ def profile_stats(profile, profile_dir, previous=None):
         usage_mode = provider_usage_mode(provider)
     if usage_mode not in ("api", "auth_provider", "unknown"):
         usage_mode = "unknown"
-    config_refreshed_at = profile_config_refreshed_at(profile)
-    if cli_available:
+    config_refreshed_at = profile_config_refreshed_at(config_source_path or profile_config_path_for(profile))
+    if configured_identity_selected:
+        # The selected identity came from the active profile configuration;
+        # pairing it with a lagging CLI provider refresh would be misleading.
+        model_refreshed_at = config_refreshed_at
+    elif cli_available:
         model_refreshed_at = normalize_timestamp(cli.get("auth_refreshed_at")) or config_refreshed_at
     elif previous_used:
         model_refreshed_at = normalize_timestamp(previous.get("auth_refreshed_at"))

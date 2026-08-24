@@ -109,6 +109,17 @@ async function run(){
   );
   assert.equal(app.formatTrafficBytes(0), '0.0B');
   assert.equal(app.formatTrafficBytes(1000000), '1.0MB');
+	assert.deepEqual(app.easytierOverviewText({
+		command_status: {peer_list: {status: 'healthy'}, stats_show: {status: 'healthy'}},
+		peers: {total: 0, direct: 0, relay: 0, unknown_path: 0},
+		traffic: {bytes_rx: 0, bytes_tx: 0, bytes_forwarded: 0}
+	}), {peers: '0（— / — / —）', traffic: '0.0B / 0.0B / 0.0B'});
+	assert.deepEqual(app.easytierOverviewText({
+		command_status: {peer_list: {status: 'unavailable'}, stats_show: {status: 'invalid_data'}},
+		peers: {direct: 0, relay: 0, unknown_path: 0},
+		traffic: {bytes_rx: 0, bytes_tx: 0, bytes_forwarded: 0}
+	}), {peers: '数据不可用', traffic: '数据不可用'});
+	assert.deepEqual(app.easytierOverviewText({}), {peers: '数据不可用', traffic: '数据不可用'});
 	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: null}, true), '未观察到');
 	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: true}, true), '是');
 	assert.equal(app.ipv6UdpDirectText({ipv6_udp_direct: null}, false), '数据不可用');
@@ -149,6 +160,9 @@ async function run(){
   assert.deepEqual(app.filesystemBackingDisks(multiDiskHardware.storage.filesystems[0]), {
     text: '2 块磁盘', title: 'sda / sdb'
   });
+  const linkedFilesystemMarkup = app.renderFilesystemDetails(multiDiskHardware);
+  assert.match(linkedFilesystemMarkup, /2 块磁盘/);
+  assert.match(linkedFilesystemMarkup, /title="sda \/ sdb"/);
   assert.match(app.smartHomeMarkup(multiDiskHardware.storage.physical_disks, multiDiskHardware), /2 \/ 3 通过/);
   assert.match(app.smartHomeMarkup(multiDiskHardware.storage.physical_disks, multiDiskHardware), /sdb故障/);
   const legacyDisk = app.physicalDisksForView({
@@ -172,19 +186,28 @@ async function run(){
     },
     hardware: {},
     easytierExpectation: {
-      network_name: '<img src=x>', overlay_ipv4: '10.250.250.1', proxy_cidrs: ['192.168.68.0/24']
+      configured: true,
+      expected: {network_name: '<img src=x>', overlay_ipv4: '10.250.250.1', proxy_cidrs: ['192.168.68.0/24']}
     }
   });
   assert.match(diagnosticMarkup, /&lt;script&gt;display/);
   assert.doesNotMatch(diagnosticMarkup, /<script>|<img src=x>|source_ip|192\.0\.2\.1|hidden\.example/);
+	const unconfiguredDiagnostics = app.deviceDiagnosticsMarkup({
+		host: {}, hardware: {},
+		easytierExpectation: {configured: false, expected: {network_name: 'must-not-render', proxy_cidrs: ['192.168.68.0/24']}}
+	});
+	assert.match(unconfiguredDiagnostics, /EasyTier 预期已配置[\s\S]*否/);
+	assert.doesNotMatch(unconfiguredDiagnostics, /must-not-render/);
+	assert.doesNotMatch(unconfiguredDiagnostics, /192\.168\.68\.0\/24/);
   const provenanceMarkup = app.buildProvenanceMarkup({
-    document: {schema_version: 2, build: {environment: 'preview', version: '2.3-preview', revision: '0123456789abcdef', token: 'must-not-render'}},
+    document: {schema_version: 2, build: {environment: 'staging', version: '2.3', revision: '0123456789abcdef', token: 'must-not-render'}},
     host: {protocol_mode: 'device_v2'},
-    hardware: {client_build: {version: '2.3-preview', revision: 'fedcba9876543210', protocol: 'device_v2'}}
+    hardware: {client_build: {version: '2.3', revision: 'fedcba9876543210', protocol: 'device_v2'}}
   });
   assert.match(provenanceMarkup, /0123456789ab/);
   assert.match(provenanceMarkup, /fedcba987654/);
   assert.doesNotMatch(provenanceMarkup, /must-not-render/);
+  assert.doesNotMatch(provenanceMarkup, /preview/i);
 
   const empty = app.buildViewModel(statsDocument('empty'));
   assert.equal(empty.profiles.length, 0);
@@ -232,6 +255,7 @@ async function run(){
   assert.match(dsmFilesystemMarkup, /4\.04 TB/);
   assert.match(dsmFilesystemMarkup, /7\.93 TB/);
   assert.match(dsmFilesystemMarkup, /50\.9%/);
+	assert.match(dsmFilesystemMarkup, /<td title="-">-<\/td>/);
   assert.doesNotMatch(dsmFilesystemMarkup, /\/dev\/shm|\/var\/packages/);
   const dsmPhysicalDiskMarkup = app.renderPhysicalDiskRows(dsmHardware);
   for(const device of ['sda', 'sdb', 'sdc', 'sdd']) {
@@ -592,11 +616,11 @@ async function run(){
   assert.match(hardwareMarkup, /id="hardwareFilesystemsBody"/);
   assert.match(hardwareMarkup, /卷 \/ 文件系统/);
   assert.match(indexMarkup, /css\/app\.css\?v=20260813-6/);
-  assert.match(indexMarkup, /js\/app\.js\?v=20260813-6/);
+  assert.match(indexMarkup, /js\/app\.js\?v=20260823-1/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
   assert.deepEqual(
     [...hardwareMarkup.matchAll(/<th>([^<]+)<\/th>/g)].map(match => match[1]),
-    ['设备', '型号', '容量', '温度', 'SMART', '通电时间', '挂载点', '来源', '格式', '已用 / 总容量', '使用率', '采集状态']
+    ['设备', '型号', '容量', '温度', 'SMART', '通电时间', '挂载点', '来源', '格式', '关联物理磁盘', '已用 / 总容量', '使用率', '采集状态']
   );
   assert.match(dockerMarkup, /id="containersBody"/);
   assert.deepEqual(

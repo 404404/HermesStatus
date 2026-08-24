@@ -424,7 +424,14 @@ def summarize_config_data(data, config_path=""):
     }
 
 
-def summarize_config(profile=None, env=None, home=None, hermes_root=None, profile_dir=None, config_path=None):
+def summarize_config(profile=None, env=None, home=None, hermes_root=None, profile_dir=None, config_path=None, return_source=False):
+    """Return a sanitized config summary.
+
+    ``return_source`` is an internal exporter-only option.  It returns the
+    successfully parsed regular-file path alongside the summary so the caller
+    can derive local freshness metadata without putting host paths into the
+    persisted/public summary.
+    """
     checked = config_candidates(
         profile=profile,
         env=env,
@@ -435,12 +442,15 @@ def summarize_config(profile=None, env=None, home=None, hermes_root=None, profil
     )
     for path in checked:
         try:
-            return summarize_config_data(parse_yaml_file(path), path)
+            summary = summarize_config_data(parse_yaml_file(path), path)
+            return (summary, str(path)) if return_source else summary
         except SecureFileError:
             continue
         except Exception:
-            return empty_summary(True)
-    return empty_summary(False)
+            summary = empty_summary(True)
+            return (summary, None) if return_source else summary
+    summary = empty_summary(False)
+    return (summary, None) if return_source else summary
 
 
 def main():

@@ -10,6 +10,7 @@ services:
       - ${SMART_DEVICE_B_HOST:-/dev/sdb}:${SMART_DEVICE_B_CONTAINER:-/dev/sdb}:r
     environment: !override
       HERMESSTATUS_CONFIG_FILE: /etc/hermesstatus/client-v2.json
+      DSM_VERSION_FILE: "${DSM_VERSION_FILE:-/host/etc.defaults/VERSION}"
       # Client JSON is authoritative for the explicit multi-disk allowlist.
       # Keep the legacy single-disk environment variable empty so it cannot
       # override `hardware.smart_devices` from the mounted JSON document.
@@ -17,6 +18,8 @@ services:
     volumes: !override
       - /etc/localtime:/etc/localtime:ro
       - /etc/os-release:/host/etc/os-release:ro
+      # Synology DSM identity is read from this exact, narrow host file.
+      - ${DSM_VERSION_FILE_HOST:-/dev/null}:${DSM_VERSION_FILE:-/host/etc.defaults/VERSION}:ro
       - /sys/class/hwmon:/sys/class/hwmon:ro
       # The collector is constrained in code to a read-only Docker API query.
       - /var/run/docker.sock:/var/run/docker.sock:ro

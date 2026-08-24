@@ -87,4 +87,15 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 	if _, ok := cpuDetails["properties"].(map[string]any)["instruction_sets"]; !ok {
 		t.Fatalf("CPUDetails is missing the optional instruction_sets property: %#v", cpuDetails)
 	}
+	storage := schemas["StorageStats"].(map[string]any)
+	filesystems := storage["properties"].(map[string]any)["filesystems"].(map[string]any)
+	if filesystems["items"].(map[string]any)["$ref"] != "#/components/schemas/FilesystemStats" {
+		t.Fatalf("StorageStats filesystems does not reference FilesystemStats: %#v", filesystems)
+	}
+	filesystem := schemas["FilesystemStats"].(map[string]any)
+	backingIDs := filesystem["properties"].(map[string]any)["backing_disk_ids"].(map[string]any)
+	backingID := backingIDs["items"].(map[string]any)
+	if backingID["pattern"] != "^[A-Za-z0-9][A-Za-z0-9_.+-]*$" {
+		t.Fatalf("filesystem backing ID OpenAPI contract rejects plus: %#v", backingID)
+	}
 }

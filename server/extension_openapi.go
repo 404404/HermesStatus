@@ -91,7 +91,7 @@ func extensionOpenAPISchemas() map[string]any {
 			"used_bytes":        nullableInteger(MaxSafeInteger, "Filesystem used bytes"),
 			"available_bytes":   nullableInteger(MaxSafeInteger, "Filesystem available bytes"),
 			"usage_percent":     map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100},
-			"backing_disk_ids":  map[string]any{"type": "array", "maxItems": MaxFilesystemBackingDisks, "items": map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength}, "default": []any{}},
+			"backing_disk_ids":  map[string]any{"type": "array", "maxItems": MaxFilesystemBackingDisks, "items": map[string]any{"type": "string", "maxLength": MaxDiskDeviceLength, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+-]*$"}, "default": []any{}},
 			"stack_type":        map[string]any{"type": "string", "enum": []string{"plain", "lvm", "mdraid", "device_mapper", "btrfs", "unknown"}},
 			"collection_status": map[string]any{"type": "string", "enum": []string{"healthy", "unavailable", "unsupported", "permission_denied", "invalid_data"}},
 			"error":             nullableRef("ExtensionError"),

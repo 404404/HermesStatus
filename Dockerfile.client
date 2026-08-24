@@ -1,11 +1,11 @@
 ARG ALPINE_IMAGE=alpine:3.13
-ARG VERSION=dev
+ARG VERSION=2.3
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_URL=https://github.com/404404/HermesStatus
 FROM ${ALPINE_IMAGE}
 
-ARG VERSION=dev
+ARG VERSION=2.3
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_URL=https://github.com/404404/HermesStatus
@@ -22,7 +22,9 @@ LABEL org.opencontainers.image.title="HermesStatus Client" \
 WORKDIR /app
 
 # smartmontools reads the configured host device; util-linux provides lscpu.
-RUN apk add --no-cache python3 py3-psutil py3-yaml iproute2 procps smartmontools util-linux
+RUN apk add --no-cache python3 py3-psutil py3-yaml iproute2 procps smartmontools util-linux \
+    && mkdir -p /host/etc.defaults \
+    && touch /host/etc.defaults/VERSION
 
 COPY clients/client-linux.py /app/client-linux.py
 COPY clients/client-psutil.py /app/client-psutil.py
@@ -49,6 +51,7 @@ ENV INTERVAL=1 \
     CM=cm.tz.cloudcpp.com \
     CLIENT=psutil \
     HOST_OS_RELEASE_FILE=/host/etc/os-release \
+    DSM_VERSION_FILE=/host/etc.defaults/VERSION \
     HWMON_ROOT=/sys/class/hwmon \
     SMART_DEVICE=auto \
     DOCKER_SOCKET=/var/run/docker.sock \

@@ -40,6 +40,7 @@ services:
       CM: "${CM:-cm.tz.cloudcpp.com}"
       CLIENT: "${CLIENT:-psutil}"
       HOST_OS_RELEASE_FILE: "${HOST_OS_RELEASE_FILE:-/host/etc/os-release}"
+      DSM_VERSION_FILE: "${DSM_VERSION_FILE:-/host/etc.defaults/VERSION}"
       HWMON_ROOT: "${HWMON_ROOT:-/sys/class/hwmon}"
       SMART_DEVICE: "${SMART_DEVICE:-auto}"
       DOCKER_SOCKET: "${DOCKER_SOCKET:-/var/run/docker.sock}"
@@ -77,6 +78,9 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/os-release:/host/etc/os-release:ro
+      # DSM deployments set DSM_VERSION_FILE_HOST=/etc.defaults/VERSION. The
+      # default keeps ordinary Linux deployments narrow and non-failing.
+      - ${DSM_VERSION_FILE_HOST:-/dev/null}:${DSM_VERSION_FILE:-/host/etc.defaults/VERSION}:ro
       - /sys/class/hwmon:/sys/class/hwmon:ro
       # A read-only bind does not make the Docker API read-only. The collector
       # is constrained in code to GET /containers/json?all=1 only.

@@ -64,7 +64,7 @@ Use `hardware.smart_devices` for multi-disk allowlists and `hardware.filesystem_
 
 ## Known limitation
 
-Some EasyTier 2.6.4 CLI output includes the local node in the peer list. The current release can include it in the remote-peer summary; this recorded P1 will be corrected in the next product-code change.
+Some EasyTier 2.6.4 CLI output includes the local node in the peer list. Remote-peer summaries strictly exclude that row by own peer ID. Raw connection output can still vary by version and must not be over-interpreted as topology truth.
 
 ## Documentation and validation
 

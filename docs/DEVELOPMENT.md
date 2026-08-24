@@ -29,7 +29,7 @@ a green result.
 ## Reviews and releases
 
 Address valid security, data-integrity, identity, persistence, compatibility
-and XSS findings.  Rebuild final images after review fixes; a preview or
+and XSS findings. Rebuild final images after review fixes; a candidate or
 production deployment must run the final reviewed commit, not an earlier
 candidate.  Keep deployment-only controlled helpers separate from product
 source unless their source is intentionally tracked and reviewed.

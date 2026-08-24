@@ -162,6 +162,200 @@ class RegistryTests(unittest.TestCase):
         finally:
             (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
 
+    def test_configured_main_model_overrides_lagging_cli_identity(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {
+                "status": "ok", "health": {"status": "ok"},
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({}),
+            }
+            module.hermes_cli_status = lambda _profile: """
+◆ Environment
+  Model: deepseek-v4-pro
+  Provider: OpenCode Go
+"""
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True,
+                "main_model": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
+                "docker_volumes": [],
+            })
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["model"], "gpt-5.6-luna")
+        self.assertEqual(payload["provider"], "openai-codex")
+        self.assertEqual(payload["usage_mode"], "auth_provider")
+
+    def test_cached_config_summary_does_not_override_live_cli_identity(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        previous = profile_payload(module, "daily")
+        previous["config_summary"] = module.sanitize_summary_snapshot({
+            "config_found": True,
+            "main_model": {"provider": "openai-codex", "model": "gpt-5.5"},
+            "docker_volumes": [],
+        })
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {
+                "status": "ok", "health": {"status": "ok"},
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({}),
+            }
+            module.hermes_cli_status = lambda _profile: """
+◆ Environment
+  Model: gpt-5.6-luna
+  Provider: OpenAI Codex
+◆ Auth Providers
+  OpenAI Codex ✓ logged in
+"""
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": False, "docker_volumes": [],
+            })
+            payload = module.profile_stats("daily", profile_dir, previous)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["model"], "gpt-5.6-luna")
+        self.assertEqual(payload["provider"], "OpenAI Codex")
+        self.assertEqual(payload["usage_mode"], "auth_provider")
+
+    def test_stale_profile_label_does_not_override_live_cli_provider(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root), "status_dir": str(self.status),
+            "profiles": [{"name": "daily", "profile_dir": str(profile_dir), "provider_label": "OpenCode Go"}],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_cli_status = lambda _profile: "◆ Environment\n  Model: gpt-5.6-luna\n  Provider: OpenAI Codex\n"
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({"config_found": False, "docker_volumes": []})
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["provider"], "OpenAI Codex")
+        self.assertEqual(payload["usage_mode"], "auth_provider")
+
+    def test_resolved_fallback_config_path_supplies_identity_timestamp(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        resolved_path = profile_dir / "config.yaml"
+        resolved_path.write_text("model:\n  provider: openai-codex\n  model: gpt-5.6-luna\n", encoding="utf-8")
+        modified = dt.datetime(2026, 8, 24, 1, 2, tzinfo=dt.timezone.utc).timestamp()
+        os.utime(resolved_path, (modified, modified))
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root), "status_dir": str(self.status),
+            "profiles": [{"name": "daily", "profile_dir": str(profile_dir)}],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_cli_status = lambda _profile: ""
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["model"], "gpt-5.6-luna")
+        self.assertEqual(payload["auth_refreshed_at"], "2026-08-24T01:02:00Z")
+
+    def test_current_main_provider_overrides_stale_profile_label(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root),
+            "status_dir": str(self.status),
+            "profiles": [{
+                "name": "daily",
+                "profile_dir": str(profile_dir),
+                "provider_label": "OpenCode Go",
+            }],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_cli_status = lambda _profile: ""
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {
+                "status": "ok", "health": {"status": "ok"},
+                "usage": module.unavailable_usage(),
+                "mixture_of_agents": module.sanitize_mixture_of_agents({}),
+            }
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True,
+                "main_model": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
+                "docker_volumes": [],
+            })
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["provider"], "openai-codex")
+        self.assertEqual(payload["usage_mode"], "auth_provider")
+
+    def test_configured_identity_uses_config_refresh_time_not_lagging_cli(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        config_path = self.root / "daily-config.yaml"
+        config_path.write_text("model: gpt-5.6-luna\nprovider: openai-codex\n", encoding="utf-8")
+        modified = dt.datetime(2026, 8, 23, 16, 30, tzinfo=dt.timezone.utc).timestamp()
+        os.utime(config_path, (modified, modified))
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root), "status_dir": str(self.status),
+            "profiles": [{"name": "daily", "profile_dir": str(profile_dir), "config_path": str(config_path)}],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+        originals = (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            module.hermes_cli_status = lambda _profile: """
+◆ Environment
+  Model: deepseek-v4-pro
+  Provider: OpenCode Go
+◆ Auth Providers
+  OpenCode Go ✓ logged in
+    Refreshed: 2026-08-22T00:00:00Z
+"""
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True,
+                "main_model": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
+                "docker_volumes": [],
+            })
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.collect_api, module.hermes_agent_version, module.summarize_config, module.collect_local_usage) = originals
+
+        self.assertEqual(payload["auth_refreshed_at"], "2026-08-23T16:30:00Z")
+
     def test_unmatched_provider_uses_profile_config_mtime(self):
         profile_dir = self.root / "daily"
         profile_dir.mkdir()
@@ -215,6 +409,96 @@ class RegistryTests(unittest.TestCase):
 
         self.assertEqual(payload["usage_mode"], "api")
         self.assertEqual(payload["auth_refreshed_at"], "2026-07-15T09:30:00Z")
+
+    def test_configured_provider_does_not_reuse_stale_cli_model(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        original = (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.hermes_cli_status = lambda _profile: "◆ Environment\n  Model: old-model\n  Provider: provider-old\n"
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True, "main_model": {"provider": "provider-new"}, "docker_volumes": [],
+            })
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api) = original
+
+        self.assertEqual(payload["provider"], "provider-new")
+        self.assertIsNone(payload["model"])
+        self.assertEqual(payload["usage_mode"], "unknown")
+
+    def test_configured_usage_mode_wins_over_incompatible_cli(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root), "status_dir": str(self.status),
+            "profiles": [{"name": "daily", "profile_dir": str(profile_dir), "usage_mode": "api"}],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+        original = (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.hermes_cli_status = lambda _profile: "◆ Environment\n  Model: old-model\n  Provider: provider-old\n"
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True, "main_model": {"provider": "custom-provider"}, "docker_volumes": [],
+            })
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api) = original
+
+        self.assertEqual(payload["usage_mode"], "api")
+
+    def test_custom_configured_provider_uses_unknown_mode_when_cli_differs(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        original = (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.hermes_cli_status = lambda _profile: "◆ Environment\n  Model: old-model\n  Provider: provider-old\n"
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True, "main_model": {"provider": "custom-provider"}, "docker_volumes": [],
+            })
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api) = original
+
+        self.assertEqual(payload["usage_mode"], "unknown")
+
+    def test_compatible_cli_can_supply_missing_configured_model(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        original = (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.hermes_cli_status = lambda _profile: "◆ Environment\n  Model: configured-default\n  Provider: OpenAI Codex\n"
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True, "main_model": {"provider": "openai-codex"}, "docker_volumes": [],
+            })
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api) = original
+
+        self.assertEqual(payload["model"], "configured-default")
+        self.assertEqual(payload["usage_mode"], "auth_provider")
 
     def test_api_and_profile_config_fill_cli_only_runtime_fields(self):
         profile_dir = self.root / "daily"
@@ -273,7 +557,7 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["gateway_service"], "running")
         self.assertEqual(payload["manager_mode"], "docker (foreground)")
         self.assertEqual(payload["usage_mode"], "api")
-        self.assertEqual(payload["provider"], "OpenCode Go")
+        self.assertEqual(payload["provider"], "opencode-go")
         self.assertEqual(degraded_payload["gateway_service"], "degraded")
         self.assertIsNone(empty_payload["gateway_service"])
 
