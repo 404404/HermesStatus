@@ -410,6 +410,96 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(payload["usage_mode"], "api")
         self.assertEqual(payload["auth_refreshed_at"], "2026-07-15T09:30:00Z")
 
+    def test_configured_provider_does_not_reuse_stale_cli_model(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        original = (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.hermes_cli_status = lambda _profile: "◆ Environment\n  Model: old-model\n  Provider: provider-old\n"
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True, "main_model": {"provider": "provider-new"}, "docker_volumes": [],
+            })
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api) = original
+
+        self.assertEqual(payload["provider"], "provider-new")
+        self.assertIsNone(payload["model"])
+        self.assertEqual(payload["usage_mode"], "unknown")
+
+    def test_configured_usage_mode_wins_over_incompatible_cli(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.config.write_text(json.dumps({
+            "hermes_root": str(self.root), "status_dir": str(self.status),
+            "profiles": [{"name": "daily", "profile_dir": str(profile_dir), "usage_mode": "api"}],
+        }), encoding="utf-8")
+        module = load_exporter(self.config)
+        original = (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.hermes_cli_status = lambda _profile: "◆ Environment\n  Model: old-model\n  Provider: provider-old\n"
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True, "main_model": {"provider": "custom-provider"}, "docker_volumes": [],
+            })
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api) = original
+
+        self.assertEqual(payload["usage_mode"], "api")
+
+    def test_custom_configured_provider_uses_unknown_mode_when_cli_differs(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        original = (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.hermes_cli_status = lambda _profile: "◆ Environment\n  Model: old-model\n  Provider: provider-old\n"
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True, "main_model": {"provider": "custom-provider"}, "docker_volumes": [],
+            })
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api) = original
+
+        self.assertEqual(payload["usage_mode"], "unknown")
+
+    def test_compatible_cli_can_supply_missing_configured_model(self):
+        profile_dir = self.root / "daily"
+        profile_dir.mkdir()
+        self.write_registry(["daily"])
+        module = load_exporter(self.config)
+        original = (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api)
+        try:
+            module.service_status = lambda _profile: ("running", "")
+            module.hermes_agent_version = lambda: "0.19.0"
+            module.hermes_cli_status = lambda _profile: "◆ Environment\n  Model: configured-default\n  Provider: OpenAI Codex\n"
+            module.summarize_config = lambda **_kwargs: module.sanitize_summary_snapshot({
+                "config_found": True, "main_model": {"provider": "openai-codex"}, "docker_volumes": [],
+            })
+            module.collect_local_usage = lambda _path: module.unavailable_usage()
+            module.collect_api = lambda _profile: {"status": "ok", "health": {"status": "ok"}, "usage": module.unavailable_usage(), "mixture_of_agents": module.sanitize_mixture_of_agents({})}
+            payload = module.profile_stats("daily", profile_dir)
+        finally:
+            (module.service_status, module.hermes_cli_status, module.hermes_agent_version, module.summarize_config, module.collect_local_usage, module.collect_api) = original
+
+        self.assertEqual(payload["model"], "configured-default")
+        self.assertEqual(payload["usage_mode"], "auth_provider")
+
     def test_api_and_profile_config_fill_cli_only_runtime_fields(self):
         profile_dir = self.root / "daily"
         profile_dir.mkdir()
