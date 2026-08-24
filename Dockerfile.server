@@ -1,6 +1,6 @@
 FROM golang:1.25-alpine AS builder
 
-ARG VERSION=dev
+ARG VERSION=2.3
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_URL=https://github.com/404404/HermesStatus
@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 
 FROM alpine:3.22
 
-ARG VERSION=dev
+ARG VERSION=2.3
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_URL=https://github.com/404404/HermesStatus
@@ -32,7 +32,8 @@ LABEL maintainer="cppla <https://cpp.la>" \
     org.opencontainers.image.revision="${VCS_REF}" \
     org.opencontainers.image.created="${BUILD_DATE}" \
     org.opencontainers.image.source="${SOURCE_URL}" \
-    org.opencontainers.image.licenses="MIT"
+    org.opencontainers.image.licenses="MIT" \
+    io.hermesstatus.component="server"
 
 RUN apk add --no-cache ca-certificates tzdata \
     && mkdir -p /app/config /app/data /app/web

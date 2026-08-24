@@ -200,13 +200,14 @@ async function run(){
 	assert.doesNotMatch(unconfiguredDiagnostics, /must-not-render/);
 	assert.doesNotMatch(unconfiguredDiagnostics, /192\.168\.68\.0\/24/);
   const provenanceMarkup = app.buildProvenanceMarkup({
-    document: {schema_version: 2, build: {environment: 'preview', version: '2.3-preview', revision: '0123456789abcdef', token: 'must-not-render'}},
+    document: {schema_version: 2, build: {environment: 'staging', version: '2.3', revision: '0123456789abcdef', token: 'must-not-render'}},
     host: {protocol_mode: 'device_v2'},
-    hardware: {client_build: {version: '2.3-preview', revision: 'fedcba9876543210', protocol: 'device_v2'}}
+    hardware: {client_build: {version: '2.3', revision: 'fedcba9876543210', protocol: 'device_v2'}}
   });
   assert.match(provenanceMarkup, /0123456789ab/);
   assert.match(provenanceMarkup, /fedcba987654/);
   assert.doesNotMatch(provenanceMarkup, /must-not-render/);
+  assert.doesNotMatch(provenanceMarkup, /preview/i);
 
   const empty = app.buildViewModel(statsDocument('empty'));
   assert.equal(empty.profiles.length, 0);

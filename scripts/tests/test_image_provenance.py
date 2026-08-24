@@ -49,8 +49,12 @@ class ImageProvenanceTests(unittest.TestCase):
     def test_publisher_preserves_component_metadata(self):
         workflow = (
             pathlib.Path(__file__).resolve().parents[2]
-            / ".github/workflows/publish-preview-images.yml"
+            / ".github/workflows/publish-2.3-candidate-images.yml"
         ).read_text(encoding="utf-8")
+        self.assertIn("name: Publish 2.3 Candidate Images", workflow)
+        self.assertIn('PRODUCT_VERSION: "2.3"', workflow)
+        self.assertIn('echo "version=${PRODUCT_VERSION}-${GITHUB_SHA::12}"', workflow)
+        self.assertNotIn("2.3-preview", workflow)
         self.assertIn("org.opencontainers.image.title=HermesStatus Server", workflow)
         self.assertIn("org.opencontainers.image.title=HermesStatus Client", workflow)
         self.assertIn("io.hermesstatus.component=server", workflow)
@@ -75,6 +79,12 @@ class ImageProvenanceTests(unittest.TestCase):
             pathlib.Path(__file__).resolve().parents[2] / "Dockerfile.client"
         ).read_text(encoding="utf-8")
         self.assertIn('io.hermesstatus.component="client"', dockerfile)
+
+    def test_server_dockerfile_sets_server_component_metadata(self):
+        dockerfile = (
+            pathlib.Path(__file__).resolve().parents[2] / "Dockerfile.server"
+        ).read_text(encoding="utf-8")
+        self.assertIn('io.hermesstatus.component="server"', dockerfile)
 
     def test_valid_metadata(self):
         result = validate(valid_inspect())

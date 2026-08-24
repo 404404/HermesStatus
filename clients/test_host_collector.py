@@ -830,13 +830,13 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNone(collect_client_build({}))
         self.assertEqual(
             collect_client_build({
-                "HERMESSTATUS_CLIENT_VERSION": "2.3-preview",
+                "HERMESSTATUS_CLIENT_VERSION": "2.3",
                 "HERMESSTATUS_CLIENT_REVISION": "abcdef0123abcdef0123abcdef0123abcdef0123",
                 "HERMESSTATUS_CLIENT_BUILD_TIME": "2026-08-11T00:00:00Z",
                 "HERMESSTATUS_CLIENT_PROTOCOL": "device_v2",
             }),
             {
-                "version": "2.3-preview",
+                "version": "2.3",
                 "revision": "abcdef0123abcdef0123abcdef0123abcdef0123",
                 "build_time": "2026-08-11T00:00:00Z",
                 "protocol": "device_v2",
@@ -844,14 +844,14 @@ class HostCollectorTests(unittest.TestCase):
         )
         self.assertIsNone(
             collect_client_build({
-                "HERMESSTATUS_CLIENT_VERSION": "2.3-preview",
+                "HERMESSTATUS_CLIENT_VERSION": "2.3",
                 "HERMESSTATUS_CLIENT_REVISION": "unknown",
                 "HERMESSTATUS_CLIENT_PROTOCOL": "device_v2",
             })
         )
 
     def test_extension_payload_exposes_client_build_at_the_root(self):
-        build = {"version": "2.3-preview", "revision": "abcdef012345", "protocol": "device_v2", "build_time": None}
+        build = {"version": "2.3", "revision": "abcdef012345", "protocol": "device_v2", "build_time": None}
         collector = HostExtensionCollector(
             host_os_release_file=str(FIXTURES / "os-release"),
             client_build=build,

@@ -1,11 +1,11 @@
 ARG ALPINE_IMAGE=alpine:3.13
-ARG VERSION=dev
+ARG VERSION=2.3
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_URL=https://github.com/404404/HermesStatus
 FROM ${ALPINE_IMAGE}
 
-ARG VERSION=dev
+ARG VERSION=2.3
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_URL=https://github.com/404404/HermesStatus
