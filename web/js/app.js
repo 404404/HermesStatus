@@ -175,7 +175,7 @@ function modelBreakdown(profile){
 }
 
 function normalizePageName(value){
-	return ['hardware', 'docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
+	return ['hardware', 'docker', 'lucky', 'easytier', 'unifi'].includes(value) ? value : 'home';
 }
 
 function valueAt(objectValue, keys){
@@ -527,13 +527,14 @@ function buildViewModel(documentValue, selectedDeviceId = null){
   const host = devices.find(device => device.device_id === selectedDeviceId) ||
     (selectedDeviceId === null ? devices[0] : null) ||
     (!hasV2Devices ? selectSingleHost(documentObject.servers) : null);
-	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, easytierExpectation: {}, profiles: [], containers: [] };
+	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, unifi: {}, easytierExpectation: {}, profiles: [], containers: [] };
 
   const hardware = safeObject(host.hardware);
   const docker = safeObject(host.docker);
 	const hermes = safeObject(host.hermes);
 	const lucky = safeObject(host.lucky);
 	const easytier = safeObject(host.easytier);
+	const unifi = safeObject(host.unifi);
   const memoryPercent = percentage(host.memory_used, host.memory_total);
   const diskUsage = homeDiskUsage(host, hardware);
   const cpuPercent = finiteNumber(host.cpu) === null ? null : clamp(host.cpu, 0, 100);
@@ -547,6 +548,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
 		hermes,
 		lucky,
 		easytier,
+		unifi,
 		easytierExpectation: safeObject(host.easytier_expectation),
     profiles: Array.isArray(hermes.profiles) ? hermes.profiles : [],
     containers: Array.isArray(docker.containers) ? docker.containers : [],
@@ -582,8 +584,8 @@ function statusTone(value){
   if(status.startsWith('up ') || status.includes('(healthy)')) return 'ok';
   if(status.startsWith('exited') || status.startsWith('dead')) return 'err';
   if(status.startsWith('created') || status.startsWith('paused') || status.startsWith('restarting') || status.startsWith('removing')) return 'warn';
-	if(['passed', 'running', 'ok', 'healthy', 'up', 'active', 'valid'].includes(status)) return 'ok';
-	if(['degraded', 'partial', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error', 'mismatch', 'unsupported', 'unsupported_version'].includes(status)) return 'warn';
+	if(['passed', 'running', 'ok', 'healthy', 'up', 'active', 'valid', 'available', 'observed'].includes(status)) return 'ok';
+	if(['degraded', 'partial', 'stale', 'never_seen', 'expiring', 'not_yet_valid', 'identity_error', 'mismatch', 'unsupported', 'unsupported_version', 'not_collected', 'not_observed'].includes(status)) return 'warn';
 	if(['failed', 'down', 'offline', 'disabled', 'stopped', 'unauthorized', 'timeout', 'dead', 'exited', 'error', 'expired', 'invalid', 'unavailable'].includes(status)) return 'err';
   return 'neutral';
 }
@@ -591,7 +593,7 @@ function statusTone(value){
 function statusText(value){
   const status = String(value ?? '').toLowerCase();
   const labels = {
-    passed: '通过', failed: '失败', unknown: '未知', unavailable: '不可用',
+    passed: '通过', failed: '失败', unknown: '未知', unavailable: '不可用', available: '可用', not_collected: '尚未采集', not_observed: '未观察到', observed: '已观察到', observed_zero_rpm: '已观察到 0 RPM',
     running: '运行中', healthy: '正常', ok: '正常', active: '活动',
     stopped: '已停止', down: '离线', unauthorized: '未授权', timeout: '超时',
 		exited: '已退出', dead: '异常', degraded: '部分异常', partial: '部分采集', stale: '已陈旧',
@@ -624,6 +626,46 @@ function luckyIsConfigured(lucky){
 
 function easytierIsConfigured(easytier){
 	return !domainIsUnknown(easytier) && easytier.status !== 'not_configured' && easytier.error?.code !== 'not_reported';
+}
+
+function unifiIsConfigured(unifi){
+  return !domainIsUnknown(unifi) && unifi.configured === true;
+}
+
+function unifiTransportSummary(unifi){
+  if(!unifiIsConfigured(unifi)) return {status: 'disabled', text: '未配置'};
+  const transport = safeObject(unifi.transport);
+  const status = String(transport.status || 'not_collected').toLowerCase();
+  if(status === 'available') return {status: unifi.stale ? 'stale' : 'available', text: unifi.stale ? '数据陈旧' : '可用'};
+  if(status === 'not_collected') return {status, text: '尚未采集'};
+  if(status === 'disabled') return {status, text: '已禁用'};
+  return {status: 'unavailable', text: '不可用'};
+}
+
+function unifiErrorText(unifi){
+  const code = String(safeObject(unifi.error).code || '').toLowerCase();
+  const labels = {
+    host_key_failure: 'SSH 主机密钥验证失败',
+    ssh_auth_failure: 'SSH 身份验证失败',
+    ssh_timeout: 'SSH 采集超时',
+    ssh_transport_failure: 'SSH 传输不可用',
+    parse_failure: '遥测解析失败',
+    not_collected: '尚未完成首次采集',
+    stale: '遥测数据已陈旧'
+  };
+  return labels[code] || (code ? 'UniFi 遥测暂不可用' : '-');
+}
+
+function unifiPresenceText(value){
+  return ({present: '已安装', not_present: '未安装', not_populated: '未装配', unknown: '未知'})[String(value || '').toLowerCase()] || '未知';
+}
+
+function unifiObservationText(value, rpm = null){
+  const state = String(value || '').toLowerCase();
+  if(state === 'observed_zero_rpm') return '已观察到 0 RPM';
+  if(state === 'observed') return finiteNumber(rpm) === null ? '已观察到' : `${formatInteger(rpm)} RPM`;
+  if(state === 'not_observed') return '未观察到';
+  return '未知';
 }
 
 function dashboardCondition(view, refreshError = null){
@@ -1082,6 +1124,76 @@ function easyTierCompatibilityText(value){ return ({supported: '支持', unsuppo
 function formatLatency(value){ const number = finiteNumber(value); return number === null ? '-' : `${number.toFixed(1)} ms`; }
 function formatLoss(value){ const number = finiteNumber(value); return number === null ? '-' : `${number.toFixed(2)}%`; }
 
+
+function unifiSystemRows(unifi){
+  const system = safeObject(unifi.system);
+  const memory = safeObject(system.memory);
+  const load = safeObject(system.load_average);
+  const cpu = finiteNumber(system.cpu_usage_percent);
+  const cpuText = cpu === null
+    ? (system.cpu_usage_reason === 'insufficient_delta' ? '数据不足（首个有效样本）' : '数据不可用')
+    : formatPercentage(cpu);
+  const memoryText = finiteNumber(memory.used_bytes) === null || finiteNumber(memory.total_bytes) === null
+    ? '-'
+    : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.total_bytes)}`;
+  const memorySource = memory.available_source === 'fallback_memfree_buffers_cached'
+    ? '（可用内存回退估算）' : '';
+  const loadText = [load.one_minute, load.five_minutes, load.fifteen_minutes]
+    .map(value => finiteNumber(value) === null ? '-' : value.toFixed(2)).join(' / ');
+  return [
+    ['CPU 使用率', cpu === null ? escapeHtml(cpuText) : resourceBar(cpu, 'UniFi CPU 使用率')],
+    ['CPU 温度', escapeHtml(formatCelsius(system.cpu_temperature_c))],
+    ['内存已用 / 总量', `${escapeHtml(memoryText)}${memorySource ? `<span class="health-inline-meta">${escapeHtml(memorySource)}</span>` : ''}`],
+    ['内存使用率', finiteNumber(memory.used_percent) === null ? '-' : resourceBar(memory.used_percent, 'UniFi 内存使用率')],
+    ['运行时间', escapeHtml(formatUptime(system.uptime_seconds))],
+    ['负载 (1 / 5 / 15m)', escapeHtml(loadText)]
+  ];
+}
+
+function unifiFanRows(unifi){
+  const fans = Array.isArray(unifi.fans) ? unifi.fans : [];
+  if(!fans.length) return '<tr><td colspan="5" class="table-empty">暂无可显示的风扇观测。</td></tr>';
+  return fans.map(fan => `<tr><td class="strong-cell mono">${escapeHtml(textOrDash(fan.id))}</td><td>${badge(fan.supported)}</td><td>${escapeHtml(unifiPresenceText(fan.present))}</td><td>${escapeHtml(unifiObservationText(fan.state, fan.rpm))}</td><td>${fan.error ? escapeHtml(unifiErrorText({error: fan.error})) : '-'}</td></tr>`).join('');
+}
+
+function unifiPowerRows(unifi){
+  const supplies = Array.isArray(unifi.power_supplies) ? unifi.power_supplies : [];
+  if(!supplies.length) return '<tr><td colspan="5" class="table-empty">暂无可显示的电源观测。</td></tr>';
+  return supplies.map(supply => `<tr><td class="strong-cell mono">${escapeHtml(textOrDash(supply.id))}</td><td>${badge(supply.supported)}</td><td>${escapeHtml(unifiPresenceText(supply.present))}</td><td>${escapeHtml(unifiObservationText(supply.state))}</td><td>${supply.error ? escapeHtml(unifiErrorText({error: supply.error})) : '-'}</td></tr>`).join('');
+}
+
+function renderUniFi(view){
+  const unifi = safeObject(view.unifi);
+  const summary = unifiTransportSummary(unifi);
+  const transport = safeObject(unifi.transport);
+  const configured = unifiIsConfigured(unifi);
+  const summaryRows = [
+    ['配置状态', configured ? '已配置' : '未配置'],
+    ['机型 Profile', textOrDash(unifi.profile)],
+    ['传输状态', `<span class="badge ${statusTone(summary.status)}">${escapeHtml(summary.text)}</span>`],
+    ['上次尝试', formatDateTime(transport.last_attempt)],
+    ['最近成功', formatDateTime(transport.last_success)],
+    ['数据更新时间', formatDateTime(unifi.updated_at)],
+    ['数据状态', unifi.stale ? '<span class="badge warn">已陈旧</span>' : configured && summary.status === 'available' ? '<span class="badge ok">最新</span>' : '-'],
+    ['采集错误', escapeHtml(unifiErrorText(unifi))]
+  ];
+  byId('unifiSummary').innerHTML = summaryRows.map(([label, value]) => detailRow(label, value, 'wrap-value')).join('');
+  byId('unifiMeta').textContent = configured ? `Profile：${textOrDash(unifi.profile)} · ${summary.text}` : '未配置 UniFi 目标';
+  byId('unifiSystem').innerHTML = configured && safeObject(unifi.system) && Object.keys(safeObject(unifi.system)).length
+    ? unifiSystemRows(unifi).map(([label, value]) => detailRow(label, value, 'wrap-value')).join('')
+    : `<div class="table-empty">${escapeHtml(summary.text === '尚未采集' ? '等待首次 UniFi 采集。' : summary.text === '未配置' ? '未配置 UniFi 目标。' : '暂无可显示的通用遥测。')}</div>`;
+  byId('unifiFansBody').innerHTML = configured ? unifiFanRows(unifi) : '<tr><td colspan="5" class="table-empty">未配置 UniFi 目标。</td></tr>';
+  byId('unifiPowerBody').innerHTML = configured ? unifiPowerRows(unifi) : '<tr><td colspan="5" class="table-empty">未配置 UniFi 目标。</td></tr>';
+  const nvme = safeObject(safeObject(unifi.storage).nvme);
+  byId('unifiStorage').innerHTML = configured
+    ? [
+      ['NVMe 支持能力', badge(nvme.supported)],
+      ['NVMe 物理存在', escapeHtml(unifiPresenceText(nvme.present))],
+      ['NVMe 观测状态', escapeHtml(nvme.observed ? '已观察到' : '未观察到')]
+    ].map(([label, value]) => detailRow(label, value)).join('')
+    : detailRow('NVMe', '未配置 UniFi 目标。');
+}
+
 function profileSummary(profiles){
   if(!profiles.length) return '';
   const versions = [...new Set(profiles
@@ -1191,6 +1303,7 @@ function renderDashboard(view){
 	renderContainers(view);
 	renderLucky(view);
 	renderEasyTier(view);
+  renderUniFi(view);
   if(!byId('deviceDiagnosticsModal').hidden) renderDeviceDiagnostics(view);
   if(!byId('aboutModal').hidden) renderBuildProvenance(view);
   applyPageVisibility();
@@ -1227,7 +1340,7 @@ function selectDevice(deviceId, options = {}){
 function applyPageVisibility(){
   const activePage = normalizePageName(dashboardState.activePage);
   dashboardState.activePage = activePage;
-	for(const page of ['home', 'hardware', 'docker', 'lucky', 'easytier']){
+	for(const page of ['home', 'hardware', 'docker', 'lucky', 'easytier', 'unifi']){
     const active = page === activePage;
     const tab = byId(`${page}Tab`);
     const panel = byId(`${page}Page`);
@@ -1619,7 +1732,7 @@ function bindInteractions(){
     tab.addEventListener('keydown', event => {
       if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-			const pages = ['home', 'hardware', 'docker', 'lucky', 'easytier'];
+			const pages = ['home', 'hardware', 'docker', 'lucky', 'easytier', 'unifi'];
 			const current = pages.indexOf(dashboardState.activePage);
 			const nextPage = event.key === 'Home' ? pages[0] : event.key === 'End' ? pages[pages.length - 1] : event.key === 'ArrowLeft' ? pages[(current - 1 + pages.length) % pages.length] : pages[(current + 1) % pages.length];
       setActivePage(nextPage);
@@ -1744,6 +1857,11 @@ const exported = {
 	deviceShortName,
 	luckyIsConfigured,
 	easytierIsConfigured,
+  unifiIsConfigured,
+  unifiTransportSummary,
+  unifiSystemRows,
+  unifiFanRows,
+  unifiPowerRows,
   fittedFontSize,
   formatBytes,
 	formatCelsius,

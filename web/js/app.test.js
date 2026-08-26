@@ -53,12 +53,14 @@ async function run(){
   assert.equal(app.normalizePageName('hardware'), 'hardware');
   assert.equal(app.normalizePageName('docker'), 'docker');
   assert.equal(app.normalizePageName('lucky'), 'lucky');
+  assert.equal(app.normalizePageName('unifi'), 'unifi');
   assert.equal(app.normalizePageName('unexpected'), 'home');
   assert.equal(app.pageFromHash(''), 'home');
   assert.equal(app.pageFromHash('#home'), 'home');
   assert.equal(app.pageFromHash('#hardware'), 'hardware');
   assert.equal(app.pageFromHash('#docker'), 'docker');
   assert.equal(app.pageFromHash('#lucky'), 'lucky');
+  assert.equal(app.pageFromHash('#unifi'), 'unifi');
   assert.equal(app.pageFromHash('#invalid'), 'home');
   assert.deepEqual(app.parseDashboardHash('#docker?device=device-alpha'), {
     page: 'docker', deviceId: 'device-alpha', needsRewrite: false
@@ -128,6 +130,55 @@ async function run(){
     app.modelBreakdown({model: 'example-model', usage_mode: 'api', provider: 'OpenCode Go'}),
     'example-model / api / OpenCode Go'
   );
+
+  const udwUniFi = {
+    configured: true, profile: 'udw', stale: false, updated_at: '2026-08-27T01:02:03Z', error: null,
+    transport: {status: 'available', last_attempt: '2026-08-27T01:02:03Z', last_success: '2026-08-27T01:02:03Z'},
+    system: {
+      cpu_usage_percent: 12.5, cpu_usage_reason: null, cpu_temperature_c: 64.2, uptime_seconds: 123456,
+      memory: {used_bytes: 2_000_000_000, total_bytes: 4_000_000_000, used_percent: 50, available_source: 'mem_available'},
+      load_average: {one_minute: 1.16, five_minutes: 1.29, fifteen_minutes: 1.17}
+    },
+    fans: [
+      {id: 'fan1', supported: 'supported', present: 'present', observed: true, rpm: 1698, state: 'observed', error: null},
+      {id: 'fan2', supported: 'supported', present: 'present', observed: true, rpm: 2752, state: 'observed', error: null}
+    ],
+    power_supplies: [{id: 'psu1', supported: 'supported', present: 'unknown', observed: false, state: 'not_observed', error: null}],
+    storage: {nvme: {supported: 'unknown', present: 'unknown', observed: false}},
+    diagnostics: {collection_status: 'available', ignored_observations: [{id: 'fan3', reason: 'profile_not_populated'}]}
+  };
+  const ucgMaxUniFi = {
+    ...udwUniFi, profile: 'ucg-max',
+    system: {...udwUniFi.system, cpu_usage_percent: null, cpu_usage_reason: 'insufficient_delta', cpu_temperature_c: null,
+      memory: {...udwUniFi.system.memory, available_source: 'fallback_memfree_buffers_cached'}},
+    fans: [{id: 'fan1', supported: 'supported', present: 'unknown', observed: true, rpm: 0, state: 'observed_zero_rpm', error: null}],
+    power_supplies: [], storage: {nvme: {supported: 'unknown', present: 'unknown', observed: false}}
+  };
+  const unifiView = app.buildViewModel(statsDocument('normal', {unifi: udwUniFi}));
+  assert.equal(unifiView.unifi.profile, 'udw');
+  assert.equal(app.unifiIsConfigured(udwUniFi), true);
+  assert.equal(app.unifiIsConfigured({configured: false, transport: {status: 'disabled'}}), false);
+  assert.deepEqual(app.unifiTransportSummary({configured: false, transport: {status: 'disabled'}}), {status: 'disabled', text: '未配置'});
+  assert.deepEqual(app.unifiTransportSummary({...udwUniFi, stale: true}), {status: 'stale', text: '数据陈旧'});
+  assert.deepEqual(app.unifiTransportSummary({...udwUniFi, transport: {status: 'unavailable'}}), {status: 'unavailable', text: '不可用'});
+  assert.match(app.unifiSystemRows(udwUniFi).map(row => row.join(' ')).join(' '), /64\.2℃/);
+  assert.match(app.unifiSystemRows(udwUniFi).map(row => row.join(' ')).join(' '), /2\.00 GB \/ 4\.00 GB/);
+  assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /数据不足（首个有效样本）/);
+  assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /可用内存回退估算/);
+  assert.match(app.unifiFanRows(udwUniFi), /1,698 RPM/);
+  assert.match(app.unifiFanRows(ucgMaxUniFi), /已观察到 0 RPM/);
+  assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /失败/);
+  assert.match(app.unifiFanRows({...ucgMaxUniFi, fans: [{id: 'fan1', supported: 'supported', present: 'unknown', observed: false, rpm: null, state: 'not_observed'}]}), /未观察到/);
+  assert.match(app.unifiPowerRows(udwUniFi), /未知/);
+  assert.match(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /不支持[\s\S]*未安装/);
+  assert.doesNotMatch(app.unifiFanRows(udwUniFi), /fan3|fan4/);
+  const unavailableUniFi = {...ucgMaxUniFi, stale: true, system: null, fans: [], power_supplies: [], updated_at: null,
+    transport: {status: 'unavailable', last_attempt: '2026-08-27T01:02:04Z', last_success: '2026-08-27T01:02:03Z'},
+    error: {code: 'ssh_timeout'}};
+  assert.deepEqual(app.unifiTransportSummary(unavailableUniFi), {status: 'unavailable', text: '不可用'});
+  assert.match(app.unifiFanRows(unavailableUniFi), /暂无可显示的风扇观测/);
+  assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /CPU 温度 -/);
+  assert.doesNotMatch(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /CPU 温度 0℃/);
 
   const multiDiskHardware = {
     cpu_temperatures: [
@@ -590,9 +641,20 @@ async function run(){
   assert.match(indexMarkup, /id="hardwareTab"[^>]*>硬件信息<\/button>/);
   assert.match(indexMarkup, /id="dockerTab"[^>]*>Docker<\/button>/);
   assert.match(indexMarkup, /id="luckyTab"[^>]*>Lucky<\/button>/);
+  assert.match(indexMarkup, /id="unifiTab"[^>]*>UniFi<\/button>/);
+  assert.match(indexMarkup, /id="unifiPage"[^>]*data-page="unifi"[^>]*hidden/);
   assert.match(indexMarkup, /id="luckyServiceSummary"/);
   assert.match(appSource, /\['API 可用性', service\.api_reachable/);
   assert.doesNotMatch(indexMarkup, /data-page-target="[^"]+"[^>]*>主机<\/button>/);
+  assert.match(indexMarkup, /id="unifiSummary"/);
+  assert.match(indexMarkup, /id="unifiSystem"/);
+  assert.match(indexMarkup, /id="unifiFansBody"/);
+  assert.match(indexMarkup, /id="unifiPowerBody"/);
+  assert.match(indexMarkup, /id="unifiStorage"/);
+  assert.doesNotMatch(indexMarkup, /raw thermal|PWM|cpuload|remote command/i);
+  assert.match(appSource, /function renderUniFi\(view\)/);
+  assert.match(appSource, /function unifiTransportSummary\(unifi\)/);
+  assert.match(appSource, /observed_zero_rpm/);
   assert.match(indexMarkup, /id="homePage"[^>]*data-page="home"/);
   assert.match(indexMarkup, /id="hardwarePage"[^>]*data-page="hardware"[^>]*hidden/);
   assert.match(indexMarkup, /id="dockerPage"[^>]*data-page="docker"[^>]*hidden/);
@@ -615,8 +677,8 @@ async function run(){
   assert.doesNotMatch(hardwareMarkup, /hardwareMemoryPrimary|hardwareMemorySecondary|hardwareMemoryTertiary/);
   assert.match(hardwareMarkup, /id="hardwareFilesystemsBody"/);
   assert.match(hardwareMarkup, /卷 \/ 文件系统/);
-  assert.match(indexMarkup, /css\/app\.css\?v=20260813-6/);
-  assert.match(indexMarkup, /js\/app\.js\?v=20260823-1/);
+  assert.match(indexMarkup, /css\/app\.css\?v=20260827-1/);
+  assert.match(indexMarkup, /js\/app\.js\?v=20260827-1/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
   assert.deepEqual(
     [...hardwareMarkup.matchAll(/<th>([^<]+)<\/th>/g)].map(match => match[1]),
@@ -645,7 +707,7 @@ async function run(){
   assert.match(appSource, /refresh\('initial'\)/);
   assert.match(appSource, /setActivePage\(tab\.dataset\.pageTarget\)/);
   assert.match(appSource, /parseDashboardHash\(window\.location\.hash\)/);
-  assert.match(appSource, /\['home', 'hardware', 'docker', 'lucky', 'easytier'\]/);
+  assert.match(appSource, /\['home', 'hardware', 'docker', 'lucky', 'easytier', 'unifi'\]/);
   const homeHardwareSource = appSource.slice(appSource.indexOf('function renderHardware'), appSource.indexOf('function filesystemBackingDisks'));
   assert.deepEqual(
     [...homeHardwareSource.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1]),

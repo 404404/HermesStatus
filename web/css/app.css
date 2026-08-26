@@ -191,6 +191,11 @@ body.light .health-card{background:#fff}
 .easytier-peer-table{min-width:1120px!important}
 .easytier-route-table{min-width:960px!important}
 .easytier-connector-table{min-width:620px!important}
+.unifi-summary,.unifi-system,.unifi-storage{padding:0 1.35rem 1.1rem}
+.unifi-fans-table,.unifi-power-table{min-width:760px!important}
+.unifi-system .usage-bar{margin:0}
+.unifi-system .detail-row dd{display:flex;justify-content:flex-end;align-items:center;gap:.4rem}
+.unifi-system .usage-bar{width:min(240px,100%)}
 
 .data-section{overflow:hidden}
 .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;min-width:0;padding:1.25rem 1.35rem;border-bottom:1px solid var(--border);overflow-wrap:anywhere;word-break:break-word}

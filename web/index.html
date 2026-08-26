@@ -6,7 +6,7 @@
     <meta name="description" content="HermesStatus 多设备云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260813-6" />
+    <link rel="stylesheet" href="css/app.css?v=20260827-1" />
 </head>
 <body>
     <header class="topbar">
@@ -24,6 +24,7 @@
             <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
             <button id="luckyTab" type="button" role="tab" aria-selected="false" aria-controls="luckyPage" tabindex="-1" data-page-target="lucky">Lucky</button>
             <button id="easytierTab" type="button" role="tab" aria-selected="false" aria-controls="easytierPage" tabindex="-1" data-page-target="easytier">EasyTier</button>
+            <button id="unifiTab" type="button" role="tab" aria-selected="false" aria-controls="unifiPage" tabindex="-1" data-page-target="unifi">UniFi</button>
         </nav>
         <div class="actions">
             <span id="lastUpdate" class="last-update">上次刷新 -</span>
@@ -214,6 +215,29 @@
                     <div class="table-wrap"><table class="data easytier-table"><thead><tr><th>项目</th><th>Expected</th><th>Observed</th><th>结果</th></tr></thead><tbody id="easytierExpectationBody"></tbody></table></div>
                 </section>
             </div>
+
+            <div id="unifiPage" class="page-panel" role="tabpanel" aria-labelledby="unifiTab" data-page="unifi" hidden>
+                <section class="data-section" aria-labelledby="unifiSummaryTitle">
+                    <div class="section-head"><h2 id="unifiSummaryTitle">UniFi 采集状态</h2><span id="unifiMeta" class="section-meta"></span></div>
+                    <dl id="unifiSummary" class="detail-list unifi-summary"></dl>
+                </section>
+                <section class="data-section" aria-labelledby="unifiSystemTitle">
+                    <div class="section-head"><h2 id="unifiSystemTitle">通用遥测</h2></div>
+                    <dl id="unifiSystem" class="detail-list unifi-system"></dl>
+                </section>
+                <section class="data-section" aria-labelledby="unifiFansTitle">
+                    <div class="section-head"><h2 id="unifiFansTitle">风扇</h2></div>
+                    <div class="table-wrap"><table class="data unifi-fans-table"><thead><tr><th>通道</th><th>支持能力</th><th>物理存在</th><th>观测</th><th>采集错误</th></tr></thead><tbody id="unifiFansBody"></tbody></table></div>
+                </section>
+                <section class="data-section" aria-labelledby="unifiPowerTitle">
+                    <div class="section-head"><h2 id="unifiPowerTitle">电源</h2></div>
+                    <div class="table-wrap"><table class="data unifi-power-table"><thead><tr><th>槽位</th><th>支持能力</th><th>物理存在</th><th>观测</th><th>采集错误</th></tr></thead><tbody id="unifiPowerBody"></tbody></table></div>
+                </section>
+                <section class="data-section" aria-labelledby="unifiStorageTitle">
+                    <div class="section-head"><h2 id="unifiStorageTitle">存储能力</h2></div>
+                    <dl id="unifiStorage" class="detail-list unifi-storage"></dl>
+                </section>
+            </div>
         </div>
     </main>
 
@@ -250,6 +274,6 @@
         <button id="aboutButton" type="button" class="footer-button" aria-haspopup="dialog">关于 / 构建信息</button>
     </footer>
 
-    <script src="js/app.js?v=20260823-1" defer></script>
+    <script src="js/app.js?v=20260827-1" defer></script>
 </body>
 </html>
