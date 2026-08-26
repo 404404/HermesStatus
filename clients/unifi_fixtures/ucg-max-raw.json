@@ -1,0 +1,14 @@
+{
+  "target_id": "ucg-max",
+  "profile_id": "ucg-max",
+  "collected_at": "2026-08-23T12:00:00+00:00",
+  "generic": {
+    "cpu_temperature_raw": "67.1",
+    "proc_stat_cpu": "cpu  2000 200 800 16000 400 0 0 0 0 0",
+    "meminfo": {"MemTotal": "8192000", "MemAvailable": "4096000", "MemFree": "2048000", "Buffers": "200000", "Cached": "600000", "SwapTotal": "1024000", "SwapFree": "1024000"},
+    "uptime_raw": "23456.78 19000.00",
+    "loadavg_raw": "0.34 0.42 0.39 2/100 77"
+  },
+  "diagnostics": {"fans": {"fan1": 0}, "thermal_zones": [{"id": "thermal_zone0", "type": "tsens_tz_sensor11"}, {"id": "thermal_zone1", "type": "tsens_tz_sensor12"}, {"id": "thermal_zone2", "type": "tsens_tz_sensor13"}, {"id": "thermal_zone3", "type": "tsens_tz_sensor14", "critical_c": 120}, {"id": "thermal_zone4", "type": "tsens_tz_sensor15"}], "hwmon": {"name": "lm63", "temp1_c": 57.0, "temp2_c": 59.0}},
+  "transport": {"ok": true, "error": null}
+}

@@ -18,6 +18,7 @@ from pathlib import PurePosixPath
 from lucky_collector import collector_from_environment, not_configured_lucky
 from easytier_collector import collector_from_environment as easytier_collector_from_environment
 from easytier_collector import not_configured_easytier
+from unifi_collector import not_configured_unifi
 
 
 EXTENSION_VERSION = "1.0-draft"
@@ -1979,6 +1980,8 @@ class HostExtensionCollector(object):
         easytier_collector=None,
         easytier_interval=None,
         easytier_args=None,
+        unifi_collector=None,
+        unifi_interval=None,
     ):
         self.host_os_release_file = host_os_release_file or os.getenv(
             "HOST_OS_RELEASE_FILE", "/host/etc/os-release"
@@ -2027,6 +2030,8 @@ class HostExtensionCollector(object):
             )
         else:
             self.easytier_interval = easytier_interval
+        self.unifi_collector = unifi_collector
+        self.unifi_interval = int(unifi_interval or getattr(unifi_collector, "config", None) and unifi_collector.config.interval_seconds or 60)
         self.host_os, os_error = collect_host_os(self.host_os_release_file)
         self.system_identity = collect_system_identity(
             self.host_os_release_file, self.dsm_version_file
@@ -2052,6 +2057,7 @@ class HostExtensionCollector(object):
         self._hermes = not_reported_hermes()
         self._lucky = not_configured_lucky()
         self._easytier = not_configured_easytier()
+        self._unifi = not_configured_unifi()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._started = False
@@ -2144,6 +2150,18 @@ class HostExtensionCollector(object):
         self._store("easytier", payload)
         return payload
 
+    def collect_unifi_once(self):
+        if self.unifi_collector is None:
+            payload = not_configured_unifi()
+        else:
+            try:
+                payload = self.unifi_collector.collect()
+            except Exception:
+                payload = not_configured_unifi()
+                payload.update({"configured": True, "stale": True, "error": _error("collector_failure", "UniFi observation is unavailable", "unifi-collector", True)})
+        self._store("unifi", payload)
+        return payload
+
     def _run_periodically(self, function, interval, initial_delay=False):
         if initial_delay and self._stop.wait(interval):
             return
@@ -2165,6 +2183,7 @@ class HostExtensionCollector(object):
             (self.collect_lucky_once, self.lucky_interval, "lucky-collector"),
             (self.collect_easytier_once, self.easytier_interval, "easytier-collector"),
         )
+        unifi_task = (self.collect_unifi_once, self.unifi_interval, "unifi-collector") if self.unifi_collector is not None else None
         # Device v2 can send an update immediately after start(). Populate every
         # independent domain synchronously first so a fresh container never
         # publishes a partially initialised extension snapshot.
@@ -2173,7 +2192,7 @@ class HostExtensionCollector(object):
                 function()
             except Exception:
                 pass
-        for function, interval, name in tasks:
+        for function, interval, name in tasks + ((unifi_task,) if unifi_task else ()):
             thread = threading.Thread(
                 target=self._run_periodically,
                 args=(function, interval, True),
@@ -2192,6 +2211,7 @@ class HostExtensionCollector(object):
             hermes = copy.deepcopy(self._hermes)
             lucky = copy.deepcopy(self._lucky)
             easytier = copy.deepcopy(self._easytier)
+            unifi = copy.deepcopy(self._unifi)
         payload = {
             "extension_version": EXTENSION_VERSION,
             "hardware": hardware,
@@ -2199,6 +2219,7 @@ class HostExtensionCollector(object):
             "hermes": hermes,
             "lucky": lucky,
             "easytier": easytier,
+            "unifi": unifi,
         }
         # Build provenance is optional.  Older/legacy clients must omit this
         # domain instead of sending JSON null, which strict Device v2 decoding
@@ -2227,6 +2248,7 @@ def add_extension_payload(update, collector):
                 "hermes": not_reported_hermes(),
                 "lucky": not_configured_lucky(),
                 "easytier": not_configured_easytier(),
+                "unifi": not_configured_unifi(),
             }
         )
     return update

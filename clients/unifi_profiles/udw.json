@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "profile_id": "udw",
+  "platform": "unifi_console",
+  "generic": {
+    "cpu_temperature": {
+      "source": "unifi.cpu.temperature.ubnt_systool",
+      "primary": true
+    },
+    "cpu_usage": {
+      "source": "linux.proc.stat",
+      "formula": "busy_without_idle_iowait"
+    },
+    "memory": {
+      "source": "linux.proc.meminfo",
+      "formula": "MemTotal-MemAvailable"
+    },
+    "uptime": {
+      "source": "linux.proc.uptime"
+    },
+    "load_average": {
+      "source": "linux.proc.loadavg"
+    }
+  },
+  "diagnostics": {
+    "thermal": {
+      "source": "linux.sys.thermal",
+      "health_affecting": false
+    },
+    "hwmon": {
+      "source": "linux.sys.hwmon",
+      "health_affecting": false
+    }
+  },
+  "fans": {
+    "channels": [
+      {
+        "id": "fan1",
+        "supported": true,
+        "present": "present"
+      },
+      {
+        "id": "fan2",
+        "supported": true,
+        "present": "present"
+      },
+      {
+        "id": "fan3",
+        "supported": true,
+        "present": "not_populated"
+      },
+      {
+        "id": "fan4",
+        "supported": true,
+        "present": "not_populated"
+      }
+    ]
+  },
+  "power": {
+    "psu_slots": 2,
+    "presence": "dynamic",
+    "sensor_mapping": "unknown"
+  },
+  "storage": {
+    "nvme": {
+      "supported": "unknown",
+      "present": "unknown",
+      "observed": "unknown"
+    }
+  },
+  "health_policy": {
+    "optional_diagnostics_affect_health": false,
+    "zero_rpm_is_failure_when_present": false
+  }
+}

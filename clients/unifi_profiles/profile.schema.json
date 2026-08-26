@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HermesStatus UniFi profile V1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "profile_id",
+    "platform",
+    "generic",
+    "diagnostics",
+    "fans",
+    "power",
+    "storage",
+    "health_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "profile_id": {
+      "enum": [
+        "udw",
+        "ucg-max"
+      ]
+    },
+    "platform": {
+      "const": "unifi_console"
+    }
+  },
+  "additionalProperties": false
+}

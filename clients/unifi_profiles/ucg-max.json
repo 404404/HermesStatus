@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "profile_id": "ucg-max",
+  "platform": "unifi_console",
+  "generic": {
+    "cpu_temperature": {
+      "source": "unifi.cpu.temperature.ubnt_systool",
+      "primary": true
+    },
+    "cpu_usage": {
+      "source": "linux.proc.stat",
+      "formula": "busy_without_idle_iowait"
+    },
+    "memory": {
+      "source": "linux.proc.meminfo",
+      "formula": "MemTotal-MemAvailable"
+    },
+    "uptime": {
+      "source": "linux.proc.uptime"
+    },
+    "load_average": {
+      "source": "linux.proc.loadavg"
+    }
+  },
+  "diagnostics": {
+    "thermal": {
+      "source": "linux.sys.thermal",
+      "health_affecting": false
+    },
+    "hwmon": {
+      "source": "linux.sys.hwmon",
+      "health_affecting": false
+    }
+  },
+  "fans": {
+    "channels": [
+      {
+        "id": "fan1",
+        "supported": true,
+        "present": "unknown"
+      }
+    ]
+  },
+  "power": {
+    "psu_slots": 0,
+    "presence": "unknown",
+    "sensor_mapping": "unknown"
+  },
+  "storage": {
+    "nvme": {
+      "supported": "unknown",
+      "present": "unknown",
+      "observed": false
+    }
+  },
+  "health_policy": {
+    "optional_diagnostics_affect_health": false,
+    "zero_rpm_is_failure_when_present": false
+  }
+}
