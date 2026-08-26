@@ -1,59 +1,188 @@
-"""Profile-driven normalization of fixed raw observations."""
-from copy import deepcopy
+"""Profile-driven, bounded UniFi normalization for Device v2 telemetry."""
 from datetime import datetime, timezone
+
+
+def _timestamp(raw):
+    return raw.get("collected_at") or datetime.now(timezone.utc).isoformat()
+
+
+def _error(code):
+    messages = {
+        "host_key_failure": "UniFi SSH host-key verification failed",
+        "ssh_auth_failure": "UniFi SSH authentication failed",
+        "ssh_timeout": "UniFi SSH timed out",
+        "parse_failure": "UniFi telemetry parsing failed",
+    }
+    return {
+        "code": code if code in messages else "ssh_transport_failure",
+        "message": messages.get(code, "UniFi SSH transport is unavailable"),
+        "source": "unifi",
+        "retryable": code not in {"host_key_failure", "ssh_auth_failure"},
+        "http_status": None,
+    }
+
 
 def _parse_cpu(line):
     fields = line.split()
     if not fields or fields[0] != "cpu" or len(fields) < 5:
         raise ValueError("invalid /proc/stat cpu line")
-    values = [int(v) for v in fields[1:]]
-    total = sum(values)
-    idle = values[3] + (values[4] if len(values) > 4 else 0)
-    return total, idle
+    try:
+        values = [int(value) for value in fields[1:]]
+    except ValueError as exc:
+        raise ValueError("invalid /proc/stat cpu line") from exc
+    if any(value < 0 for value in values):
+        raise ValueError("invalid /proc/stat cpu line")
+    return sum(values), values[3] + (values[4] if len(values) > 4 else 0)
+
 
 def _parse_mem(mem):
-    required = {"MemTotal", "MemAvailable", "MemFree", "Buffers", "Cached", "SwapTotal", "SwapFree"}
-    if set(mem) != required:
+    required = {"MemTotal", "MemFree", "Buffers", "Cached", "SwapTotal", "SwapFree"}
+    if not isinstance(mem, dict) or not required <= set(mem):
         raise ValueError("invalid meminfo keys")
-    values = {key: int(value) * 1024 for key, value in mem.items()}
-    if values["MemTotal"] <= 0 or values["MemAvailable"] > values["MemTotal"]:
+    try:
+        values = {key: int(value) * 1024 for key, value in mem.items()}
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid meminfo values") from exc
+    if any(value < 0 for value in values.values()) or values["MemTotal"] <= 0:
         raise ValueError("invalid meminfo values")
+    available = values.get("MemAvailable")
+    source = "mem_available"
+    if available is None:
+        available = values["MemFree"] + values["Buffers"] + values["Cached"]
+        source = "fallback_memfree_buffers_cached"
+    if available < 0 or available > values["MemTotal"]:
+        raise ValueError("invalid meminfo values")
+    values["MemAvailable"] = available
+    values["AvailableSource"] = source
     return values
 
-def _fan_output(profile, raw_fans):
-    supported = {f["id"]: f for f in profile["fans"]["channels"]}
+
+def _cpu_delta(total, idle, previous):
+    baseline = previous.get("_cpu_baseline") if previous else None
+    if not baseline:
+        return None, "insufficient_delta"
+    old_total, old_idle = baseline.get("total"), baseline.get("idle")
+    if not isinstance(old_total, int) or not isinstance(old_idle, int):
+        return None, "invalid_sample"
+    if total < old_total or idle < old_idle:
+        return None, "counter_reset"
+    delta_total, delta_idle = total - old_total, idle - old_idle
+    if delta_total == 0:
+        return None, "zero_delta"
+    if delta_idle > delta_total:
+        return None, "invalid_sample"
+    return round((delta_total - delta_idle) / delta_total * 100, 2), None
+
+
+def _state_for_rpm(rpm):
+    return "observed_zero_rpm" if rpm == 0 else "observed"
+
+
+def _fans(profile, raw_fans):
+    observed = raw_fans if isinstance(raw_fans, dict) else {}
     output, ignored = [], []
-    for fan_id, rpm in raw_fans.items():
-        capability = supported.get(fan_id)
-        if capability and capability["present"] == "not_populated":
-            ignored.append({"id": fan_id, "reason": "profile_not_populated", "rpm": rpm})
-        elif capability:
-            output.append({"id": fan_id, "rpm": rpm, "supported": True, "present": capability["present"], "health": "unknown" if capability["present"] == "unknown" else "not_evaluated"})
+    for capability in profile["fans"]["channels"]:
+        fan_id = capability["id"]
+        present = capability["present"]
+        if present == "not_populated":
+            if fan_id in observed:
+                ignored.append({"id": fan_id, "reason": "profile_not_populated"})
+            continue
+        rpm = observed.get(fan_id)
+        if isinstance(rpm, bool) or not isinstance(rpm, int) or rpm < 0:
+            rpm = None
+        output.append({
+            "id": fan_id,
+            "supported": "supported" if capability["supported"] else "unsupported",
+            "present": present,
+            "observed": rpm is not None,
+            "rpm": rpm,
+            "state": _state_for_rpm(rpm) if rpm is not None else "not_observed",
+            "error": None,
+        })
     return output, ignored
 
+
+def _power(profile):
+    slots = profile["power"]["psu_slots"]
+    presence = profile["power"]["presence"]
+    # `dynamic` is a model capability, not a runtime presence observation.
+    # Preserve that uncertainty as `unknown` until a qualified sensor mapping
+    # proves an individual PSU slot is present or absent.
+    present = "unknown" if presence == "dynamic" else presence
+    return [{
+        "id": f"psu{index}", "supported": "supported", "present": present,
+        "observed": False, "state": "not_observed", "error": None,
+    } for index in range(1, slots + 1)]
+
+
+def _storage(profile):
+    nvme = profile["storage"]["nvme"]
+    supported = nvme["supported"]
+    return {"nvme": {
+        "supported": "supported" if supported is True else "unsupported" if supported is False else "unknown",
+        "present": "not_present" if nvme["present"] == "not_populated" else nvme["present"],
+        "observed": nvme["observed"] is True,
+    }}
+
+
 def normalize(profile, raw, previous=None):
-    now = raw.get("collected_at") or datetime.now(timezone.utc).isoformat()
-    target_id = raw.get("target_id")
-    if not raw.get("transport", {}).get("ok"):
-        return {"target_id": target_id, "profile_id": profile["profile_id"], "platform": profile["platform"], "system": None, "fans": [], "power_supplies": [], "diagnostics": {}, "updated_at": now, "stale": True, "error": {"code": "ssh_transport_failure"}, "previous_observation": deepcopy(previous) if previous else None}
+    now = _timestamp(raw)
+    transport = raw.get("transport", {})
+    if not transport.get("ok"):
+        return {
+            "profile": profile["profile_id"],
+            "transport": {"status": "unavailable", "last_attempt": now,
+                          "last_success": previous.get("updated_at") if previous else None},
+            "system": previous.get("system") if previous else None,
+            "fans": previous.get("fans", []) if previous else [],
+            "power_supplies": previous.get("power_supplies", _power(profile)) if previous else _power(profile),
+            "storage": previous.get("storage", _storage(profile)) if previous else _storage(profile),
+            "diagnostics": previous.get("diagnostics", {"collection_status": "unavailable", "ignored_observations": []}) if previous else {"collection_status": "unavailable", "ignored_observations": []},
+            "updated_at": previous.get("updated_at") if previous else None,
+            "stale": True,
+            "error": _error(transport.get("error")),
+        }
     generic = raw["generic"]
     mem = _parse_mem(generic["meminfo"])
     total, idle = _parse_cpu(generic["proc_stat_cpu"])
-    previous_cpu = previous.get("_cpu_baseline") if previous else None
-    cpu_pct, cpu_reason = None, "insufficient_delta"
-    if previous_cpu and total > previous_cpu["total"] and idle >= previous_cpu["idle"]:
-        cpu_pct = round((1 - (idle - previous_cpu["idle"]) / (total - previous_cpu["total"])) * 100, 2)
-        cpu_reason = None
-    uptime = float(generic["uptime_raw"].split()[0])
-    load = [float(v) for v in generic["loadavg_raw"].split()[:3]]
-    if len(load) != 3:
-        raise ValueError("invalid loadavg")
-    fans, ignored = _fan_output(profile, raw.get("diagnostics", {}).get("fans", {}))
-    diagnostics = deepcopy(raw.get("diagnostics", {}))
-    diagnostics["ignored_observations"] = ignored
-    diagnostics["nvme"] = deepcopy(profile["storage"]["nvme"])
+    cpu_pct, cpu_reason = _cpu_delta(total, idle, previous)
+    try:
+        temperature = float(generic["cpu_temperature_raw"])
+        uptime = float(generic["uptime_raw"].split()[0])
+        load = [float(value) for value in generic["loadavg_raw"].split()[:3]]
+    except (TypeError, ValueError, IndexError) as exc:
+        raise ValueError("invalid generic observation") from exc
+    if len(load) != 3 or temperature < -100 or temperature > 250 or uptime < 0 or any(value < 0 for value in load):
+        raise ValueError("invalid generic observation")
+    fans, ignored = _fans(profile, raw.get("diagnostics", {}).get("fans", {}))
+    diagnostic_status = "available" if raw.get("diagnostics") else "not_collected"
+    if raw.get("diagnostics", {}).get("collection_status") == "unavailable":
+        diagnostic_status = "unavailable"
     return {
-        "target_id": target_id, "profile_id": profile["profile_id"], "platform": profile["platform"],
-        "system": {"cpu_usage_pct": cpu_pct, "cpu_usage_reason": cpu_reason, "cpu_temperature_c": float(generic["cpu_temperature_raw"]), "memory": {"total_bytes": mem["MemTotal"], "available_bytes": mem["MemAvailable"], "free_bytes": mem["MemFree"], "buffers_bytes": mem["Buffers"], "cached_bytes": mem["Cached"], "swap_total_bytes": mem["SwapTotal"], "swap_free_bytes": mem["SwapFree"], "used_bytes": mem["MemTotal"] - mem["MemAvailable"], "used_pct": round((mem["MemTotal"] - mem["MemAvailable"]) / mem["MemTotal"] * 100, 2)}, "uptime_seconds": uptime, "load_average": {"1m": load[0], "5m": load[1], "15m": load[2]}},
-        "fans": fans, "power_supplies": [], "diagnostics": diagnostics, "updated_at": now, "stale": False, "error": None, "_cpu_baseline": {"total": total, "idle": idle}
+        "profile": profile["profile_id"],
+        "transport": {"status": "available", "last_attempt": now, "last_success": now},
+        "system": {
+            "cpu_usage_percent": cpu_pct,
+            "cpu_usage_reason": cpu_reason,
+            "cpu_temperature_c": temperature,
+            "memory": {
+                "total_bytes": mem["MemTotal"], "available_bytes": mem["MemAvailable"],
+                "free_bytes": mem["MemFree"], "buffers_bytes": mem["Buffers"],
+                "cached_bytes": mem["Cached"], "swap_total_bytes": mem["SwapTotal"],
+                "swap_free_bytes": mem["SwapFree"], "used_bytes": mem["MemTotal"] - mem["MemAvailable"],
+                "used_percent": round((mem["MemTotal"] - mem["MemAvailable"]) / mem["MemTotal"] * 100, 2),
+                "available_source": mem["AvailableSource"],
+            },
+            "uptime_seconds": uptime,
+            "load_average": {"one_minute": load[0], "five_minutes": load[1], "fifteen_minutes": load[2]},
+        },
+        "fans": fans,
+        "power_supplies": _power(profile),
+        "storage": _storage(profile),
+        "diagnostics": {"collection_status": diagnostic_status, "ignored_observations": ignored},
+        "updated_at": now,
+        "stale": False,
+        "error": None,
+        "_cpu_baseline": {"total": total, "idle": idle},
     }

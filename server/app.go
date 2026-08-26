@@ -367,6 +367,7 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 		base["hermes"] = extension.Hermes
 		base["lucky"] = extension.Lucky
 		base["easytier"] = extension.EasyTier
+		base["unifi"] = extension.UniFi
 		base["client_build"] = extension.ClientBuild
 		if a.registry != nil {
 			device, _ := a.registryDevice(deviceID)

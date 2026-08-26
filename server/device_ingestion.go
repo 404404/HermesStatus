@@ -483,6 +483,14 @@ func forceExtensionStale(extension *ExtensionSnapshot) {
 		extension.EasyTier.Stale = true
 		extension.EasyTier.Status = EasyTierStale
 	}
+	if extension.UniFi != nil {
+		value := *extension.UniFi
+		extension.UniFi = &value
+		extension.UniFi.Stale = true
+		if extension.UniFi.Configured && extension.UniFi.Error == nil {
+			extension.UniFi.Error = newPipelineError("unifi", "stale")
+		}
+	}
 }
 
 func (a *App) updateAgent(

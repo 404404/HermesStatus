@@ -31,7 +31,7 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := stats["servers"].([]any)[0].(map[string]any)
-	for _, field := range []string{"extension_version", "received_at", "hardware", "docker", "hermes", "lucky", "easytier"} {
+	for _, field := range []string{"extension_version", "received_at", "hardware", "docker", "hermes", "lucky", "easytier", "unifi"} {
 		if _, ok := server[field]; !ok {
 			t.Fatalf("stats server is missing %s: %#v", field, server)
 		}
@@ -63,7 +63,7 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 		t.Fatalf("stats response does not reference StatsDocument: %#v", responseSchema)
 	}
 	schemas := spec["components"].(map[string]any)["schemas"].(map[string]any)
-	for _, name := range []string{"HardwareStats", "CPUUsageStats", "CPUDetails", "MemoryDetails", "DockerStats", "HermesStats", "LuckyStats", "LuckyServiceStats", "LuckyVersionStats", "LuckyDynamicDNSStats", "LuckyWebServicesStats", "LuckyPortForwardsStats", "LuckyCertificatesStats", "ConfigModelSummary", "AuxiliaryModelSummary", "DelegationSummary", "SanitizedConfigSummary", "MixtureOfAgentsStats", "EasyTierExpectationValues", "EasyTierExpectationProjection", "StatsServer", "StatsDocument"} {
+	for _, name := range []string{"HardwareStats", "CPUUsageStats", "CPUDetails", "MemoryDetails", "DockerStats", "HermesStats", "LuckyStats", "LuckyServiceStats", "LuckyVersionStats", "LuckyDynamicDNSStats", "LuckyWebServicesStats", "LuckyPortForwardsStats", "LuckyCertificatesStats", "ConfigModelSummary", "AuxiliaryModelSummary", "DelegationSummary", "SanitizedConfigSummary", "MixtureOfAgentsStats", "EasyTierExpectationValues", "EasyTierExpectationProjection", "UniFiFanStats", "UniFiPowerStats", "UniFiMemoryStats", "UniFiLoadAverage", "UniFiSystemStats", "UniFiStats", "StatsServer", "StatsDocument"} {
 		schema := schemas[name].(map[string]any)
 		if schema["additionalProperties"] != false {
 			t.Fatalf("%s is not allowlisted: %#v", name, schema)

@@ -511,8 +511,50 @@ func extensionOpenAPISchemas() map[string]any {
 		"observed":   schemaRef("EasyTierExpectationValues"),
 	})
 
+	uniFiCapability := map[string]any{"type": "string", "enum": []string{"supported", "unknown", "unsupported"}}
+	uniFiPresence := map[string]any{"type": "string", "enum": []string{"present", "not_present", "not_populated", "unknown"}}
+	uniFiObservation := map[string]any{"type": "string", "enum": []string{"not_observed", "observed", "observed_zero_rpm", "unknown"}}
+	uniFiFan := requiredObject([]string{"id", "supported", "present", "observed", "rpm", "state", "error"}, map[string]any{
+		"id": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength}, "supported": uniFiCapability, "present": uniFiPresence,
+		"observed": map[string]any{"type": "boolean"}, "rpm": nullableInteger(100000, "Observed fan speed"), "state": uniFiObservation, "error": nullableRef("ExtensionError"),
+	})
+	uniFiPower := requiredObject([]string{"id", "supported", "present", "observed", "state", "error"}, map[string]any{
+		"id": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength}, "supported": uniFiCapability, "present": uniFiPresence,
+		"observed": map[string]any{"type": "boolean"}, "state": uniFiObservation, "error": nullableRef("ExtensionError"),
+	})
+	uniFiMemory := requiredObject([]string{"total_bytes", "available_bytes", "free_bytes", "buffers_bytes", "cached_bytes", "swap_total_bytes", "swap_free_bytes", "used_bytes", "used_percent", "available_source"}, map[string]any{
+		"total_bytes": nullableInteger(MaxSafeInteger, "Total memory bytes"), "available_bytes": nullableInteger(MaxSafeInteger, "Available memory bytes"), "free_bytes": nullableInteger(MaxSafeInteger, "Free memory bytes"),
+		"buffers_bytes": nullableInteger(MaxSafeInteger, "Buffer bytes"), "cached_bytes": nullableInteger(MaxSafeInteger, "Cached bytes"), "swap_total_bytes": nullableInteger(MaxSafeInteger, "Swap total bytes"), "swap_free_bytes": nullableInteger(MaxSafeInteger, "Swap free bytes"),
+		"used_bytes": nullableInteger(MaxSafeInteger, "Used memory bytes"), "used_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100}, "available_source": map[string]any{"type": "string", "enum": []string{"mem_available", "fallback_memfree_buffers_cached"}},
+	})
+	uniFiLoad := requiredObject([]string{"one_minute", "five_minutes", "fifteen_minutes"}, map[string]any{
+		"one_minute": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "five_minutes": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "fifteen_minutes": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+	})
+	uniFiSystem := requiredObject([]string{"cpu_usage_percent", "cpu_usage_reason", "cpu_temperature_c", "memory", "uptime_seconds", "load_average"}, map[string]any{
+		"cpu_usage_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100}, "cpu_usage_reason": map[string]any{"type": []string{"string", "null"}, "enum": []any{"insufficient_delta", "counter_reset", "zero_delta", "invalid_sample", nil}},
+		"cpu_temperature_c": map[string]any{"type": []string{"number", "null"}, "minimum": MinTemperatureCelsius, "maximum": MaxTemperatureCelsius}, "memory": nullableRef("UniFiMemoryStats"), "uptime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "load_average": nullableRef("UniFiLoadAverage"),
+	})
+	uniFiStats := requiredObject([]string{"configured", "profile", "transport", "system", "fans", "power_supplies", "storage", "diagnostics", "updated_at", "stale", "error"}, map[string]any{
+		"configured": map[string]any{"type": "boolean"}, "profile": map[string]any{"type": []string{"string", "null"}, "enum": []any{"udw", "ucg-max", "unknown", nil}},
+		"transport": requiredObject([]string{"status", "last_attempt", "last_success"}, map[string]any{"status": map[string]any{"type": "string", "enum": []string{"disabled", "not_collected", "available", "unavailable"}}, "last_attempt": nullableString(MaxTimestampLength, "Latest collection attempt"), "last_success": nullableString(MaxTimestampLength, "Latest successful collection")}),
+		"system":    nullableRef("UniFiSystemStats"), "fans": map[string]any{"type": "array", "maxItems": MaxUniFiFans, "items": schemaRef("UniFiFanStats"), "default": []any{}}, "power_supplies": map[string]any{"type": "array", "maxItems": MaxUniFiPowerSupplies, "items": schemaRef("UniFiPowerStats"), "default": []any{}},
+		"storage": requiredObject([]string{"nvme"}, map[string]any{"nvme": requiredObject([]string{"supported", "present", "observed"}, map[string]any{"supported": uniFiCapability, "present": uniFiPresence, "observed": map[string]any{"type": "boolean"}})}),
+		"diagnostics": requiredObject([]string{"collection_status", "ignored_observations"}, map[string]any{
+			"collection_status": map[string]any{"type": "string", "enum": []string{"not_collected", "available", "partial", "unavailable"}},
+			"ignored_observations": map[string]any{
+				"type": "array", "maxItems": MaxUniFiIgnoredObservations,
+				"items": requiredObject([]string{"id", "reason"}, map[string]any{
+					"id":     map[string]any{"type": "string", "maxLength": MaxUniFiTextLength},
+					"reason": map[string]any{"type": "string", "enum": []string{"profile_not_populated", "optional_sensor_unavailable"}},
+				}),
+				"default": []any{},
+			},
+		}),
+		"updated_at": nullableString(MaxTimestampLength, "Last successful UniFi collection"), "stale": map[string]any{"type": "boolean"}, "error": nullableRef("ExtensionError"),
+	})
+
 	statsServer := requiredObject(
-		[]string{"name", "type", "host", "location", "online4", "online6", "extension_version", "received_at", "hardware", "docker", "hermes", "lucky", "easytier"},
+		[]string{"name", "type", "host", "location", "online4", "online6", "extension_version", "received_at", "hardware", "docker", "hermes", "lucky", "easytier", "unifi"},
 		map[string]any{
 			"name": stringOpenAPISchema(), "type": stringOpenAPISchema(), "host": stringOpenAPISchema(), "location": stringOpenAPISchema(),
 			"online4": map[string]any{"type": "boolean"}, "online6": map[string]any{"type": "boolean"},
@@ -533,6 +575,7 @@ func extensionOpenAPISchemas() map[string]any {
 			"hermes":               schemaRef("HermesStats"),
 			"lucky":                schemaRef("LuckyStats"),
 			"easytier":             schemaRef("EasyTierStats"),
+			"unifi":                schemaRef("UniFiStats"),
 			"client_build":         nullableRef("ClientBuildInfo"),
 			"easytier_expectation": schemaRef("EasyTierExpectationProjection"),
 		},
@@ -590,6 +633,12 @@ func extensionOpenAPISchemas() map[string]any {
 		"EasyTierStats":                 easyTierStats,
 		"EasyTierExpectationValues":     easyTierExpectationValues,
 		"EasyTierExpectationProjection": easyTierExpectationProjection,
+		"UniFiFanStats":                 uniFiFan,
+		"UniFiPowerStats":               uniFiPower,
+		"UniFiMemoryStats":              uniFiMemory,
+		"UniFiLoadAverage":              uniFiLoad,
+		"UniFiSystemStats":              uniFiSystem,
+		"UniFiStats":                    uniFiStats,
 		"StatsServer":                   statsServer,
 		"StatsDocument":                 statsDocument,
 	}

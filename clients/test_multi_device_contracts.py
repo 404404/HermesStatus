@@ -138,6 +138,20 @@ class ClientV2ConfigContractTests(unittest.TestCase):
                 file_values={**self.file_values, "unknown": "synthetic"}
             )
 
+    def test_unifi_configuration_is_strict_and_credential_file_only(self):
+        unifi = {
+            "enabled": True, "profile": "udw", "host": "192.0.2.1", "port": 22,
+            "username": "root", "credential_file": "/run/secrets/unifi-password",
+            "known_hosts_file": "/run/secrets/unifi-known-hosts",
+            "connect_timeout_seconds": 10, "interval_seconds": 60,
+        }
+        config = resolve_client_config(file_values={**self.file_values, "unifi": unifi})
+        self.assertEqual(config.unifi.profile_id, "udw")
+        self.assertEqual(config.unifi.interval_seconds, 60)
+        for mutation in ({**unifi, "command": "id"}, {**unifi, "profile": "unknown"}, {**unifi, "host": "192.0.2.1;id"}, {"enabled": False, "profile": "udw"}):
+            with self.subTest(mutation=mutation), self.assertRaises(ClientContractError):
+                resolve_client_config(file_values={**self.file_values, "unifi": mutation})
+
     def test_fqdn_device_id_timeout_and_token_path_validation(self):
         mutations = [
             {"device_id": "INVALID ID"},

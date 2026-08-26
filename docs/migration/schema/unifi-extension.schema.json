@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/404404/HermesStatus/schemas/unifi-extension.schema.json",
+  "title": "HermesStatus UniFi telemetry extension",
+  "$comment": "Strict profile-selected read-only telemetry. SSH credentials, commands, host keys, raw shell output, vendor configuration, and arbitrary diagnostic keys are deliberately absent.",
+  "type": "object",
+  "required": [
+    "configured",
+    "profile",
+    "transport",
+    "system",
+    "fans",
+    "power_supplies",
+    "storage",
+    "diagnostics",
+    "updated_at",
+    "stale",
+    "error"
+  ],
+  "properties": {
+    "configured": {
+      "type": "boolean"
+    },
+    "profile": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "udw",
+        "ucg-max",
+        "unknown",
+        null
+      ]
+    },
+    "transport": {
+      "$ref": "#/$defs/transport"
+    },
+    "system": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/system"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fans": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/fan"
+      }
+    },
+    "power_supplies": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/power"
+      }
+    },
+    "storage": {
+      "$ref": "#/$defs/storage"
+    },
+    "diagnostics": {
+      "$ref": "#/$defs/diagnostics"
+    },
+    "updated_at": {
+      "$ref": "#/$defs/nullableDateTime"
+    },
+    "stale": {
+      "type": "boolean"
+    },
+    "error": {
+      "$ref": "agent-update-extension.schema.json#/$defs/error"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "nullableDateTime": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "maxLength": 40
+    },
+    "nullableCounter": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "nullableNumber": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "capability": {
+      "enum": [
+        "supported",
+        "unknown",
+        "unsupported"
+      ]
+    },
+    "presence": {
+      "enum": [
+        "present",
+        "not_present",
+        "not_populated",
+        "unknown"
+      ]
+    },
+    "observation": {
+      "enum": [
+        "not_observed",
+        "observed",
+        "observed_zero_rpm",
+        "unknown"
+      ]
+    },
+    "transport": {
+      "type": "object",
+      "required": [
+        "status",
+        "last_attempt",
+        "last_success"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "disabled",
+            "not_collected",
+            "available",
+            "unavailable"
+          ]
+        },
+        "last_attempt": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "last_success": {
+          "$ref": "#/$defs/nullableDateTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "memory": {
+      "type": "object",
+      "required": [
+        "total_bytes",
+        "available_bytes",
+        "free_bytes",
+        "buffers_bytes",
+        "cached_bytes",
+        "swap_total_bytes",
+        "swap_free_bytes",
+        "used_bytes",
+        "used_percent",
+        "available_source"
+      ],
+      "properties": {
+        "total_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "available_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "free_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "buffers_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "cached_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "swap_total_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "swap_free_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "used_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "used_percent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "available_source": {
+          "enum": [
+            "mem_available",
+            "fallback_memfree_buffers_cached"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "load": {
+      "type": "object",
+      "required": [
+        "one_minute",
+        "five_minutes",
+        "fifteen_minutes"
+      ],
+      "properties": {
+        "one_minute": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "five_minutes": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "fifteen_minutes": {
+          "$ref": "#/$defs/nullableNumber"
+        }
+      },
+      "additionalProperties": false
+    },
+    "system": {
+      "type": "object",
+      "required": [
+        "cpu_usage_percent",
+        "cpu_usage_reason",
+        "cpu_temperature_c",
+        "memory",
+        "uptime_seconds",
+        "load_average"
+      ],
+      "properties": {
+        "cpu_usage_percent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "cpu_usage_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "insufficient_delta",
+            "counter_reset",
+            "zero_delta",
+            "invalid_sample",
+            null
+          ]
+        },
+        "cpu_temperature_c": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": -100,
+          "maximum": 250
+        },
+        "memory": {
+          "$ref": "#/$defs/memory"
+        },
+        "uptime_seconds": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "load_average": {
+          "$ref": "#/$defs/load"
+        }
+      },
+      "additionalProperties": false
+    },
+    "fan": {
+      "type": "object",
+      "required": [
+        "id",
+        "supported",
+        "present",
+        "observed",
+        "rpm",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "supported": {
+          "$ref": "#/$defs/capability"
+        },
+        "present": {
+          "$ref": "#/$defs/presence"
+        },
+        "observed": {
+          "type": "boolean"
+        },
+        "rpm": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "state": {
+          "$ref": "#/$defs/observation"
+        },
+        "error": {
+          "$ref": "agent-update-extension.schema.json#/$defs/error"
+        }
+      },
+      "additionalProperties": false
+    },
+    "power": {
+      "type": "object",
+      "required": [
+        "id",
+        "supported",
+        "present",
+        "observed",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "supported": {
+          "$ref": "#/$defs/capability"
+        },
+        "present": {
+          "$ref": "#/$defs/presence"
+        },
+        "observed": {
+          "type": "boolean"
+        },
+        "state": {
+          "$ref": "#/$defs/observation"
+        },
+        "error": {
+          "$ref": "agent-update-extension.schema.json#/$defs/error"
+        }
+      },
+      "additionalProperties": false
+    },
+    "storage": {
+      "type": "object",
+      "required": [
+        "nvme"
+      ],
+      "properties": {
+        "nvme": {
+          "type": "object",
+          "required": [
+            "supported",
+            "present",
+            "observed"
+          ],
+          "properties": {
+            "supported": {
+              "$ref": "#/$defs/capability"
+            },
+            "present": {
+              "$ref": "#/$defs/presence"
+            },
+            "observed": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "diagnostics": {
+      "type": "object",
+      "required": [
+        "collection_status",
+        "ignored_observations"
+      ],
+      "properties": {
+        "collection_status": {
+          "enum": [
+            "not_collected",
+            "available",
+            "partial",
+            "unavailable"
+          ]
+        },
+        "ignored_observations": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "reason"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "reason": {
+                "enum": [
+                  "profile_not_populated",
+                  "optional_sensor_unavailable"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

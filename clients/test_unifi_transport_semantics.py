@@ -22,4 +22,4 @@ class TransportSemanticsTests(unittest.TestCase):
         result = normalize(self.profile, raw)
         self.assertFalse(result["stale"])
         self.assertIsNone(result["error"])
-        self.assertIsNone(result["system"]["cpu_usage_pct"])
+        self.assertIsNone(result["system"]["cpu_usage_percent"])

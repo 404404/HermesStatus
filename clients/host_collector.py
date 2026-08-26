@@ -18,7 +18,7 @@ from pathlib import PurePosixPath
 from lucky_collector import collector_from_environment, not_configured_lucky
 from easytier_collector import collector_from_environment as easytier_collector_from_environment
 from easytier_collector import not_configured_easytier
-from unifi_collector import not_configured_unifi
+from unifi_collector import not_configured_unifi, not_collected_unifi
 
 
 EXTENSION_VERSION = "1.0-draft"
@@ -2057,7 +2057,7 @@ class HostExtensionCollector(object):
         self._hermes = not_reported_hermes()
         self._lucky = not_configured_lucky()
         self._easytier = not_configured_easytier()
-        self._unifi = not_configured_unifi()
+        self._unifi = not_collected_unifi(unifi_collector.config.profile_id) if unifi_collector is not None else not_configured_unifi()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._started = False
@@ -2157,8 +2157,9 @@ class HostExtensionCollector(object):
             try:
                 payload = self.unifi_collector.collect()
             except Exception:
-                payload = not_configured_unifi()
-                payload.update({"configured": True, "stale": True, "error": _error("collector_failure", "UniFi observation is unavailable", "unifi-collector", True)})
+                payload = not_collected_unifi(self.unifi_collector.config.profile_id)
+                payload["transport"]["status"] = "unavailable"
+                payload["error"] = _error("collector_failure", "UniFi observation is unavailable", "unifi", True)
         self._store("unifi", payload)
         return payload
 

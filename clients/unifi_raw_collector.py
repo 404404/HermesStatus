@@ -54,8 +54,10 @@ class RawCollector:
     def collect(self):
         try:
             return parse_core(collect_core(self.config), self.target_id, self.profile_id)
-        except (TransportError, ValueError):
-            return {"target_id": self.target_id, "profile_id": self.profile_id, "collected_at": datetime.now(timezone.utc).isoformat(), "transport": {"ok": False, "error": "ssh_transport_failure"}}
+        except TransportError as exc:
+            return {"target_id": self.target_id, "profile_id": self.profile_id, "collected_at": datetime.now(timezone.utc).isoformat(), "transport": {"ok": False, "error": str(exc)}}
+        except ValueError:
+            return {"target_id": self.target_id, "profile_id": self.profile_id, "collected_at": datetime.now(timezone.utc).isoformat(), "transport": {"ok": False, "error": "parse_failure"}}
 
     def diagnostics(self):
         try:

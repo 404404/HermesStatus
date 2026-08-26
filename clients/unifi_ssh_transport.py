@@ -37,10 +37,12 @@ def _run_fixed(remote_script, config):
     askpass = _askpass(config.credential_file)
     env = os.environ.copy()
     env.update({"SSH_ASKPASS": askpass, "SSH_ASKPASS_REQUIRE": "force", "DISPLAY": "hermesstatus-unifi"})
-    command = ["setsid", "ssh", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + config.known_hosts_file, "-o", "KbdInteractiveAuthentication=yes", "-o", "PasswordAuthentication=no", "-o", "PreferredAuthentications=keyboard-interactive", "-o", "PubkeyAuthentication=yes", "-o", "ConnectTimeout=" + str(config.connect_timeout_seconds), "-p", str(config.port), config.username + "@" + config.host, remote_script]
+    command = ["setsid", "--wait", "ssh", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + config.known_hosts_file, "-o", "KbdInteractiveAuthentication=yes", "-o", "PasswordAuthentication=no", "-o", "PreferredAuthentications=keyboard-interactive", "-o", "PubkeyAuthentication=yes", "-o", "ConnectTimeout=" + str(config.connect_timeout_seconds), "-p", str(config.port), config.username + "@" + config.host, remote_script]
     try:
         completed = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=config.connect_timeout_seconds + 15, env=env, check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired as exc:
+        raise TransportError("ssh_timeout") from exc
+    except OSError as exc:
         raise TransportError("ssh_transport_failure") from exc
     finally:
         try: os.unlink(askpass)

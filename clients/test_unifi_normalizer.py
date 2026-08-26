@@ -20,14 +20,14 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(result["system"]["cpu_temperature_c"], 64.0)
         self.assertEqual([x["id"] for x in result["fans"]], ["fan1", "fan2"])
         self.assertEqual([x["id"] for x in result["diagnostics"]["ignored_observations"]], ["fan3", "fan4"])
-        self.assertEqual(result["system"]["cpu_usage_pct"], None)
+        self.assertEqual(result["system"]["cpu_usage_percent"], None)
 
     def test_ucg_max_zero_rpm_is_not_failure_and_nvme_unknown(self):
         result = normalize(load_profile(self.profiles, "ucg-max"), fixture("ucg-max-raw.json"))
         self.assertEqual(result["fans"][0]["rpm"], 0)
-        self.assertEqual(result["fans"][0]["health"], "unknown")
-        self.assertEqual(result["diagnostics"]["nvme"]["present"], "unknown")
-        self.assertFalse(result["diagnostics"]["nvme"]["observed"])
+        self.assertEqual(result["fans"][0]["state"], "observed_zero_rpm")
+        self.assertEqual(result["storage"]["nvme"]["present"], "unknown")
+        self.assertFalse(result["storage"]["nvme"]["observed"])
 
     def test_memory_uptime_load_and_cpu_delta(self):
         profile = load_profile(self.profiles, "ucg-max")
@@ -35,11 +35,11 @@ class NormalizerTests(unittest.TestCase):
         second_raw = fixture("ucg-max-raw.json")
         second_raw["generic"]["proc_stat_cpu"] = "cpu  2100 210 850 16200 405 0 0 0 0 0"
         second = normalize(profile, second_raw, first)
-        self.assertGreater(second["system"]["cpu_usage_pct"], 0)
+        self.assertGreater(second["system"]["cpu_usage_percent"], 0)
         self.assertEqual(second["system"]["cpu_usage_reason"], None)
         self.assertEqual(second["system"]["memory"]["used_bytes"], 4194304000)
         self.assertEqual(second["system"]["uptime_seconds"], 23456.78)
-        self.assertEqual(second["system"]["load_average"]["15m"], 0.39)
+        self.assertEqual(second["system"]["load_average"]["fifteen_minutes"], 0.39)
 
     def test_optional_diagnostics_do_not_break_core(self):
         raw = fixture("ucg-max-raw.json")

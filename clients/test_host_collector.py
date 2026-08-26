@@ -148,6 +148,24 @@ class HostCollectorTests(unittest.TestCase):
         )
         self.assertEqual(collector.easytier_interval, 75)
 
+    def test_configured_unifi_starts_not_collected_without_blocking_host_collection(self):
+        class UniFiFixture(object):
+            class config:
+                profile_id = "udw"
+                interval_seconds = 60
+            def collect(self):
+                raise AssertionError("must not run during host construction")
+        collector = HostExtensionCollector(
+            host_os_release_file=str(FIXTURES / "os-release"), status_dir="",
+            command_runner=lambda command, timeout: (0, ""), docker_request=lambda path: [],
+            unifi_collector=UniFiFixture(),
+        )
+        unifi = collector.extension_payload()["unifi"]
+        self.assertTrue(unifi["configured"])
+        self.assertEqual(unifi["profile"], "udw")
+        self.assertEqual(unifi["transport"]["status"], "not_collected")
+        self.assertTrue(unifi["stale"])
+
     def test_host_os_uses_mounted_pretty_name(self):
         name, error = collect_host_os(str(FIXTURES / "os-release"))
         self.assertEqual(name, "Example Linux 24.04 LTS")

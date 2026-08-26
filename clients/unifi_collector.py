@@ -3,24 +3,42 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+
 from unifi_normalizer import normalize
 from unifi_profile_loader import ProfileError, load_profile
 from unifi_raw_collector import RawCollector
 
 PROFILE_DIRECTORY = Path(__file__).with_name("unifi_profiles")
 
+
 def not_configured_unifi():
-    return {"configured": False, "profile": None, "transport": {"status": "disabled", "last_attempt": None, "last_success": None}, "system": None, "fans": [], "power_supplies": [], "storage": {"nvme": {"supported": "unknown", "present": "unknown", "observed": "unknown"}}, "diagnostics": {}, "updated_at": None, "stale": False, "error": None}
+    return {
+        "configured": False, "profile": None,
+        "transport": {"status": "disabled", "last_attempt": None, "last_success": None},
+        "system": None, "fans": [], "power_supplies": [],
+        "storage": {"nvme": {"supported": "unknown", "present": "unknown", "observed": False}},
+        "diagnostics": {"collection_status": "not_collected", "ignored_observations": []},
+        "updated_at": None, "stale": False, "error": None,
+    }
+
+
+def not_collected_unifi(profile_id):
+    result = not_configured_unifi()
+    result.update({
+        "configured": True, "profile": profile_id,
+        "transport": {"status": "not_collected", "last_attempt": None, "last_success": None},
+        "stale": True,
+        "error": {"code": "not_collected", "message": "UniFi telemetry has not been collected", "source": "unifi", "retryable": True, "http_status": None},
+    })
+    return result
+
 
 def _public(payload):
     result = copy.deepcopy(payload)
     result.pop("_cpu_baseline", None)
-    result.pop("previous_observation", None)
     result["configured"] = True
-    transport = result.setdefault("transport", {})
-    transport.setdefault("status", "available" if not result.get("stale") else "unavailable")
-    transport.setdefault("last_success", result.get("updated_at"))
     return result
+
 
 class UniFiDomainCollector:
     def __init__(self, config, *, raw_collector=None):
@@ -34,7 +52,13 @@ class UniFiDomainCollector:
 
     def collect(self):
         raw = self.raw_collector.collect()
-        normalized = normalize(self.profile, raw, self.previous)
-        if not normalized.get("stale"):
-            self.previous = copy.deepcopy(normalized)
-        return _public(normalized)
+        try:
+            normalized = normalize(self.profile, raw, self.previous)
+        except ValueError:
+            raw = {"collected_at": raw.get("collected_at"), "transport": {"ok": False, "error": "parse_failure"}}
+            normalized = normalize(self.profile, raw, self.previous)
+        public = _public(normalized)
+        if not public["stale"]:
+            self.previous = copy.deepcopy(public)
+            self.previous["_cpu_baseline"] = normalized["_cpu_baseline"]
+        return public
