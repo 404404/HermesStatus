@@ -108,6 +108,40 @@ class ClientArgumentTests(unittest.TestCase):
             namespaces[1]["_device_v2_stats_collector"],
         )
 
+    def test_carrier_latency_probe_surface_is_removed(self):
+        legacy_probe_terms = (
+            "ping_10010",
+            "ping_189",
+            "ping_10086",
+            "time_10010",
+            "time_189",
+            "time_10086",
+            "cu.tz.cloudcpp.com",
+            "ct.tz.cloudcpp.com",
+            "cm.tz.cloudcpp.com",
+            "PROBEPORT",
+            "PROBE_PROTOCOL_PREFER",
+            "PING_PACKET_HISTORY_LEN",
+        )
+        paths = (
+            CLIENT_DIR / "client-linux.py",
+            CLIENT_DIR / "client-psutil.py",
+            CLIENT_DIR / "multi_device_contracts.py",
+            CLIENT_DIR.parent / "Dockerfile.client",
+            CLIENT_DIR.parent / "docker-compose-client.yml",
+            CLIENT_DIR.parent / "schemas" / "device-update-v2.schema.json",
+            CLIENT_DIR.parent / "schemas" / "stats-v2.schema.json",
+            CLIENT_DIR.parent / "server" / "model.go",
+            CLIENT_DIR.parent / "server" / "app.go",
+            CLIENT_DIR.parent / "server" / "contracts" / "contracts.go",
+            CLIENT_DIR.parent / "server" / "extension_openapi.go",
+        )
+        for path in paths:
+            content = path.read_text(encoding="utf-8")
+            for term in legacy_probe_terms:
+                with self.subTest(path=path.name, term=term):
+                    self.assertNotIn(term, content)
+
     def test_client_image_does_not_force_legacy_transport_into_v2_mode(self):
         dockerfile = (CLIENT_DIR.parent / "Dockerfile.client").read_text(
             encoding="utf-8"

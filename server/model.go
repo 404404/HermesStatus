@@ -52,12 +52,6 @@ type AgentStats struct {
 	Load1        float64 `json:"load_1"`
 	Load5        float64 `json:"load_5"`
 	Load15       float64 `json:"load_15"`
-	Ping10010    float64 `json:"ping_10010"`
-	Ping189      float64 `json:"ping_189"`
-	Ping10086    float64 `json:"ping_10086"`
-	Time10010    int64   `json:"time_10010"`
-	Time189      int64   `json:"time_189"`
-	Time10086    int64   `json:"time_10086"`
 	TCPCount     int64   `json:"tcp"`
 	UDPCount     int64   `json:"udp"`
 	ProcessCount int64   `json:"process"`

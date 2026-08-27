@@ -41,7 +41,6 @@ func TestAgentProtocolAndTrafficState(t *testing.T) {
 		Uptime: 90061, Load1: 1.25, Load5: 1, Load15: 0.75, CPU: 33.5, CPUCores: 4, CPUModel: "Test CPU",
 		MemoryTotal: 1024, MemoryUsed: 512, SwapTotal: 128, SwapUsed: 2, HDDTotal: 10000, HDDUsed: 4000,
 		NetworkRX: 123, NetworkTX: 456, NetworkIn: 1_000_000, NetworkOut: 2_000_000,
-		Ping10010: 1, Ping189: 2, Ping10086: 3, Time10010: 10, Time189: 20, Time10086: 30,
 		TCPCount: 10, UDPCount: 2, ProcessCount: 30, ThreadCount: 60, IORead: 1, IOWrite: 2,
 		OS: "linux", Custom: "example=12", Online6: &online6,
 	}
