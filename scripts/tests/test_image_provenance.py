@@ -93,6 +93,20 @@ class ImageProvenanceTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("COPY server/contracts ./contracts", dockerfile)
 
+    def test_client_dockerfile_copies_all_unifi_runtime_modules(self):
+        dockerfile = (
+            pathlib.Path(__file__).resolve().parents[2] / "Dockerfile.client"
+        ).read_text(encoding="utf-8")
+        for module in (
+            "unifi_collector.py",
+            "unifi_profile_loader.py",
+            "unifi_source_registry.py",
+            "unifi_raw_collector.py",
+            "unifi_ssh_transport.py",
+            "unifi_normalizer.py",
+        ):
+            self.assertIn("COPY clients/" + module + " /app/" + module, dockerfile)
+
     def test_client_dockerfile_sets_client_component_metadata(self):
         dockerfile = (
             pathlib.Path(__file__).resolve().parents[2] / "Dockerfile.client"
