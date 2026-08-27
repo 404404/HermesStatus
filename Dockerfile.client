@@ -40,6 +40,7 @@ COPY clients/unifi_profile_loader.py /app/unifi_profile_loader.py
 COPY clients/unifi_source_registry.py /app/unifi_source_registry.py
 COPY clients/unifi_raw_collector.py /app/unifi_raw_collector.py
 COPY clients/unifi_ssh_transport.py /app/unifi_ssh_transport.py
+COPY clients/unifi_askpass.py /app/unifi_askpass.py
 COPY clients/unifi_normalizer.py /app/unifi_normalizer.py
 COPY clients/unifi_profiles /app/unifi_profiles
 COPY scripts/export-hermes-status.py /app/export-hermes-status.py
@@ -85,7 +86,7 @@ ENV INTERVAL=1 \
     HERMESSTATUS_CLIENT_REVISION=${VCS_REF} \
     HERMESSTATUS_CLIENT_BUILD_TIME=${BUILD_DATE}
 
-RUN chmod +x /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh /app/unifi_askpass.py
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD []

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from unifi_ssh_transport import TransportError, _run_fixed, _validate_file
+from unifi_ssh_transport import ASKPASS_PATH, TransportError, _askpass, _run_fixed, _validate_file
 
 
 class UniFiSSHTransportTests(unittest.TestCase):
@@ -74,23 +74,19 @@ class UniFiSSHTransportTests(unittest.TestCase):
             self.assertNotIn("not-a-real-secret", " ".join(command))
             self.assertNotIn("not-a-real-secret", " ".join(str(value) for value in environment.values()))
 
-    def test_askpass_reads_password_only_at_prompt_time(self):
+    def test_askpass_uses_fixed_executable_and_path_only_environment(self):
         with tempfile.NamedTemporaryFile(mode="w+") as handle:
             handle.write("prompt-secret\n")
             handle.flush()
             os.chmod(handle.name, stat.S_IRUSR | stat.S_IWUSR)
-            askpass = __import__("unifi_ssh_transport")._askpass(handle.name)
-            try:
-                self.assertEqual(os.stat(askpass).st_mode & 0o777, 0o700)
-                import subprocess
-                self.assertEqual(subprocess.check_output([askpass], text=True), "prompt-secret\n")
-                with open(askpass, encoding="utf-8") as script:
-                    self.assertNotIn("prompt-secret", script.read())
-            finally:
-                try:
-                    os.unlink(askpass)
-                except OSError:
-                    pass
+            self.assertEqual(_askpass(handle.name), ASKPASS_PATH)
+            result = SimpleNamespace(returncode=0, stderr="", stdout="fixed\n")
+            with patch("unifi_ssh_transport.subprocess.run", return_value=result) as run:
+                _run_fixed("printf fixed", self._config(handle.name))
+            environment = run.call_args.kwargs["env"]
+            self.assertEqual(environment["SSH_ASKPASS"], ASKPASS_PATH)
+            self.assertEqual(environment["HERMESSTATUS_UNIFI_CREDENTIAL_FILE"], handle.name)
+            self.assertNotIn("prompt-secret", " ".join(str(value) for value in environment.values()))
 
     def test_auth_rejection_is_distinct(self):
         with tempfile.NamedTemporaryFile() as handle:
