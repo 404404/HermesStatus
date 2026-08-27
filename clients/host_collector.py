@@ -53,6 +53,13 @@ MAX_FILESYSTEM_BACKING_DISKS = 16
 MAX_BLOCK_GRAPH_DEPTH = 16
 MAX_BLOCK_GRAPH_NODES = 256
 
+# Authentication and host-key failures are configuration/availability faults,
+# not normal telemetry cadence failures. Keep retries bounded and per-target.
+UNIFI_BACKOFF_CODES = frozenset({
+    "ssh_auth_failure", "host_key_failure", "host_key_configuration",
+})
+UNIFI_BACKOFF_DELAYS_SECONDS = (300, 900, 1800)
+
 # The hardware document deliberately keeps CPU and memory facts typed and
 # bounded. It must never forward arbitrary command output such as the full
 # ``lscpu`` or ``/proc/meminfo`` document.
@@ -1982,6 +1989,7 @@ class HostExtensionCollector(object):
         easytier_args=None,
         unifi_collector=None,
         unifi_interval=None,
+        unifi_clock=None,
     ):
         self.host_os_release_file = host_os_release_file or os.getenv(
             "HOST_OS_RELEASE_FILE", "/host/etc/os-release"
@@ -2032,6 +2040,10 @@ class HostExtensionCollector(object):
             self.easytier_interval = easytier_interval
         self.unifi_collector = unifi_collector
         self.unifi_interval = int(unifi_interval or getattr(unifi_collector, "config", None) and unifi_collector.config.interval_seconds or 60)
+        self._unifi_clock = unifi_clock or time.monotonic
+        self._unifi_collect_lock = threading.Lock()
+        self._unifi_failure_streak = 0
+        self._unifi_retry_after = 0.0
         self.host_os, os_error = collect_host_os(self.host_os_release_file)
         self.system_identity = collect_system_identity(
             self.host_os_release_file, self.dsm_version_file
@@ -2153,15 +2165,40 @@ class HostExtensionCollector(object):
     def collect_unifi_once(self):
         if self.unifi_collector is None:
             payload = not_configured_unifi()
-        else:
+            self._store("unifi", payload)
+            return payload
+        # The scheduler owns one acquisition per target. A non-blocking lock
+        # also protects callers that trigger an immediate refresh concurrently.
+        if not self._unifi_collect_lock.acquire(blocking=False):
+            with self._lock:
+                return copy.deepcopy(self._unifi)
+        try:
+            now = self._unifi_clock()
+            if now < self._unifi_retry_after:
+                with self._lock:
+                    return copy.deepcopy(self._unifi)
             try:
                 payload = self.unifi_collector.collect()
             except Exception:
                 payload = not_collected_unifi(self.unifi_collector.config.profile_id)
                 payload["transport"]["status"] = "unavailable"
                 payload["error"] = _error("collector_failure", "UniFi observation is unavailable", "unifi", True)
-        self._store("unifi", payload)
-        return payload
+            error = payload.get("error") if isinstance(payload, dict) else None
+            error_code = error.get("code") if isinstance(error, dict) else None
+            if not payload.get("stale"):
+                self._unifi_failure_streak = 0
+                self._unifi_retry_after = 0.0
+            elif error_code in UNIFI_BACKOFF_CODES:
+                self._unifi_failure_streak += 1
+                delay_index = min(self._unifi_failure_streak - 1, len(UNIFI_BACKOFF_DELAYS_SECONDS) - 1)
+                self._unifi_retry_after = now + UNIFI_BACKOFF_DELAYS_SECONDS[delay_index]
+            else:
+                self._unifi_failure_streak = 0
+                self._unifi_retry_after = 0.0
+            self._store("unifi", payload)
+            return payload
+        finally:
+            self._unifi_collect_lock.release()
 
     def _run_periodically(self, function, interval, initial_delay=False):
         if initial_delay and self._stop.wait(interval):

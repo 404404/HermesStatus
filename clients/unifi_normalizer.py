@@ -8,6 +8,7 @@ def _timestamp(raw):
 
 def _error(code):
     messages = {
+        "host_key_configuration": "UniFi SSH host-key configuration is unavailable",
         "host_key_failure": "UniFi SSH host-key verification failed",
         "ssh_auth_failure": "UniFi SSH authentication failed",
         "ssh_timeout": "UniFi SSH timed out",
@@ -17,7 +18,7 @@ def _error(code):
         "code": code if code in messages else "ssh_transport_failure",
         "message": messages.get(code, "UniFi SSH transport is unavailable"),
         "source": "unifi",
-        "retryable": code not in {"host_key_failure", "ssh_auth_failure"},
+        "retryable": code not in {"host_key_configuration", "host_key_failure", "ssh_auth_failure"},
         "http_status": None,
     }
 
