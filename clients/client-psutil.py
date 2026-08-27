@@ -32,6 +32,7 @@ from device_client_transport import (
     install_monitor_definitions,
 )
 from multi_device_contracts import ClientContractError
+from unifi_collector import UniFiDomainCollector
 
 def _env_str(name, default):
     value = os.getenv(name)
@@ -483,12 +484,14 @@ def _device_v2_extension_collector(config, arguments):
         {"mountpoint": probe.mountpoint, "probe_path": probe.probe_path}
         for probe in config.filesystem_probes
     ]
+    unifi_collector = UniFiDomainCollector(config.unifi) if config.unifi is not None else None
     return HostExtensionCollector(
         smart_devices=smart_devices,
         primary_smart_device=config.primary_smart_device,
         filesystem_probes=filesystem_probes,
         client_build=collect_client_build(protocol="device_v2"),
         easytier_args=arguments,
+        unifi_collector=unifi_collector,
     )
 
 

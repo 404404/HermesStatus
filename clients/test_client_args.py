@@ -21,8 +21,19 @@ class ClientArgumentTests(unittest.TestCase):
             ClientV2Config,
             FilesystemProbeConfig,
             SmartDeviceConfig,
+            UniFiConfig,
         )
 
+        unifi = UniFiConfig(
+            profile_id="udw",
+            host="192.0.2.1",
+            port=22,
+            username="root",
+            credential_file="/run/secrets/unifi-password",
+            known_hosts_file="/run/secrets/unifi-known-hosts",
+            connect_timeout_seconds=10,
+            interval_seconds=60,
+        )
         config = ClientV2Config(
             server_url="https://status.example.invalid",
             device_id="device-alpha",
@@ -32,6 +43,7 @@ class ClientArgumentTests(unittest.TestCase):
             smart_devices=(SmartDeviceConfig("/dev/sda", "sat", "disk one"),),
             primary_smart_device="/dev/sda",
             filesystem_probes=(FilesystemProbeConfig("/", "/host-storage/root"),),
+            unifi=unifi,
         )
         for filename in ("client-linux.py", "client-psutil.py"):
             with self.subTest(client=filename):
@@ -52,6 +64,7 @@ class ClientArgumentTests(unittest.TestCase):
                             "build_time": "2026-08-11T00:00:00Z",
                             "protocol": protocol,
                         },
+                        "UniFiDomainCollector": lambda value: {"profile": value.profile_id},
                     },
                 ):
                     namespace["_device_v2_extension_collector"](config, ["synthetic"])
@@ -60,6 +73,7 @@ class ClientArgumentTests(unittest.TestCase):
                 self.assertEqual(captured["filesystem_probes"], [{"mountpoint": "/", "probe_path": "/host-storage/root"}])
                 self.assertEqual(captured["client_build"]["protocol"], "device_v2")
                 self.assertEqual(captured["easytier_args"], ["synthetic"])
+                self.assertEqual(captured["unifi_collector"], {"profile": "udw"})
 
     def test_password_with_user_text_does_not_replace_username(self):
         if "psutil" not in sys.modules and importlib.util.find_spec("psutil") is None:
