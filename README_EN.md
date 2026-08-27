@@ -2,7 +2,7 @@
 
 [中文](README.md) · [English docs](docs/README.md) · [中文文档](docs/zh-CN/README.md)
 
-HermesStatus is a self-hosted, multi-device status dashboard. The Python Client collects authorized host and local-service observations with least privilege; the Go Server validates, persists, and projects them; the browser renders Home, Hardware, Docker, Lucky, and EasyTier from one `/json/stats.json` document.
+HermesStatus is a self-hosted, multi-device status dashboard. The Python Client collects authorized host and local-service observations with least privilege; the Go Server validates, persists, and projects them; the browser renders Home, Hardware, Docker, Lucky, EasyTier, and UniFi from one `/json/stats.json` document.
 
 ## Scope
 
@@ -12,13 +12,14 @@ HermesStatus is a self-hosted, multi-device status dashboard. The Python Client 
 - **Hermes** — Profile summaries when installed. `not_installed` is a usable optional state, not a device failure.
 - **Lucky** — loopback-only, read-only HTTP(S) collection of version, DDNS, web services, port forwards, and certificate summaries. Tokens are read only from protected files.
 - **EasyTier** — read-only CLI and loopback RPC collection of node, peer, route, connector, traffic, and configured-vs-observed state. No remote peers, unobserved direct/relay paths, and unconfigured optional capabilities are not failures.
+- **UniFi (2.5)** — explicit-profile, read-only SSH telemetry. V1 supports UDW and UCG Max generic CPU, memory, temperature, uptime and load observations plus evidence-backed fan, PSU and storage capability semantics.
 
 Network throughput, carrier probing, EasyTier management, remote command execution, auto-registration, history storage, and alerting are out of scope.
 
 ## Architecture
 
 ```text
-authorized host inputs / Docker / Hermes / Lucky / EasyTier
+authorized host inputs / Docker / Hermes / Lucky / EasyTier / UniFi
                          ↓
                   Python Client
                          ↓
@@ -71,7 +72,7 @@ Some EasyTier 2.6.4 CLI output includes the local node in the peer list. Remote-
 - [Architecture](docs/ARCHITECTURE.md) · [Configuration](docs/CONFIGURATION.md) · [Deployment](docs/DEPLOYMENT.md)
 - [Security](docs/SECURITY.md) · [Operations](docs/OPERATIONS.md) · [Development](docs/DEVELOPMENT.md)
 - [Device configuration guide](docs/DEVICE_CONFIGURATION.md)
-- [EasyTier monitoring](docs/design/EASYTIER_MONITORING.md) · [Hardware monitoring](docs/design/HARDWARE_MONITORING.md)
+- [EasyTier monitoring](docs/design/EASYTIER_MONITORING.md) · [Hardware monitoring](docs/design/HARDWARE_MONITORING.md) · [UniFi monitoring](docs/design/UNIFI_MONITORING.md)
 
 ## License
 

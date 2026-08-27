@@ -2,7 +2,7 @@
 
 [English](../README.md)
 
-本文档集以当前 `2.0` 产品线为准，说明已部署行为、严格信任边界和已知限制；不再把分支提升流程或端口号描述为产品环境。
+本文档集以当前 `2.5` 开发线为准，说明已部署行为、严格信任边界和已知限制；不再把分支提升流程或端口号描述为产品环境。
 
 | 文档 | 用途 |
 | --- | --- |
@@ -15,5 +15,6 @@
 | [开发](DEVELOPMENT.md) | 测试门禁与 PR 流程。 |
 | [EasyTier 监控](EASYTIER_MONITORING.md) | 只读模型、数据边界与状态语义。 |
 | [硬件监控](HARDWARE_MONITORING.md) | SMART、文件系统、存储拓扑与诊断语义。 |
+| [UniFi 监控](UNIFI_MONITORING.md) | 已验证 UniFi Console 机型的 profile 驱动只读 SSH 遥测。 |
 
 英文和中文文档必须在同一次文档变更中保持语义一致。

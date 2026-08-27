@@ -2,7 +2,7 @@
 
 [中文文档](zh-CN/README.md)
 
-This set documents the current `2.0` product line. It describes deployed behavior, strict trust boundaries, and known limitations; it does not document a promotion workflow or a port as a product environment.
+This set documents the current `2.5` development line. It describes deployed behavior, strict trust boundaries, and known limitations; it does not document a promotion workflow or a port as a product environment.
 
 | Document | Purpose |
 | --- | --- |
@@ -15,5 +15,6 @@ This set documents the current `2.0` product line. It describes deployed behavio
 | [Development](DEVELOPMENT.md) | Test gates and pull-request workflow. |
 | [EasyTier monitoring](design/EASYTIER_MONITORING.md) | Read-only model, source boundaries, and semantics. |
 | [Hardware monitoring](design/HARDWARE_MONITORING.md) | SMART, filesystems, storage topology, and diagnostic semantics. |
+| [UniFi monitoring](design/UNIFI_MONITORING.md) | Profile-driven read-only SSH telemetry for qualified UniFi console models. |
 
 Keep the English and Chinese documents semantically synchronized in the same documentation change.

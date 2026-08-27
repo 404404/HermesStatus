@@ -21,3 +21,16 @@ Server validation bounds counts, strings, counters, timestamps, CIDRs and enums.
 ## Reporting vulnerabilities
 
 Do not include secrets or live infrastructure identifiers in an issue. Provide the smallest reproducible, sanitized description through the repository's private security contact or maintainer channel.
+
+## UniFi remote-observation boundary
+
+UniFi V1 has no generic `run_remote(command)` interface. Profiles reference
+only code-side symbolic source IDs, and the Client invokes a fixed bundled
+read-only SSH script with argv arrays, a bounded timeout, `setsid --wait`,
+keyboard-interactive authentication, and `StrictHostKeyChecking=yes`. The
+password is read only from a validated protected file by a short-lived local
+askpass helper; it is not written to argv, logs, stats, fixtures, UI, image
+labels, or environment values. Host-key failure is a safe telemetry error, not
+permission to accept a replacement key. The Client does not install keys, scan
+networks, modify UniFi configuration, read configuration databases, or execute
+fan/PWM/storage control commands.

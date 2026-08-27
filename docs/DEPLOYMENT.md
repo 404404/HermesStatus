@@ -38,3 +38,15 @@ Confirm successful reports become fresh, restore behavior is stale until the
 next accepted report, and the browser receives data through the existing stats
 document.  Verify no secret is present in logs, process arguments, environment
 output, stats projection or the UI.
+
+## UniFi target deployment
+
+UniFi is enabled only through a reviewed Device v2 JSON configuration and two
+fixed read-only secret mounts: a credential file and a dedicated `known_hosts`
+file. Validate both file type, ownership and mode before a Client recreation.
+A container image can contain the profile library, but it must not contain
+site-specific credentials, host keys, targets or raw discovery output. After
+deployment, verify UniFi separately from host health: profile selection,
+transport state, timestamp progression, and stale/error presentation are
+expected evidence; a remote target failure must not be repaired by changing
+Docker privileges or by recreating the remote console.

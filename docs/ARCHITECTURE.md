@@ -29,7 +29,8 @@ The current projection contains independent read-only domains:
 - Docker;
 - Hermes Agent profiles when the Agent is installed;
 - Lucky;
-- EasyTier.
+- EasyTier;
+- UniFi targets when an explicit Client-side profile is configured.
 
 A domain can be fresh, partial, degraded, unavailable or not configured without
 turning unrelated domains into failures.  In particular, an optional Hermes
@@ -68,3 +69,19 @@ implemented.
 HermesStatus is not an EasyTier manager, a remote-execution service, an alerting
 system, a time-series database, a topology editor, or a general network traffic
 or carrier-probing product.
+
+## UniFi model profiles
+
+UniFi V1 is a remote-observation domain, not a second Client identity or a
+control channel. A Device v2 Client runs one bounded, fixed OpenSSH session per
+collection cycle and normalizes only symbolic sources: `ubnt-systool cputemp`,
+aggregate `/proc/stat`, selected `/proc/meminfo`, `/proc/uptime`, and
+`/proc/loadavg`. The Server receives a bounded telemetry projection only.
+
+Profile selection is administrator-controlled and fail-closed. UDW and UCG Max
+share the generic collector while their fan, PSU, thermal and NVMe differences
+live in profile data. `supported`, `present`, and `observed` remain separate:
+0 RPM, an unobserved block device, or an optional diagnostic source never
+creates an inferred physical failure. UniFi transport failure marks only the
+UniFi target stale; it never changes Device v2 identity or makes the collector
+host offline.

@@ -625,6 +625,7 @@ async function run(){
   assert.match(css, /@media \(max-width:1180px\)/);
   assert.match(css, /@media \(max-width:720px\)/);
   assert.match(css, /\.device-buttons\{[^}]*overflow-x:auto/);
+  assert.match(css, /\.nav\{[^}]*overflow-x:auto/);
   assert.match(css, /@media \(max-width:720px\)\{[\s\S]*\.device-buttons\{display:none\}/);
   assert.match(css, /@media \(max-width:720px\)\{[\s\S]*\.device-select-label\{display:block\}/);
 

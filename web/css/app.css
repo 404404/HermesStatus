@@ -62,7 +62,7 @@ a:hover{color:var(--accent-glow)}
 .logo-mark svg{display:block}
 .logo-text{display:inline;letter-spacing:.5px}
 .logo-accent{color:var(--accent-glow)}
-.nav{display:flex;align-items:center;gap:.35rem;min-width:0;padding:3px;border:1px solid var(--border);border-radius:7px;background:var(--bg)}
+.nav{display:flex;align-items:center;gap:.35rem;max-width:100%;min-width:0;padding:3px;border:1px solid var(--border);border-radius:7px;background:var(--bg);overflow-x:auto;overscroll-behavior-inline:contain}
 .nav button{position:relative;height:30px;padding:0 .85rem;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--text-dim);font-weight:650;white-space:nowrap;cursor:pointer;transition:var(--transition)}
 .nav button:hover{color:var(--text);background:var(--panel)}
 .nav button:focus-visible{outline:2px solid var(--accent-glow);outline-offset:2px}

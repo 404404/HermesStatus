@@ -48,3 +48,41 @@ certificate verification deliberately.  There is no automatic “verify then
 disable verification” fallback.  If a local self-signed certificate requires
 verification off, that exception must remain confined to the loopback-only
 Lucky boundary and documented in the deployment configuration.
+
+## UniFi monitoring (2.5)
+
+UniFi V1 is disabled when the `unifi` object is absent, or when it is exactly
+`{"enabled": false}`. To enable it, place all target details in the existing
+root-owned Device v2 JSON file; no UniFi credential is accepted from an
+argument or environment value:
+
+```json
+{
+  "unifi": {
+    "enabled": true,
+    "profile": "udw",
+    "host": "console.example.invalid",
+    "port": 22,
+    "username": "root",
+    "credential_file": "/run/secrets/unifi-password",
+    "known_hosts_file": "/run/secrets/unifi-known-hosts",
+    "connect_timeout_seconds": 10,
+    "interval_seconds": 60
+  }
+}
+```
+
+Only `udw` and `ucg-max` are valid V1 profiles. The selected profile is never
+auto-detected from hostname, kernel, fans, temperatures, or observed values.
+Mount both files read-only and make them regular, non-symlink files owned by
+the Client effective user; the credential file mode must be `0400` or `0600`
+and `known_hosts` must not be group/world writable. `StrictHostKeyChecking=yes`
+is mandatory. Do not use `StrictHostKeyChecking=no`, a plaintext password
+field, SSH keys added by HermesStatus, or an environment variable for the
+credential.
+
+The fixed core read only observes CPU temperature, aggregate CPU counters,
+selected memory counters, uptime and load. Optional thermal/hwmon diagnostics
+are non-health-affecting. Transport, host-key, authentication, timeout and
+parse failures preserve the prior UniFi observation if one exists, mark it
+stale, and never zero-fill metrics or degrade the Device v2 collector host.
