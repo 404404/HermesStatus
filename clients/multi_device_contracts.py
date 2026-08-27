@@ -64,6 +64,7 @@ ALLOWED_STATS_FIELDS = {
     "hermes",
     "lucky",
     "easytier",
+    "unifi",
     "client_build",
     "hardware_json",
     "docker_json",

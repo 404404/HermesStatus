@@ -201,6 +201,7 @@ class ClientV2MockTests(unittest.TestCase):
             "docker": {},
             "hermes": {},
             "lucky": {},
+            "unifi": {"configured": False},
         }
         envelope = build_envelope(
             self.config,
