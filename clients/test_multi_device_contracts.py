@@ -138,6 +138,18 @@ class ClientV2ConfigContractTests(unittest.TestCase):
                 file_values={**self.file_values, "unknown": "synthetic"}
             )
 
+    def test_unifi_schema_matches_the_strict_file_backed_contract(self):
+        schema = json.loads((CLIENT_DIR.parent / "schemas" / "client-v2-config.schema.json").read_text(encoding="utf-8"))
+        unifi = schema["properties"]["unifi"]
+        self.assertEqual(len(unifi["oneOf"]), 2)
+        disabled, enabled = unifi["oneOf"]
+        self.assertFalse(disabled["properties"]["enabled"]["const"])
+        self.assertTrue(enabled["properties"]["enabled"]["const"])
+        self.assertFalse(enabled["additionalProperties"])
+        self.assertEqual(enabled["properties"]["profile"]["enum"], ["udw", "ucg-max"])
+        self.assertNotIn("command", enabled["properties"])
+        self.assertNotIn("password", enabled["properties"])
+
     def test_unifi_configuration_is_strict_and_credential_file_only(self):
         unifi = {
             "enabled": True, "profile": "udw", "host": "192.0.2.1", "port": 22,
