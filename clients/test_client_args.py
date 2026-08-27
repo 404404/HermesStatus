@@ -47,7 +47,7 @@ class ClientArgumentTests(unittest.TestCase):
                     {
                         "HostExtensionCollector": CapturingCollector,
                         "collect_client_build": lambda protocol: {
-                            "version": "2.3-test",
+                            "version": "2.5-test",
                             "revision": "a" * 40,
                             "build_time": "2026-08-11T00:00:00Z",
                             "protocol": protocol,

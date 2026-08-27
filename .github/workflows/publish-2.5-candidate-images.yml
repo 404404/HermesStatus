@@ -1,10 +1,10 @@
-name: Publish 2.3 Candidate Images
+name: Publish 2.5 Candidate Images
 
 on:
   workflow_dispatch:
 
 concurrency:
-  group: publish-2-3-candidates-${{ github.ref }}
+  group: publish-2-5-candidates-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -15,7 +15,7 @@ env:
   IMAGE_REGISTRY: ghcr.io
   IMAGE_NAMESPACE: ${{ github.repository_owner }}
   IMAGE_SOURCE: https://github.com/404404/HermesStatus
-  PRODUCT_VERSION: "2.3"
+  PRODUCT_VERSION: "2.5"
 
 jobs:
   contracts:

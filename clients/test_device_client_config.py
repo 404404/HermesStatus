@@ -54,7 +54,7 @@ class DeviceClientConfigTests(unittest.TestCase):
             [],
             environ={
                 "SERVER": "127.0.0.1",
-                "HERMESSTATUS_CLIENT_VERSION": "2.3",
+                "HERMESSTATUS_CLIENT_VERSION": "2.5",
                 "HERMESSTATUS_CLIENT_REVISION": "abcdef012345",
             },
         )
