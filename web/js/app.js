@@ -175,7 +175,7 @@ function modelBreakdown(profile){
 }
 
 function normalizePageName(value){
-	return ['hardware', 'docker', 'lucky', 'easytier', 'unifi'].includes(value) ? value : 'home';
+	return ['hardware', 'unifi', 'docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
 }
 
 function valueAt(objectValue, keys){
@@ -1340,7 +1340,7 @@ function selectDevice(deviceId, options = {}){
 function applyPageVisibility(){
   const activePage = normalizePageName(dashboardState.activePage);
   dashboardState.activePage = activePage;
-	for(const page of ['home', 'hardware', 'docker', 'lucky', 'easytier', 'unifi']){
+	for(const page of ['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier']){
     const active = page === activePage;
     const tab = byId(`${page}Tab`);
     const panel = byId(`${page}Page`);
@@ -1732,7 +1732,7 @@ function bindInteractions(){
     tab.addEventListener('keydown', event => {
       if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-			const pages = ['home', 'hardware', 'docker', 'lucky', 'easytier', 'unifi'];
+			const pages = ['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier'];
 			const current = pages.indexOf(dashboardState.activePage);
 			const nextPage = event.key === 'Home' ? pages[0] : event.key === 'End' ? pages[pages.length - 1] : event.key === 'ArrowLeft' ? pages[(current - 1 + pages.length) % pages.length] : pages[(current + 1) % pages.length];
       setActivePage(nextPage);

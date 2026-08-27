@@ -6,7 +6,7 @@
     <meta name="description" content="HermesStatus 多设备云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260827-1" />
+    <link rel="stylesheet" href="css/app.css?v=20260827-2" />
 </head>
 <body>
     <header class="topbar">
@@ -21,10 +21,10 @@
         <nav class="nav" aria-label="主导航" role="tablist">
             <button id="homeTab" type="button" class="active" role="tab" aria-selected="true" aria-controls="homePage" aria-current="page" data-page-target="home">主页</button>
             <button id="hardwareTab" type="button" role="tab" aria-selected="false" aria-controls="hardwarePage" tabindex="-1" data-page-target="hardware">硬件信息</button>
+            <button id="unifiTab" type="button" role="tab" aria-selected="false" aria-controls="unifiPage" tabindex="-1" data-page-target="unifi">UniFi</button>
             <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
             <button id="luckyTab" type="button" role="tab" aria-selected="false" aria-controls="luckyPage" tabindex="-1" data-page-target="lucky">Lucky</button>
             <button id="easytierTab" type="button" role="tab" aria-selected="false" aria-controls="easytierPage" tabindex="-1" data-page-target="easytier">EasyTier</button>
-            <button id="unifiTab" type="button" role="tab" aria-selected="false" aria-controls="unifiPage" tabindex="-1" data-page-target="unifi">UniFi</button>
         </nav>
         <div class="actions">
             <span id="lastUpdate" class="last-update">上次刷新 -</span>
@@ -274,6 +274,6 @@
         <button id="aboutButton" type="button" class="footer-button" aria-haspopup="dialog">关于 / 构建信息</button>
     </footer>
 
-    <script src="js/app.js?v=20260827-1" defer></script>
+    <script src="js/app.js?v=20260827-2" defer></script>
 </body>
 </html>

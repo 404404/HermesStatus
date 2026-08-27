@@ -643,6 +643,11 @@ async function run(){
   assert.match(indexMarkup, /id="dockerTab"[^>]*>Docker<\/button>/);
   assert.match(indexMarkup, /id="luckyTab"[^>]*>Lucky<\/button>/);
   assert.match(indexMarkup, /id="unifiTab"[^>]*>UniFi<\/button>/);
+  assert.ok(
+    indexMarkup.indexOf('id="hardwareTab"') < indexMarkup.indexOf('id="unifiTab"')
+      && indexMarkup.indexOf('id="unifiTab"') < indexMarkup.indexOf('id="dockerTab"'),
+    'UniFi tab must remain between hardware and Docker'
+  );
   assert.match(indexMarkup, /id="unifiPage"[^>]*data-page="unifi"[^>]*hidden/);
   assert.match(indexMarkup, /id="luckyServiceSummary"/);
   assert.match(appSource, /\['API 可用性', service\.api_reachable/);
@@ -678,8 +683,8 @@ async function run(){
   assert.doesNotMatch(hardwareMarkup, /hardwareMemoryPrimary|hardwareMemorySecondary|hardwareMemoryTertiary/);
   assert.match(hardwareMarkup, /id="hardwareFilesystemsBody"/);
   assert.match(hardwareMarkup, /卷 \/ 文件系统/);
-  assert.match(indexMarkup, /css\/app\.css\?v=20260827-1/);
-  assert.match(indexMarkup, /js\/app\.js\?v=20260827-1/);
+  assert.match(indexMarkup, /css\/app\.css\?v=20260827-2/);
+  assert.match(indexMarkup, /js\/app\.js\?v=20260827-2/);
   assert.match(hardwareMarkup, /id="hardwareDisksBody"/);
   assert.deepEqual(
     [...hardwareMarkup.matchAll(/<th>([^<]+)<\/th>/g)].map(match => match[1]),
@@ -708,7 +713,7 @@ async function run(){
   assert.match(appSource, /refresh\('initial'\)/);
   assert.match(appSource, /setActivePage\(tab\.dataset\.pageTarget\)/);
   assert.match(appSource, /parseDashboardHash\(window\.location\.hash\)/);
-  assert.match(appSource, /\['home', 'hardware', 'docker', 'lucky', 'easytier', 'unifi'\]/);
+  assert.match(appSource, /\['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier'\]/);
   const homeHardwareSource = appSource.slice(appSource.indexOf('function renderHardware'), appSource.indexOf('function filesystemBackingDisks'));
   assert.deepEqual(
     [...homeHardwareSource.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1]),
