@@ -16,7 +16,11 @@ def not_configured_unifi():
         "configured": False, "profile": None,
         "transport": {"status": "disabled", "last_attempt": None, "last_success": None},
         "system": None, "fans": [], "power_supplies": [],
-        "storage": {"nvme": {"supported": "unknown", "present": "unknown", "observed": False}},
+        "storage": {
+            "nvme": {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None},
+            "sata_ssd": {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None},
+            "tf": {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None},
+        },
         "diagnostics": {"collection_status": "not_collected", "ignored_observations": []},
         "updated_at": None, "stale": False, "error": None,
     }

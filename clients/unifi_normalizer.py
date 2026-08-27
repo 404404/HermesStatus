@@ -117,13 +117,16 @@ def _power(profile):
 
 
 def _storage(profile):
-    nvme = profile["storage"]["nvme"]
-    supported = nvme["supported"]
-    return {"nvme": {
-        "supported": "supported" if supported is True else "unsupported" if supported is False else "unknown",
-        "present": "not_present" if nvme["present"] == "not_populated" else nvme["present"],
-        "observed": nvme["observed"] is True,
-    }}
+    result = {}
+    for name, capability in profile["storage"].items():
+        supported = capability["supported"]
+        result[name] = {
+            "supported": "supported" if supported is True else "unsupported" if supported is False else "unknown",
+            "present": "not_present" if capability["present"] == "not_populated" else capability["present"],
+            "observed": capability["observed"] is True,
+            "capacity_bytes": capability["capacity_bytes"],
+        }
+    return result
 
 
 def normalize(profile, raw, previous=None):

@@ -51,6 +51,39 @@ func TestUniFiValidationDisabledAndProfiles(t *testing.T) {
 	}
 }
 
+func TestUniFiStorageMediaCapabilitiesRoundTrip(t *testing.T) {
+	stats := validUniFiFixture("udw")
+	capacity := int64(128000000000)
+	stats.Storage.SATA = &UniFiStorageCapability{
+		Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent,
+		Observed: false, CapacityBytes: &capacity,
+	}
+	stats.Storage.TF = &UniFiStorageCapability{
+		Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent,
+		Observed: false,
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeUniFiStatsJSON(raw)
+	if err != nil {
+		t.Fatalf("storage capability payload rejected: %v", err)
+	}
+	if decoded.Storage.SATA == nil || decoded.Storage.SATA.CapacityBytes == nil || *decoded.Storage.SATA.CapacityBytes != capacity {
+		t.Fatalf("SATA capability was not preserved: %#v", decoded.Storage.SATA)
+	}
+	if decoded.Storage.TF == nil || decoded.Storage.TF.Present != UniFiPresencePresent {
+		t.Fatalf("TF capability was not preserved: %#v", decoded.Storage.TF)
+	}
+	bad := stats
+	negative := int64(-1)
+	bad.Storage.SATA = &UniFiStorageCapability{Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent, CapacityBytes: &negative}
+	if err := ValidateUniFiStats(&bad); err == nil {
+		t.Fatal("negative storage capacity accepted")
+	}
+}
+
 func TestUniFiPartialObservationIsValid(t *testing.T) {
 	stats := validUniFiFixture("udw")
 	stats.Diagnostics.CollectionStatus = "partial"

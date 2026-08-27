@@ -144,7 +144,11 @@ async function run(){
       {id: 'fan2', supported: 'supported', present: 'present', observed: true, rpm: 2752, state: 'observed', error: null}
     ],
     power_supplies: [{id: 'psu1', supported: 'supported', present: 'unknown', observed: false, state: 'not_observed', error: null}],
-    storage: {nvme: {supported: 'unknown', present: 'unknown', observed: false}},
+    storage: {
+      nvme: {supported: 'unsupported', present: 'not_present', observed: false, capacity_bytes: null},
+      sata_ssd: {supported: 'supported', present: 'present', observed: false, capacity_bytes: 128000000000},
+      tf: {supported: 'supported', present: 'present', observed: false, capacity_bytes: null}
+    },
     diagnostics: {collection_status: 'available', ignored_observations: [{id: 'fan3', reason: 'profile_not_populated'}]}
   };
   const ucgMaxUniFi = {
@@ -152,7 +156,11 @@ async function run(){
     system: {...udwUniFi.system, cpu_usage_percent: null, cpu_usage_reason: 'insufficient_delta', cpu_temperature_c: null,
       memory: {...udwUniFi.system.memory, available_source: 'fallback_memfree_buffers_cached'}},
     fans: [{id: 'fan1', supported: 'supported', present: 'unknown', observed: true, rpm: 0, state: 'observed_zero_rpm', error: null}],
-    power_supplies: [], storage: {nvme: {supported: 'unknown', present: 'unknown', observed: false}}
+    power_supplies: [], storage: {
+      nvme: {supported: 'unknown', present: 'unknown', observed: false, capacity_bytes: null},
+      sata_ssd: {supported: 'unknown', present: 'unknown', observed: false, capacity_bytes: null},
+      tf: {supported: 'unknown', present: 'unknown', observed: false, capacity_bytes: null}
+    }
   };
   const unifiView = app.buildViewModel(statsDocument('normal', {unifi: udwUniFi}));
   assert.equal(unifiView.unifi.profile, 'udw');
@@ -170,6 +178,11 @@ async function run(){
   assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /失败/);
   assert.match(app.unifiFanRows({...ucgMaxUniFi, fans: [{id: 'fan1', supported: 'supported', present: 'unknown', observed: false, rpm: null, state: 'not_observed'}]}), /未观察到/);
   assert.match(app.unifiPowerRows(udwUniFi), /未知/);
+  const udwStorageRows = app.unifiStorageRows(udwUniFi).map(row => row.join(' ')).join(' ');
+  assert.match(udwStorageRows, /SATA SSD/);
+  assert.match(udwStorageRows, /128 GB/);
+  assert.match(udwStorageRows, /TF/);
+  assert.match(udwStorageRows, /NVMe/);
   assert.match(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /不支持[\s\S]*未安装/);
   assert.doesNotMatch(app.unifiFanRows(udwUniFi), /fan3|fan4/);
   const unavailableUniFi = {...ucgMaxUniFi, stale: true, system: null, fans: [], power_supplies: [], updated_at: null,
@@ -624,6 +637,8 @@ async function run(){
   assert.match(css, /\.resource-value\{[^}]*height:27px;min-height:27px/);
   assert.match(css, /@media \(max-width:1180px\)/);
   assert.match(css, /@media \(max-width:720px\)/);
+  assert.match(css, /\.detail-list\.unifi-summary\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}/);
+  assert.match(css, /@media \(max-width:720px\)[\s\S]*\.detail-list\.unifi-summary\{grid-template-columns:1fr\}/);
   assert.match(css, /\.device-buttons\{[^}]*overflow-x:auto/);
   assert.match(css, /\.nav\{[^}]*overflow-x:auto/);
   assert.match(css, /@media \(max-width:720px\)\{[\s\S]*\.device-buttons\{display:none\}/);

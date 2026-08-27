@@ -63,9 +63,22 @@
   },
   "storage": {
     "nvme": {
-      "supported": "unknown",
-      "present": "unknown",
-      "observed": "unknown"
+      "supported": false,
+      "present": "not_populated",
+      "observed": false,
+      "capacity_bytes": null
+    },
+    "sata_ssd": {
+      "supported": true,
+      "present": "present",
+      "observed": "unknown",
+      "capacity_bytes": 128000000000
+    },
+    "tf": {
+      "supported": true,
+      "present": "present",
+      "observed": "unknown",
+      "capacity_bytes": null
     }
   },
   "health_policy": {

@@ -262,6 +262,7 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
 .compact-details{margin-top:.25rem}
 .compact-details .detail-row{padding:.55rem 0}
 .detail-list{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:1.2rem}
+.detail-list.unifi-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
 .detail-row{display:grid;grid-template-columns:minmax(120px,.42fr) minmax(0,1fr);gap:.8rem;min-width:0;padding:.68rem 0;border-bottom:1px solid var(--border)}
 .detail-row dt{color:var(--text-dim)}
 .detail-row dd{min-width:0;margin:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -302,6 +303,7 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
     .device-select-label{display:block}
     .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list,.easytier-command-grid,.hardware-usage-grid,.hardware-cpu-columns,.hardware-memory-grid{grid-template-columns:1fr}
     .detail-list.hardware-three-column-info{grid-template-columns:1fr}
+    .detail-list.unifi-summary{grid-template-columns:1fr}
     .hardware-cpu-column+.hardware-cpu-column{border-top:1px solid var(--border);border-left:0}
     .overview-grid .summary-card:last-child,.health-grid .health-card:last-child{grid-column:auto}
     .section-head{display:block}

@@ -538,7 +538,11 @@ func extensionOpenAPISchemas() map[string]any {
 		"configured": map[string]any{"type": "boolean"}, "profile": map[string]any{"type": []string{"string", "null"}, "enum": []any{"udw", "ucg-max", "unknown", nil}},
 		"transport": requiredObject([]string{"status", "last_attempt", "last_success"}, map[string]any{"status": map[string]any{"type": "string", "enum": []string{"disabled", "not_collected", "available", "unavailable"}}, "last_attempt": nullableString(MaxTimestampLength, "Latest collection attempt"), "last_success": nullableString(MaxTimestampLength, "Latest successful collection")}),
 		"system":    nullableRef("UniFiSystemStats"), "fans": map[string]any{"type": "array", "maxItems": MaxUniFiFans, "items": schemaRef("UniFiFanStats"), "default": []any{}}, "power_supplies": map[string]any{"type": "array", "maxItems": MaxUniFiPowerSupplies, "items": schemaRef("UniFiPowerStats"), "default": []any{}},
-		"storage": requiredObject([]string{"nvme"}, map[string]any{"nvme": requiredObject([]string{"supported", "present", "observed"}, map[string]any{"supported": uniFiCapability, "present": uniFiPresence, "observed": map[string]any{"type": "boolean"}})}),
+		"storage": requiredObject([]string{"nvme"}, map[string]any{
+			"nvme":     requiredObject([]string{"supported", "present", "observed"}, map[string]any{"supported": uniFiCapability, "present": uniFiPresence, "observed": map[string]any{"type": "boolean"}, "capacity_bytes": nullableInteger(MaxSafeInteger, "Storage capacity bytes")}),
+			"sata_ssd": requiredObject([]string{"supported", "present", "observed"}, map[string]any{"supported": uniFiCapability, "present": uniFiPresence, "observed": map[string]any{"type": "boolean"}, "capacity_bytes": nullableInteger(MaxSafeInteger, "Storage capacity bytes")}),
+			"tf":       requiredObject([]string{"supported", "present", "observed"}, map[string]any{"supported": uniFiCapability, "present": uniFiPresence, "observed": map[string]any{"type": "boolean"}, "capacity_bytes": nullableInteger(MaxSafeInteger, "Storage capacity bytes")}),
+		}),
 		"diagnostics": requiredObject([]string{"collection_status", "ignored_observations"}, map[string]any{
 			"collection_status": map[string]any{"type": "string", "enum": []string{"not_collected", "available", "partial", "unavailable"}},
 			"ignored_observations": map[string]any{

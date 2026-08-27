@@ -50,7 +50,20 @@
     "nvme": {
       "supported": "unknown",
       "present": "unknown",
-      "observed": false
+      "observed": false,
+      "capacity_bytes": null
+    },
+    "sata_ssd": {
+      "supported": "unknown",
+      "present": "unknown",
+      "observed": false,
+      "capacity_bytes": null
+    },
+    "tf": {
+      "supported": "unknown",
+      "present": "unknown",
+      "observed": false,
+      "capacity_bytes": null
     }
   },
   "health_policy": {

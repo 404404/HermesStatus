@@ -4,6 +4,7 @@ from pathlib import Path
 from unifi_source_registry import KNOWN_SOURCES, CORE_SOURCES
 
 PRESENCE = {"present", "not_populated", "unknown", "dynamic"}
+STORAGE_CAPABILITIES = {"nvme", "sata_ssd", "tf"}
 ROOT_KEYS = {"schema_version", "profile_id", "platform", "generic", "diagnostics", "fans", "power", "storage", "health_policy"}
 GENERIC_KEYS = {"cpu_temperature", "cpu_usage", "memory", "uptime", "load_average"}
 
@@ -60,9 +61,16 @@ def validate_profile(profile):
     if not isinstance(power, dict) or set(power) != {"psu_slots", "presence", "sensor_mapping"} or not isinstance(power["psu_slots"], int) or power["psu_slots"] < 0 or power["presence"] not in PRESENCE or power["sensor_mapping"] not in {"unknown"}:
         raise ProfileError("invalid power")
     storage = profile["storage"]
-    nvme = storage.get("nvme") if isinstance(storage, dict) else None
-    if not isinstance(nvme, dict) or set(nvme) != {"supported", "present", "observed"} or nvme["supported"] not in {True, False, "unknown"} or nvme["present"] not in PRESENCE or nvme["observed"] not in {True, False, "unknown"}:
+    if not isinstance(storage, dict) or set(storage) != STORAGE_CAPABILITIES:
         raise ProfileError("invalid storage")
+    for name, capability in storage.items():
+        if not isinstance(capability, dict) or set(capability) != {"supported", "present", "observed", "capacity_bytes"}:
+            raise ProfileError(f"invalid storage capability: {name}")
+        if capability["supported"] not in {True, False, "unknown"} or capability["present"] not in PRESENCE or capability["observed"] not in {True, False, "unknown"}:
+            raise ProfileError(f"invalid storage capability: {name}")
+        capacity = capability["capacity_bytes"]
+        if capacity is not None and (isinstance(capacity, bool) or not isinstance(capacity, int) or capacity < 0):
+            raise ProfileError(f"invalid storage capacity: {name}")
     policy = profile["health_policy"]
     if not isinstance(policy, dict) or set(policy) != {"optional_diagnostics_affect_health", "zero_rpm_is_failure_when_present"} or any(not isinstance(v, bool) for v in policy.values()):
         raise ProfileError("invalid health policy")

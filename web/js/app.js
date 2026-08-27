@@ -1162,6 +1162,24 @@ function unifiPowerRows(unifi){
   return supplies.map(supply => `<tr><td class="strong-cell mono">${escapeHtml(textOrDash(supply.id))}</td><td>${badge(supply.supported)}</td><td>${escapeHtml(unifiPresenceText(supply.present))}</td><td>${escapeHtml(unifiObservationText(supply.state))}</td><td>${supply.error ? escapeHtml(unifiErrorText({error: supply.error})) : '-'}</td></tr>`).join('');
 }
 
+function unifiStorageRows(unifi){
+  const storage = safeObject(unifi?.storage);
+  const labels = {nvme: 'NVMe', sata_ssd: 'SATA SSD', tf: 'TF'};
+  return Object.entries(labels).filter(([key]) => Object.prototype.hasOwnProperty.call(storage, key)).map(([key, label]) => {
+    const capability = safeObject(storage[key]);
+    const capacity = finiteNumber(capability.capacity_bytes);
+    const capacityText = capacity === null ? '容量未知' : formatBytes(capacity);
+    const observation = capability.observed === true ? '已观察到' : '未观察到';
+    const value = [
+      badge(capability.supported),
+      escapeHtml(unifiPresenceText(capability.present)),
+      escapeHtml(observation),
+      `<span class="health-inline-meta">${escapeHtml(capacityText)}</span>`
+    ].join(' · ');
+    return [label, value];
+  });
+}
+
 function renderUniFi(view){
   const unifi = safeObject(view.unifi);
   const summary = unifiTransportSummary(unifi);
@@ -1184,14 +1202,9 @@ function renderUniFi(view){
     : `<div class="table-empty">${escapeHtml(summary.text === '尚未采集' ? '等待首次 UniFi 采集。' : summary.text === '未配置' ? '未配置 UniFi 目标。' : '暂无可显示的通用遥测。')}</div>`;
   byId('unifiFansBody').innerHTML = configured ? unifiFanRows(unifi) : '<tr><td colspan="5" class="table-empty">未配置 UniFi 目标。</td></tr>';
   byId('unifiPowerBody').innerHTML = configured ? unifiPowerRows(unifi) : '<tr><td colspan="5" class="table-empty">未配置 UniFi 目标。</td></tr>';
-  const nvme = safeObject(safeObject(unifi.storage).nvme);
   byId('unifiStorage').innerHTML = configured
-    ? [
-      ['NVMe 支持能力', badge(nvme.supported)],
-      ['NVMe 物理存在', escapeHtml(unifiPresenceText(nvme.present))],
-      ['NVMe 观测状态', escapeHtml(nvme.observed ? '已观察到' : '未观察到')]
-    ].map(([label, value]) => detailRow(label, value)).join('')
-    : detailRow('NVMe', '未配置 UniFi 目标。');
+    ? unifiStorageRows(unifi).map(([label, value]) => detailRow(label, value, 'wrap-value')).join('')
+    : detailRow('存储能力', '未配置 UniFi 目标。');
 }
 
 function profileSummary(profiles){
@@ -1862,6 +1875,7 @@ const exported = {
   unifiSystemRows,
   unifiFanRows,
   unifiPowerRows,
+  unifiStorageRows,
   fittedFontSize,
   formatBytes,
 	formatCelsius,

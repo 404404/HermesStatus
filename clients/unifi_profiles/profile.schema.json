@@ -25,6 +25,140 @@
     },
     "platform": {
       "const": "unifi_console"
+    },
+    "storage": {
+      "type": "object",
+      "required": [
+        "nvme",
+        "sata_ssd",
+        "tf"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "nvme": {
+          "type": "object",
+          "required": [
+            "supported",
+            "present",
+            "observed",
+            "capacity_bytes"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "supported": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "present": {
+              "enum": [
+                "present",
+                "not_populated",
+                "unknown",
+                "dynamic"
+              ]
+            },
+            "observed": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "capacity_bytes": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "sata_ssd": {
+          "type": "object",
+          "required": [
+            "supported",
+            "present",
+            "observed",
+            "capacity_bytes"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "supported": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "present": {
+              "enum": [
+                "present",
+                "not_populated",
+                "unknown",
+                "dynamic"
+              ]
+            },
+            "observed": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "capacity_bytes": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "tf": {
+          "type": "object",
+          "required": [
+            "supported",
+            "present",
+            "observed",
+            "capacity_bytes"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "supported": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "present": {
+              "enum": [
+                "present",
+                "not_populated",
+                "unknown",
+                "dynamic"
+              ]
+            },
+            "observed": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "capacity_bytes": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        }
+      }
     }
   },
   "additionalProperties": false

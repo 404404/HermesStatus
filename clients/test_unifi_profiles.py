@@ -20,6 +20,13 @@ class ProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(ProfileError, "unknown_profile"):
             load_profile(self.profiles, "not-a-profile")
 
+    def test_storage_capabilities_capture_udw_media(self):
+        udw = load_profile(self.profiles, "udw")
+        self.assertEqual(set(udw["storage"]), {"nvme", "sata_ssd", "tf"})
+        self.assertEqual(udw["storage"]["nvme"]["supported"], False)
+        self.assertEqual(udw["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
+        self.assertEqual(udw["storage"]["tf"]["present"], "present")
+
     def test_unknown_source_rejected(self):
         profile = copy.deepcopy(load_profile(self.profiles, "udw"))
         profile["generic"]["memory"]["source"] = "arbitrary_shell"

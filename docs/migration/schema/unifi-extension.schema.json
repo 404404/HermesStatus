@@ -376,6 +376,55 @@
             },
             "observed": {
               "type": "boolean"
+            },
+            "capacity_bytes": {
+              "$ref": "#/$defs/nullableCounter"
+            }
+          },
+          "additionalProperties": false
+        },
+        "sata_ssd": {
+          "type": "object",
+          "required": [
+            "supported",
+            "present",
+            "observed"
+          ],
+          "properties": {
+            "supported": {
+              "$ref": "#/$defs/capability"
+            },
+            "present": {
+              "$ref": "#/$defs/presence"
+            },
+            "observed": {
+              "type": "boolean"
+            },
+            "capacity_bytes": {
+              "$ref": "#/$defs/nullableCounter"
+            }
+          },
+          "additionalProperties": false
+        },
+        "tf": {
+          "type": "object",
+          "required": [
+            "supported",
+            "present",
+            "observed"
+          ],
+          "properties": {
+            "supported": {
+              "$ref": "#/$defs/capability"
+            },
+            "present": {
+              "$ref": "#/$defs/presence"
+            },
+            "observed": {
+              "type": "boolean"
+            },
+            "capacity_bytes": {
+              "$ref": "#/$defs/nullableCounter"
             }
           },
           "additionalProperties": false

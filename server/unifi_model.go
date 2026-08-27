@@ -105,13 +105,16 @@ type UniFiPowerStats struct {
 }
 
 type UniFiStorageStats struct {
-	NVMe UniFiStorageCapability `json:"nvme"`
+	NVMe UniFiStorageCapability  `json:"nvme"`
+	SATA *UniFiStorageCapability `json:"sata_ssd,omitempty"`
+	TF   *UniFiStorageCapability `json:"tf,omitempty"`
 }
 
 type UniFiStorageCapability struct {
-	Supported UniFiCapabilityState `json:"supported"`
-	Present   UniFiPresenceState   `json:"present"`
-	Observed  bool                 `json:"observed"`
+	Supported     UniFiCapabilityState `json:"supported"`
+	Present       UniFiPresenceState   `json:"present"`
+	Observed      bool                 `json:"observed"`
+	CapacityBytes *int64               `json:"capacity_bytes,omitempty"`
 }
 
 type UniFiDiagnostics struct {

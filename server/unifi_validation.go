@@ -208,8 +208,28 @@ func validateUniFiPower(items []UniFiPowerStats) error {
 }
 
 func validateUniFiStorage(value UniFiStorageStats) error {
-	if !validUniFiCapability(value.NVMe.Supported) || !validUniFiPresence(value.NVMe.Present) {
-		return validationError(validationCodeInvalidValue, "unifi.storage.nvme", "contains an invalid capability state")
+	if err := validateUniFiStorageCapability("unifi.storage.nvme", value.NVMe); err != nil {
+		return err
+	}
+	for name, capability := range map[string]*UniFiStorageCapability{
+		"sata_ssd": value.SATA,
+		"tf":       value.TF,
+	} {
+		if capability != nil {
+			if err := validateUniFiStorageCapability("unifi.storage."+name, *capability); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateUniFiStorageCapability(field string, value UniFiStorageCapability) error {
+	if !validUniFiCapability(value.Supported) || !validUniFiPresence(value.Present) {
+		return validationError(validationCodeInvalidValue, field, "contains an invalid capability state")
+	}
+	if value.CapacityBytes != nil && (*value.CapacityBytes < 0 || *value.CapacityBytes > MaxSafeInteger) {
+		return validationError(validationCodeInvalidValue, field+".capacity_bytes", "is invalid")
 	}
 	return nil
 }
