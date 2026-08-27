@@ -137,6 +137,9 @@ class ClientArgumentTests(unittest.TestCase):
             "PROBE_PROTOCOL_PREFER",
             "PING_PACKET_HISTORY_LEN",
         )
+        # The Device v2 input validator keeps a narrow transitional allowlist so
+        # deployed 2.3 clients can update a 2.5 server.  Public collection,
+        # schema, model, API, and UI surfaces must remain free of these fields.
         paths = (
             CLIENT_DIR / "client-linux.py",
             CLIENT_DIR / "client-psutil.py",
@@ -147,7 +150,6 @@ class ClientArgumentTests(unittest.TestCase):
             CLIENT_DIR.parent / "schemas" / "stats-v2.schema.json",
             CLIENT_DIR.parent / "server" / "model.go",
             CLIENT_DIR.parent / "server" / "app.go",
-            CLIENT_DIR.parent / "server" / "contracts" / "contracts.go",
             CLIENT_DIR.parent / "server" / "extension_openapi.go",
         )
         for path in paths:

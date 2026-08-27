@@ -301,6 +301,45 @@ func TestDeviceEndpointTransportAndTrustedProxyBoundaries(t *testing.T) {
 	}
 }
 
+func TestDeviceEndpointAcceptsLegacyCarrierProbeFieldsWithoutProjection(t *testing.T) {
+	registry := testRegistry(
+		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
+	)
+	app := newStageCApp(t, registry, []contracts.CredentialRecord{
+		activeTestCredentialRecord("device-alpha"),
+	}, nil)
+	body := validDeviceEnvelope(t, "device-alpha", nil, 12)
+	for key, value := range map[string]any{
+		"ping_10010": 1.0, "ping_189": 2.0, "ping_10086": 3.0,
+		"time_10010": 10, "time_189": 20, "time_10086": 30,
+	} {
+		body = replaceStatsEnvelopeField(t, body, key, value)
+	}
+	response := performDeviceUpdateRequest(
+		app, http.MethodPost, body, testCurrentToken, "device-alpha", true,
+	)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("legacy 2.3 carrier fields rejected: status=%d body=%s", response.Code, response.Body.String())
+	}
+	node := app.nodes["device-alpha"]
+	if node.ProtocolMode != "device_v2" || node.Stats.CPU != 12 {
+		t.Fatalf("legacy update did not preserve retained telemetry: %#v", node)
+	}
+	servers, ok := app.snapshotStats(false)["servers"].([]any)
+	if !ok || len(servers) != 1 {
+		t.Fatalf("unexpected stats projection: %#v", servers)
+	}
+	server, ok := servers[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected server projection: %#v", servers[0])
+	}
+	for _, key := range []string{"ping_10010", "ping_189", "ping_10086", "time_10010", "time_189", "time_10086"} {
+		if _, exists := server[key]; exists {
+			t.Fatalf("legacy carrier field was projected: %s", key)
+		}
+	}
+}
+
 func TestDeviceEndpointHTTPValidationMatrix(t *testing.T) {
 	registry := testRegistry(
 		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),

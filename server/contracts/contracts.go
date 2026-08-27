@@ -44,6 +44,10 @@ var (
 	}
 	statsKeys = map[string]bool{
 		"uptime": true, "load_1": true, "load_5": true, "load_15": true,
+		// Transitional input-only fields accepted from 2.3 Device v2 clients.
+		// HermesStatus 2.5 no longer collects, stores, or projects them.
+		"ping_10010": true, "ping_189": true, "ping_10086": true,
+		"time_10010": true, "time_189": true, "time_10086": true,
 		"tcp": true, "udp": true, "process": true, "thread": true,
 		"network_rx": true, "network_tx": true, "network_in": true, "network_out": true,
 		"memory_total": true, "memory_used": true, "swap_total": true, "swap_used": true,
