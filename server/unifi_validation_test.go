@@ -129,7 +129,7 @@ func TestUniFiTransportFailureAndDeviceStatusIsolation(t *testing.T) {
 		t.Fatal("fresh Device v2 update was rejected")
 	}
 	node := app.nodes["s01"]
-	if node.IdentityError || app.deviceStatusAt(node, time.Now()) != "online" {
+	if node.IdentityError || node.Degraded {
 		t.Fatalf("UniFi failure changed device identity or online state: %#v", node)
 	}
 }

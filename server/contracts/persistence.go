@@ -127,7 +127,7 @@ func ValidatePersistenceV2(snapshot *PersistenceV2) error {
 			}
 		}
 		for domain := range device.Domains {
-			if domain != "hardware" && domain != "docker" && domain != "hermes" && domain != "lucky" && domain != "easytier" && domain != "client_build" {
+			if domain != "hardware" && domain != "docker" && domain != "hermes" && domain != "lucky" && domain != "easytier" && domain != "unifi" && domain != "client_build" {
 				return contractError(prefix+".domains", "contains an unknown domain")
 			}
 			if !rawJSONObject(device.Domains[domain]) {

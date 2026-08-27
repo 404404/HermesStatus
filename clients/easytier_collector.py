@@ -1,7 +1,7 @@
 """Strict, read-only EasyTier collector for HermesStatus 2.5.
 
 The module deliberately accepts only the five inspection commands documented in
-the 2.3 contract. It never asks EasyTier for its configuration or credentials,
+the 2.5 contract. It never asks EasyTier for its configuration or credentials,
 and it never returns command stderr.
 """
 
