@@ -126,6 +126,12 @@ class UniFiAPITests(unittest.TestCase):
         target_uplink = next(item for item in telemetry["uplinks"] if item.get("name") == "UDW")
         self.assertEqual(target_uplink["speed_mbps"], 2500)
 
+    def test_legacy_target_accepts_exact_external_id_alias(self):
+        from unifi_api import _legacy_target
+        target = {"id": "target-1"}
+        self.assertIsNotNone(_legacy_target({"data": [{"external_id": "target-1", "port_table": []}]}, target))
+        self.assertIsNone(_legacy_target({"data": [{"external_id": "other", "name": "target-1"}]}, target))
+
     def test_port_counter_delta_and_reset_are_bounded(self):
         previous = {}
         base = {"port_idx": 7, "up": True, "speed": 1000, "rx_bytes": 1000, "tx_bytes": 2000}

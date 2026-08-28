@@ -578,7 +578,10 @@ def _legacy_target(payload, target):
         return None
     records = _items(payload.get("data") if isinstance(payload, dict) else payload)
     for item in records:
-        if _identifier(item.get("device_id")) == target_id:
+        # Legacy records use either device_id, _id, or external_id for the
+        # same controller identity. Accept only an exact match to the
+        # already-qualified official target ID; never fall back to names/MACs.
+        if any(_identifier(item.get(key)) == target_id for key in ("device_id", "_id", "external_id")):
             return item
     return None
 
