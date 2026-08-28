@@ -663,14 +663,25 @@ def _port_record(port, *, device_id, previous_samples, sample_time):
         same_link = previous.get("up") == current_sample.get("up")
         if 0 < elapsed <= 3600 and same_speed and same_link:
             deltas = {key: current_sample[key] - previous[key] for key in ("rx_bytes", "tx_bytes")}
-            if all(value >= 0 for value in deltas.values()):
-                max_bps = (current_sample.get("speed_mbps") or 0) * 1_000_000 * 2
-                rates = {key.replace("_bytes", "_bps"): int(round(value / elapsed)) for key, value in deltas.items()}
-                if not max_bps or all(value <= max_bps for value in rates.values()):
-                    result.update(rates)
-                    if current_sample.get("speed_mbps"):
-                        result["rx_utilization_pct"] = round(rates["rx_bps"] * 8 / (current_sample["speed_mbps"] * 1_000_000) * 100, 2)
-                        result["tx_utilization_pct"] = round(rates["tx_bps"] * 8 / (current_sample["speed_mbps"] * 1_000_000) * 100, 2)
+            max_bps = (current_sample.get("speed_mbps") or 0) * 1_000_000 * 2
+            rates = {}
+            for key, delta in deltas.items():
+                if delta < 0:
+                    continue
+                rate_key = key.replace("_bytes", "_bps")
+                rate = int(round(delta / elapsed))
+                # Validate each direction independently so one corrupt/reset
+                # counter cannot hide a valid observation in the other.
+                if max_bps and rate > max_bps:
+                    continue
+                rates[rate_key] = rate
+            if rates:
+                result.update(rates)
+                speed = current_sample.get("speed_mbps")
+                if speed:
+                    for rate_key, utilization_key in (("rx_bps", "rx_utilization_pct"), ("tx_bps", "tx_utilization_pct")):
+                        if rate_key in rates:
+                            result[utilization_key] = round(rates[rate_key] * 8 / (speed * 1_000_000) * 100, 2)
     previous_samples[sample_key] = current_sample
     poe = _poe_record(port)
     if poe is not None:
