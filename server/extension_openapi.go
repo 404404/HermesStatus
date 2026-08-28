@@ -531,12 +531,79 @@ func extensionOpenAPISchemas() map[string]any {
 		"one_minute": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "five_minutes": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "fifteen_minutes": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
 	})
 	uniFiSystem := requiredObject([]string{"cpu_usage_percent", "cpu_usage_reason", "cpu_temperature_c", "memory", "uptime_seconds", "load_average"}, map[string]any{
-		"cpu_usage_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100}, "cpu_usage_reason": map[string]any{"type": []string{"string", "null"}, "enum": []any{"insufficient_delta", "counter_reset", "zero_delta", "invalid_sample", nil}},
+		"cpu_model": nullableString(MaxCPUModelLength, "Qualified UniFi CPU model from profile"), "cpu_usage_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100}, "cpu_usage_reason": map[string]any{"type": []string{"string", "null"}, "enum": []any{"insufficient_delta", "counter_reset", "zero_delta", "invalid_sample", nil}},
 		"cpu_temperature_c": map[string]any{"type": []string{"number", "null"}, "minimum": MinTemperatureCelsius, "maximum": MaxTemperatureCelsius}, "memory": nullableRef("UniFiMemoryStats"), "uptime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "load_average": nullableRef("UniFiLoadAverage"),
+	})
+	uniFiAPIEndpoint := requiredObject([]string{"name", "status", "http_status", "error"}, map[string]any{
+		"name":        map[string]any{"type": "string", "enum": []string{"info", "sites", "devices", "clients", "networks"}},
+		"status":      map[string]any{"type": "string", "enum": []string{"ok", "error", "unsupported"}},
+		"http_status": map[string]any{"type": []string{"integer", "null"}, "minimum": 100, "maximum": 599},
+		"error":       nullableRef("ExtensionError"),
+	})
+	uniFiAPISummary := map[string]any{"type": "object", "properties": map[string]any{
+		"model":               nullableString(MaxCPUModelLength, "UniFi API model"),
+		"firmware":            nullableString(MaxCPUModelLength, "UniFi API firmware"),
+		"application_version": nullableString(MaxCPUModelLength, "UniFi application version"),
+	}, "additionalProperties": false}
+	uniFiAPIIdentity := map[string]any{"type": "object", "properties": map[string]any{
+		"model": nullableString(MaxUniFiTextLength, "UniFi API device model"), "display_name": nullableString(MaxUniFiTextLength, "UniFi API display name"),
+		"firmware": nullableString(MaxUniFiTextLength, "UniFi API firmware"), "status": nullableString(MaxUniFiTextLength, "UniFi API status"),
+		"uptime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+	}, "additionalProperties": false}
+	uniFiAPIController := map[string]any{"type": "object", "properties": map[string]any{
+		"application_version": nullableString(MaxUniFiTextLength, "Network application version"), "build": nullableString(MaxUniFiTextLength, "Network application build"),
+		"update_available": map[string]any{"type": []string{"boolean", "null"}}, "state": nullableString(MaxUniFiTextLength, "Controller state"),
+	}, "additionalProperties": false}
+	uniFiAPIWAN := map[string]any{"type": "object", "properties": map[string]any{
+		"id": nullableString(MaxUniFiTextLength, "WAN identifier"), "name": nullableString(MaxUniFiTextLength, "WAN name"), "interface": nullableString(MaxUniFiTextLength, "WAN interface"),
+		"isp": nullableString(MaxUniFiTextLength, "ISP"), "link_state": nullableString(MaxUniFiTextLength, "WAN link state"),
+		"online": map[string]any{"type": []string{"boolean", "null"}}, "active": map[string]any{"type": []string{"boolean", "null"}}, "standby": map[string]any{"type": []string{"boolean", "null"}},
+		"uptime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "downtime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"latency_ms": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "packet_loss_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100},
+		"rx_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
+		"rx_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
+		"configured_upstream_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "configured_downstream_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
+		"failover_state": nullableString(MaxUniFiTextLength, "WAN failover state"), "load_balancing_state": nullableString(MaxUniFiTextLength, "WAN load-balancing state"),
+	}, "additionalProperties": false}
+	uniFiAPIUplink := map[string]any{"type": "object", "properties": map[string]any{
+		"name": nullableString(MaxUniFiTextLength, "Uplink name"), "link_state": nullableString(MaxUniFiTextLength, "Uplink state"), "speed_mbps": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"duplex": nullableString(MaxUniFiTextLength, "Uplink duplex"), "wan_id": nullableString(MaxUniFiTextLength, "Associated WAN"),
+	}, "additionalProperties": false}
+	uniFiAPITemperature := requiredObject([]string{"id", "label", "celsius", "source"}, map[string]any{
+		"id": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength}, "label": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength},
+		"celsius": map[string]any{"type": "number", "minimum": MinTemperatureCelsius, "maximum": MaxTemperatureCelsius}, "source": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength},
+	})
+	uniFiAPIClients := requiredObject([]string{"total", "wired", "wireless", "observed"}, map[string]any{
+		"total": map[string]any{"type": "integer", "minimum": 0}, "wired": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "wireless": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "observed": map[string]any{"type": "boolean"},
+	})
+	uniFiAPIDevices := requiredObject([]string{"total", "online", "offline", "by_type"}, map[string]any{
+		"total": map[string]any{"type": "integer", "minimum": 0}, "online": map[string]any{"type": "integer", "minimum": 0}, "offline": map[string]any{"type": "integer", "minimum": 0},
+		"by_type": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "integer", "minimum": 0}, "maxProperties": 4},
+	})
+	uniFiAPINetworks := requiredObject([]string{"total", "vlan"}, map[string]any{
+		"total": map[string]any{"type": "integer", "minimum": 0}, "vlan": map[string]any{"type": "integer", "minimum": 0},
+	})
+	uniFiAPITelemetry := requiredObject([]string{"identity", "controller", "wans", "uplinks", "temperatures", "clients", "devices", "networks"}, map[string]any{
+		"identity": nullableRef("UniFiAPIIdentity"), "controller": nullableRef("UniFiAPIController"),
+		"wans":         map[string]any{"type": "array", "maxItems": MaxUniFiAPIWans, "items": schemaRef("UniFiAPIWAN")},
+		"uplinks":      map[string]any{"type": "array", "maxItems": MaxUniFiAPIUplinks, "items": schemaRef("UniFiAPIUplink")},
+		"temperatures": map[string]any{"type": "array", "maxItems": MaxUniFiAPITemperatures, "items": schemaRef("UniFiAPITemperature")},
+		"clients":      nullableRef("UniFiAPIClientSummary"), "devices": nullableRef("UniFiAPIDeviceSummary"), "networks": nullableRef("UniFiAPINetworkSummary"),
+	})
+	uniFiAPI := requiredObject([]string{"enabled", "status", "last_attempt", "last_success", "endpoints", "summary", "error"}, map[string]any{
+		"enabled":      map[string]any{"type": "boolean"},
+		"status":       map[string]any{"type": "string", "enum": []string{"disabled", "available", "partial", "unavailable"}},
+		"last_attempt": nullableString(MaxTimestampLength, "Latest API collection attempt"),
+		"last_success": nullableString(MaxTimestampLength, "Latest successful API collection"),
+		"endpoints":    map[string]any{"type": "array", "maxItems": 5, "items": uniFiAPIEndpoint},
+		"summary":      map[string]any{"anyOf": []any{uniFiAPISummary, map[string]any{"type": "null"}}},
+		"telemetry":    map[string]any{"anyOf": []any{schemaRef("UniFiAPITelemetry"), map[string]any{"type": "null"}}},
+		"error":        nullableRef("ExtensionError"),
 	})
 	uniFiStats := requiredObject([]string{"configured", "profile", "transport", "system", "fans", "power_supplies", "storage", "diagnostics", "updated_at", "stale", "error"}, map[string]any{
 		"configured": map[string]any{"type": "boolean"}, "profile": map[string]any{"type": []string{"string", "null"}, "enum": []any{"udw", "ucg-max", "unknown", nil}},
 		"transport": requiredObject([]string{"status", "last_attempt", "last_success"}, map[string]any{"status": map[string]any{"type": "string", "enum": []string{"disabled", "not_collected", "available", "unavailable"}}, "last_attempt": nullableString(MaxTimestampLength, "Latest collection attempt"), "last_success": nullableString(MaxTimestampLength, "Latest successful collection")}),
+		"api":       nullableRef("UniFiAPIStats"),
 		"system":    nullableRef("UniFiSystemStats"), "fans": map[string]any{"type": "array", "maxItems": MaxUniFiFans, "items": schemaRef("UniFiFanStats"), "default": []any{}}, "power_supplies": map[string]any{"type": "array", "maxItems": MaxUniFiPowerSupplies, "items": schemaRef("UniFiPowerStats"), "default": []any{}},
 		"storage": requiredObject([]string{"nvme"}, map[string]any{
 			"nvme":     requiredObject([]string{"supported", "present", "observed"}, map[string]any{"supported": uniFiCapability, "present": uniFiPresence, "observed": map[string]any{"type": "boolean"}, "capacity_bytes": nullableInteger(MaxSafeInteger, "Storage capacity bytes")}),
@@ -640,6 +707,16 @@ func extensionOpenAPISchemas() map[string]any {
 		"UniFiMemoryStats":              uniFiMemory,
 		"UniFiLoadAverage":              uniFiLoad,
 		"UniFiSystemStats":              uniFiSystem,
+		"UniFiAPIStats":                 uniFiAPI,
+		"UniFiAPIIdentity":              uniFiAPIIdentity,
+		"UniFiAPIController":            uniFiAPIController,
+		"UniFiAPIWAN":                   uniFiAPIWAN,
+		"UniFiAPIUplink":                uniFiAPIUplink,
+		"UniFiAPITemperature":           uniFiAPITemperature,
+		"UniFiAPIClientSummary":         uniFiAPIClients,
+		"UniFiAPIDeviceSummary":         uniFiAPIDevices,
+		"UniFiAPINetworkSummary":        uniFiAPINetworks,
+		"UniFiAPITelemetry":             uniFiAPITelemetry,
 		"UniFiStats":                    uniFiStats,
 		"StatsServer":                   statsServer,
 		"StatsDocument":                 statsDocument,

@@ -41,6 +41,7 @@ type UniFiStats struct {
 	Configured    bool                `json:"configured"`
 	Profile       *string             `json:"profile"`
 	Transport     UniFiTransportStats `json:"transport"`
+	API           *UniFiAPIStats      `json:"api,omitempty"`
 	System        *UniFiSystemStats   `json:"system"`
 	Fans          []UniFiFanStats     `json:"fans"`
 	PowerSupplies []UniFiPowerStats   `json:"power_supplies"`
@@ -57,7 +58,115 @@ type UniFiTransportStats struct {
 	LastSuccess *string              `json:"last_success"`
 }
 
+type UniFiAPIStats struct {
+	Enabled     bool               `json:"enabled"`
+	Status      string             `json:"status"`
+	LastAttempt *string            `json:"last_attempt"`
+	LastSuccess *string            `json:"last_success"`
+	Endpoints   []UniFiAPIEndpoint `json:"endpoints"`
+	Summary     *UniFiAPISummary   `json:"summary"`
+	Telemetry   *UniFiAPITelemetry `json:"telemetry"`
+	Error       *ExtensionError    `json:"error"`
+}
+
+type UniFiAPIEndpoint struct {
+	Name       string          `json:"name"`
+	Status     string          `json:"status"`
+	HTTPStatus *int            `json:"http_status"`
+	Error      *ExtensionError `json:"error"`
+}
+
+type UniFiAPISummary struct {
+	Model              *string `json:"model,omitempty"`
+	Firmware           *string `json:"firmware,omitempty"`
+	ApplicationVersion *string `json:"application_version,omitempty"`
+}
+
+type UniFiAPITelemetry struct {
+	Identity     *UniFiAPIIdentity       `json:"identity"`
+	Controller   *UniFiAPIController     `json:"controller"`
+	WANs         []UniFiAPIWAN           `json:"wans"`
+	Uplinks      []UniFiAPIUplink        `json:"uplinks"`
+	Temperatures []UniFiAPITemperature   `json:"temperatures"`
+	Clients      *UniFiAPIClientSummary  `json:"clients"`
+	Devices      *UniFiAPIDeviceSummary  `json:"devices"`
+	Networks     *UniFiAPINetworkSummary `json:"networks"`
+}
+
+type UniFiAPIIdentity struct {
+	Model         *string  `json:"model,omitempty"`
+	DisplayName   *string  `json:"display_name,omitempty"`
+	Firmware      *string  `json:"firmware,omitempty"`
+	Status        *string  `json:"status,omitempty"`
+	UptimeSeconds *float64 `json:"uptime_seconds,omitempty"`
+}
+
+type UniFiAPIController struct {
+	ApplicationVersion *string `json:"application_version,omitempty"`
+	Build              *string `json:"build,omitempty"`
+	UpdateAvailable    *bool   `json:"update_available,omitempty"`
+	State              *string `json:"state,omitempty"`
+}
+
+type UniFiAPIWAN struct {
+	ID                      *string  `json:"id,omitempty"`
+	Name                    *string  `json:"name,omitempty"`
+	Interface               *string  `json:"interface,omitempty"`
+	ISP                     *string  `json:"isp,omitempty"`
+	LinkState               *string  `json:"link_state,omitempty"`
+	Online                  *bool    `json:"online,omitempty"`
+	Active                  *bool    `json:"active,omitempty"`
+	Standby                 *bool    `json:"standby,omitempty"`
+	UptimeSeconds           *float64 `json:"uptime_seconds,omitempty"`
+	DowntimeSeconds         *float64 `json:"downtime_seconds,omitempty"`
+	LatencyMs               *float64 `json:"latency_ms,omitempty"`
+	PacketLossPercent       *float64 `json:"packet_loss_percent,omitempty"`
+	RxBPS                   *int64   `json:"rx_bps,omitempty"`
+	TxBPS                   *int64   `json:"tx_bps,omitempty"`
+	RxBytes                 *int64   `json:"rx_bytes,omitempty"`
+	TxBytes                 *int64   `json:"tx_bytes,omitempty"`
+	ConfiguredUpstreamBPS   *int64   `json:"configured_upstream_bps,omitempty"`
+	ConfiguredDownstreamBPS *int64   `json:"configured_downstream_bps,omitempty"`
+	FailoverState           *string  `json:"failover_state,omitempty"`
+	LoadBalancingState      *string  `json:"load_balancing_state,omitempty"`
+}
+
+type UniFiAPIUplink struct {
+	Name      *string  `json:"name,omitempty"`
+	LinkState *string  `json:"link_state,omitempty"`
+	SpeedMbps *float64 `json:"speed_mbps,omitempty"`
+	Duplex    *string  `json:"duplex,omitempty"`
+	WANID     *string  `json:"wan_id,omitempty"`
+}
+
+type UniFiAPITemperature struct {
+	ID      string  `json:"id"`
+	Label   string  `json:"label"`
+	Celsius float64 `json:"celsius"`
+	Source  string  `json:"source"`
+}
+
+type UniFiAPIClientSummary struct {
+	Total    int  `json:"total"`
+	Wired    *int `json:"wired"`
+	Wireless *int `json:"wireless"`
+	Observed bool `json:"observed"`
+}
+
+type UniFiAPIDeviceSummary struct {
+	Total   int            `json:"total"`
+	Online  int            `json:"online"`
+	Offline int            `json:"offline"`
+	ByType  map[string]int `json:"by_type"`
+}
+
+type UniFiAPINetworkSummary struct {
+	Total int `json:"total"`
+	VLAN  int `json:"vlan"`
+}
+
 type UniFiSystemStats struct {
+	CPUModel        *string           `json:"cpu_model"`
 	CPUUsagePercent *float64          `json:"cpu_usage_percent"`
 	CPUUsageReason  *string           `json:"cpu_usage_reason"`
 	CPUTemperatureC *float64          `json:"cpu_temperature_c"`

@@ -7,6 +7,7 @@ from pathlib import Path
 from unifi_normalizer import normalize
 from unifi_profile_loader import ProfileError, load_profile
 from unifi_raw_collector import RawCollector
+from unifi_api import UniFiAPICollector, api_disabled
 
 PROFILE_DIRECTORY = Path(__file__).with_name("unifi_profiles")
 
@@ -15,6 +16,7 @@ def not_configured_unifi():
     return {
         "configured": False, "profile": None,
         "transport": {"status": "disabled", "last_attempt": None, "last_success": None},
+        "api": api_disabled(),
         "system": None, "fans": [], "power_supplies": [],
         "storage": {
             "nvme": {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None},
@@ -52,10 +54,13 @@ class UniFiDomainCollector:
         except ProfileError as exc:
             raise ValueError("unknown_profile") from exc
         self.raw_collector = raw_collector or RawCollector(config)
+        api_config = getattr(config, "api", None)
+        self.api_collector = UniFiAPICollector(api_config) if api_config is not None and getattr(api_config, "enabled", False) else None
         self.previous = None
 
     def collect(self):
         raw = self.raw_collector.collect()
+        raw["api"] = self.api_collector.collect() if self.api_collector is not None else api_disabled()
         try:
             normalized = normalize(self.profile, raw, self.previous)
         except ValueError:

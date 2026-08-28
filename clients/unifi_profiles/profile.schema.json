@@ -159,6 +159,10 @@
           }
         }
       }
+    },
+    "cpu_model": {
+      "type": "string",
+      "maxLength": 128
     }
   },
   "additionalProperties": false

@@ -51,6 +51,83 @@ func TestUniFiValidationDisabledAndProfiles(t *testing.T) {
 	}
 }
 
+func TestUniFiAPIFailureAndSuccessProjectionRoundTrip(t *testing.T) {
+	stats := validUniFiFixture("udw")
+	now := "2026-08-27T01:02:03Z"
+	status := 401
+	stats.API = &UniFiAPIStats{
+		Enabled: true, Status: "unavailable", LastAttempt: &now,
+		LastSuccess: nil, Endpoints: []UniFiAPIEndpoint{{Name: "info", Status: "error", HTTPStatus: &status, Error: &ExtensionError{Code: "api_auth_failure", Message: "UniFi API authentication failed", Source: "unifi-api", Retryable: true, HTTPStatus: &status}}},
+		Error: &ExtensionError{Code: "api_auth_failure", Message: "UniFi API authentication failed", Source: "unifi-api", Retryable: true, HTTPStatus: &status},
+	}
+	if err := ValidateUniFiStats(&stats); err != nil {
+		t.Fatalf("API failure projection rejected: %v", err)
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeUniFiStatsJSON(raw)
+	if err != nil {
+		t.Fatalf("API projection round trip rejected: %v", err)
+	}
+	if decoded.API == nil || decoded.API.Status != "unavailable" || decoded.API.Error == nil || decoded.API.Error.Code != "api_auth_failure" {
+		t.Fatalf("API projection changed: %#v", decoded.API)
+	}
+}
+
+func TestUniFiAPITelemetryProjectionAndPartialFailure(t *testing.T) {
+	stats := validUniFiFixture("udw")
+	now := "2026-08-27T01:02:03Z"
+	status := 200
+	stats.API = &UniFiAPIStats{
+		Enabled: true, Status: "available", LastAttempt: &now, LastSuccess: &now,
+		Endpoints: []UniFiAPIEndpoint{
+			{Name: "info", Status: "ok", HTTPStatus: &status},
+			{Name: "sites", Status: "ok", HTTPStatus: &status},
+			{Name: "devices", Status: "ok", HTTPStatus: &status},
+			{Name: "clients", Status: "ok", HTTPStatus: &status},
+			{Name: "networks", Status: "ok", HTTPStatus: &status},
+		},
+		Summary: &UniFiAPISummary{Model: unifiString("UDW"), Firmware: unifiString("5.0.1"), ApplicationVersion: unifiString("9.1.2")},
+		Telemetry: &UniFiAPITelemetry{
+			Identity:     &UniFiAPIIdentity{Model: unifiString("UDW"), DisplayName: unifiString("Gateway"), Firmware: unifiString("5.0.1"), Status: unifiString("online"), UptimeSeconds: unifiFloat(1234)},
+			Controller:   &UniFiAPIController{ApplicationVersion: unifiString("9.1.2"), Build: unifiString("build-1"), UpdateAvailable: func() *bool { value := false; return &value }(), State: unifiString("healthy")},
+			WANs:         []UniFiAPIWAN{{ID: unifiString("wan1"), Name: unifiString("WAN1"), Interface: unifiString("eth0"), ISP: unifiString("Example ISP"), LinkState: unifiString("up"), Online: func() *bool { value := true; return &value }(), LatencyMs: unifiFloat(0), PacketLossPercent: unifiFloat(0), RxBPS: unifiInt64(0), TxBPS: unifiInt64(123)}},
+			Uplinks:      []UniFiAPIUplink{{Name: unifiString("eth0"), LinkState: unifiString("up"), SpeedMbps: unifiFloat(1000)}},
+			Temperatures: []UniFiAPITemperature{{ID: "cpu", Label: "CPU", Celsius: 64.5, Source: "unifi-api"}},
+			Clients:      &UniFiAPIClientSummary{Total: 2, Wired: unifiInt(1), Wireless: unifiInt(1), Observed: true},
+			Devices:      &UniFiAPIDeviceSummary{Total: 2, Online: 2, Offline: 0, ByType: map[string]int{"gateway": 1, "switch": 1}},
+			Networks:     &UniFiAPINetworkSummary{Total: 2, VLAN: 1},
+		},
+	}
+	if err := ValidateUniFiStats(&stats); err != nil {
+		t.Fatalf("API telemetry rejected: %v", err)
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeUniFiStatsJSON(raw)
+	if err != nil {
+		t.Fatalf("API telemetry round trip rejected: %v", err)
+	}
+	if decoded.API == nil || decoded.API.Telemetry == nil || decoded.API.Telemetry.WANs[0].LatencyMs == nil || *decoded.API.Telemetry.WANs[0].LatencyMs != 0 {
+		t.Fatalf("API telemetry was not preserved: %#v", decoded.API)
+	}
+
+	partial := stats
+	partial.API = &UniFiAPIStats{
+		Enabled: true, Status: "partial", LastAttempt: &now, LastSuccess: &now,
+		Endpoints: []UniFiAPIEndpoint{{Name: "info", Status: "ok", HTTPStatus: &status}, {Name: "devices", Status: "error", HTTPStatus: func() *int { value := 401; return &value }(), Error: &ExtensionError{Code: "api_auth_failure", Message: "UniFi API authentication failed", Source: "unifi-api", Retryable: true, HTTPStatus: func() *int { value := 401; return &value }()}}},
+		Telemetry: &UniFiAPITelemetry{Identity: &UniFiAPIIdentity{Model: unifiString("UDW")}, WANs: []UniFiAPIWAN{}, Uplinks: []UniFiAPIUplink{}, Temperatures: []UniFiAPITemperature{}, Clients: nil, Devices: nil, Networks: nil},
+		Error:     &ExtensionError{Code: "api_partial_failure", Message: "UniFi API returned a partial observation", Source: "unifi-api", Retryable: true},
+	}
+	if err := ValidateUniFiStats(&partial); err != nil {
+		t.Fatalf("partial API telemetry rejected: %v", err)
+	}
+}
+
 func TestUniFiStorageMediaCapabilitiesRoundTrip(t *testing.T) {
 	stats := validUniFiFixture("udw")
 	capacity := int64(128000000000)

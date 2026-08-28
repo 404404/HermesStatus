@@ -36,6 +36,7 @@ COPY clients/host_collector.py /app/host_collector.py
 COPY clients/lucky_collector.py /app/lucky_collector.py
 COPY clients/easytier_collector.py /app/easytier_collector.py
 COPY clients/unifi_collector.py /app/unifi_collector.py
+COPY clients/unifi_api.py /app/unifi_api.py
 COPY clients/unifi_profile_loader.py /app/unifi_profile_loader.py
 COPY clients/unifi_source_registry.py /app/unifi_source_registry.py
 COPY clients/unifi_raw_collector.py /app/unifi_raw_collector.py

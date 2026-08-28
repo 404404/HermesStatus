@@ -192,10 +192,26 @@ body.light .health-card{background:#fff}
 .easytier-route-table{min-width:960px!important}
 .easytier-connector-table{min-width:620px!important}
 .unifi-summary,.unifi-system,.unifi-storage{padding:0 1.35rem 1.1rem}
-.unifi-fans-table,.unifi-power-table{min-width:760px!important}
-.unifi-system .usage-bar{margin:0}
-.unifi-system .detail-row dd{display:flex;justify-content:flex-end;align-items:center;gap:.4rem}
-.unifi-system .usage-bar{width:min(240px,100%)}
+.unifi-system-cards{grid-template-columns:repeat(5,minmax(0,1fr));padding:0}
+.unifi-system-cards .summary-card{min-width:0}
+.unifi-system-cards .usage-bar{margin-top:auto}
+.unifi-system-cards .card-detail.resource-value{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.unifi-system-cards .card-value[data-fit-single-line]{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.unifi-card-unavailable{font-size:16px;line-height:1.3}
+.unifi-load-card{min-width:0}
+.unifi-fans-table,.unifi-power-table{min-width:980px!important}
+.unifi-api-telemetry{padding:0 1.35rem 1.1rem}
+.unifi-api-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}
+.unifi-api-card{min-width:0;padding:1rem;border:1px solid var(--border);border-radius:12px;background:var(--surface-alt,#171a22)}
+.unifi-api-card h3{margin:0 0 .65rem;font-size:15px;color:var(--text)}
+.unifi-api-card .detail-list{padding:0}
+.unifi-api-table{min-width:760px!important}
+.unifi-api-table td,.unifi-api-table th{white-space:nowrap}
+.unifi-api-unavailable{color:var(--text-dim);padding:.25rem 0}
+.unifi-storage-table{min-width:940px!important;table-layout:auto}
+.unifi-storage-table th,.unifi-storage-table td{white-space:nowrap}
+.unifi-storage-table .table-usage{min-width:150px}
+.unifi-storage-table .usage-bar{margin:0;min-width:130px}
 
 .data-section{overflow:hidden}
 .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;min-width:0;padding:1.25rem 1.35rem;border-bottom:1px solid var(--border);overflow-wrap:anywhere;word-break:break-word}
@@ -301,7 +317,7 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
     .device-selection-notice{text-align:left}
     .device-buttons{display:none}
     .device-select-label{display:block}
-    .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list,.easytier-command-grid,.hardware-usage-grid,.hardware-cpu-columns,.hardware-memory-grid{grid-template-columns:1fr}
+    .overview-grid,.health-grid,.profile-status-grid,.modal-metric-grid,.detail-list,.easytier-command-grid,.hardware-usage-grid,.hardware-cpu-columns,.hardware-memory-grid,.unifi-system-cards{grid-template-columns:1fr}
     .detail-list.hardware-three-column-info{grid-template-columns:1fr}
     .detail-list.unifi-summary{grid-template-columns:1fr}
     .hardware-cpu-column+.hardware-cpu-column{border-top:1px solid var(--border);border-left:0}
@@ -315,3 +331,6 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
     .detail-row{grid-template-columns:1fr;gap:.25rem}
     .detail-row dd{text-align:left;white-space:normal;overflow-wrap:anywhere}
 }
+
+@media (max-width:900px){.unifi-api-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:720px){.unifi-api-grid{grid-template-columns:1fr}}

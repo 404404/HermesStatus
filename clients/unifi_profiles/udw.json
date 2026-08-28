@@ -76,7 +76,7 @@
     },
     "tf": {
       "supported": true,
-      "present": "present",
+      "present": "not_populated",
       "observed": "unknown",
       "capacity_bytes": null
     }
@@ -84,5 +84,6 @@
   "health_policy": {
     "optional_diagnostics_affect_health": false,
     "zero_rpm_is_failure_when_present": false
-  }
+  },
+  "cpu_model": "Annapurna AL324"
 }

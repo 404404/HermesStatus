@@ -74,6 +74,9 @@
     },
     "error": {
       "$ref": "agent-update-extension.schema.json#/$defs/error"
+    },
+    "api": {
+      "$ref": "#/$defs/api"
     }
   },
   "additionalProperties": false,
@@ -471,6 +474,549 @@
             },
             "additionalProperties": false
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "api": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "status",
+        "last_attempt",
+        "last_success",
+        "endpoints",
+        "summary",
+        "telemetry",
+        "error"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "disabled",
+            "available",
+            "partial",
+            "unavailable"
+          ]
+        },
+        "last_attempt": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "last_success": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "endpoints": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "$ref": "#/$defs/apiEndpoint"
+          }
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/apiSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "$ref": "agent-update-extension.schema.json#/$defs/error"
+        },
+        "telemetry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/apiTelemetry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiEndpoint": {
+      "type": "object",
+      "required": [
+        "name",
+        "status",
+        "http_status",
+        "error"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "info",
+            "sites",
+            "devices",
+            "clients",
+            "networks"
+          ]
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "error",
+            "unsupported"
+          ]
+        },
+        "http_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 599
+        },
+        "error": {
+          "$ref": "agent-update-extension.schema.json#/$defs/error"
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiSummary": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "firmware": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "application_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiIdentity": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "display_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "firmware": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "uptime_seconds": {
+          "$ref": "#/$defs/nullableNumber"
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiController": {
+      "type": "object",
+      "properties": {
+        "application_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "build": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "update_available": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiWan": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "interface": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "isp": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "link_state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "online": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "active": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "standby": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "uptime_seconds": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "downtime_seconds": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "latency_ms": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "packet_loss_percent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "rx_bps": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "tx_bps": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "rx_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "tx_bytes": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "configured_upstream_bps": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "configured_downstream_bps": {
+          "$ref": "#/$defs/nullableCounter"
+        },
+        "failover_state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "load_balancing_state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiUplink": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "link_state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "speed_mbps": {
+          "$ref": "#/$defs/nullableNumber"
+        },
+        "duplex": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "wan_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiTemperature": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "celsius",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "celsius": {
+          "type": "number",
+          "minimum": -100,
+          "maximum": 250
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiClients": {
+      "type": "object",
+      "required": [
+        "total",
+        "wired",
+        "wireless",
+        "observed"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wired": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "wireless": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "observed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiDevices": {
+      "type": "object",
+      "required": [
+        "total",
+        "online",
+        "offline",
+        "by_type"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "online": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "offline": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_type": {
+          "type": "object",
+          "maxProperties": 4,
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiNetworks": {
+      "type": "object",
+      "required": [
+        "total",
+        "vlan"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "vlan": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiTelemetry": {
+      "type": "object",
+      "required": [
+        "identity",
+        "controller",
+        "wans",
+        "uplinks",
+        "temperatures",
+        "clients",
+        "devices",
+        "networks"
+      ],
+      "properties": {
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/apiIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "controller": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/apiController"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wans": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/apiWan"
+          }
+        },
+        "uplinks": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/apiUplink"
+          }
+        },
+        "temperatures": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/apiTemperature"
+          }
+        },
+        "clients": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/apiClients"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "devices": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/apiDevices"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "networks": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/apiNetworks"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false

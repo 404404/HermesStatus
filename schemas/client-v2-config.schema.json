@@ -251,6 +251,69 @@
               "type": "integer",
               "minimum": 30,
               "maximum": 3600
+            },
+            "api": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "enabled"
+                  ],
+                  "properties": {
+                    "enabled": {
+                      "const": false
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "enabled",
+                    "base_url",
+                    "api_key_file",
+                    "ca_file",
+                    "tls_sha256",
+                    "timeout_seconds"
+                  ],
+                  "properties": {
+                    "enabled": {
+                      "const": true
+                    },
+                    "base_url": {
+                      "type": "string",
+                      "pattern": "^https://[^/?#]+(?::443)?/?$",
+                      "maxLength": 512
+                    },
+                    "api_key_file": {
+                      "type": "string",
+                      "pattern": "^/[^\\u0000]*$",
+                      "maxLength": 4096
+                    },
+                    "ca_file": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^/[^\\u0000]*$",
+                      "maxLength": 4096
+                    },
+                    "tls_sha256": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^[0-9A-Fa-f]{64}$"
+                    },
+                    "timeout_seconds": {
+                      "type": "integer",
+                      "minimum": 3,
+                      "maximum": 30
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
             }
           },
           "additionalProperties": false

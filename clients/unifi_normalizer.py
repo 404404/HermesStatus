@@ -130,6 +130,15 @@ def _storage(profile):
     return result
 
 
+def _api_observation(raw, previous=None):
+    value = raw.get("api")
+    if isinstance(value, dict):
+        return value
+    if isinstance(previous, dict) and isinstance(previous.get("api"), dict):
+        return previous["api"]
+    return {"enabled": False, "status": "disabled", "last_attempt": None, "last_success": None, "endpoints": [], "summary": None, "error": None}
+
+
 def normalize(profile, raw, previous=None):
     now = _timestamp(raw)
     transport = raw.get("transport", {})
@@ -138,6 +147,7 @@ def normalize(profile, raw, previous=None):
             "profile": profile["profile_id"],
             "transport": {"status": "unavailable", "last_attempt": now,
                           "last_success": previous.get("updated_at") if previous else None},
+            "api": _api_observation(raw, previous),
             "system": previous.get("system") if previous else None,
             "fans": previous.get("fans", []) if previous else [],
             "power_supplies": previous.get("power_supplies", _power(profile)) if previous else _power(profile),
@@ -166,7 +176,9 @@ def normalize(profile, raw, previous=None):
     return {
         "profile": profile["profile_id"],
         "transport": {"status": "available", "last_attempt": now, "last_success": now},
+        "api": _api_observation(raw, previous),
         "system": {
+            "cpu_model": profile.get("cpu_model"),
             "cpu_usage_percent": cpu_pct,
             "cpu_usage_reason": cpu_reason,
             "cpu_temperature_c": temperature,

@@ -18,13 +18,14 @@ class NormalizerTests(unittest.TestCase):
     def test_udw_normalization_and_fans(self):
         result = normalize(load_profile(self.profiles, "udw"), fixture("udw-raw.json"))
         self.assertEqual(result["system"]["cpu_temperature_c"], 64.0)
+        self.assertEqual(result["system"]["cpu_model"], "Annapurna AL324")
         self.assertEqual([x["id"] for x in result["fans"]], ["fan1", "fan2"])
         self.assertEqual([x["id"] for x in result["diagnostics"]["ignored_observations"]], ["fan3", "fan4"])
         self.assertEqual(result["storage"]["nvme"]["supported"], "unsupported")
         self.assertEqual(result["storage"]["nvme"]["present"], "not_present")
         self.assertEqual(result["storage"]["sata_ssd"]["supported"], "supported")
         self.assertEqual(result["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
-        self.assertEqual(result["storage"]["tf"]["present"], "present")
+        self.assertEqual(result["storage"]["tf"]["present"], "not_present")
         self.assertEqual(result["system"]["cpu_usage_percent"], None)
 
     def test_ucg_max_zero_rpm_is_not_failure_and_nvme_unknown(self):

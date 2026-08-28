@@ -25,7 +25,8 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(set(udw["storage"]), {"nvme", "sata_ssd", "tf"})
         self.assertEqual(udw["storage"]["nvme"]["supported"], False)
         self.assertEqual(udw["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
-        self.assertEqual(udw["storage"]["tf"]["present"], "present")
+        self.assertEqual(udw["storage"]["tf"]["present"], "not_populated")
+        self.assertEqual(udw["cpu_model"], "Annapurna AL324")
 
     def test_unknown_source_rejected(self):
         profile = copy.deepcopy(load_profile(self.profiles, "udw"))

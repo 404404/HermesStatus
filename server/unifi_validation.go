@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"sort"
+	"strconv"
 )
 
 func DecodeUniFiStatsJSON(data []byte) (*UniFiStats, error) {
@@ -40,8 +41,13 @@ func ValidateUniFiStats(stats *UniFiStats) error {
 	if err := ValidateExtensionError("unifi.error", stats.Error); err != nil {
 		return err
 	}
+	if stats.API != nil {
+		if err := validateUniFiAPI(stats.API); err != nil {
+			return err
+		}
+	}
 	if !stats.Configured {
-		if stats.Profile != nil || stats.System != nil || stats.Stale || stats.Error != nil || stats.Transport.Status != UniFiTransportDisabled {
+		if stats.Profile != nil || stats.System != nil || stats.Stale || stats.Error != nil || stats.Transport.Status != UniFiTransportDisabled || (stats.API != nil && (stats.API.Enabled || stats.API.Status != "disabled")) {
 			return validationError(validationCodeInvalidValue, "unifi", "disabled telemetry must not claim a collection result")
 		}
 	} else {
@@ -98,9 +104,201 @@ func ValidateUniFiStats(stats *UniFiStats) error {
 	return validatePayloadSize("unifi", stats, MaxUniFiPayloadBytes)
 }
 
+func validateUniFiAPI(value *UniFiAPIStats) error {
+	if value == nil {
+		return nil
+	}
+	if value.Status != "disabled" && value.Status != "available" && value.Status != "partial" && value.Status != "unavailable" {
+		return validationError(validationCodeInvalidValue, "unifi.api.status", "is invalid")
+	}
+	if err := validateDateTime("unifi.api.last_attempt", value.LastAttempt, true); err != nil {
+		return err
+	}
+	if err := validateDateTime("unifi.api.last_success", value.LastSuccess, true); err != nil {
+		return err
+	}
+	if !value.Enabled {
+		if value.Status != "disabled" || len(value.Endpoints) != 0 || value.Summary != nil || value.Telemetry != nil || value.Error != nil {
+			return validationError(validationCodeInvalidValue, "unifi.api", "disabled API must not claim an observation")
+		}
+		return nil
+	}
+	if value.Status == "disabled" || len(value.Endpoints) > 5 {
+		return validationError(validationCodeInvalidValue, "unifi.api", "enabled API state is invalid")
+	}
+	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "clients": true, "networks": true}
+	seen := map[string]bool{}
+	okCount, failedCount := 0, 0
+	for _, endpoint := range value.Endpoints {
+		if !allowed[endpoint.Name] || seen[endpoint.Name] || (endpoint.Status != "ok" && endpoint.Status != "error" && endpoint.Status != "unsupported") {
+			return validationError(validationCodeInvalidValue, "unifi.api.endpoints", "contains an invalid endpoint")
+		}
+		seen[endpoint.Name] = true
+		if endpoint.HTTPStatus != nil && (*endpoint.HTTPStatus < 100 || *endpoint.HTTPStatus > 599) {
+			return validationError(validationCodeInvalidValue, "unifi.api.endpoints.http_status", "is invalid")
+		}
+		if endpoint.Status == "ok" {
+			okCount++
+			if endpoint.Error != nil {
+				return validationError(validationCodeInvalidValue, "unifi.api.endpoints.error", "successful endpoint must not contain an error")
+			}
+		} else {
+			failedCount++
+			if endpoint.Error == nil {
+				return validationError(validationCodeInvalidValue, "unifi.api.endpoints.error", "failed endpoint requires an error")
+			}
+			if err := ValidateExtensionError("unifi.api.endpoints.error", endpoint.Error); err != nil {
+				return err
+			}
+		}
+	}
+	if value.Status == "available" && failedCount != 0 {
+		return validationError(validationCodeInvalidValue, "unifi.api.status", "available API cannot contain failed endpoints")
+	}
+	if value.Status == "partial" && (okCount == 0 || failedCount == 0) {
+		return validationError(validationCodeInvalidValue, "unifi.api.status", "partial API requires successful and failed endpoints")
+	}
+	if value.Status == "unavailable" && okCount != 0 {
+		return validationError(validationCodeInvalidValue, "unifi.api.status", "unavailable API cannot contain successful endpoints")
+	}
+	if value.Status == "partial" && (value.Error == nil || value.Error.Code != "api_partial_failure") {
+		return validationError(validationCodeInvalidValue, "unifi.api.error", "partial API requires api_partial_failure")
+	}
+	if value.Status == "available" && value.Error != nil {
+		return validationError(validationCodeInvalidValue, "unifi.api.error", "available API must not contain an error")
+	}
+	if value.Status == "unavailable" && value.Error == nil {
+		return validationError(validationCodeInvalidValue, "unifi.api.error", "unavailable API requires an error")
+	}
+	if err := ValidateExtensionError("unifi.api.error", value.Error); err != nil {
+		return err
+	}
+	if value.Summary != nil {
+		for field, item := range map[string]*string{"model": value.Summary.Model, "firmware": value.Summary.Firmware, "application_version": value.Summary.ApplicationVersion} {
+			if err := validateOptionalString("unifi.api.summary."+field, item, MaxCPUModelLength); err != nil {
+				return err
+			}
+		}
+	}
+	if err := validateUniFiAPITelemetry(value.Telemetry); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
+	if value == nil {
+		return nil
+	}
+	if value.Identity != nil {
+		for field, item := range map[string]*string{"model": value.Identity.Model, "display_name": value.Identity.DisplayName, "firmware": value.Identity.Firmware, "status": value.Identity.Status} {
+			if err := validateOptionalString("unifi.api.telemetry.identity."+field, item, MaxUniFiTextLength); err != nil {
+				return err
+			}
+		}
+		if err := validateOptionalFloat("unifi.api.telemetry.identity.uptime_seconds", value.Identity.UptimeSeconds, float64(MaxSafeInteger)); err != nil {
+			return err
+		}
+	}
+	if value.Controller != nil {
+		for field, item := range map[string]*string{"application_version": value.Controller.ApplicationVersion, "build": value.Controller.Build, "state": value.Controller.State} {
+			if err := validateOptionalString("unifi.api.telemetry.controller."+field, item, MaxUniFiTextLength); err != nil {
+				return err
+			}
+		}
+	}
+	if len(value.WANs) > MaxUniFiAPIWans || len(value.Uplinks) > MaxUniFiAPIUplinks || len(value.Temperatures) > MaxUniFiAPITemperatures {
+		return validationError(validationCodeInvalidValue, "unifi.api.telemetry", "array exceeds the allowed size")
+	}
+	for index, item := range value.WANs {
+		prefix := "unifi.api.telemetry.wans[" + strconv.Itoa(index) + "]"
+		for field, text := range map[string]*string{"id": item.ID, "name": item.Name, "interface": item.Interface, "isp": item.ISP, "link_state": item.LinkState, "failover_state": item.FailoverState, "load_balancing_state": item.LoadBalancingState} {
+			if err := validateOptionalString(prefix+"."+field, text, MaxUniFiTextLength); err != nil {
+				return err
+			}
+		}
+		for field, number := range map[string]*float64{"uptime_seconds": item.UptimeSeconds, "downtime_seconds": item.DowntimeSeconds, "latency_ms": item.LatencyMs, "packet_loss_percent": item.PacketLossPercent} {
+			if err := validateOptionalFloat(prefix+"."+field, number, float64(MaxSafeInteger)); err != nil {
+				return err
+			}
+		}
+		for field, number := range map[string]*int64{"rx_bps": item.RxBPS, "tx_bps": item.TxBPS, "rx_bytes": item.RxBytes, "tx_bytes": item.TxBytes, "configured_upstream_bps": item.ConfiguredUpstreamBPS, "configured_downstream_bps": item.ConfiguredDownstreamBPS} {
+			if err := validateCounter(prefix+"."+field, number, MaxSafeInteger); err != nil {
+				return err
+			}
+		}
+	}
+	for index, item := range value.Uplinks {
+		prefix := "unifi.api.telemetry.uplinks[" + strconv.Itoa(index) + "]"
+		for field, text := range map[string]*string{"name": item.Name, "link_state": item.LinkState, "duplex": item.Duplex, "wan_id": item.WANID} {
+			if err := validateOptionalString(prefix+"."+field, text, MaxUniFiTextLength); err != nil {
+				return err
+			}
+		}
+		if err := validateOptionalFloat(prefix+".speed_mbps", item.SpeedMbps, float64(MaxSafeInteger)); err != nil {
+			return err
+		}
+	}
+	for index, item := range value.Temperatures {
+		prefix := "unifi.api.telemetry.temperatures[" + strconv.Itoa(index) + "]"
+		if err := validateRequiredString(prefix+".id", item.ID, MaxUniFiTextLength); err != nil {
+			return err
+		}
+		if err := validateRequiredString(prefix+".label", item.Label, MaxUniFiTextLength); err != nil {
+			return err
+		}
+		if err := validateRequiredString(prefix+".source", item.Source, MaxUniFiTextLength); err != nil {
+			return err
+		}
+		if err := validateTemperature(prefix+".celsius", item.Celsius); err != nil {
+			return err
+		}
+	}
+	if value.Clients != nil {
+		if value.Clients.Total < 0 {
+			return validationError(validationCodeInvalidValue, "unifi.api.telemetry.clients.total", "is invalid")
+		}
+		for field, item := range map[string]*int{"wired": value.Clients.Wired, "wireless": value.Clients.Wireless} {
+			if item != nil && (*item < 0 || *item > value.Clients.Total) {
+				return validationError(validationCodeInvalidValue, "unifi.api.telemetry.clients."+field, "is invalid")
+			}
+		}
+	}
+	if value.Devices != nil {
+		if value.Devices.Total < 0 || value.Devices.Online < 0 || value.Devices.Offline < 0 || value.Devices.Online+value.Devices.Offline > value.Devices.Total {
+			return validationError(validationCodeInvalidValue, "unifi.api.telemetry.devices", "counts are invalid")
+		}
+		if len(value.Devices.ByType) > 4 {
+			return validationError(validationCodeInvalidValue, "unifi.api.telemetry.devices.by_type", "is too large")
+		}
+		for key, count := range value.Devices.ByType {
+			if key != "gateway" && key != "ap" && key != "switch" && key != "other" || count < 0 || count > value.Devices.Total {
+				return validationError(validationCodeInvalidValue, "unifi.api.telemetry.devices.by_type", "contains an invalid count")
+			}
+		}
+	}
+	if value.Networks != nil && (value.Networks.Total < 0 || value.Networks.VLAN < 0 || value.Networks.VLAN > value.Networks.Total) {
+		return validationError(validationCodeInvalidValue, "unifi.api.telemetry.networks", "counts are invalid")
+	}
+	return nil
+}
+
+func validateOptionalFloat(field string, value *float64, max float64) error {
+	if value == nil {
+		return nil
+	}
+	if math.IsNaN(*value) || math.IsInf(*value, 0) || *value < 0 || *value > max {
+		return validationError(validationCodeInvalidValue, field, "is invalid")
+	}
+	return nil
+}
+
 func validateUniFiSystem(value *UniFiSystemStats) error {
 	if value == nil || value.Memory == nil || value.LoadAverage == nil {
 		return validationError(validationCodeInvalidValue, "unifi.system", "is incomplete")
+	}
+	if err := validateOptionalString("unifi.system.cpu_model", value.CPUModel, MaxCPUModelLength); err != nil {
+		return err
 	}
 	if err := validateOptionalBoundedFloat("unifi.system.cpu_usage_percent", value.CPUUsagePercent, 100); err != nil {
 		return err
@@ -283,11 +481,99 @@ func validateRequiredUniFi(raw json.RawMessage) error {
 	return nil
 }
 
+func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
+	if input == nil {
+		return nil
+	}
+	result := *input
+	if input.Identity != nil {
+		identity := *input.Identity
+		identity.Model = sanitizeStringPointer(identity.Model)
+		identity.DisplayName = sanitizeStringPointer(identity.DisplayName)
+		identity.Firmware = sanitizeStringPointer(identity.Firmware)
+		identity.Status = sanitizeStringPointer(identity.Status)
+		result.Identity = &identity
+	}
+	if input.Controller != nil {
+		controller := *input.Controller
+		controller.ApplicationVersion = sanitizeStringPointer(controller.ApplicationVersion)
+		controller.Build = sanitizeStringPointer(controller.Build)
+		controller.State = sanitizeStringPointer(controller.State)
+		result.Controller = &controller
+	}
+	result.WANs = append([]UniFiAPIWAN(nil), input.WANs...)
+	for index := range result.WANs {
+		item := &result.WANs[index]
+		item.ID = sanitizeStringPointer(item.ID)
+		item.Name = sanitizeStringPointer(item.Name)
+		item.Interface = sanitizeStringPointer(item.Interface)
+		item.ISP = sanitizeStringPointer(item.ISP)
+		item.LinkState = sanitizeStringPointer(item.LinkState)
+		item.FailoverState = sanitizeStringPointer(item.FailoverState)
+		item.LoadBalancingState = sanitizeStringPointer(item.LoadBalancingState)
+	}
+	result.Uplinks = append([]UniFiAPIUplink(nil), input.Uplinks...)
+	for index := range result.Uplinks {
+		item := &result.Uplinks[index]
+		item.Name = sanitizeStringPointer(item.Name)
+		item.LinkState = sanitizeStringPointer(item.LinkState)
+		item.Duplex = sanitizeStringPointer(item.Duplex)
+		item.WANID = sanitizeStringPointer(item.WANID)
+	}
+	result.Temperatures = append([]UniFiAPITemperature(nil), input.Temperatures...)
+	for index := range result.Temperatures {
+		result.Temperatures[index].ID = SanitizeText(result.Temperatures[index].ID)
+		result.Temperatures[index].Label = SanitizeText(result.Temperatures[index].Label)
+		result.Temperatures[index].Source = SanitizeText(result.Temperatures[index].Source)
+	}
+	if input.Clients != nil {
+		clients := *input.Clients
+		result.Clients = &clients
+	}
+	if input.Devices != nil {
+		devices := *input.Devices
+		devices.ByType = make(map[string]int, len(input.Devices.ByType))
+		for key, count := range input.Devices.ByType {
+			devices.ByType[SanitizeText(key)] = count
+		}
+		result.Devices = &devices
+	}
+	if input.Networks != nil {
+		networks := *input.Networks
+		result.Networks = &networks
+	}
+	return &result
+}
+
 func SanitizeUniFiStats(input UniFiStats) UniFiStats {
 	result := input
+	if input.System != nil {
+		system := *input.System
+		system.CPUModel = sanitizeStringPointer(system.CPUModel)
+		result.System = &system
+	}
 	result.Profile = sanitizeStringPointer(result.Profile)
 	result.Transport.LastAttempt = sanitizeStringPointer(result.Transport.LastAttempt)
 	result.Transport.LastSuccess = sanitizeStringPointer(result.Transport.LastSuccess)
+	if input.API != nil {
+		api := *input.API
+		api.LastAttempt = sanitizeStringPointer(api.LastAttempt)
+		api.LastSuccess = sanitizeStringPointer(api.LastSuccess)
+		api.Error = sanitizeExtensionError(api.Error)
+		api.Endpoints = append([]UniFiAPIEndpoint(nil), input.API.Endpoints...)
+		for index := range api.Endpoints {
+			api.Endpoints[index].Error = sanitizeExtensionError(api.Endpoints[index].Error)
+		}
+		api.Telemetry = sanitizeUniFiAPITelemetry(input.API.Telemetry)
+		if api.Summary != nil {
+			summary := *api.Summary
+			summary.Model = sanitizeStringPointer(summary.Model)
+			summary.Firmware = sanitizeStringPointer(summary.Firmware)
+			summary.ApplicationVersion = sanitizeStringPointer(summary.ApplicationVersion)
+			api.Summary = &summary
+		}
+		result.API = &api
+	}
 	result.UpdatedAt = sanitizeStringPointer(result.UpdatedAt)
 	result.Error = sanitizeExtensionError(result.Error)
 	result.Fans = append([]UniFiFanStats(nil), input.Fans...)

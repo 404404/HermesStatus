@@ -79,6 +79,7 @@ SMART_DEVICE_PATH_RE = re.compile(r"^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$")
 SMART_DEVICE_TYPE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9,._+-]{0,63}$")
 UNIFI_PROFILE_IDS = frozenset({"udw", "ucg-max"})
 UNIFI_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+UNIFI_API_FINGERPRINT_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
 ENV_TO_FIELD = {
     "HERMESSTATUS_SERVER_URL": "server_url",
@@ -132,6 +133,18 @@ class FilesystemProbeConfig:
 
 
 @dataclass(frozen=True)
+class UniFiAPIConfig:
+    """Fixed, file-backed, read-only UniFi Network API configuration."""
+
+    enabled: bool
+    base_url: str
+    api_key_file: str
+    ca_file: str | None
+    tls_sha256: str | None
+    timeout_seconds: int
+
+
+@dataclass(frozen=True)
 class UniFiConfig:
     """Explicit, file-backed, read-only SSH target configuration."""
 
@@ -143,6 +156,7 @@ class UniFiConfig:
     known_hosts_file: str
     connect_timeout_seconds: int
     interval_seconds: int
+    api: UniFiAPIConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -470,6 +484,48 @@ def _filesystem_probes_value(value: Any) -> tuple[FilesystemProbeConfig, ...]:
 
 
 
+def _unifi_api_config_value(value: Any, host: str) -> UniFiAPIConfig | None:
+    if value is None:
+        return None
+    config = _json_value(value, "unifi.api")
+    if not isinstance(config, dict) or "enabled" not in config or not isinstance(config["enabled"], bool):
+        raise ClientContractError("unifi.api is invalid")
+    if not config["enabled"]:
+        if set(config) != {"enabled"}:
+            raise ClientContractError("disabled unifi.api must not contain target fields")
+        return None
+    required = {"enabled", "base_url", "api_key_file", "ca_file", "tls_sha256", "timeout_seconds"}
+    if set(config) != required:
+        raise ClientContractError("unifi.api contains unknown or missing fields")
+    base_url = config["base_url"]
+    if not isinstance(base_url, str) or base_url != base_url.strip():
+        raise ClientContractError("unifi.api.base_url is invalid")
+    try:
+        parsed = urlsplit(base_url)
+        parsed_port = parsed.port
+    except ValueError as exc:
+        raise ClientContractError("unifi.api.base_url is invalid") from exc
+    if parsed.scheme != "https" or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment or parsed.path not in ("", "/"):
+        raise ClientContractError("unifi.api.base_url is invalid")
+    if parsed.hostname is None or parsed.hostname.lower() != host.lower() or (parsed_port is not None and parsed_port != 443):
+        raise ClientContractError("unifi.api.base_url is invalid")
+    api_key_file = validate_readonly_file_path(str(config["api_key_file"]), "unifi.api.api_key_file")
+    ca_file = config["ca_file"]
+    if ca_file not in (None, ""):
+        ca_file = validate_readonly_file_path(str(ca_file), "unifi.api.ca_file")
+    else:
+        ca_file = None
+    fingerprint = config["tls_sha256"]
+    if fingerprint not in (None, ""):
+        if not isinstance(fingerprint, str) or not UNIFI_API_FINGERPRINT_RE.fullmatch(fingerprint):
+            raise ClientContractError("unifi.api.tls_sha256 is invalid")
+        fingerprint = fingerprint.lower()
+    else:
+        fingerprint = None
+    timeout = _int_range(config["timeout_seconds"], "unifi.api.timeout_seconds", 3, 30)
+    return UniFiAPIConfig(enabled=True, base_url=f"https://{parsed.hostname}:{parsed_port or 443}", api_key_file=api_key_file, ca_file=ca_file, tls_sha256=fingerprint, timeout_seconds=timeout)
+
+
 def _unifi_config_value(value: Any) -> UniFiConfig | None:
     """Validate V1 UniFi config without accepting remote execution input."""
     if value is None:
@@ -488,7 +544,8 @@ def _unifi_config_value(value: Any) -> UniFiConfig | None:
         "enabled", "profile", "host", "port", "username", "credential_file",
         "known_hosts_file", "connect_timeout_seconds", "interval_seconds",
     }
-    if set(config) != required:
+    allowed = required | {"api"}
+    if set(config) - allowed or not required <= set(config):
         raise ClientContractError("unifi contains unknown or missing fields")
     profile_id = config["profile"]
     if not isinstance(profile_id, str) or profile_id not in UNIFI_PROFILE_IDS:
@@ -504,6 +561,7 @@ def _unifi_config_value(value: Any) -> UniFiConfig | None:
     known_hosts_file = validate_readonly_file_path(str(config["known_hosts_file"]), "unifi.known_hosts_file")
     connect_timeout = _int_range(config["connect_timeout_seconds"], "unifi.connect_timeout_seconds", 3, 60)
     interval = _int_range(config["interval_seconds"], "unifi.interval_seconds", 30, 3600)
+    api = _unifi_api_config_value(config.get("api"), host) if "api" in config else None
     return UniFiConfig(
         profile_id=profile_id,
         host=host,
@@ -513,6 +571,7 @@ def _unifi_config_value(value: Any) -> UniFiConfig | None:
         known_hosts_file=known_hosts_file,
         connect_timeout_seconds=connect_timeout,
         interval_seconds=interval,
+        api=api,
     )
 
 

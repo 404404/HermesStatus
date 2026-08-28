@@ -5,7 +5,8 @@ from unifi_source_registry import KNOWN_SOURCES, CORE_SOURCES
 
 PRESENCE = {"present", "not_populated", "unknown", "dynamic"}
 STORAGE_CAPABILITIES = {"nvme", "sata_ssd", "tf"}
-ROOT_KEYS = {"schema_version", "profile_id", "platform", "generic", "diagnostics", "fans", "power", "storage", "health_policy"}
+REQUIRED_ROOT_KEYS = {"schema_version", "profile_id", "platform", "generic", "diagnostics", "fans", "power", "storage", "health_policy"}
+OPTIONAL_ROOT_KEYS = {"cpu_model"}
 GENERIC_KEYS = {"cpu_temperature", "cpu_usage", "memory", "uptime", "load_average"}
 
 class ProfileError(ValueError):
@@ -20,7 +21,8 @@ def _require_source(node, name):
     return source
 
 def validate_profile(profile):
-    if not isinstance(profile, dict) or set(profile) != ROOT_KEYS:
+    if (not isinstance(profile, dict) or not REQUIRED_ROOT_KEYS <= set(profile)
+            or set(profile) - REQUIRED_ROOT_KEYS - OPTIONAL_ROOT_KEYS):
         raise ProfileError("unexpected or missing root profile fields")
     if profile.get("schema_version") != 1:
         raise ProfileError("unsupported schema_version")
@@ -29,6 +31,8 @@ def validate_profile(profile):
         raise ProfileError("invalid profile_id")
     if profile.get("platform") != "unifi_console":
         raise ProfileError("unknown platform")
+    if "cpu_model" in profile and (not isinstance(profile["cpu_model"], str) or not profile["cpu_model"].strip() or len(profile["cpu_model"]) > 128):
+        raise ProfileError("invalid cpu_model")
     generic = profile["generic"]
     if not isinstance(generic, dict) or set(generic) != GENERIC_KEYS:
         raise ProfileError("invalid generic fields")
