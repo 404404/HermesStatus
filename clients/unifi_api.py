@@ -543,14 +543,13 @@ def _telemetry(payloads, *, site=None, target=None):
     clients = _items(payloads.get("clients"))
     networks = _items(payloads.get("networks"))
     target_detail = payloads.get("device_detail")
-    target_stats = payloads.get("device_stats")
+    # Latest statistics are required for target qualification, but the
+    # current Device v2 API contract does not expose the raw statistics
+    # object. Keep it out of the normalized projection unless each field is
+    # explicitly represented by the server model.
     identity = _identity(info, devices, target_detail or target)
     controller = _controller(info, target_detail or target)
     wans, uplinks = _wans_and_uplinks(devices)
-    statistics = _latest_statistics(target_stats)
-    if statistics and statistics.get("uplink"):
-        uplinks = (uplinks or [])[:MAX_API_UPLINKS]
-        uplinks.append({"name": "uplink", **statistics["uplink"]})
     telemetry = {
         "identity": identity,
         "controller": controller,

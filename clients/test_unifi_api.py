@@ -101,7 +101,11 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(telemetry["devices"]["total"], 3)
         self.assertEqual(telemetry["clients"], {"total": 2, "wired": 1, "wireless": 1, "observed": True})
         self.assertEqual(telemetry["networks"], {"total": 2, "vlan": 1})
-        self.assertEqual(telemetry["uplinks"][-1]["rx_bps"], 100)
+        # Latest-statistics rates are intentionally not projected into the
+        # strict Device v2 uplink model (which only accepts link metadata).
+        self.assertTrue(telemetry["uplinks"])
+        self.assertTrue(all(set(item) <= {"name", "link_state", "speed_mbps", "duplex", "wan_id"}
+                            for item in telemetry["uplinks"]))
 
     def test_multiple_sites_fail_closed_without_selector(self):
         calls = []
