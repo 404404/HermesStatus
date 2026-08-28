@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _port_record
+from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _port_record, _ports, _merge_wans
 
 
 class UniFiAPITests(unittest.TestCase):
@@ -85,6 +85,8 @@ class UniFiAPITests(unittest.TestCase):
                 return {"data": []}, 200
             if path.endswith("/topology") or path.endswith("/ports/port-anomalies"):
                 raise APIError("api_endpoint_unsupported", status=404)
+            if "/wan/" in path or path.endswith("/wans") or path.endswith("/wan-slas"):
+                raise APIError("api_endpoint_unsupported", status=404)
             raise AssertionError(f"unexpected request path: {path}")
 
         return request
@@ -96,7 +98,7 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(result["error"]["code"], "api_partial_failure")
         self.assertEqual([x["name"] for x in result["endpoints"]], [
             "info", "sites", "devices", "clients", "networks",
-            "legacy_stat_device", "lags", "topology", "port_anomalies"
+            "legacy_stat_device", "lags", "topology", "port_anomalies", "wan_official", "wan_enriched", "wan_isp_status", "wan_load_balance", "wan_slas"
         ])
         self.assertIn("/proxy/network/integration/v1/sites/site-a/devices", calls)
         self.assertIn("/proxy/network/integration/v1/sites/site-a/clients", calls)
@@ -173,6 +175,24 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(item["max_speed_mbps"], 2500)
         self.assertEqual(item["poe"]["max_power_w"], 30)
         self.assertTrue(item["poe"]["active"])
+
+    def test_device_reported_poe_total_wins_over_port_sum(self):
+        legacy = {"data": [{"device_id": "device", "port_table": [
+            {"port_idx": 1, "up": True, "port_poe": True, "poe_power": "4.0"},
+            {"port_idx": 2, "up": True, "port_poe": True, "poe_power": "5.0"},
+        ]}]}
+        records, summary = _ports(legacy, {"id": "device"}, {}, 1.0, {"poe_total_power_w": 20.0, "poe_max_power_w": 420.0})
+        self.assertEqual(len(records), 2)
+        self.assertEqual(summary["poe_total_power_w"], 20.0)
+        self.assertEqual(summary["poe_total_source"], "device_reported")
+        self.assertEqual(summary["poe_max_power_w"], 420.0)
+
+    def test_wan_merge_keeps_zero_sla_values_and_source_fields(self):
+        result = _merge_wans(
+            {"data": [{"id": "wan1", "name": "Primary", "online": True, "latency_ms": 0, "packet_loss_percent": 0}]},
+            {"data": [{"id": "wan1", "jitter_ms": 0, "link_speed_mbps": 2500, "sla_status": "healthy"}]},
+        )
+        self.assertEqual(result, [{"id": "wan1", "name": "Primary", "online": True, "latency_ms": 0.0, "packet_loss_percent": 0.0, "jitter_ms": 0.0, "link_speed_mbps": 2500.0, "sla_status": "healthy"}])
 
     def test_down_port_does_not_emit_rates_or_utilization(self):
         previous = {}

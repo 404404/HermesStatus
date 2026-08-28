@@ -227,12 +227,11 @@
                 </section>
                 <section class="data-section" aria-labelledby="unifiNetworkTitle">
                     <div class="section-head"><h2 id="unifiNetworkTitle">UniFi设备端口状态</h2><span class="section-meta">仅显示已验证的只读摘要</span></div>
-                    <div class="unifi-network-tabs" role="tablist" aria-label="UniFi 网络信息">
-                        <button id="unifiDeviceTab" class="unifi-network-tab" type="button" role="tab" aria-selected="true" aria-controls="unifiApiTelemetry" data-unifi-tab="devices">UniFi 设备</button>
-                        <button id="unifiPortTab" class="unifi-network-tab" type="button" role="tab" aria-selected="false" aria-controls="unifiPorts" data-unifi-tab="ports" tabindex="-1">端口</button>
-                    </div>
-                    <div id="unifiApiTelemetry" class="unifi-api-telemetry unifi-network-panel" role="tabpanel" aria-labelledby="unifiDeviceTab" data-unifi-panel="devices"></div>
-                    <div id="unifiPorts" class="unifi-ports unifi-network-panel" role="tabpanel" aria-labelledby="unifiPortTab" data-unifi-panel="ports" hidden></div>
+                    <div id="unifiPorts" class="unifi-ports"></div>
+                </section>
+                <section class="data-section" aria-labelledby="unifiWanTitle">
+                    <div class="section-head"><h2 id="unifiWanTitle">WAN / ISP / SLA</h2><span class="section-meta">仅显示只读观测到的链路与质量指标</span></div>
+                    <div id="unifiWan" class="unifi-wan"></div>
                 </section>
                 <section class="data-section" aria-labelledby="unifiStorageTitle">
                     <div class="section-head"><h2 id="unifiStorageTitle">存储能力</h2><span class="section-meta">未安装时容量与使用情况显示为 -</span></div>

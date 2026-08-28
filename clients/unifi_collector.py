@@ -60,6 +60,12 @@ class UniFiDomainCollector:
 
     def collect(self):
         raw = self.raw_collector.collect()
+        # Diagnostics are a fixed, read-only second pass.  They are kept
+        # optional so a cache/sensor failure cannot invalidate core SSH data.
+        try:
+            raw["diagnostics"] = self.raw_collector.diagnostics()
+        except Exception:
+            raw["diagnostics"] = {"collection_status": "unavailable"}
         raw["api"] = self.api_collector.collect() if self.api_collector is not None else api_disabled()
         try:
             normalized = normalize(self.profile, raw, self.previous)

@@ -79,8 +79,83 @@ def _state_for_rpm(rpm):
     return "observed_zero_rpm" if rpm == 0 else "observed"
 
 
-def _fans(profile, raw_fans):
+def _cache_section(cache, names):
+    if not isinstance(cache, dict):
+        return None
+    for name in names:
+        value = cache.get(name)
+        if isinstance(value, (dict, list)):
+            return value
+    for value in cache.values():
+        if isinstance(value, dict):
+            nested = _cache_section(value, names)
+            if nested is not None:
+                return nested
+    return None
+
+
+def _cache_fans(cache):
+    section = _cache_section(cache, ("fans", "fan"))
+    if isinstance(section, dict):
+        result = {}
+        for key, value in section.items():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                result[str(key)] = value
+            elif isinstance(value, dict):
+                rpm = value.get("rpm", value.get("speed"))
+                if isinstance(rpm, (int, float)) and not isinstance(rpm, bool):
+                    result[str(value.get("id", key))] = rpm
+        return result
+    if isinstance(section, list):
+        result = {}
+        for value in section[:16]:
+            if isinstance(value, dict):
+                rpm = value.get("rpm", value.get("speed"))
+                ident = value.get("id", value.get("name"))
+                if isinstance(ident, str) and isinstance(rpm, (int, float)) and not isinstance(rpm, bool):
+                    result[ident] = rpm
+        return result
+    result = {}
+    def visit(value, depth=0):
+        if depth > 4 or len(result) >= 16:
+            return
+        if isinstance(value, dict):
+            for key, child in value.items():
+                lowered = str(key).lower()
+                if lowered.startswith("fan") and lowered[3:].isdigit():
+                    if isinstance(child, (int, float)) and not isinstance(child, bool):
+                        result[lowered] = child
+                    elif isinstance(child, dict):
+                        rpm = child.get("rpm", child.get("speed"))
+                        if isinstance(rpm, (int, float)) and not isinstance(rpm, bool):
+                            result[lowered] = rpm
+                visit(child, depth + 1)
+        elif isinstance(value, list):
+            for child in value[:16]:
+                visit(child, depth + 1)
+    visit(cache)
+    return result
+
+
+def _cache_records(cache, names):
+    section = _cache_section(cache, names)
+    if isinstance(section, list):
+        return [item for item in section[:8] if isinstance(item, dict)]
+    if isinstance(section, dict):
+        result = []
+        for key, value in section.items():
+            if isinstance(value, dict):
+                item = dict(value)
+                item.setdefault("id", str(key))
+                result.append(item)
+        return result[:8]
+    return []
+
+
+def _fans(profile, raw_fans, hardware_cache=None):
     observed = raw_fans if isinstance(raw_fans, dict) else {}
+    if not observed and hardware_cache is not None:
+        observed = _cache_fans(hardware_cache)
     output, ignored = [], []
     for capability in profile["fans"]["channels"]:
         fan_id = capability["id"]
@@ -104,20 +179,39 @@ def _fans(profile, raw_fans):
     return output, ignored
 
 
-def _power(profile):
+def _power(profile, hardware_cache=None):
     slots = profile["power"]["psu_slots"]
     presence = profile["power"]["presence"]
     # `dynamic` is a model capability, not a runtime presence observation.
     # Preserve that uncertainty as `unknown` until a qualified sensor mapping
     # proves an individual PSU slot is present or absent.
     present = "unknown" if presence == "dynamic" else presence
-    return [{
+    result = [{
         "id": f"psu{index}", "supported": "supported", "present": present,
         "observed": False, "state": "not_observed", "error": None,
     } for index in range(1, slots + 1)]
+    records = _cache_records(hardware_cache, ("power_supplies", "psus", "power_supply")) if hardware_cache else []
+    for record in records:
+        ident = str(record.get("id", record.get("slot", "")))
+        index = next((i for i in range(len(result)) if result[i]["id"].lower() == ident.lower() or str(i + 1) == ident), None)
+        if index is None:
+            continue
+        item = result[index]
+        if record.get("present") in {True, False}:
+            item["present"] = "present" if record["present"] else "not_present"
+        watts = record.get("power_w", record.get("power"))
+        fan_rpm = record.get("fan_rpm", record.get("rpm"))
+        if isinstance(watts, (int, float)) and not isinstance(watts, bool) and watts >= 0:
+            item["power_w"] = watts
+        if isinstance(fan_rpm, (int, float)) and not isinstance(fan_rpm, bool) and fan_rpm >= 0:
+            item["fan_rpm"] = int(fan_rpm)
+        if item["present"] == "present" and ("power_w" in item or "fan_rpm" in item):
+            item["observed"] = True
+            item["state"] = "observed"
+    return result
 
 
-def _storage(profile):
+def _storage(profile, hardware_cache=None):
     result = {}
     for name, capability in profile["storage"].items():
         supported = capability["supported"]
@@ -127,6 +221,22 @@ def _storage(profile):
             "observed": capability["observed"] is True,
             "capacity_bytes": capability["capacity_bytes"],
         }
+    records = _cache_records(hardware_cache, ("storage", "storages", "disks", "block_devices")) if hardware_cache else []
+    aliases = {"sata_ssd": {"sata_ssd", "sata", "ssd"}, "tf": {"tf", "sd", "mmc", "tf_card"}, "nvme": {"nvme"}}
+    for record in records:
+        category = str(record.get("category", record.get("type", record.get("id", "")))).lower().replace("-", "_")
+        name = next((key for key, values in aliases.items() if category in values or any(value in category for value in values)), None)
+        if name is None or name not in result:
+            continue
+        item = result[name]
+        if record.get("present") in {True, False}:
+            item["present"] = "present" if record["present"] else "not_present"
+        for output, keys in (("capacity_bytes", ("capacity_bytes", "total_bytes", "size_bytes")), ("used_bytes", ("used_bytes", "used")), ("available_bytes", ("available_bytes", "free_bytes", "available")), ("usage_percent", ("usage_percent", "used_percent", "usage_pct"))):
+            value = next((record.get(key) for key in keys if record.get(key) is not None), None)
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+                item[output] = value
+        if item.get("present") == "present" and item.get("capacity_bytes") is not None:
+            item["observed"] = True
     return result
 
 
@@ -169,7 +279,9 @@ def normalize(profile, raw, previous=None):
         raise ValueError("invalid generic observation") from exc
     if len(load) != 3 or temperature < -100 or temperature > 250 or uptime < 0 or any(value < 0 for value in load):
         raise ValueError("invalid generic observation")
-    fans, ignored = _fans(profile, raw.get("diagnostics", {}).get("fans", {}))
+    diagnostics_raw = raw.get("diagnostics", {}) if isinstance(raw.get("diagnostics", {}), dict) else {}
+    hardware_cache = diagnostics_raw.get("hardware_cache") if isinstance(diagnostics_raw.get("hardware_cache"), (dict, list)) else None
+    fans, ignored = _fans(profile, diagnostics_raw.get("fans", {}), hardware_cache)
     diagnostic_status = "available" if raw.get("diagnostics") else "not_collected"
     if raw.get("diagnostics", {}).get("collection_status") == "unavailable":
         diagnostic_status = "unavailable"
@@ -194,9 +306,9 @@ def normalize(profile, raw, previous=None):
             "load_average": {"one_minute": load[0], "five_minutes": load[1], "fifteen_minutes": load[2]},
         },
         "fans": fans,
-        "power_supplies": _power(profile),
-        "storage": _storage(profile),
-        "diagnostics": {"collection_status": diagnostic_status, "ignored_observations": ignored},
+        "power_supplies": _power(profile, hardware_cache),
+        "storage": _storage(profile, hardware_cache),
+        "diagnostics": {"collection_status": diagnostic_status, "ignored_observations": ignored, "hardware_cache_status": diagnostics_raw.get("hardware_cache_status", "unavailable")},
         "updated_at": now,
         "stale": False,
         "error": None,

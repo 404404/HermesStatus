@@ -119,6 +119,8 @@ type UniFiAPIWAN struct {
 	Interface               *string  `json:"interface,omitempty"`
 	ISP                     *string  `json:"isp,omitempty"`
 	LinkState               *string  `json:"link_state,omitempty"`
+	Gateway                 *string  `json:"gateway,omitempty"`
+	SLAStatus               *string  `json:"sla_status,omitempty"`
 	Online                  *bool    `json:"online,omitempty"`
 	Active                  *bool    `json:"active,omitempty"`
 	Standby                 *bool    `json:"standby,omitempty"`
@@ -126,6 +128,8 @@ type UniFiAPIWAN struct {
 	DowntimeSeconds         *float64 `json:"downtime_seconds,omitempty"`
 	LatencyMs               *float64 `json:"latency_ms,omitempty"`
 	PacketLossPercent       *float64 `json:"packet_loss_percent,omitempty"`
+	JitterMs                *float64 `json:"jitter_ms,omitempty"`
+	LinkSpeedMbps           *float64 `json:"link_speed_mbps,omitempty"`
 	RxBPS                   *int64   `json:"rx_bps,omitempty"`
 	TxBPS                   *int64   `json:"tx_bps,omitempty"`
 	RxBytes                 *int64   `json:"rx_bytes,omitempty"`
@@ -203,6 +207,8 @@ type UniFiAPIPortSummary struct {
 	Down           int      `json:"down"`
 	PoEActive      int      `json:"poe_active"`
 	PoETotalPowerW *float64 `json:"poe_total_power_w,omitempty"`
+	PoETotalSource string   `json:"poe_total_source,omitempty"`
+	PoEMaxPowerW   *float64 `json:"poe_max_power_w,omitempty"`
 }
 
 type UniFiAPILAG struct {
@@ -286,12 +292,15 @@ type UniFiFanStats struct {
 }
 
 type UniFiPowerStats struct {
-	ID        string                `json:"id"`
-	Supported UniFiCapabilityState  `json:"supported"`
-	Present   UniFiPresenceState    `json:"present"`
-	Observed  bool                  `json:"observed"`
-	State     UniFiObservationState `json:"state"`
-	Error     *ExtensionError       `json:"error"`
+	ID           string                `json:"id"`
+	Supported    UniFiCapabilityState  `json:"supported"`
+	Present      UniFiPresenceState    `json:"present"`
+	Observed     bool                  `json:"observed"`
+	State        UniFiObservationState `json:"state"`
+	PowerW       *float64              `json:"power_w,omitempty"`
+	FanRPM       *int                  `json:"fan_rpm,omitempty"`
+	TemperatureC *float64              `json:"temperature_c,omitempty"`
+	Error        *ExtensionError       `json:"error"`
 }
 
 type UniFiStorageStats struct {
@@ -301,15 +310,19 @@ type UniFiStorageStats struct {
 }
 
 type UniFiStorageCapability struct {
-	Supported     UniFiCapabilityState `json:"supported"`
-	Present       UniFiPresenceState   `json:"present"`
-	Observed      bool                 `json:"observed"`
-	CapacityBytes *int64               `json:"capacity_bytes,omitempty"`
+	Supported      UniFiCapabilityState `json:"supported"`
+	Present        UniFiPresenceState   `json:"present"`
+	Observed       bool                 `json:"observed"`
+	CapacityBytes  *int64               `json:"capacity_bytes,omitempty"`
+	UsedBytes      *int64               `json:"used_bytes,omitempty"`
+	AvailableBytes *int64               `json:"available_bytes,omitempty"`
+	UsagePercent   *float64             `json:"usage_percent,omitempty"`
 }
 
 type UniFiDiagnostics struct {
-	CollectionStatus string                    `json:"collection_status"`
-	Ignored          []UniFiIgnoredObservation `json:"ignored_observations"`
+	CollectionStatus    string                    `json:"collection_status"`
+	HardwareCacheStatus string                    `json:"hardware_cache_status,omitempty"`
+	Ignored             []UniFiIgnoredObservation `json:"ignored_observations"`
 }
 
 type UniFiIgnoredObservation struct {

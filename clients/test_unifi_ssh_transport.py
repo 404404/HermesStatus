@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from unifi_ssh_transport import ASKPASS_PATH, TransportError, _askpass, _run_fixed, _validate_file
+from unifi_raw_collector import parse_diagnostics
 
 
 class UniFiSSHTransportTests(unittest.TestCase):
@@ -98,6 +99,19 @@ class UniFiSSHTransportTests(unittest.TestCase):
                 with self.assertRaises(TransportError) as captured:
                     _run_fixed("printf fixed", self._config(handle.name))
             self.assertEqual(str(captured.exception), "ssh_auth_failure")
+
+    def test_diagnostics_parses_bounded_hardware_cache(self):
+        text = "\n".join([
+            "__HS_THERMAL__", "zone=0 type=cpu temp=64000", "__HS_HWMON__", "{\"lm63\":{}}",
+            "__HS_HW_CACHE__", "{\"fans\":{\"fan1\":3820},\"power_supplies\":{\"psu1\":{\"present\":true,\"power_w\":42}}}", "__HS_END__"
+        ])
+        result = parse_diagnostics(text)
+        self.assertEqual(result["hardware_cache_status"], "available")
+        self.assertEqual(result["hardware_cache"]["fans"]["fan1"], 3820)
+
+    def test_diagnostics_marks_missing_hardware_cache_unavailable(self):
+        text = "\n".join(["__HS_THERMAL__", "__HS_HWMON__", "__HS_HW_CACHE__", "__HS_END__"])
+        self.assertEqual(parse_diagnostics(text)["hardware_cache_status"], "unavailable")
 
 
 if __name__ == "__main__":

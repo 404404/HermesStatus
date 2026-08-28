@@ -22,6 +22,13 @@ API_ENDPOINTS = (
     ("info", "/proxy/network/integration/v1/info"),
     ("sites", "/proxy/network/integration/v1/sites"),
 )
+WAN_ENDPOINTS = (
+    ("wan_official", "official"),
+    ("wan_enriched", "supplemental_v2"),
+    ("wan_isp_status", "supplemental_v2"),
+    ("wan_load_balance", "supplemental_v2"),
+    ("wan_slas", "supplemental_v2"),
+)
 REQUIRED_ENDPOINTS = frozenset({"info", "sites", "devices", "device_detail"})
 SITE_RESOURCE_LIMIT = 32
 API_ID_LIMIT = 128
@@ -479,6 +486,8 @@ def _wan_record(item):
         ("interface", ("interface", "interface_name", "interfaceName", "ifname")),
         ("isp", ("isp", "provider", "provider_name", "providerName")),
         ("link_state", ("link_state", "linkState", "state", "status")),
+        ("gateway", ("gateway", "gateway_name", "gatewayName")),
+        ("sla_status", ("sla_status", "slaStatus", "health", "health_status")),
         ("failover_state", ("failover_state", "failoverState")),
         ("load_balancing_state", ("load_balancing_state", "loadBalancingState")),
     ):
@@ -498,6 +507,8 @@ def _wan_record(item):
         ("downtime_seconds", ("downtime_seconds", "downtimeSeconds", "downtime"), False),
         ("latency_ms", ("latency_ms", "latencyMs", "latency"), False),
         ("packet_loss_percent", ("packet_loss_percent", "packetLossPercent", "packet_loss", "loss_percent"), False),
+        ("jitter_ms", ("jitter_ms", "jitterMs", "jitter"), False),
+        ("link_speed_mbps", ("link_speed_mbps", "linkSpeedMbps", "speed_mbps", "speedMbps"), False),
         ("rx_bps", ("rx_bps", "rxBps", "download_bps", "downloadBps"), True),
         ("tx_bps", ("tx_bps", "txBps", "upload_bps", "uploadBps"), True),
         ("rx_bytes", ("rx_bytes", "rxBytes", "download_bytes", "downloadBytes"), True),
@@ -511,6 +522,40 @@ def _wan_record(item):
     if not result:
         return None
     return result
+
+
+def _wan_items(payload):
+    if isinstance(payload, dict):
+        direct = _wan_record(payload)
+        if direct:
+            return [payload]
+        for key in ("wans", "wan", "interfaces", "items", "results", "data"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                nested = _wan_items(value)
+                if nested:
+                    return nested
+            elif isinstance(value, list):
+                return [item for item in value[:MAX_API_WANS] if isinstance(item, dict)]
+    return [item for item in _items(payload)[:MAX_API_WANS] if isinstance(item, dict)]
+
+
+def _merge_wans(*payloads):
+    merged = {}
+    for payload in payloads:
+        candidates = payload if isinstance(payload, list) else [payload]
+        for candidate in candidates:
+            items = _wan_items(candidate)
+            for item in items:
+                record = _wan_record(item)
+                if not record:
+                    continue
+                key = record.get("id") or record.get("interface") or record.get("name")
+                if not key:
+                    continue
+                current = merged.setdefault(key, {})
+                current.update(record)
+    return list(merged.values())[:MAX_API_WANS] or None
 
 
 def _detail_link_speed(target_detail):
@@ -537,7 +582,7 @@ def _detail_link_speed(target_detail):
     return max(values) if values else None
 
 
-def _wans_and_uplinks(devices, target_detail=None):
+def _wans_and_uplinks(devices, target_detail=None, extra_wans=None):
     wans, uplinks = [], []
     target_id = _identifier(target_detail.get("id")) if isinstance(target_detail, dict) else None
     target_speed = _detail_link_speed(target_detail)
@@ -568,7 +613,7 @@ def _wans_and_uplinks(devices, target_detail=None):
                     uplink["speed_mbps"] = speed
                 if uplink:
                     uplinks.append(uplink)
-    return wans or None, uplinks or None
+    return (_merge_wans(wans, extra_wans) if extra_wans else (wans or None)), uplinks or None
 
 
 def _legacy_target(payload, target):
@@ -725,6 +770,20 @@ def _detail_port_capabilities(target_detail):
     return result
 
 
+def _device_poe_totals(target_detail):
+    if not isinstance(target_detail, dict):
+        return None, None
+    current = _decimal(_first(target_detail, "poe_total_power_w", "poeTotalPowerW", "total_poe_power_w", "totalPoePowerW"), minimum=0)
+    maximum = _decimal(_first(target_detail, "poe_max_power_w", "poeMaxPowerW", "total_max_power_w", "totalMaxPowerW", "poe_budget_w", "poeBudgetW"), minimum=0)
+    poe = _first(target_detail, "poe", "power_over_ethernet", "powerOverEthernet")
+    if isinstance(poe, dict):
+        if current is None:
+            current = _decimal(_first(poe, "total_power_w", "totalPowerW", "power_w", "powerW"), minimum=0)
+        if maximum is None:
+            maximum = _decimal(_first(poe, "max_power_w", "maxPowerW", "budget_w", "budgetW"), minimum=0)
+    return current, maximum
+
+
 def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=None):
     legacy = _legacy_target(legacy_payload, target)
     if legacy is None:
@@ -739,12 +798,19 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
                             max_speed_mbps=detail.get("max_speed_mbps"), max_power_w=detail.get("max_power_w"))
         if item is not None:
             records.append(item)
-    summary = {"total": len(records), "up": sum(1 for item in records if item.get("up") is True), "down": sum(1 for item in records if item.get("up") is False), "poe_active": 0, "poe_total_power_w": None}
+    summary = {"total": len(records), "up": sum(1 for item in records if item.get("up") is True), "down": sum(1 for item in records if item.get("up") is False), "poe_active": 0, "poe_total_power_w": None, "poe_total_source": "unavailable", "poe_max_power_w": None}
     poe_items = [item.get("poe", {}) for item in records if isinstance(item.get("poe"), dict)]
     summary["poe_active"] = sum(1 for item in poe_items if item.get("active") is True)
     powers = [item.get("power_w") for item in poe_items if isinstance(item.get("power_w"), (int, float))]
-    if powers:
+    device_current, device_max = _device_poe_totals(target_detail)
+    if device_current is not None:
+        summary["poe_total_power_w"] = round(device_current, 2)
+        summary["poe_total_source"] = "device_reported"
+    elif powers:
         summary["poe_total_power_w"] = round(sum(powers), 2)
+        summary["poe_total_source"] = "port_sum"
+    if device_max is not None:
+        summary["poe_max_power_w"] = round(device_max, 2)
     return records, summary
 
 
@@ -830,7 +896,7 @@ def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sampl
     # explicitly represented by the server model.
     identity = _identity(info, devices, target_detail or target)
     controller = _controller(info, target_detail or target)
-    wans, uplinks = _wans_and_uplinks(devices, target_detail)
+    wans, uplinks = _wans_and_uplinks(devices, target_detail, [payloads.get(name) for name, _ in WAN_ENDPOINTS if payloads.get(name) is not None])
     ports, port_summary = _ports(payloads.get("legacy_stat_device"), target, previous_samples if previous_samples is not None else {}, sample_time if sample_time is not None else time.monotonic(), target_detail=target_detail) if target is not None and payloads.get("legacy_stat_device") is not None else (None, None)
     telemetry = {
         "identity": identity,
@@ -991,6 +1057,13 @@ class UniFiAPICollector:
                     call("lags", _site_path(site_id, "switching/lags"), required=False)
                     call("topology", f"/proxy/network/v2/api/site/{quote(site_id, safe='')}/topology", required=False)
                     call("port_anomalies", f"/proxy/network/v2/api/site/{quote(site_id, safe='')}/ports/port-anomalies", required=False)
+                    internal_site = quote(site_id, safe="")
+                    network_group = quote(str(selected_site.get("internal_reference") or site_id), safe="")
+                    call("wan_official", f"/proxy/network/integration/v1/sites/{internal_site}/wans", required=False)
+                    call("wan_enriched", f"/proxy/network/v2/api/site/{internal_site}/wan/enriched-configuration", required=False)
+                    call("wan_isp_status", f"/proxy/network/v2/api/site/{internal_site}/wan/{network_group}/isp-status", required=False)
+                    call("wan_load_balance", f"/proxy/network/v2/api/site/{internal_site}/wan/load-balancing/status", required=False)
+                    call("wan_slas", f"/proxy/network/v2/api/site/{internal_site}/wan-slas", required=False)
 
         summary = _summary("info", payloads.get("info")) if "info" in payloads else None
         telemetry = _telemetry(payloads, site=selected_site, target=target, previous_samples=self._port_samples, sample_time=time.monotonic())

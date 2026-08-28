@@ -93,6 +93,9 @@ func ValidateUniFiStats(stats *UniFiStats) error {
 	if stats.Diagnostics.CollectionStatus != "not_collected" && stats.Diagnostics.CollectionStatus != "available" && stats.Diagnostics.CollectionStatus != "partial" && stats.Diagnostics.CollectionStatus != "unavailable" {
 		return validationError(validationCodeInvalidValue, "unifi.diagnostics.collection_status", "is invalid")
 	}
+	if stats.Diagnostics.HardwareCacheStatus != "" && stats.Diagnostics.HardwareCacheStatus != "available" && stats.Diagnostics.HardwareCacheStatus != "unavailable" && stats.Diagnostics.HardwareCacheStatus != "invalid" {
+		return validationError(validationCodeInvalidValue, "unifi.diagnostics.hardware_cache_status", "is invalid")
+	}
 	for _, item := range stats.Diagnostics.Ignored {
 		if err := validateRequiredString("unifi.diagnostics.ignored_observations.id", item.ID, MaxUniFiTextLength); err != nil {
 			return err
@@ -126,7 +129,7 @@ func validateUniFiAPI(value *UniFiAPIStats) error {
 	if value.Status == "disabled" || len(value.Endpoints) > MaxUniFiAPIEndpoints {
 		return validationError(validationCodeInvalidValue, "unifi.api", "enabled API state is invalid")
 	}
-	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "clients": true, "networks": true, "legacy_stat_device": true, "lags": true, "topology": true, "port_anomalies": true}
+	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "clients": true, "networks": true, "legacy_stat_device": true, "lags": true, "topology": true, "port_anomalies": true, "wan_official": true, "wan_enriched": true, "wan_isp_status": true, "wan_load_balance": true, "wan_slas": true}
 	seen := map[string]bool{}
 	okCount, failedCount := 0, 0
 	for _, endpoint := range value.Endpoints {
@@ -212,12 +215,12 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 	}
 	for index, item := range value.WANs {
 		prefix := "unifi.api.telemetry.wans[" + strconv.Itoa(index) + "]"
-		for field, text := range map[string]*string{"id": item.ID, "name": item.Name, "interface": item.Interface, "isp": item.ISP, "link_state": item.LinkState, "failover_state": item.FailoverState, "load_balancing_state": item.LoadBalancingState} {
+		for field, text := range map[string]*string{"id": item.ID, "name": item.Name, "interface": item.Interface, "isp": item.ISP, "link_state": item.LinkState, "gateway": item.Gateway, "sla_status": item.SLAStatus, "failover_state": item.FailoverState, "load_balancing_state": item.LoadBalancingState} {
 			if err := validateOptionalString(prefix+"."+field, text, MaxUniFiTextLength); err != nil {
 				return err
 			}
 		}
-		for field, number := range map[string]*float64{"uptime_seconds": item.UptimeSeconds, "downtime_seconds": item.DowntimeSeconds, "latency_ms": item.LatencyMs, "packet_loss_percent": item.PacketLossPercent} {
+		for field, number := range map[string]*float64{"uptime_seconds": item.UptimeSeconds, "downtime_seconds": item.DowntimeSeconds, "latency_ms": item.LatencyMs, "packet_loss_percent": item.PacketLossPercent, "jitter_ms": item.JitterMs, "link_speed_mbps": item.LinkSpeedMbps} {
 			if err := validateOptionalFloat(prefix+"."+field, number, float64(MaxSafeInteger)); err != nil {
 				return err
 			}
@@ -334,6 +337,12 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 			return validationError(validationCodeInvalidValue, "unifi.api.telemetry.port_summary", "counts are invalid")
 		}
 		if err := validateOptionalFloat("unifi.api.telemetry.port_summary.poe_total_power_w", value.PortSummary.PoETotalPowerW, float64(MaxSafeInteger)); err != nil {
+			return err
+		}
+		if value.PortSummary.PoETotalSource != "" && value.PortSummary.PoETotalSource != "device_reported" && value.PortSummary.PoETotalSource != "port_sum" && value.PortSummary.PoETotalSource != "unavailable" {
+			return validationError(validationCodeInvalidValue, "unifi.api.telemetry.port_summary.poe_total_source", "is invalid")
+		}
+		if err := validateOptionalFloat("unifi.api.telemetry.port_summary.poe_max_power_w", value.PortSummary.PoEMaxPowerW, float64(MaxSafeInteger)); err != nil {
 			return err
 		}
 	}
@@ -487,6 +496,14 @@ func validateUniFiPower(items []UniFiPowerStats) error {
 		if item.Observed != (item.State == UniFiObservationObserved || item.State == UniFiObservationObservedZeroRPM) {
 			return validationError(validationCodeInvalidValue, "unifi.power_supplies.observed", "does not match state")
 		}
+		for field, number := range map[string]*float64{"power_w": item.PowerW, "temperature_c": item.TemperatureC} {
+			if err := validateOptionalFloat("unifi.power_supplies."+field, number, float64(MaxSafeInteger)); err != nil {
+				return err
+			}
+		}
+		if item.FanRPM != nil && (*item.FanRPM < 0 || *item.FanRPM > 100000) {
+			return validationError(validationCodeInvalidValue, "unifi.power_supplies.fan_rpm", "is invalid")
+		}
 		if err := ValidateExtensionError("unifi.power_supplies.error", item.Error); err != nil {
 			return err
 		}
@@ -517,6 +534,14 @@ func validateUniFiStorageCapability(field string, value UniFiStorageCapability) 
 	}
 	if value.CapacityBytes != nil && (*value.CapacityBytes < 0 || *value.CapacityBytes > MaxSafeInteger) {
 		return validationError(validationCodeInvalidValue, field+".capacity_bytes", "is invalid")
+	}
+	for name, number := range map[string]*int64{"used_bytes": value.UsedBytes, "available_bytes": value.AvailableBytes} {
+		if err := validateCounter(field+"."+name, number, MaxSafeInteger); err != nil {
+			return err
+		}
+	}
+	if value.UsagePercent != nil && (*value.UsagePercent < 0 || *value.UsagePercent > 100 || math.IsNaN(*value.UsagePercent) || math.IsInf(*value.UsagePercent, 0)) {
+		return validationError(validationCodeInvalidValue, field+".usage_percent", "is invalid")
 	}
 	return nil
 }
@@ -601,6 +626,8 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 		item.Interface = sanitizeStringPointer(item.Interface)
 		item.ISP = sanitizeStringPointer(item.ISP)
 		item.LinkState = sanitizeStringPointer(item.LinkState)
+		item.Gateway = sanitizeStringPointer(item.Gateway)
+		item.SLAStatus = sanitizeStringPointer(item.SLAStatus)
 		item.FailoverState = sanitizeStringPointer(item.FailoverState)
 		item.LoadBalancingState = sanitizeStringPointer(item.LoadBalancingState)
 	}
@@ -742,6 +769,20 @@ func SanitizeUniFiStats(input UniFiStats) UniFiStats {
 	for index := range result.PowerSupplies {
 		result.PowerSupplies[index].ID = SanitizeText(result.PowerSupplies[index].ID)
 		result.PowerSupplies[index].Error = sanitizeExtensionError(result.PowerSupplies[index].Error)
+	}
+	for _, capability := range []*UniFiStorageCapability{&result.Storage.NVMe, result.Storage.SATA, result.Storage.TF} {
+		if capability == nil {
+			continue
+		}
+		if capability.UsedBytes != nil && *capability.UsedBytes < 0 {
+			capability.UsedBytes = nil
+		}
+		if capability.AvailableBytes != nil && *capability.AvailableBytes < 0 {
+			capability.AvailableBytes = nil
+		}
+		if capability.UsagePercent != nil && (*capability.UsagePercent < 0 || *capability.UsagePercent > 100) {
+			capability.UsagePercent = nil
+		}
 	}
 	for index := range result.Diagnostics.Ignored {
 		result.Diagnostics.Ignored[index].ID = SanitizeText(result.Diagnostics.Ignored[index].ID)

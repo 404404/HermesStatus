@@ -4,6 +4,7 @@ KNOWN_SOURCES = frozenset({
     "unifi.cpu.temperature.ubnt_systool", "linux.proc.stat", "linux.proc.meminfo",
     "linux.proc.uptime", "linux.proc.loadavg", "unifi.cpu.cpuload",
     "linux.sys.thermal", "linux.sys.hwmon", "linux.sensors_json",
+    "unifi.udw.ustd_hw_polling",
 })
 CORE_SOURCES = frozenset({
     "unifi.cpu.temperature.ubnt_systool", "linux.proc.stat", "linux.proc.meminfo",
@@ -33,5 +34,9 @@ for z in /sys/class/thermal/thermal_zone[0-9]*; do
 done
 printf '%s\n' '__HS_HWMON__'
 /usr/bin/sensors -j 2>/dev/null || true
+printf '%s\n' '__HS_HW_CACHE__'
+if [ -f /var/run/ustd/hw_polling.cache ] && [ -r /var/run/ustd/hw_polling.cache ]; then
+  head -c 65536 /var/run/ustd/hw_polling.cache
+fi
 printf '%s\n' '__HS_END__'
 '''

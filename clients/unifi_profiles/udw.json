@@ -30,6 +30,10 @@
     "hwmon": {
       "source": "linux.sys.hwmon",
       "health_affecting": false
+    },
+    "hardware_cache": {
+      "source": "unifi.udw.ustd_hw_polling",
+      "health_affecting": false
     }
   },
   "fans": {

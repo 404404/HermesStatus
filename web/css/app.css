@@ -195,7 +195,7 @@ body.light .health-card{background:#fff}
 .unifi-page-empty{min-height:260px;display:grid;place-items:center;padding:2rem;text-align:center;border:1px solid var(--border);border-radius:var(--radius);background:linear-gradient(145deg,var(--bg-alt),#11141b);color:var(--text-dim);font-size:18px;font-weight:700}
 body.light .unifi-page-empty{background:var(--panel)}
 .unifi-system-cards{grid-template-columns:repeat(5,minmax(0,1fr));padding:0}
-.unifi-system-cards .summary-card{min-width:0}
+.unifi-system-cards .summary-card{min-width:0;min-height:0}
 .unifi-system-cards .usage-bar{margin-top:auto}
 .unifi-system-cards .card-detail.resource-value{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .unifi-system-cards .card-value[data-fit-single-line]{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -217,8 +217,15 @@ body.light .unifi-page-empty{background:var(--panel)}
 .unifi-api-table{min-width:560px!important}
 .unifi-api-table td,.unifi-api-table th{white-space:nowrap}
 .unifi-ports{padding:0 1.35rem 1.1rem}
-.unifi-ports-table{min-width:1080px!important}
+.unifi-ports-table{min-width:1180px!important}
 .unifi-ports-table td,.unifi-ports-table th{white-space:nowrap}
+.unifi-device-tabs{padding:0 1.35rem 1.1rem}
+.unifi-device-tabs .unifi-network-tabs{padding:0 0 .8rem;border-bottom:1px solid var(--border)}
+.unifi-device-panel[hidden]{display:none}
+.unifi-port-summary{padding:.8rem 0;color:var(--text-dim);font-size:13px;font-weight:700}
+.unifi-wan{padding:0 1.35rem 1.1rem}
+.unifi-wan-table{min-width:960px!important}
+.unifi-wan-table td,.unifi-wan-table th{white-space:nowrap}
 .unifi-api-unavailable{color:var(--text-dim);padding:.25rem 0}
 .unifi-storage-table{min-width:940px!important;table-layout:auto}
 .unifi-storage-table th,.unifi-storage-table td{white-space:nowrap}

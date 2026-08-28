@@ -1,4 +1,5 @@
-"""Strict parsing for the fixed UCG Max prototype collection scripts."""
+"""Strict parsing for the fixed UniFi prototype collection scripts."""
+import json
 from datetime import datetime, timezone
 from unifi_ssh_transport import collect_core, collect_diagnostics, TransportError
 
@@ -35,15 +36,29 @@ def parse_core(text, target_id="ucg-max", profile_id="ucg-max"):
 
 def parse_diagnostics(text):
     lines = text.splitlines()
-    if "__HS_THERMAL__" not in lines or "__HS_HWMON__" not in lines or lines[-1:] != ["__HS_END__"]:
+    if "__HS_THERMAL__" not in lines or "__HS_HWMON__" not in lines or "__HS_HW_CACHE__" not in lines or lines[-1:] != ["__HS_END__"]:
         raise ValueError("invalid diagnostics framing")
-    thermal_start, hwmon_start = lines.index("__HS_THERMAL__"), lines.index("__HS_HWMON__")
+    thermal_start, hwmon_start, cache_start = lines.index("__HS_THERMAL__"), lines.index("__HS_HWMON__"), lines.index("__HS_HW_CACHE__")
     zones = []
     for line in lines[thermal_start + 1:hwmon_start]:
         fields = dict(part.split("=", 1) for part in line.split() if "=" in part)
         if {"zone", "type", "temp"} <= set(fields):
             zones.append(fields)
-    return {"thermal_zones": zones, "hwmon_json_available": bool("\n".join(lines[hwmon_start + 1:-1]).strip())}
+    cache_text = "\n".join(lines[cache_start + 1:-1])
+    cache = None
+    cache_status = "unavailable"
+    if cache_text.strip():
+        try:
+            parsed = json.loads(cache_text)
+        except (TypeError, ValueError):
+            cache_status = "invalid"
+        else:
+            if isinstance(parsed, (dict, list)):
+                cache = parsed
+                cache_status = "available"
+            else:
+                cache_status = "invalid"
+    return {"thermal_zones": zones, "hwmon_json_available": bool("\n".join(lines[hwmon_start + 1:cache_start]).strip()), "hardware_cache": cache, "hardware_cache_status": cache_status}
 
 class RawCollector:
     def __init__(self, config, target_id=None):
