@@ -204,10 +204,6 @@ body.light .health-card{background:#fff}
 .unifi-load-card{min-width:0}
 .unifi-fans-table,.unifi-power-table{min-width:980px!important}
 .unifi-api-telemetry{padding:0 1.35rem 1.1rem}
-.unifi-api-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}
-.unifi-api-card{min-width:0;padding:1rem;border:1px solid var(--border);border-radius:12px;background:var(--surface-alt,#171a22)}
-.unifi-api-card h3{margin:0 0 .65rem;font-size:15px;color:var(--text)}
-.unifi-api-card .detail-list{padding:0}
 .unifi-api-table{min-width:560px!important}
 .unifi-api-table td,.unifi-api-table th{white-space:nowrap}
 .unifi-api-unavailable{color:var(--text-dim);padding:.25rem 0}
@@ -334,6 +330,3 @@ table.modal-data-table th,table.modal-data-table td{padding:.6rem .7rem;font-siz
     .detail-row{grid-template-columns:1fr;gap:.25rem}
     .detail-row dd{text-align:left;white-space:normal;overflow-wrap:anywhere}
 }
-
-@media (max-width:900px){.unifi-api-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:720px){.unifi-api-grid{grid-template-columns:1fr}}
