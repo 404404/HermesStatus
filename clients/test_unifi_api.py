@@ -97,12 +97,11 @@ class UniFiAPITests(unittest.TestCase):
         self.assertNotIn("/proxy/network/integration/v1/clients", calls)
         self.assertNotIn("/proxy/network/integration/v1/networks", calls)
         telemetry = result["telemetry"]
-        self.assertEqual(telemetry["site"]["id"], "site-a")
         self.assertEqual(telemetry["identity"]["model"], "UDW")
         self.assertEqual(telemetry["devices"]["total"], 3)
         self.assertEqual(telemetry["clients"], {"total": 2, "wired": 1, "wireless": 1, "observed": True})
         self.assertEqual(telemetry["networks"], {"total": 2, "vlan": 1})
-        self.assertEqual(telemetry["latest_statistics"]["cpu_utilization_pct"], 12.5)
+        self.assertEqual(telemetry["uplinks"][-1]["rx_bps"], 100)
 
     def test_multiple_sites_fail_closed_without_selector(self):
         calls = []
@@ -120,7 +119,6 @@ class UniFiAPITests(unittest.TestCase):
         self.config.site_id = "site-b"
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls, sites=sites), target_profile="udw").collect()
         self.assertEqual(result["status"], "available")
-        self.assertEqual(result["telemetry"]["site"]["id"], "site-b")
         self.assertIn("/proxy/network/integration/v1/sites/site-b/devices", calls)
 
     def test_target_resolution_does_not_depend_on_device_order(self):

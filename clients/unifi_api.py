@@ -537,17 +537,6 @@ def _latest_statistics(stats):
     return result or None
 
 
-def _site_summary(site):
-    if not isinstance(site, dict):
-        return None
-    result = {"id": site["id"]}
-    for key in ("internal_reference", "name"):
-        value = _text(site.get(key))
-        if value:
-            result[key] = value
-    return result
-
-
 def _telemetry(payloads, *, site=None, target=None):
     info = payloads.get("info")
     devices = _items(payloads.get("devices"))
@@ -563,7 +552,6 @@ def _telemetry(payloads, *, site=None, target=None):
         uplinks = (uplinks or [])[:MAX_API_UPLINKS]
         uplinks.append({"name": "uplink", **statistics["uplink"]})
     telemetry = {
-        "site": _site_summary(site),
         "identity": identity,
         "controller": controller,
         "wans": wans,
@@ -572,7 +560,6 @@ def _telemetry(payloads, *, site=None, target=None):
         "clients": _client_summary(clients),
         "devices": _device_summary(devices),
         "networks": _network_summary(networks),
-        "latest_statistics": statistics,
     }
     return telemetry if any(value is not None for value in telemetry.values()) else None
 
