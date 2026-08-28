@@ -217,6 +217,7 @@
             </div>
 
             <div id="unifiPage" class="page-panel" role="tabpanel" aria-labelledby="unifiTab" data-page="unifi" hidden>
+                <div id="unifiEmptyState" class="unifi-page-empty" role="status" hidden></div>
                 <section class="unifi-system-section" aria-label="UniFi 通用遥测">
                     <div id="unifiSystem" class="unifi-system"></div>
                 </section>
@@ -224,13 +225,14 @@
                     <div class="section-head"><h2 id="unifiSummaryTitle">UniFi 采集状态</h2><span id="unifiMeta" class="section-meta"></span></div>
                     <dl id="unifiSummary" class="detail-list unifi-summary"></dl>
                 </section>
-                <section class="data-section" aria-labelledby="unifiApiTelemetryTitle">
-                    <div class="section-head"><h2 id="unifiApiTelemetryTitle">UniFi 设备</h2><span class="section-meta">仅显示已验证的只读摘要</span></div>
-                    <div id="unifiApiTelemetry" class="unifi-api-telemetry"></div>
-                </section>
-                <section class="data-section" aria-labelledby="unifiPortsTitle">
-                    <div class="section-head"><h2 id="unifiPortsTitle">端口</h2><span class="section-meta">仅显示已取得的端口状态、链路速率与摘要</span></div>
-                    <div id="unifiPorts" class="unifi-ports"></div>
+                <section class="data-section" aria-labelledby="unifiNetworkTitle">
+                    <div class="section-head"><h2 id="unifiNetworkTitle">UniFi设备端口状态</h2><span class="section-meta">仅显示已验证的只读摘要</span></div>
+                    <div class="unifi-network-tabs" role="tablist" aria-label="UniFi 网络信息">
+                        <button id="unifiDeviceTab" class="unifi-network-tab" type="button" role="tab" aria-selected="true" aria-controls="unifiApiTelemetry" data-unifi-tab="devices">UniFi 设备</button>
+                        <button id="unifiPortTab" class="unifi-network-tab" type="button" role="tab" aria-selected="false" aria-controls="unifiPorts" data-unifi-tab="ports" tabindex="-1">端口</button>
+                    </div>
+                    <div id="unifiApiTelemetry" class="unifi-api-telemetry unifi-network-panel" role="tabpanel" aria-labelledby="unifiDeviceTab" data-unifi-panel="devices"></div>
+                    <div id="unifiPorts" class="unifi-ports unifi-network-panel" role="tabpanel" aria-labelledby="unifiPortTab" data-unifi-panel="ports" hidden></div>
                 </section>
                 <section class="data-section" aria-labelledby="unifiStorageTitle">
                     <div class="section-head"><h2 id="unifiStorageTitle">存储能力</h2><span class="section-meta">未安装时容量与使用情况显示为 -</span></div>

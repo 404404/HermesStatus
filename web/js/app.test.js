@@ -80,10 +80,17 @@ async function run(){
   assert.match(appSource, /<dt>指令集<\/dt>/);
   assert.match(appSource, /<h2>运行中\/容器总数<\/h2>/);
   assert.match(appSource, /<h2>Lucky运行状态\/版本<\/h2>/);
+  assert.match(appSource, /采集状态 \(SSH\/API\)/);
   assert.match(appSource, /EasyTier远端节点数/);
   assert.match(appSource, /EasyTier流量统计/);
   assert.match(indexMarkup, /id="unifiApiTelemetry"/);
   assert.match(indexMarkup, /id="unifiPorts"/);
+  assert.match(indexMarkup, /data-unifi-tab="devices"/);
+  assert.match(indexMarkup, /data-unifi-tab="ports"/);
+  assert.match(indexMarkup, /id="unifiEmptyState"/);
+  assert.match(appSource, /已配置 UniFi 目标，但访问失败，请检查 SSH 密码和 API Key/);
+  assert.match(appSource, /未配置 UniFi 目标/);
+  assert.ok(indexMarkup.indexOf('data-unifi-tab="devices"') < indexMarkup.indexOf('data-unifi-tab="ports"'));
 	assert.doesNotMatch(appSource, /easytierCommandsBody/);
   assert.match(appSource, /easytierPeersBody/);
   assert.match(appSource, /easytierExpectationBody/);
@@ -173,6 +180,8 @@ async function run(){
   assert.deepEqual(app.unifiTransportSummary({...udwUniFi, stale: true}), {status: 'stale', text: '数据陈旧'});
   assert.deepEqual(app.unifiTransportSummary({...udwUniFi, transport: {status: 'unavailable'}}), {status: 'unavailable', text: '不可用'});
   assert.equal(app.unifiApiStatusText(udwUniFi), '可用（SSH）');
+  assert.deepEqual(app.unifiCollectionStatus({...udwUniFi, api: {status: 'available'}}), {ssh: '成功', api: '成功'});
+  assert.deepEqual(app.unifiCollectionStatus({...udwUniFi, stale: true, api: {status: 'partial'}}), {ssh: '失败', api: '部分成功'});
   assert.equal(app.unifiApiStatusText({...udwUniFi, api_reachable: false}), '不可用');
   assert.equal(app.unifiApiStatusText({...udwUniFi, api: {status: 'available'}}), '可用');
   assert.equal(app.unifiApiStatusText({...udwUniFi, api: {status: 'unavailable', error: {code: 'api_auth_failure'}}}), '认证失败');
@@ -217,7 +226,7 @@ async function run(){
     uplinks: [{name: 'UniFi Dream Wall', link_state: 'ONLINE', speed_mbps: 2500}, {name: 'USW Flex Mini', link_state: 'ONLINE', speed_mbps: 1000}],
     clients: {total: 19, wired: 14, wireless: 5, observed: true},
     networks: {total: 3, vlan: 3},
-    ports: [{device_id: 'udw-1', port_idx: 7, name: 'LAN 7', media: '2.5GE', up: true, enabled: true, speed_mbps: 2500, rx_bps: 1000000, tx_bps: 2000000, poe: {supported: true, active: true, power_w: 3.32}, peer_count: 1}],
+    ports: [{device_id: 'udw-1', port_idx: 7, name: 'Port 7', media: '2.5GE', up: true, enabled: true, uplink: true, speed_mbps: 2500, max_speed_mbps: 2500, rx_bytes: 1000, tx_bytes: 2000, rx_bps: 1000000, tx_bps: 2000000, poe: {supported: true, active: true, power_w: 3.32, max_power_w: 30}, peer_count: 1}],
     port_summary: {total: 1, up: 1, down: 0, poe_active: 1, poe_total_power_w: 3.32},
     lags: [], topology: null, anomalies: null
   }};
@@ -225,11 +234,16 @@ async function run(){
   const apiTelemetryMarkup = app.unifiApiTelemetryMarkup({...udwUniFi, api: apiFixture});
   const portTelemetryMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: apiFixture});
   assert.match(portTelemetryMarkup, /unifi-ports-table/);
-  assert.match(portTelemetryMarkup, /LAN 7/);
+  assert.match(portTelemetryMarkup, /Port 7/);
   assert.match(portTelemetryMarkup, /2\.5 GbE/);
-  assert.match(portTelemetryMarkup, /1\.0 Mbps/);
-  assert.match(portTelemetryMarkup, /2\.0 Mbps/);
+  assert.match(portTelemetryMarkup, />7<\/td>/);
+  assert.match(portTelemetryMarkup, /端口编号/);
+  assert.match(portTelemetryMarkup, /已连接 · 上联/);
+  assert.match(portTelemetryMarkup, /2\.5 GbE \/ 2\.5 GbE/);
+  assert.match(portTelemetryMarkup, /2\.00 KB/);
+  assert.match(portTelemetryMarkup, /1\.00 KB/);
   assert.match(portTelemetryMarkup, /3\.32 W/);
+  assert.doesNotMatch(portTelemetryMarkup, /<th>RX<\/th>|<th>TX<\/th>|<th>连接<\/th>/);
   assert.doesNotMatch(portTelemetryMarkup, /mac_table|mac_address|192\\.168/);
   assert.match(apiTelemetryMarkup, /UniFi 设备型号/);
   assert.match(apiTelemetryMarkup, /UniFi Dream Wall/);
@@ -240,7 +254,7 @@ async function run(){
   assert.equal(app.unifiLinkBandwidth(10000), '10 GbE');
   assert.doesNotMatch(apiTelemetryMarkup, /WAN|双工|速率|设备身份|连接客户端/);
   assert.match(apiTelemetryMarkup, /unifi-api-table/);
-  assert.match(systemCards, /<h2>设备<\/h2>/);
+  assert.match(systemCards, /<h2>设备名称\/型号<\/h2>/);
   assert.match(systemCards, /UDW/);
   assert.match(systemCards, /UniFi Dream Wall/);
   assert.match(systemCards, /<h2>CPU<\/h2>/);
@@ -252,17 +266,19 @@ async function run(){
   assert.match(systemCards, /14 \/ 5 \/ 19/);
   assert.match(systemCards, /有线 \/ 无线 \/ 总数/);
   assert.match(systemCards, /运行时间/);
-  assert.match(systemCards, /设备状态/);
+  assert.match(systemCards, /控制器状态 \(版本\)/);
   assert.match(systemCards, /在线.*5\.1\.31/);
-  assert.match(systemCards, /网络应用/);
+  assert.match(systemCards, /网络应用状态 \(版本\)/);
   assert.match(systemCards, /10\.5\.67/);
   assert.match(systemCards, /网络摘要/);
+  assert.match(systemCards, /3 \/ 3 <span class="card-mini-meta">\(网络 \/ VLAN\)<\/span>/);
   assert.match(systemCards, /3 \/ 3/);
   assert.match(systemCards, /power-on-days/);
   assert.match(systemCards, /data-fit-single-line="unifi-primary-value"/);
   assert.match(systemCards, /Annapurna AL324/);
   assert.match(systemCards, /2\.00 GB \/ 4\.00 GB/);
-  const cardLabels = ['设备', 'CPU', '内存', '负载', '连接客户端', 'CPU 温度', '运行时间', '设备状态', '网络应用', '网络摘要'];
+  assert.doesNotMatch(systemCards, /card-mini-meta"[^>]*>\(网络 \/ VLAN\)<\/div>/);
+  const cardLabels = ['设备名称/型号', 'CPU', '内存', '负载', '连接客户端', 'CPU 温度', '运行时间', '控制器状态 (版本)', '网络应用状态 (版本)', '网络摘要'];
   let previous = -1;
   for(const label of cardLabels){
     const position = systemCards.indexOf(`<h2>${label}</h2>`);
@@ -713,7 +729,7 @@ async function run(){
     fs.readFileSync(path.join(ROOT, 'web/index.html'), 'utf8'),
     fs.readFileSync(path.join(ROOT, 'web/js/app.js'), 'utf8')
   ].join('\n');
-  assert.doesNotMatch(frontendSource, /Bearer|ADMIN_TOKEN|Authorization|api[_ -]?key/i);
+  assert.doesNotMatch(frontendSource, /Bearer|ADMIN_TOKEN|Authorization\s*[:=]|api[_ -]?key\s*[:=]/i);
 
   const css = fs.readFileSync(path.join(ROOT, 'web/css/app.css'), 'utf8');
   assert.match(css, /overflow-x:hidden/);

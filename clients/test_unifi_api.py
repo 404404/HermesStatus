@@ -72,7 +72,7 @@ class UniFiAPITests(unittest.TestCase):
                         "uplink": {"rxRateBps": 100, "txRateBps": 200}}, 200
             if "/devices/" in path:
                 return {"id": "udw-1", "model": "UDW", "name": "UDW", "firmwareVersion": "5.0", "state": "ONLINE",
-                        "interfaces": {"ports": [{"state": "UP", "speedMbps": 2500}, {"state": "DOWN", "maxSpeedMbps": 1000}]}}, 200
+                        "interfaces": {"ports": [{"idx": 1, "state": "UP", "speedMbps": 2500, "maxSpeedMbps": 2500}, {"idx": 2, "state": "DOWN", "maxSpeedMbps": 1000}]}}, 200
             if path.endswith("/devices"):
                 return {"data": devices}, 200
             if path.endswith("/clients"):
@@ -111,6 +111,7 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(telemetry["networks"], {"total": 2, "vlan": 1})
         self.assertEqual(len(telemetry["ports"]), 1)
         self.assertEqual(telemetry["ports"][0]["port_idx"], 1)
+        self.assertEqual(telemetry["ports"][0]["max_speed_mbps"], 2500)
         self.assertEqual(telemetry["ports"][0]["rx_bytes"], 1000)
         self.assertNotIn("rx_bps", telemetry["ports"][0])
         self.assertEqual(telemetry["port_summary"]["up"], 1)
@@ -154,6 +155,25 @@ class UniFiAPITests(unittest.TestCase):
         self.assertNotIn("tx_bps", item)
         self.assertNotIn("tx_utilization_pct", item)
 
+    def test_speed_change_and_invalid_interval_discard_rates(self):
+        previous = {}
+        base = {"port_idx": 9, "up": True, "speed": 1000, "rx_bytes": 1000, "tx_bytes": 2000}
+        _port_record(base, device_id="device", previous_samples=previous, sample_time=10.0)
+        changed = _port_record({**base, "speed": 2500, "rx_bytes": 3000, "tx_bytes": 4000}, device_id="device", previous_samples=previous, sample_time=11.0)
+        self.assertNotIn("rx_bps", changed)
+        invalid_dt = _port_record({**base, "rx_bytes": 4000, "tx_bytes": 5000}, device_id="device", previous_samples=previous, sample_time=10.5)
+        self.assertNotIn("rx_bps", invalid_dt)
+
+    def test_port_link_fields_and_poe_active_are_preserved(self):
+        item = _port_record({"port_idx": 4, "name": "PoE", "media": "GE", "up": True, "enable": True, "full_duplex": True, "autoneg": True, "is_uplink": False, "speed": 1000, "max_speed": 2500, "port_poe": True, "poe_enable": True, "poe_power": "6.8", "poe_max_power": "30"}, device_id="device", previous_samples={}, sample_time=1.0)
+        self.assertEqual(item["media"], "GE")
+        self.assertTrue(item["duplex"] and item["autoneg"] and item["enabled"] and item["up"])
+        self.assertFalse(item["uplink"])
+        self.assertEqual(item["poe"]["power_w"], 6.8)
+        self.assertEqual(item["max_speed_mbps"], 2500)
+        self.assertEqual(item["poe"]["max_power_w"], 30)
+        self.assertTrue(item["poe"]["active"])
+
     def test_down_port_does_not_emit_rates_or_utilization(self):
         previous = {}
         _port_record({"port_idx": 1, "up": False, "speed": 1000, "rx_bytes": 10, "tx_bytes": 20}, device_id="device", previous_samples=previous, sample_time=1.0)
@@ -166,7 +186,7 @@ class UniFiAPITests(unittest.TestCase):
         self.assertNotIn("poe", item)
         item = _port_record({"port_idx": 3, "up": True, "speed": 1000, "port_poe": False, "poe_power": "0.00"}, device_id="device", previous_samples={}, sample_time=1.0)
         self.assertEqual(item["poe"]["supported"], False)
-        self.assertEqual(item["poe"]["power_w"], 0.0)
+        self.assertNotIn("power_w", item["poe"])
 
     def test_multiple_sites_fail_closed_without_selector(self):
         calls = []

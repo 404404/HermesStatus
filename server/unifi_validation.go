@@ -299,6 +299,9 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 		if err := validateOptionalFloat(prefix+".speed_mbps", item.SpeedMbps, float64(MaxSafeInteger)); err != nil {
 			return err
 		}
+		if err := validateOptionalFloat(prefix+".max_speed_mbps", item.MaxSpeedMbps, float64(MaxSafeInteger)); err != nil {
+			return err
+		}
 		for field, number := range map[string]*int64{"rx_bytes": item.RxBytes, "tx_bytes": item.TxBytes, "rx_packets": item.RxPackets, "tx_packets": item.TxPackets, "rx_errors": item.RxErrors, "tx_errors": item.TxErrors, "rx_dropped": item.RxDropped, "tx_dropped": item.TxDropped, "rx_multicast": item.RxMulticast, "tx_multicast": item.TxMulticast, "rx_broadcast": item.RxBroadcast, "tx_broadcast": item.TxBroadcast, "rx_bps": item.RxBPS, "tx_bps": item.TxBPS} {
 			if err := validateCounter(prefix+"."+field, number, MaxSafeInteger); err != nil {
 				return err
@@ -319,7 +322,7 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 					return err
 				}
 			}
-			for field, number := range map[string]*float64{"power_w": poe.PowerW, "voltage_v": poe.VoltageV, "current_ma": poe.CurrentMA} {
+			for field, number := range map[string]*float64{"power_w": poe.PowerW, "max_power_w": poe.MaxPowerW, "voltage_v": poe.VoltageV, "current_ma": poe.CurrentMA} {
 				if err := validateOptionalFloat(prefix+".poe."+field, number, float64(MaxSafeInteger)); err != nil {
 					return err
 				}

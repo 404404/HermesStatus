@@ -159,6 +159,7 @@ type UniFiAPIPort struct {
 	Enabled          *bool        `json:"enabled,omitempty"`
 	Up               *bool        `json:"up,omitempty"`
 	SpeedMbps        *float64     `json:"speed_mbps,omitempty"`
+	MaxSpeedMbps     *float64     `json:"max_speed_mbps,omitempty"`
 	Duplex           *bool        `json:"duplex,omitempty"`
 	Autoneg          *bool        `json:"autoneg,omitempty"`
 	Uplink           *bool        `json:"uplink,omitempty"`
@@ -190,6 +191,7 @@ type UniFiAPIPoE struct {
 	Mode      *string  `json:"mode,omitempty"`
 	Class     *string  `json:"class,omitempty"`
 	PowerW    *float64 `json:"power_w,omitempty"`
+	MaxPowerW *float64 `json:"max_power_w,omitempty"`
 	VoltageV  *float64 `json:"voltage_v,omitempty"`
 	CurrentMA *float64 `json:"current_ma,omitempty"`
 	Good      *bool    `json:"good,omitempty"`

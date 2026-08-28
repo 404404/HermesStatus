@@ -586,7 +586,7 @@ def _legacy_target(payload, target):
     return None
 
 
-def _poe_record(port):
+def _poe_record(port, *, max_power_w=None):
     supported = _boolean(_first(port, "port_poe"))
     if supported is None:
         caps = _counter(port, "poe_caps")
@@ -600,9 +600,13 @@ def _poe_record(port):
         if value is not None:
             result[output] = value
     power = _decimal(_first(port, "poe_power", "power_w", "powerW"), minimum=0)
-    if power is not None:
+    if power is not None and supported is not False:
         result["power_w"] = power
         result["active"] = power > 0
+    if max_power_w is None:
+        max_power_w = _decimal(_first(port, "poe_max_power", "poe_max_power_w", "poe_max_watts", "max_power_w", "maxPowerW"), minimum=0)
+    if max_power_w is not None and supported is not False:
+        result["max_power_w"] = max_power_w
     for output, keys in (("state", ("poe_state",)), ("mode", ("poe_mode",)), ("class", ("poe_class", "poe_standard"))):
         value = _text(_first(port, *keys))
         if value:
@@ -614,7 +618,7 @@ def _poe_record(port):
     return result
 
 
-def _port_record(port, *, device_id, previous_samples, sample_time):
+def _port_record(port, *, device_id, previous_samples, sample_time, max_speed_mbps=None, max_power_w=None):
     if not isinstance(port, dict):
         return None
     index = _counter(port, "port_idx", "idx", "portIndex")
@@ -640,6 +644,11 @@ def _port_record(port, *, device_id, previous_samples, sample_time):
     speed = _decimal(_first(port, "speed", "speedMbps", "speed_mbps", "linkSpeedMbps"), minimum=0)
     if speed is not None:
         result["speed_mbps"] = speed
+    maximum = _decimal(_first(port, "max_speed", "maxSpeed", "max_speed_mbps", "maxSpeedMbps"), minimum=0)
+    if maximum is None:
+        maximum = max_speed_mbps
+    if maximum is not None:
+        result["max_speed_mbps"] = maximum
     counter_keys = {
         "rx_bytes": ("rx_bytes", "rxBytes"), "tx_bytes": ("tx_bytes", "txBytes"),
         "rx_packets": ("rx_packets", "rxPackets"), "tx_packets": ("tx_packets", "txPackets"),
@@ -683,7 +692,7 @@ def _port_record(port, *, device_id, previous_samples, sample_time):
                         if rate_key in rates:
                             result[utilization_key] = round(rates[rate_key] * 8 / (speed * 1_000_000) * 100, 2)
     previous_samples[sample_key] = current_sample
-    poe = _poe_record(port)
+    poe = _poe_record(port, max_power_w=max_power_w)
     if poe is not None:
         result["poe"] = poe
     connection = port.get("last_connection")
@@ -692,14 +701,42 @@ def _port_record(port, *, device_id, previous_samples, sample_time):
     return result
 
 
-def _ports(legacy_payload, target, previous_samples, sample_time):
+def _detail_port_capabilities(target_detail):
+    """Return fixed port-index capabilities from the official detail payload."""
+    if not isinstance(target_detail, dict):
+        return {}
+    interfaces = target_detail.get("interfaces")
+    ports = interfaces.get("ports") if isinstance(interfaces, dict) else None
+    if not isinstance(ports, list):
+        return {}
+    result = {}
+    for port in ports[:MAX_API_PORTS]:
+        if not isinstance(port, dict):
+            continue
+        index = _counter(port, "port_idx", "idx", "portIndex")
+        if index is None or index < 1 or index > 65535:
+            continue
+        maximum = _decimal(_first(port, "maxSpeedMbps", "max_speed_mbps", "max_speed"), minimum=0)
+        max_power = None
+        poe = _first(port, "poe", "powerOverEthernet")
+        if isinstance(poe, dict):
+            max_power = _decimal(_first(poe, "maxPowerW", "max_power_w", "maxPower", "powerLimitW"), minimum=0)
+        result[index] = {"max_speed_mbps": maximum, "max_power_w": max_power}
+    return result
+
+
+def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=None):
     legacy = _legacy_target(legacy_payload, target)
     if legacy is None:
         return None, None
     device_id = _identifier(target.get("id"))
+    capabilities = _detail_port_capabilities(target_detail)
     records = []
     for port in (legacy.get("port_table") or [])[:MAX_API_PORTS]:
-        item = _port_record(port, device_id=device_id, previous_samples=previous_samples, sample_time=sample_time)
+        index = _counter(port, "port_idx", "idx", "portIndex")
+        detail = capabilities.get(index, {})
+        item = _port_record(port, device_id=device_id, previous_samples=previous_samples, sample_time=sample_time,
+                            max_speed_mbps=detail.get("max_speed_mbps"), max_power_w=detail.get("max_power_w"))
         if item is not None:
             records.append(item)
     summary = {"total": len(records), "up": sum(1 for item in records if item.get("up") is True), "down": sum(1 for item in records if item.get("up") is False), "poe_active": 0, "poe_total_power_w": None}
@@ -794,7 +831,7 @@ def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sampl
     identity = _identity(info, devices, target_detail or target)
     controller = _controller(info, target_detail or target)
     wans, uplinks = _wans_and_uplinks(devices, target_detail)
-    ports, port_summary = _ports(payloads.get("legacy_stat_device"), target, previous_samples if previous_samples is not None else {}, sample_time if sample_time is not None else time.monotonic()) if target is not None and payloads.get("legacy_stat_device") is not None else (None, None)
+    ports, port_summary = _ports(payloads.get("legacy_stat_device"), target, previous_samples if previous_samples is not None else {}, sample_time if sample_time is not None else time.monotonic(), target_detail=target_detail) if target is not None and payloads.get("legacy_stat_device") is not None else (None, None)
     telemetry = {
         "identity": identity,
         "controller": controller,
