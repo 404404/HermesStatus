@@ -76,6 +76,25 @@ func TestUniFiAPIFailureAndSuccessProjectionRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUniFiAPIDisabledArraysRemainEmpty(t *testing.T) {
+	stats := NewNotReportedUniFiStats()
+	disabled := "disabled"
+	stats.API = &UniFiAPIStats{
+		Enabled: false, Status: disabled, Endpoints: []UniFiAPIEndpoint{},
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeUniFiStatsJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.API == nil || decoded.API.Endpoints == nil {
+		t.Fatal("disabled API endpoints must remain an empty array")
+	}
+}
+
 func TestUniFiAPITelemetryProjectionAndPartialFailure(t *testing.T) {
 	stats := validUniFiFixture("udw")
 	now := "2026-08-27T01:02:03Z"

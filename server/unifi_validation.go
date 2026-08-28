@@ -502,6 +502,9 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 		result.Controller = &controller
 	}
 	result.WANs = append([]UniFiAPIWAN(nil), input.WANs...)
+	if input.WANs != nil && result.WANs == nil {
+		result.WANs = make([]UniFiAPIWAN, 0)
+	}
 	for index := range result.WANs {
 		item := &result.WANs[index]
 		item.ID = sanitizeStringPointer(item.ID)
@@ -513,6 +516,9 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 		item.LoadBalancingState = sanitizeStringPointer(item.LoadBalancingState)
 	}
 	result.Uplinks = append([]UniFiAPIUplink(nil), input.Uplinks...)
+	if input.Uplinks != nil && result.Uplinks == nil {
+		result.Uplinks = make([]UniFiAPIUplink, 0)
+	}
 	for index := range result.Uplinks {
 		item := &result.Uplinks[index]
 		item.Name = sanitizeStringPointer(item.Name)
@@ -521,6 +527,9 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 		item.WANID = sanitizeStringPointer(item.WANID)
 	}
 	result.Temperatures = append([]UniFiAPITemperature(nil), input.Temperatures...)
+	if input.Temperatures != nil && result.Temperatures == nil {
+		result.Temperatures = make([]UniFiAPITemperature, 0)
+	}
 	for index := range result.Temperatures {
 		result.Temperatures[index].ID = SanitizeText(result.Temperatures[index].ID)
 		result.Temperatures[index].Label = SanitizeText(result.Temperatures[index].Label)
@@ -561,6 +570,9 @@ func SanitizeUniFiStats(input UniFiStats) UniFiStats {
 		api.LastSuccess = sanitizeStringPointer(api.LastSuccess)
 		api.Error = sanitizeExtensionError(api.Error)
 		api.Endpoints = append([]UniFiAPIEndpoint(nil), input.API.Endpoints...)
+		if input.API.Endpoints != nil && api.Endpoints == nil {
+			api.Endpoints = make([]UniFiAPIEndpoint, 0)
+		}
 		for index := range api.Endpoints {
 			api.Endpoints[index].Error = sanitizeExtensionError(api.Endpoints[index].Error)
 		}
