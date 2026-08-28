@@ -79,7 +79,7 @@ const (
 	MaxUniFiFans                = 8
 	MaxUniFiPowerSupplies       = 4
 	MaxUniFiIgnoredObservations = 8
-	MaxUniFiAPIEndpoints        = 12
+	MaxUniFiAPIEndpoints        = 16
 	MaxUniFiAPIWans             = 16
 	MaxUniFiAPIUplinks          = 32
 	MaxUniFiAPITemperatures     = 16

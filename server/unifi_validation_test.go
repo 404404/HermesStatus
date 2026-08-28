@@ -106,7 +106,7 @@ func TestUniFiAPITelemetryProjectionAndPartialFailure(t *testing.T) {
 			{Name: "sites", Status: "ok", HTTPStatus: &status},
 			{Name: "devices", Status: "ok", HTTPStatus: &status},
 			{Name: "clients", Status: "ok", HTTPStatus: &status},
-			{Name: "networks", Status: "ok", HTTPStatus: &status},
+			{Name: "networks", Status: "ok", HTTPStatus: &status}, {Name: "legacy_stat_device", Status: "ok", HTTPStatus: &status}, {Name: "lags", Status: "ok", HTTPStatus: &status}, {Name: "topology", Status: "ok", HTTPStatus: &status}, {Name: "port_anomalies", Status: "ok", HTTPStatus: &status}, {Name: "wan_official", Status: "ok", HTTPStatus: &status}, {Name: "wan_enriched", Status: "ok", HTTPStatus: &status}, {Name: "wan_isp_status", Status: "ok", HTTPStatus: &status}, {Name: "wan_load_balance", Status: "ok", HTTPStatus: &status}, {Name: "wan_slas", Status: "ok", HTTPStatus: &status},
 		},
 		Summary: &UniFiAPISummary{Model: unifiString("UDW"), Firmware: unifiString("5.0.1"), ApplicationVersion: unifiString("9.1.2")},
 		Telemetry: &UniFiAPITelemetry{
