@@ -1,4 +1,5 @@
 import os
+import ssl
 import stat
 import tempfile
 import unittest
@@ -8,7 +9,7 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _read_key
+from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key
 
 
 class UniFiAPITests(unittest.TestCase):
@@ -24,6 +25,14 @@ class UniFiAPITests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_explicit_pin_uses_pin_only_context_without_implicit_fallback(self):
+        context = _context(None, "a" * 64)
+        self.assertFalse(context.check_hostname)
+        self.assertEqual(context.verify_mode, ssl.CERT_NONE)
+        verified = _context(None, None)
+        self.assertTrue(verified.check_hostname)
+        self.assertEqual(verified.verify_mode, ssl.CERT_REQUIRED)
 
     def test_key_is_file_backed_and_not_returned_by_payload(self):
         self.assertEqual(_read_key(str(self.key)), "redacted-test-key")

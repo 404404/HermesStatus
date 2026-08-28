@@ -103,9 +103,25 @@ def _read_key(path: str) -> str:
     return key
 
 
-def _context(ca_file: str | None):
+def _context(ca_file: str | None, tls_sha256: str | None = None):
     try:
-        return ssl.create_default_context(cafile=ca_file) if ca_file else ssl.create_default_context()
+        if ca_file:
+            context = ssl.create_default_context(cafile=ca_file)
+            # An explicit certificate pin is the deterministic identity check
+            # for local controllers whose certificate SAN does not contain the
+            # configured IP.  Keep CA validation when a CA is supplied, but
+            # let the pin—not an automatic fallback—decide peer identity.
+            if tls_sha256:
+                context.check_hostname = False
+            return context
+        if tls_sha256:
+            # Pin-only mode is explicit in configuration.  The peer certificate
+            # is still required below and must match the exact SHA-256 pin.
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            return context
+        return ssl.create_default_context()
     except (OSError, ssl.SSLError) as exc:
         raise APIError("api_tls_failure") from exc
 
@@ -419,11 +435,11 @@ def _request(config, path: str, key: str):
     response = None
     body = b""
     try:
-        connection = HTTPSConnection(parsed.hostname, parsed.port or 443, context=_context(config.ca_file), timeout=config.timeout_seconds)
+        expected = getattr(config, "tls_sha256", None)
+        connection = HTTPSConnection(parsed.hostname, parsed.port or 443, context=_context(config.ca_file, expected), timeout=config.timeout_seconds)
         connection.request("GET", path, headers={"X-API-Key": key, "Accept": "application/json"})
         response = connection.getresponse()
         cert = connection.sock.getpeercert(binary_form=True) if connection.sock else b""
-        expected = getattr(config, "tls_sha256", None)
         if expected and hashlib.sha256(cert).hexdigest().lower() != expected.lower():
             raise APIError("api_tls_failure")
         body = response.read(MAX_RESPONSE_BYTES + 1)
