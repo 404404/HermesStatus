@@ -37,6 +37,7 @@ printf '%s\n' '__HS_HWMON__'
 printf '%s\n' '__HS_HW_CACHE__'
 if [ -f /var/run/ustd/hw_polling.cache ] && [ -r /var/run/ustd/hw_polling.cache ]; then
   head -c 65536 /var/run/ustd/hw_polling.cache
+  printf "\n"
 fi
 printf '%s\n' '__HS_END__'
 '''

@@ -10,6 +10,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from unifi_ssh_transport import ASKPASS_PATH, TransportError, _askpass, _run_fixed, _validate_file
 from unifi_raw_collector import parse_diagnostics
+from unifi_source_registry import REMOTE_DIAGNOSTICS_SCRIPT
 
 
 class UniFiSSHTransportTests(unittest.TestCase):
@@ -108,6 +109,10 @@ class UniFiSSHTransportTests(unittest.TestCase):
         result = parse_diagnostics(text)
         self.assertEqual(result["hardware_cache_status"], "available")
         self.assertEqual(result["hardware_cache"]["fans"]["fan1"], 3820)
+
+    def test_diagnostics_script_separates_cache_from_end_marker(self):
+        self.assertIn("head -c 65536 /var/run/ustd/hw_polling.cache\n  printf \"\\n\"", REMOTE_DIAGNOSTICS_SCRIPT)
+
 
     def test_diagnostics_marks_missing_hardware_cache_unavailable(self):
         text = "\n".join(["__HS_THERMAL__", "__HS_HWMON__", "__HS_HW_CACHE__", "__HS_END__"])
