@@ -55,7 +55,7 @@ class UniFiDomainCollector:
             raise ValueError("unknown_profile") from exc
         self.raw_collector = raw_collector or RawCollector(config)
         api_config = getattr(config, "api", None)
-        self.api_collector = UniFiAPICollector(api_config) if api_config is not None and getattr(api_config, "enabled", False) else None
+        self.api_collector = UniFiAPICollector(api_config, target_profile=config.profile_id) if api_config is not None and getattr(api_config, "enabled", False) else None
         self.previous = None
 
     def collect(self):
