@@ -111,6 +111,8 @@ ALLOWED_FIELDS = {
     "primary_smart_device",
     "filesystem_probes",
     "unifi",
+    "platform",
+    "unified_collectors",
 }
 FORBIDDEN_AMBIGUOUS_KEYS = {"DOMAIN", "TOKEN", "PASSWORD", "AUTHORIZATION"}
 
@@ -176,6 +178,8 @@ class ClientV2Config:
     filesystem_probes: tuple[FilesystemProbeConfig, ...] = ()
     unifi: UniFiConfig | None = None
     loopback_test_profile: bool = False
+    platform: str = "linux"
+    unified_collectors: Mapping[str, Any] | None = None
 
 
 class MockTransport(Protocol):
@@ -200,6 +204,10 @@ def parse_config_json(data: str | bytes) -> dict[str, Any]:
         raise ClientContractError("config is not valid JSON") from exc
     if not isinstance(document, dict):
         raise ClientContractError("config root must be an object")
+    if "schema_version" in document:
+        from client_config_v1 import parse_unified_document
+
+        return parse_unified_document(document)
     _require_fields(
         document,
         {"version", "server", "device", "collection"},
@@ -379,6 +387,8 @@ def resolve_client_config(
         filesystem_probes=filesystem_probes,
         unifi=unifi,
         loopback_test_profile=loopback_test_profile,
+        platform=str(merged.get("platform") or "linux"),
+        unified_collectors=merged.get("unified_collectors"),
     )
 
 

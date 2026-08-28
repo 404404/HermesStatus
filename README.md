@@ -78,6 +78,7 @@ environment:
 - [架构](docs/zh-CN/ARCHITECTURE.md) · [配置](docs/zh-CN/CONFIGURATION.md) · [部署](docs/zh-CN/DEPLOYMENT.md)
 - [安全](docs/zh-CN/SECURITY.md) · [运维](docs/zh-CN/OPERATIONS.md) · [开发](docs/zh-CN/DEVELOPMENT.md)
 - [Device v2 配置指南](docs/zh-CN/DEVICE_CONFIGURATION.md)
+- [Unified Client configuration](docs/UNIFIED_CLIENT_CONFIG.md)
 - [EasyTier 监控设计](docs/zh-CN/EASYTIER_MONITORING.md) · [硬件监控设计](docs/zh-CN/HARDWARE_MONITORING.md) · [UniFi 监控设计](docs/zh-CN/UNIFI_MONITORING.md)
 
 ```bash

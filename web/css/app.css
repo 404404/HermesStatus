@@ -191,12 +191,15 @@ body.light .health-card{background:#fff}
 .easytier-peer-table{min-width:1120px!important}
 .easytier-route-table{min-width:960px!important}
 .easytier-connector-table{min-width:620px!important}
-.unifi-summary,.unifi-system,.unifi-storage{padding:0 1.35rem 1.1rem}
+.unifi-summary,.unifi-storage{padding:0 1.35rem 1.1rem}
+.unifi-system{width:100%;padding:0 0 1.1rem}
 .unifi-page-empty{min-height:260px;display:grid;place-items:center;padding:2rem;text-align:center;border:1px solid var(--border);border-radius:var(--radius);background:linear-gradient(145deg,var(--bg-alt),#11141b);color:var(--text-dim);font-size:18px;font-weight:700}
 body.light .unifi-page-empty{background:var(--panel)}
 .unifi-system-cards{grid-template-columns:repeat(5,minmax(0,1fr));padding:0}
 .unifi-system-cards .summary-card{min-width:0;min-height:0}
-.unifi-system-cards .usage-bar{margin-top:auto}
+.unifi-system-cards .usage-bar{margin-top:.7rem}
+.unifi-system-cards .resource-card{justify-content:flex-start}
+.unifi-system-cards .resource-card .resource-value{align-items:center}
 .unifi-system-cards .card-detail.resource-value{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .unifi-system-cards .card-value[data-fit-single-line]{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .unifi-system-cards .card-subvalue{margin-top:.45rem;color:var(--text-dim);font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -222,7 +225,12 @@ body.light .unifi-page-empty{background:var(--panel)}
 .unifi-device-tabs{padding:0 1.35rem 1.1rem}
 .unifi-device-tabs .unifi-network-tabs{padding:0 0 .8rem;border-bottom:1px solid var(--border)}
 .unifi-device-panel[hidden]{display:none}
-.unifi-port-summary{padding:.8rem 0;color:var(--text-dim);font-size:13px;font-weight:700}
+.unifi-port-summary{width:50%;min-width:280px;padding:.8rem 0;display:flex;align-items:center;gap:.65rem;color:var(--text-dim);font-size:13px;font-weight:700}
+.unifi-poe-summary-value{flex:0 0 auto;color:var(--text);font-size:13px;font-weight:750;white-space:nowrap}
+.unifi-port-summary .usage-bar{flex:1 1 auto;margin:0;min-width:180px}
+.unifi-power-inline{display:flex;align-items:center;gap:.65rem;min-width:300px}
+.unifi-power-value{flex:0 0 auto;font-weight:700;white-space:nowrap}
+.unifi-power-inline .usage-bar{flex:1 1 auto;margin:0;min-width:150px}
 .unifi-wan{padding:0 1.35rem 1.1rem}
 .unifi-wan-table{min-width:960px!important}
 .unifi-wan-table td,.unifi-wan-table th{white-space:nowrap}

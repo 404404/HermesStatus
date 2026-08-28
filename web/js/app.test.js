@@ -150,7 +150,8 @@ async function run(){
       {id: 'fan1', supported: 'supported', present: 'present', observed: true, rpm: 1698, state: 'observed', error: null},
       {id: 'fan2', supported: 'supported', present: 'present', observed: true, rpm: 2752, state: 'observed', error: null}
     ],
-    power_supplies: [{id: 'psu1', supported: 'supported', present: 'unknown', observed: false, state: 'not_observed', error: null}],
+    power_supplies: [{id: 'psu1', supported: 'supported', present: 'unknown', observed: true, state: 'observed', power_w: 47, max_power_w: 550, error: null}],
+    poe: {supported: true, total_max_power_w: 420, port_max_power_w: {1: 15.4, 2: 15.4, 3: 15.4, 4: 15.4, 5: 30, 6: 30, 7: 30, 8: 30, 9: 60, 10: 60, 11: 60, 12: 60}},
     storage: {
       nvme: {supported: 'unsupported', present: 'not_present', observed: false, capacity_bytes: null},
       sata_ssd: {supported: 'supported', present: 'present', observed: false, capacity_bytes: 128000000000},
@@ -163,7 +164,7 @@ async function run(){
     system: {...udwUniFi.system, cpu_usage_percent: null, cpu_usage_reason: 'insufficient_delta', cpu_temperature_c: null,
       memory: {...udwUniFi.system.memory, available_source: 'fallback_memfree_buffers_cached'}},
     fans: [{id: 'fan1', supported: 'supported', present: 'unknown', observed: true, rpm: 0, state: 'observed_zero_rpm', error: null}],
-    power_supplies: [], storage: {
+    power_supplies: [], poe: {supported: false, total_max_power_w: null, port_max_power_w: {}}, storage: {
       nvme: {supported: 'unknown', present: 'unknown', observed: false, capacity_bytes: null},
       sata_ssd: {supported: 'unknown', present: 'unknown', observed: false, capacity_bytes: null},
       tf: {supported: 'unknown', present: 'unknown', observed: false, capacity_bytes: null}
@@ -187,10 +188,13 @@ async function run(){
   assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /CPU 使用率[\s\S]*usage-bar[\s\S]*-/);
   assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /可用内存回退估算/);
   assert.match(app.unifiFanRows(udwUniFi), /1,698 RPM/);
-  assert.match(app.unifiFanRows(ucgMaxUniFi), /已观察到 0 RPM/);
+  assert.match(app.unifiFanRows(ucgMaxUniFi), /0 RPM/);
+  assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /观测/);
   assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /失败/);
-  assert.match(app.unifiFanRows({...ucgMaxUniFi, fans: [{id: 'fan1', supported: 'supported', present: 'unknown', observed: false, rpm: null, state: 'not_observed'}]}), /未观察到/);
-  assert.match(app.unifiPowerRows(udwUniFi), /未知/);
+  assert.match(app.unifiFanRows({...ucgMaxUniFi, fans: [{id: 'fan1', supported: 'supported', present: 'unknown', observed: false, rpm: null, state: 'not_observed'}]}), /—/);
+  assert.match(app.unifiPowerRows(udwUniFi), /47 W \/ 550 W/);
+  assert.match(app.unifiPowerRows(udwUniFi), /unifi-power-inline/);
+  assert.match(app.unifiPowerRows(udwUniFi), /usage-bar/);
   const udwStorageRows = app.unifiStorageRows(udwUniFi).map(row => row.join(' ')).join(' ');
   assert.match(udwStorageRows, /SATA SSD/);
   assert.match(udwStorageRows, /128 GB/);
@@ -235,7 +239,7 @@ async function run(){
   const systemCards = app.unifiSystemCards({...udwUniFi, api: apiFixture});
   const apiTelemetryMarkup = app.unifiApiTelemetryMarkup({...udwUniFi, api: apiFixture});
   const portTelemetryMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: apiFixture});
-  const wanMarkup = app.unifiWanMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, wans: [{id: 'wan1', name: 'WAN', online: true, active: true, isp: 'Example ISP', link_speed_mbps: 2500, latency_ms: 0, packet_loss_percent: 0, jitter_ms: 0, sla_status: 'healthy'}]}}});
+  const wanMarkup = app.unifiWanMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, wans: [{id: 'wan1', name: 'WAN', online: true, role: 'active', isp: 'Example ISP', asn: '64500', link_speed_mbps: 2500, speedtest: {observed: true, timestamp: '2026-01-01T00:00:00Z', latency_ms: 2.5, download_mbps: 900, upload_mbps: 100}}]}}});
   assert.match(portTelemetryMarkup, /unifi-ports-table/);
   assert.match(portTelemetryMarkup, /Port 7/);
   assert.match(portTelemetryMarkup, /2\.5 GbE/);
@@ -243,16 +247,21 @@ async function run(){
   assert.match(portTelemetryMarkup, /端口编号/);
   assert.match(portTelemetryMarkup, />上行</);
   assert.match(portTelemetryMarkup, /2\.5 GbE \/ 2\.5 GbE/);
+  assert.match(portTelemetryMarkup, /15\.4 W/);
   assert.match(portTelemetryMarkup, /2\.00 KB/);
   assert.match(portTelemetryMarkup, /1\.00 KB/);
   assert.match(portTelemetryMarkup, /3\.32 W/);
   assert.match(portTelemetryMarkup, /发送 \/ 接收 \(错误\/丢弃\)/);
   assert.match(portTelemetryMarkup, /2 \/ 3 \/ 0 \/ 1/);
-  assert.match(portTelemetryMarkup, /PoE 总功率：6\.64 W \/ 60 W/);
+  assert.match(portTelemetryMarkup, /PoE 总功率 6\.64 W \/ 420 W/);
+  assert.match(portTelemetryMarkup, /PoE 总功率使用率/);
+  assert.match(portTelemetryMarkup, /unifi-poe-summary-value[\s\S]*usage-bar/);
   assert.match(portTelemetryMarkup, /未连接 \/ 1 GbE/);
   assert.match(portTelemetryMarkup, /发送 \/ 接收 \(错误\/丢弃\)/);
   assert.match(wanMarkup, /Example ISP/);
-  assert.match(wanMarkup, /0\.0 ms \/ 0\.00% \/ 0\.0 ms/);
+  assert.match(wanMarkup, /最近测速 2\.5 ms \/ ↓ 900\.0 Mbps \/ ↑ 100\.0 Mbps/);
+  assert.match(wanMarkup, /AS64500/);
+  assert.doesNotMatch(wanMarkup, /丢包|抖动|实时/);
   assert.doesNotMatch(portTelemetryMarkup, /<th>RX<\/th>|<th>TX<\/th>|<th>连接<\/th>/);
   assert.equal(app.unifiPortLinkText({up: false, speed_mbps: 1000, max_speed_mbps: 10000}), '未连接 / 10 GbE');
   assert.equal(app.unifiPortPoeText({poe: {supported: false, power_w: 0}}), '-');
@@ -297,6 +306,7 @@ async function run(){
   assert.ok(portTelemetryMarkup.indexOf('>2</td>') < portTelemetryMarkup.indexOf('>7</td>'));
   assert.ok(portTelemetryMarkup.indexOf('>7</td>') < portTelemetryMarkup.indexOf('>10</td>'));
   assert.doesNotMatch(portTelemetryMarkup, /已连接 · 上联/);
+  assert.doesNotMatch(app.unifiPortTelemetryMarkup({...ucgMaxUniFi, api: apiFixture}), /PoE 总功率/);
   assert.doesNotMatch(systemCards, /card-mini-meta"[^>]*>\(网络 \/ VLAN\)<\/div>/);
   const cardLabels = ['设备名称/型号', 'CPU', '内存', '负载', '连接客户端', 'CPU 温度', '运行时间', '控制器状态 (版本)', '网络应用状态 (版本)', '网络摘要'];
   let previous = -1;
@@ -807,7 +817,7 @@ async function run(){
   assert.match(indexMarkup, /<th>功率<\/th>/);
   assert.match(indexMarkup, /<th>风扇转速<\/th>/);
   assert.match(indexMarkup, /未安装时容量与使用情况显示为 -/);
-  assert.match(indexMarkup, /观测=本轮是否取得转速读数/);
+  assert.doesNotMatch(indexMarkup, /<th>观测<\/th>/);
   assert.doesNotMatch(indexMarkup, /raw thermal|PWM|cpuload|remote command/i);
   assert.match(appSource, /function renderUniFi\(view\)/);
   assert.match(appSource, /function unifiTransportSummary\(unifi\)/);

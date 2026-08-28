@@ -1,0 +1,6 @@
+services:
+  server:
+    image: ghcr.io/404404/hermesstatus-server:2.5
+    restart: unless-stopped
+    ports:
+      - "21443:21443"

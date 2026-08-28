@@ -1,0 +1,16 @@
+services:
+  server:
+    image: ghcr.io/404404/hermesstatus-server:2.5
+    restart: unless-stopped
+    ports:
+      - "21443:21443"
+  client:
+    image: ghcr.io/404404/hermesstatus-client:2.5
+    restart: unless-stopped
+    environment:
+      HERMESSTATUS_CONFIG_FILE: /run/secrets/hermesstatus/client-config.json
+    volumes:
+      - /volume1/docker/status/config/client-config.json:/run/secrets/hermesstatus/client-config.json:ro
+      - ./device-token:/run/secrets/hermesstatus-device-token:ro
+    tmpfs:
+      - /run/hermesstatus:size=4m,mode=0700,nosuid,nodev,noexec

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "server": {
+    "url": "https://status.example.invalid:21443",
+    "verify_tls": true,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 30,
+    "ca_file": "/run/secrets/preview-ca.crt"
+  },
+  "device": {
+    "id": "example-client",
+    "display_name": "Example Client",
+    "platform": "linux"
+  },
+  "collection": {"interval_seconds": 60},
+  "collectors": {
+    "hardware": {"enabled": true},
+    "filesystem": {"enabled": true, "probes": []},
+    "smart": {"enabled": false},
+    "docker": {"enabled": true},
+    "hermes": {"enabled": true},
+    "lucky": {"enabled": false},
+    "easytier": {"enabled": false},
+    "unifi": {"enabled": false}
+  }
+}

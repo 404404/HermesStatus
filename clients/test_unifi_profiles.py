@@ -28,6 +28,17 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(udw["storage"]["tf"]["present"], "not_populated")
         self.assertEqual(udw["cpu_model"], "Annapurna AL324")
 
+    def test_fixed_poe_and_power_limits_are_profile_data(self):
+        udw = load_profile(self.profiles, "udw")
+        self.assertTrue(udw["poe"]["supported"])
+        self.assertEqual(udw["poe"]["total_max_power_w"], 420)
+        self.assertEqual(udw["poe"]["port_max_power_w"]["1"], 15.4)
+        self.assertEqual(udw["poe"]["port_max_power_w"]["12"], 60)
+        self.assertEqual(udw["power"]["max_power_w"], 550)
+        ucg = load_profile(self.profiles, "ucg-max")
+        self.assertFalse(ucg["poe"]["supported"])
+        self.assertIsNone(ucg["power"]["max_power_w"])
+
     def test_unknown_source_rejected(self):
         profile = copy.deepcopy(load_profile(self.profiles, "udw"))
         profile["generic"]["memory"]["source"] = "arbitrary_shell"

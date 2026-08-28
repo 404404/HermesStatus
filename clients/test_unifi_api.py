@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _port_record, _ports, _merge_wans
+from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _port_record, _ports, _merge_wans, _site_records, _v2_site_path, _legacy_site_path
 
 
 class UniFiAPITests(unittest.TestCase):
@@ -83,12 +83,26 @@ class UniFiAPITests(unittest.TestCase):
                 return {"data": [{"id": "n1", "vlanId": 10}, {"id": "n2", "management": True}]}, 200
             if path.startswith("/proxy/network/api/s/") and path.endswith("/stat/device"):
                 return {"data": [{"device_id": "udw-1", "model": "UDW", "port_table": [{"port_idx": 1, "name": "Port 1", "media": "GE", "up": True, "enable": True, "speed": 1000, "full_duplex": True, "autoneg": True, "is_uplink": True, "rx_bytes": 1000, "tx_bytes": 2000, "rx_packets": 10, "tx_packets": 20, "rx_errors": 0, "tx_errors": 1, "rx_dropped": 2, "tx_dropped": 3, "port_poe": False, "poe_power": "0.00", "last_connection": {"connected": True}}]}]}, 200
+            if path.startswith("/proxy/network/api/s/") and path.endswith("/stat/health"):
+                return {"data": [{"device_id": "udw-1", "wan_status": [{"id": "wan1", "isp_name": "Example ISP", "asn": 64500, "alive": True}]}]}, 200
+            if path.startswith("/proxy/network/api/s/") and path.endswith("/stat/sysinfo"):
+                return {"data": []}, 200
             if path.endswith("/switching/lags"):
                 return {"data": []}, 200
             if path.endswith("/topology") or path.endswith("/ports/port-anomalies"):
                 raise APIError("api_endpoint_unsupported", status=404)
-            if "/wan/" in path or path.endswith("/wans") or path.endswith("/wan-slas"):
-                raise APIError("api_endpoint_unsupported", status=404)
+            if path.endswith("/wans"):
+                return {"data": [{"id": "wan1", "name": "Primary", "interface": "WAN"}, {"id": "wan2", "name": "WAN2", "interface": "WAN2"}]}, 200
+            if path.endswith("/enriched-configuration"):
+                return {"data": [{"id": "wan1", "networkGroup": "wan"}, {"id": "wan2", "networkGroup": "wan2"}]}, 200
+            if path.endswith("/load-balancing/status"):
+                return {"data": [{"id": "wan1", "role": "active"}, {"id": "wan2", "role": "backup"}]}, 200
+            if path.endswith("/load-balancing/configuration"):
+                return {"data": [{"id": "wan1", "priority": 1}, {"id": "wan2", "priority": 2}]}, 200
+            if path.endswith("/wan-slas"):
+                return {"data": []}, 200
+            if path.endswith("/isp-status"):
+                return {"data": [{"id": "wan1", "networkGroup": "wan", "speedtestHistory": [{"timestamp": "2026-01-01T00:00:00Z", "latencyMs": 2.5, "downloadMbps": 900, "uploadMbps": 100}]}]}, 200
             raise AssertionError(f"unexpected request path: {path}")
 
         return request
@@ -100,20 +114,23 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(result["error"]["code"], "api_partial_failure")
         self.assertEqual([x["name"] for x in result["endpoints"]], [
             "info", "sites", "devices", "clients", "networks",
-            "legacy_stat_device", "lags", "topology", "port_anomalies", "wan_official", "wan_enriched", "wan_isp_status", "wan_load_balance", "wan_slas"
+            "lags", "legacy_stat_device", "legacy_stat_health", "legacy_stat_sysinfo", "topology", "port_anomalies", "wan_official", "wan_enriched", "wan_load_balance", "wan_load_balance_config", "wan_slas", "wan_isp_status"
         ])
         self.assertIn("/proxy/network/integration/v1/sites/site-a/devices", calls)
         self.assertIn("/proxy/network/integration/v1/sites/site-a/clients", calls)
         self.assertIn("/proxy/network/integration/v1/sites/site-a/networks", calls)
+        self.assertIn("/proxy/network/v2/api/site/default/topology", calls)
+        self.assertIn("/proxy/network/api/s/default/stat/health", calls)
         self.assertNotIn("/proxy/network/integration/v1/devices", calls)
         self.assertNotIn("/proxy/network/integration/v1/clients", calls)
         self.assertNotIn("/proxy/network/integration/v1/networks", calls)
         telemetry = result["telemetry"]
         self.assertEqual(telemetry["wans"][0]["id"], "wan1")
         self.assertEqual(telemetry["wans"][0]["isp"], "Example ISP")
-        self.assertEqual(telemetry["wans"][0]["link_speed_mbps"], 2500.0)
-        self.assertEqual(telemetry["wans"][0]["latency_ms"], 2.5)
-        self.assertEqual(telemetry["wans"][0]["packet_loss_percent"], 0.0)
+        self.assertEqual(telemetry["wans"][0]["role"], "active")
+        self.assertEqual(telemetry["wans"][0]["asn"], "64500")
+        self.assertEqual(telemetry["wans"][0]["speedtest"]["download_mbps"], 900.0)
+        self.assertNotIn("packet_loss_percent", telemetry["wans"][0])
         self.assertEqual(telemetry["identity"]["model"], "UDW")
         self.assertEqual(telemetry["devices"]["total"], 3)
         self.assertEqual(telemetry["clients"], {"total": 2, "wired": 1, "wireless": 1, "observed": True})
@@ -135,6 +152,25 @@ class UniFiAPITests(unittest.TestCase):
                             for item in telemetry["uplinks"]))
         target_uplink = next(item for item in telemetry["uplinks"] if item.get("name") == "UDW")
         self.assertEqual(target_uplink["speed_mbps"], 2500)
+
+    def test_site_model_keeps_integration_and_internal_namespaces(self):
+        sites = _site_records({"data": [{"id": "uuid-123", "internalReference": "default", "name": "Main"}]})
+        self.assertEqual(sites, [{"id": "uuid-123", "internal_reference": "default", "name": "Main"}])
+        self.assertEqual(_v2_site_path("default", "wan/enriched-configuration"), "/proxy/network/v2/api/site/default/wan/enriched-configuration")
+        self.assertEqual(_legacy_site_path("default", "stat/health"), "/proxy/network/api/s/default/stat/health")
+        self.assertNotIn("uuid-123", _v2_site_path("default", "topology"))
+
+    def test_missing_internal_reference_never_guesses_default(self):
+        sites = _site_records({"data": [{"id": "uuid-123", "name": "Main"}]})
+        self.assertEqual(sites, [{"id": "uuid-123", "name": "Main"}])
+
+    def test_unconfirmed_realtime_sla_fields_are_not_projected(self):
+        merged = _merge_wans({"data": [{"id": "wan1", "latencyMs": 4, "packetLossPercent": 0, "jitterMs": 1, "uptimeSeconds": 5}]})
+        self.assertEqual(merged[0]["role"], "unknown")
+        self.assertNotIn("latency_ms", merged[0])
+        self.assertNotIn("packet_loss_percent", merged[0])
+        self.assertNotIn("jitter_ms", merged[0])
+        self.assertNotIn("uptime_seconds", merged[0])
 
     def test_legacy_target_accepts_exact_external_id_alias(self):
         from unifi_api import _legacy_target
@@ -194,12 +230,16 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(summary["poe_total_source"], "device_reported")
         self.assertEqual(summary["poe_max_power_w"], 420.0)
 
-    def test_wan_merge_keeps_zero_sla_values_and_source_fields(self):
+    def test_wan_merge_preserves_identity_and_historical_speedtest(self):
         result = _merge_wans(
-            {"data": [{"id": "wan1", "name": "Primary", "online": True, "latency_ms": 0, "packet_loss_percent": 0}]},
-            {"data": [{"id": "wan1", "jitter_ms": 0, "link_speed_mbps": 2500, "sla_status": "healthy"}]},
+            {"data": [{"id": "wan1", "name": "Primary", "online": True}]},
+            {"data": [{"id": "wan1", "role": "active", "asn": 64500, "speedtestHistory": [{"timestamp": "2026-01-01T00:00:00Z", "latencyMs": 2.5, "downloadMbps": 900, "uploadMbps": 100}]}]},
         )
-        self.assertEqual(result, [{"id": "wan1", "name": "Primary", "online": True, "latency_ms": 0.0, "packet_loss_percent": 0.0, "jitter_ms": 0.0, "link_speed_mbps": 2500.0, "sla_status": "healthy"}])
+        self.assertEqual(result[0]["name"], "Primary")
+        self.assertEqual(result[0]["role"], "active")
+        self.assertEqual(result[0]["asn"], "64500")
+        self.assertEqual(result[0]["speedtest"]["latency_ms"], 2.5)
+        self.assertNotIn("packet_loss_percent", result[0])
 
     def test_down_port_does_not_emit_rates_or_utilization(self):
         previous = {}
@@ -230,9 +270,10 @@ class UniFiAPITests(unittest.TestCase):
         sites = [{"id": "site-a", "name": "A"}, {"id": "site-b", "name": "B"}]
         self.config.site_id = "site-b"
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls, sites=sites), target_profile="udw").collect()
-        self.assertEqual(result["status"], "partial")
-        self.assertEqual(result["error"]["code"], "api_partial_failure")
+        self.assertEqual(result["status"], "available")
+        self.assertIsNone(result["error"])
         self.assertIn("/proxy/network/integration/v1/sites/site-b/devices", calls)
+        self.assertFalse(any("/proxy/network/v2/api/site/" in path for path in calls))
 
     def test_target_resolution_does_not_depend_on_device_order(self):
         calls = []

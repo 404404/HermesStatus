@@ -110,9 +110,10 @@ func TestUniFiAPITelemetryProjectionAndPartialFailure(t *testing.T) {
 		},
 		Summary: &UniFiAPISummary{Model: unifiString("UDW"), Firmware: unifiString("5.0.1"), ApplicationVersion: unifiString("9.1.2")},
 		Telemetry: &UniFiAPITelemetry{
+			Site:         &UniFiAPISite{IntegrationID: unifiString("uuid-1"), InternalReference: unifiString("default"), Name: unifiString("Main")},
 			Identity:     &UniFiAPIIdentity{Model: unifiString("UDW"), DisplayName: unifiString("Gateway"), Firmware: unifiString("5.0.1"), Status: unifiString("online"), UptimeSeconds: unifiFloat(1234)},
 			Controller:   &UniFiAPIController{ApplicationVersion: unifiString("9.1.2"), Build: unifiString("build-1"), UpdateAvailable: func() *bool { value := false; return &value }(), State: unifiString("healthy")},
-			WANs:         []UniFiAPIWAN{{ID: unifiString("wan1"), Name: unifiString("WAN1"), Interface: unifiString("eth0"), ISP: unifiString("Example ISP"), LinkState: unifiString("up"), Online: func() *bool { value := true; return &value }(), LatencyMs: unifiFloat(0), PacketLossPercent: unifiFloat(0), RxBPS: unifiInt64(0), TxBPS: unifiInt64(123)}},
+			WANs:         []UniFiAPIWAN{{ID: unifiString("wan1"), NetworkGroup: unifiString("wan"), Role: unifiString("active"), ASN: unifiString("64500"), Name: unifiString("WAN1"), Interface: unifiString("eth0"), ISP: unifiString("Example ISP"), LinkState: unifiString("up"), Online: func() *bool { value := true; return &value }(), Speedtest: &UniFiAPISpeedtest{Observed: true, Timestamp: unifiString(now), LatencyMs: unifiFloat(2.5), DownloadMbps: unifiFloat(900), UploadMbps: unifiFloat(100)}, RxBPS: unifiInt64(0), TxBPS: unifiInt64(123)}},
 			Uplinks:      []UniFiAPIUplink{{Name: unifiString("eth0"), LinkState: unifiString("up"), SpeedMbps: unifiFloat(1000)}},
 			Temperatures: []UniFiAPITemperature{{ID: "cpu", Label: "CPU", Celsius: 64.5, Source: "unifi-api"}},
 			Clients:      &UniFiAPIClientSummary{Total: 2, Wired: unifiInt(1), Wireless: unifiInt(1), Observed: true},
@@ -131,7 +132,7 @@ func TestUniFiAPITelemetryProjectionAndPartialFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("API telemetry round trip rejected: %v", err)
 	}
-	if decoded.API == nil || decoded.API.Telemetry == nil || decoded.API.Telemetry.WANs[0].LatencyMs == nil || *decoded.API.Telemetry.WANs[0].LatencyMs != 0 {
+	if decoded.API == nil || decoded.API.Telemetry == nil || decoded.API.Telemetry.Site == nil || decoded.API.Telemetry.WANs[0].Speedtest == nil || *decoded.API.Telemetry.WANs[0].Speedtest.DownloadMbps != 900 {
 		t.Fatalf("API telemetry was not preserved: %#v", decoded.API)
 	}
 

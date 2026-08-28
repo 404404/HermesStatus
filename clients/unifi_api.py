@@ -27,7 +27,10 @@ WAN_ENDPOINTS = (
     ("wan_enriched", "supplemental_v2"),
     ("wan_isp_status", "supplemental_v2"),
     ("wan_load_balance", "supplemental_v2"),
+    ("wan_load_balance_config", "supplemental_v2"),
     ("wan_slas", "supplemental_v2"),
+    ("legacy_stat_health", "legacy"),
+    ("legacy_stat_sysinfo", "legacy"),
 )
 REQUIRED_ENDPOINTS = frozenset({"info", "sites", "devices", "device_detail"})
 SITE_RESOURCE_LIMIT = 32
@@ -71,6 +74,7 @@ def _safe_error(code: str):
         "api_site_ambiguity": "UniFi API site selection is ambiguous",
         "api_site_not_found": "UniFi API site selection found no match",
         "api_target_resolution": "UniFi API target device could not be resolved",
+        "api_site_reference_missing": "UniFi site internal reference is unavailable",
     }
     return {
         "code": code,
@@ -319,6 +323,15 @@ def _site_path(site_id, resource, device_id=None, suffix=None):
     return "/".join(parts)
 
 
+def _v2_site_path(internal_reference, resource):
+    """Build a v2 path only from the controller internalReference."""
+    return "/proxy/network/v2/api/site/{}/{}".format(quote(internal_reference, safe=""), resource)
+
+
+def _legacy_site_path(internal_reference, resource):
+    return "/proxy/network/api/s/{}/{}".format(quote(internal_reference, safe=""), resource)
+
+
 def _nested_records(mapping, *keys):
     if not isinstance(mapping, dict):
         return []
@@ -476,13 +489,73 @@ def _temperature_records(devices):
     return result
 
 
+def _timestamp_value(value):
+    text = _text(value)
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return text
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.isoformat()
+
+
+def _speedtest_record(item):
+    """Reduce one qualified historical speed-test result to typed fields."""
+    if not isinstance(item, dict):
+        return None
+    source = item
+    for key in ("speedtest", "speed_test", "latest_speedtest", "latestSpeedtest", "result"):
+        child = item.get(key)
+        if isinstance(child, dict):
+            source = child
+            break
+    timestamp = _timestamp_value(_first(source, "timestamp", "tested_at", "testedAt", "created_at", "createdAt", "time"))
+    result = {}
+    if timestamp:
+        result["timestamp"] = timestamp
+    for output, keys, minimum in (
+        ("latency_ms", ("latency_ms", "latencyMs", "latency", "round_trip_ms", "roundTripMs"), 0),
+        ("download_mbps", ("download_mbps", "downloadMbps", "download", "down_mbps"), 0),
+        ("upload_mbps", ("upload_mbps", "uploadMbps", "upload", "up_mbps"), 0),
+    ):
+        value = _decimal(_first(source, *keys), minimum=minimum)
+        if value is not None:
+            result[output] = value
+    if result:
+        result["observed"] = True
+    return result or None
+
+
+def _latest_speedtest(item):
+    if not isinstance(item, dict):
+        return None
+    candidates = []
+    for key in ("speedtest_history", "speedtestHistory", "speedtests", "history", "historical"):
+        value = item.get(key)
+        if isinstance(value, list):
+            candidates.extend(value[:MAX_API_ITEMS])
+        elif isinstance(value, dict):
+            candidates.append(value)
+    direct = _speedtest_record(item)
+    if direct:
+        candidates.append(direct)
+    records = [record for record in (_speedtest_record(value) for value in candidates) if record]
+    if not records:
+        return None
+    with_timestamp = [record for record in records if record.get("timestamp")]
+    if with_timestamp:
+        return max(with_timestamp, key=lambda record: record["timestamp"])
+    return records[-1]
+
+
 def _wan_record(item):
     if not isinstance(item, dict):
         return None
-    # Official responses and statistics may nest link/health/traffic fields
-    # one level below the WAN record. Flatten only reviewed object keys so the
-    # projection remains bounded and typed; arbitrary payload keys are never
-    # emitted.
+    # Flatten only reviewed one-level status/link objects; no raw payload is
+    # ever copied into the Device v2 projection.
     source = dict(item)
     for nested_name in ("link", "status", "health", "metrics", "statistics", "performance", "uplink"):
         nested = item.get(nested_name)
@@ -494,73 +567,107 @@ def _wan_record(item):
         ("id", ("id", "wan_id", "wanId", "interface_id", "interfaceId")),
         ("name", ("name", "display_name", "displayName", "label")),
         ("interface", ("interface", "interface_name", "interfaceName", "ifname", "interface_id", "interfaceId")),
-        ("isp", ("isp", "provider", "provider_name", "providerName", "carrier", "vendor")),
-        ("link_state", ("link_state", "linkState", "link_status", "linkStatus", "state", "status", "connection_state", "connectionState")),
+        ("network_group", ("network_group", "networkGroup", "networkgroup", "wan_networkgroup", "wanNetworkgroup")),
+        ("isp", ("isp", "isp_name", "ispName", "provider", "provider_name", "providerName", "carrier", "vendor", "isp_organization")),
+        ("asn", ("asn", "isp_asn", "ispAsn", "autonomous_system", "autonomousSystem")),
+        ("link_state", ("link_state", "linkState", "link_status", "linkStatus", "state", "status", "connection_state", "connectionState", "alive")),
         ("gateway", ("gateway", "gateway_name", "gatewayName", "gateway_address", "gatewayAddress")),
-        ("sla_status", ("sla_status", "slaStatus", "health", "health_status", "healthStatus")),
+        ("sla_status", ("sla_status", "slaStatus", "health_status", "healthStatus")),
         ("failover_state", ("failover_state", "failoverState")),
         ("load_balancing_state", ("load_balancing_state", "loadBalancingState")),
     ):
-        value = _text(_first(source, *keys))
+        value = _first(source, *keys)
+        if output == "link_state" and isinstance(value, bool):
+            value = "up" if value else "down"
+        if output == "asn" and isinstance(value, (int, float)) and not isinstance(value, bool):
+            value = str(int(value)) if float(value).is_integer() else str(value)
+        value = _text(value)
         if value:
             result[output] = value
+    role = _text(_first(source, "role", "wan_role", "wanRole", "failover_role", "failoverRole"))
+    if role:
+        role_token = role.casefold()
+        result["role"] = "active" if role_token in {"active", "primary", "main", "master", "preferred"} else "backup" if role_token in {"backup", "standby", "secondary", "failover"} else "unknown"
+    else:
+        active = _boolean(_first(source, "active", "is_active", "isActive"))
+        standby = _boolean(_first(source, "standby", "is_standby", "isStandby"))
+        if active is True:
+            result["role"] = "active"
+        elif standby is True:
+            result["role"] = "backup"
     for output, keys in (
-        ("online", ("online", "is_online", "isOnline", "connected")),
+        ("online", ("online", "is_online", "isOnline", "connected", "alive")),
         ("active", ("active", "is_active", "isActive")),
         ("standby", ("standby", "is_standby", "isStandby")),
     ):
         value = _boolean(_first(source, *keys))
         if value is not None:
             result[output] = value
-    for output, keys, integer in (
-        ("uptime_seconds", ("uptime_seconds", "uptimeSeconds", "uptime"), False),
-        ("downtime_seconds", ("downtime_seconds", "downtimeSeconds", "downtime"), False),
-        ("latency_ms", ("latency_ms", "latencyMs", "latency", "round_trip_ms", "roundTripMs"), False),
-        ("packet_loss_percent", ("packet_loss_percent", "packetLossPercent", "packet_loss", "loss_percent", "lossPercent"), False),
-        ("jitter_ms", ("jitter_ms", "jitterMs", "jitter"), False),
-        ("link_speed_mbps", ("link_speed_mbps", "linkSpeedMbps", "speed_mbps", "speedMbps", "speed"), False),
-        ("rx_bps", ("rx_bps", "rxBps", "download_bps", "downloadBps", "rx_rate_bps", "rxRateBps"), True),
-        ("tx_bps", ("tx_bps", "txBps", "upload_bps", "uploadBps", "tx_rate_bps", "txRateBps"), True),
-        ("rx_bytes", ("rx_bytes", "rxBytes", "download_bytes", "downloadBytes"), True),
-        ("tx_bytes", ("tx_bytes", "txBytes", "upload_bytes", "uploadBytes"), True),
-        ("configured_upstream_bps", ("configured_upstream_bps", "upstream_bps", "upstreamBps"), True),
-        ("configured_downstream_bps", ("configured_downstream_bps", "downstream_bps", "downstreamBps"), True),
-    ):
-        value = _number(_first(source, *keys), integer=integer)
-        if value is not None:
-            result[output] = value
+    # Link speed is retained only when an explicit numeric field is present;
+    # no conversion from an unqualified bandwidth string is attempted.
+    speed = _number(_first(source, "link_speed_mbps", "linkSpeedMbps", "speed_mbps", "speedMbps"), minimum=0)
+    if speed is not None:
+        result["link_speed_mbps"] = speed
+    speedtest = _latest_speedtest(item)
+    if speedtest:
+        result["speedtest"] = speedtest
     if not result:
         return None
     return result
 
 
-def _statistics_wans(payload):
-    """Extract only explicitly WAN-named records from latest statistics."""
+def _known_wan_records(payload, depth=0):
+    if depth > 3:
+        return []
+    if isinstance(payload, list):
+        result = []
+        nested_keys = {"wans", "wan", "wan_interfaces", "wanInterfaces", "wan_status", "wanStatus", "interfaces", "items", "results", "data", "records"}
+        for value in payload[:MAX_API_ITEMS]:
+            if not isinstance(value, dict):
+                continue
+            children = []
+            for key in nested_keys.intersection(value):
+                child = value.get(key)
+                if isinstance(child, (dict, list)):
+                    children.extend(_known_wan_records(child, 1))
+            result.extend(children or [value])
+        return result[:MAX_API_WANS]
     if not isinstance(payload, dict):
         return []
-    records = []
-    for key in ("wans", "wan", "wan_interfaces", "wanInterfaces", "wan_status", "wanStatus"):
+    result = []
+    known = ("wans", "wan", "wan_interfaces", "wanInterfaces", "wan_status", "wanStatus", "interfaces", "items", "results", "data", "records", "history", "speedtest_history", "speedtestHistory")
+    for key in known:
         value = payload.get(key)
         if isinstance(value, list):
-            records.extend(item for item in value[:MAX_API_WANS] if isinstance(item, dict))
+            result.extend(_known_wan_records(value, depth + 1))
         elif isinstance(value, dict):
-            records.append(value)
-    return records[:MAX_API_WANS]
+            result.extend(_known_wan_records(value, depth + 1))
+    if not result:
+        # Some controller responses are keyed by WAN/network-group name.
+        # Accept only child objects carrying reviewed WAN markers.
+        markers = {"id", "name", "network_group", "networkGroup", "interface", "state", "status", "role", "isp", "asn", "speedtest"}
+        for value in list(payload.values())[:MAX_API_ITEMS]:
+            if isinstance(value, dict) and markers.intersection(value):
+                result.append(value)
+    return result[:MAX_API_WANS]
+
+
+def _statistics_wans(payload):
+    """Extract only explicitly WAN-named records from reviewed statistics."""
+    records = _known_wan_records(payload)
+    if records:
+        return records[:MAX_API_WANS]
+    return []
 
 
 def _wan_items(payload):
+    records = _known_wan_records(payload)
+    if records:
+        return records
     if isinstance(payload, dict):
         direct = _wan_record(payload)
         if direct:
             return [payload]
-        for key in ("wans", "wan", "interfaces", "items", "results", "data"):
-            value = payload.get(key)
-            if isinstance(value, dict):
-                nested = _wan_items(value)
-                if nested:
-                    return nested
-            elif isinstance(value, list):
-                return [item for item in value[:MAX_API_WANS] if isinstance(item, dict)]
     return [item for item in _items(payload)[:MAX_API_WANS] if isinstance(item, dict)]
 
 
@@ -569,18 +676,38 @@ def _merge_wans(*payloads):
     for payload in payloads:
         candidates = payload if isinstance(payload, list) else [payload]
         for candidate in candidates:
-            items = _wan_items(candidate)
-            for item in items:
+            for item in _wan_items(candidate):
                 record = _wan_record(item)
                 if not record:
                     continue
-                key = record.get("id") or record.get("interface") or record.get("name")
+                aliases = {str(record.get(field)).casefold() for field in ("id", "network_group", "interface", "name") if record.get(field)}
+                key = next((existing for existing, current in merged.items() if aliases.intersection({str(current.get(field)).casefold() for field in ("id", "network_group", "interface", "name") if current.get(field)})), None)
+                if key is None:
+                    key = record.get("id") or record.get("network_group") or record.get("interface") or record.get("name")
                 if not key:
                     continue
                 current = merged.setdefault(key, {})
-                current.update(record)
+                # Identity is supplied by Integration /wans; supplemental
+                # sources may only fill gaps, while live state can refresh.
+                for field, value in record.items():
+                    if field in {"id", "name", "interface", "network_group"}:
+                        current.setdefault(field, value)
+                    else:
+                        current[field] = value
+    for current in merged.values():
+        current.setdefault("role", "unknown")
     return list(merged.values())[:MAX_API_WANS] or None
 
+
+def _network_groups(payload):
+    result = []
+    for item in _known_wan_records(payload):
+        value = _identifier(_first(item, "network_group", "networkGroup", "networkgroup", "wan_networkgroup", "wanNetworkgroup", "id", "name"))
+        if value and value not in result:
+            result.append(value)
+        if len(result) >= MAX_API_WANS:
+            break
+    return result
 
 def _detail_link_speed(target_detail):
     """Return the highest observed target port speed, if the API exposes it."""
@@ -637,7 +764,7 @@ def _wans_and_uplinks(devices, target_detail=None, extra_wans=None):
                     uplink["speed_mbps"] = speed
                 if uplink:
                     uplinks.append(uplink)
-    return (_merge_wans(wans, extra_wans) if extra_wans else (wans or None)), uplinks or None
+    return (_merge_wans(extra_wans, wans) if extra_wans else (wans or None)), uplinks or None
 
 
 def _legacy_target(payload, target):
@@ -921,10 +1048,15 @@ def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sampl
     identity = _identity(info, devices, target_detail or target)
     controller = _controller(info, target_detail or target)
     extra_wans = [payloads.get(name) for name, _ in WAN_ENDPOINTS if payloads.get(name) is not None]
-    extra_wans.append(_statistics_wans(payloads.get("device_stats")))
+    extra_wans.extend((_statistics_wans(payloads.get("device_stats")), _statistics_wans(payloads.get("legacy_stat_health")), _statistics_wans(payloads.get("legacy_stat_sysinfo")), _statistics_wans(payloads.get("legacy_stat_device"))))
     wans, uplinks = _wans_and_uplinks(devices, target_detail, extra_wans)
     ports, port_summary = _ports(payloads.get("legacy_stat_device"), target, previous_samples if previous_samples is not None else {}, sample_time if sample_time is not None else time.monotonic(), target_detail=target_detail) if target is not None and payloads.get("legacy_stat_device") is not None else (None, None)
+    site_model = None
+    if isinstance(site, dict):
+        site_model = {"integration_id": site.get("id"), "internal_reference": site.get("internal_reference"), "name": site.get("name")}
+        site_model = {key: value for key, value in site_model.items() if value}
     telemetry = {
+        "site": site_model,
         "identity": identity,
         "controller": controller,
         "wans": wans,
@@ -1032,6 +1164,36 @@ class UniFiAPICollector:
             payloads[name] = payload
             return payload
 
+        def call_many(name, paths, *, required=False):
+            successes = []
+            errors = []
+            for path in paths[:MAX_API_WANS]:
+                try:
+                    payload, status = self._request(self.config, path, key)
+                    successes.append(payload)
+                except APIError as exc:
+                    error = _safe_error(exc.code)
+                    if exc.status is not None:
+                        error["http_status"] = exc.status
+                    errors.append(error)
+            if successes and not errors:
+                endpoint_results.append({"name": name, "status": "ok", "http_status": 200, "error": None})
+                payloads[name] = successes
+                return successes
+            if successes and errors:
+                error = _safe_error("api_partial_failure")
+                endpoint_results.append({"name": name, "status": "error", "http_status": None, "error": error})
+                payloads[name] = successes
+                failures.append((name, error, required))
+                failure_details[name] = error
+                return successes
+            if errors:
+                error = errors[0]
+                endpoint_results.append({"name": name, "status": "unsupported" if error.get("http_status") == 404 else "error", "http_status": error.get("http_status"), "error": error})
+                failures.append((name, error, required))
+                failure_details[name] = error
+            return None
+
         for name, path in API_ENDPOINTS:
             call(name, path, required=True)
 
@@ -1078,18 +1240,22 @@ class UniFiAPICollector:
                     call("clients", _site_path(site_id, "clients"), required=False)
                     call("networks", _site_path(site_id, "networks"), required=False)
                     internal_reference = _identifier(selected_site.get("internal_reference"))
-                    if internal_reference:
-                        call("legacy_stat_device", f"/proxy/network/api/s/{quote(internal_reference, safe='')}/stat/device", required=False)
                     call("lags", _site_path(site_id, "switching/lags"), required=False)
-                    call("topology", f"/proxy/network/v2/api/site/{quote(site_id, safe='')}/topology", required=False)
-                    call("port_anomalies", f"/proxy/network/v2/api/site/{quote(site_id, safe='')}/ports/port-anomalies", required=False)
-                    internal_site = quote(site_id, safe="")
-                    network_group = quote(str(selected_site.get("internal_reference") or site_id), safe="")
-                    call("wan_official", f"/proxy/network/integration/v1/sites/{internal_site}/wans", required=False)
-                    call("wan_enriched", f"/proxy/network/v2/api/site/{internal_site}/wan/enriched-configuration", required=False)
-                    call("wan_isp_status", f"/proxy/network/v2/api/site/{internal_site}/wan/{network_group}/isp-status", required=False)
-                    call("wan_load_balance", f"/proxy/network/v2/api/site/{internal_site}/wan/load-balancing/status", required=False)
-                    call("wan_slas", f"/proxy/network/v2/api/site/{internal_site}/wan-slas", required=False)
+                    if internal_reference:
+                        call("legacy_stat_device", _legacy_site_path(internal_reference, "stat/device"), required=False)
+                        call("legacy_stat_health", _legacy_site_path(internal_reference, "stat/health"), required=False)
+                        call("legacy_stat_sysinfo", _legacy_site_path(internal_reference, "stat/sysinfo"), required=False)
+                        call("topology", _v2_site_path(internal_reference, "topology"), required=False)
+                        call("port_anomalies", _v2_site_path(internal_reference, "ports/port-anomalies"), required=False)
+                    call("wan_official", _site_path(site_id, "wans"), required=False)
+                    if internal_reference:
+                        call("wan_enriched", _v2_site_path(internal_reference, "wan/enriched-configuration"), required=False)
+                        call("wan_load_balance", _v2_site_path(internal_reference, "wan/load-balancing/status"), required=False)
+                        call("wan_load_balance_config", _v2_site_path(internal_reference, "wan/load-balancing/configuration"), required=False)
+                        call("wan_slas", _v2_site_path(internal_reference, "wan-slas"), required=False)
+                        groups = _network_groups(payloads.get("wan_enriched"))
+                        if groups:
+                            call_many("wan_isp_status", [_v2_site_path(internal_reference, f"wan/{quote(group, safe='')}/isp-status") for group in groups])
 
         summary = _summary("info", payloads.get("info")) if "info" in payloads else None
         telemetry = _telemetry(payloads, site=selected_site, target=target, previous_samples=self._port_samples, sample_time=time.monotonic())

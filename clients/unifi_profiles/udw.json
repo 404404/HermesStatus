@@ -63,7 +63,8 @@
   "power": {
     "psu_slots": 2,
     "presence": "dynamic",
-    "sensor_mapping": "unknown"
+    "sensor_mapping": "unknown",
+    "max_power_w": 550
   },
   "storage": {
     "nvme": {
@@ -89,5 +90,23 @@
     "optional_diagnostics_affect_health": false,
     "zero_rpm_is_failure_when_present": false
   },
-  "cpu_model": "Annapurna AL324"
+  "cpu_model": "Annapurna AL324",
+  "poe": {
+    "supported": true,
+    "total_max_power_w": 420,
+    "port_max_power_w": {
+      "1": 15.4,
+      "2": 15.4,
+      "3": 15.4,
+      "4": 15.4,
+      "5": 30,
+      "6": 30,
+      "7": 30,
+      "8": 30,
+      "9": 60,
+      "10": 60,
+      "11": 60,
+      "12": 60
+    }
+  }
 }

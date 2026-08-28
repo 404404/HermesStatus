@@ -6,7 +6,7 @@ from unifi_source_registry import KNOWN_SOURCES, CORE_SOURCES
 PRESENCE = {"present", "not_populated", "unknown", "dynamic"}
 STORAGE_CAPABILITIES = {"nvme", "sata_ssd", "tf"}
 REQUIRED_ROOT_KEYS = {"schema_version", "profile_id", "platform", "generic", "diagnostics", "fans", "power", "storage", "health_policy"}
-OPTIONAL_ROOT_KEYS = {"cpu_model"}
+OPTIONAL_ROOT_KEYS = {"cpu_model", "poe"}
 GENERIC_KEYS = {"cpu_temperature", "cpu_usage", "memory", "uptime", "load_average"}
 
 class ProfileError(ValueError):
@@ -33,6 +33,25 @@ def validate_profile(profile):
         raise ProfileError("unknown platform")
     if "cpu_model" in profile and (not isinstance(profile["cpu_model"], str) or not profile["cpu_model"].strip() or len(profile["cpu_model"]) > 128):
         raise ProfileError("invalid cpu_model")
+    if "poe" in profile:
+        poe = profile["poe"]
+        if not isinstance(poe, dict) or set(poe) != {"supported", "total_max_power_w", "port_max_power_w"}:
+            raise ProfileError("invalid poe")
+        if not isinstance(poe["supported"], bool):
+            raise ProfileError("invalid poe supported")
+        total = poe["total_max_power_w"]
+        if total is not None and (isinstance(total, bool) or not isinstance(total, (int, float)) or total <= 0):
+            raise ProfileError("invalid poe total_max_power_w")
+        ports = poe["port_max_power_w"]
+        if not isinstance(ports, dict) or len(ports) > 64:
+            raise ProfileError("invalid poe port_max_power_w")
+        for port, maximum in ports.items():
+            if not isinstance(port, str) or not port.isdigit() or not 1 <= int(port) <= 65535:
+                raise ProfileError("invalid poe port id")
+            if isinstance(maximum, bool) or not isinstance(maximum, (int, float)) or maximum <= 0:
+                raise ProfileError("invalid poe port_max_power_w")
+        if not poe["supported"] and (total is not None or ports):
+            raise ProfileError("unsupported poe cannot define power limits")
     generic = profile["generic"]
     if not isinstance(generic, dict) or set(generic) != GENERIC_KEYS:
         raise ProfileError("invalid generic fields")
@@ -62,8 +81,11 @@ def validate_profile(profile):
         if not isinstance(fan["supported"], bool) or fan["present"] not in PRESENCE:
             raise ProfileError("invalid fan capability")
     power = profile["power"]
-    if not isinstance(power, dict) or set(power) != {"psu_slots", "presence", "sensor_mapping"} or not isinstance(power["psu_slots"], int) or power["psu_slots"] < 0 or power["presence"] not in PRESENCE or power["sensor_mapping"] not in {"unknown"}:
+    if not isinstance(power, dict) or not {"psu_slots", "presence", "sensor_mapping"} <= set(power) or set(power) - {"psu_slots", "presence", "sensor_mapping", "max_power_w"} or not isinstance(power["psu_slots"], int) or power["psu_slots"] < 0 or power["presence"] not in PRESENCE or power["sensor_mapping"] not in {"unknown"}:
         raise ProfileError("invalid power")
+    max_power = power.get("max_power_w")
+    if max_power is not None and (isinstance(max_power, bool) or not isinstance(max_power, (int, float)) or max_power <= 0):
+        raise ProfileError("invalid power max_power_w")
     storage = profile["storage"]
     if not isinstance(storage, dict) or set(storage) != STORAGE_CAPABILITIES:
         raise ProfileError("invalid storage")

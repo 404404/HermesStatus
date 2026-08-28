@@ -677,6 +677,26 @@
       },
       "additionalProperties": false
     },
+    "apiSite": {
+      "type": "object",
+      "properties": {
+        "integration_id": {"type": ["string", "null"], "maxLength": 128},
+        "internal_reference": {"type": ["string", "null"], "maxLength": 128},
+        "name": {"type": ["string", "null"], "maxLength": 128}
+      },
+      "additionalProperties": false
+    },
+    "apiSpeedtest": {
+      "type": "object",
+      "properties": {
+        "observed": {"type": "boolean"},
+        "timestamp": {"type": ["string", "null"], "maxLength": 128},
+        "latency_ms": {"$ref": "#/$defs/nullableNumber"},
+        "download_mbps": {"$ref": "#/$defs/nullableNumber"},
+        "upload_mbps": {"$ref": "#/$defs/nullableNumber"}
+      },
+      "additionalProperties": false
+    },
     "apiWan": {
       "type": "object",
       "properties": {
@@ -687,6 +707,9 @@
           ],
           "maxLength": 128
         },
+        "network_group": {"type": ["string", "null"], "maxLength": 128},
+        "role": {"type": "string", "enum": ["active", "backup", "unknown"]},
+        "asn": {"type": ["string", "null"], "maxLength": 128},
         "name": {
           "type": [
             "string",
@@ -781,7 +804,8 @@
             "null"
           ],
           "maxLength": 128
-        }
+        },
+        "speedtest": {"anyOf": [{"$ref": "#/$defs/apiSpeedtest"}, {"type": "null"}]}
       },
       "additionalProperties": false
     },
@@ -947,6 +971,7 @@
         "networks"
       ],
       "properties": {
+        "site": {"anyOf": [{"$ref": "#/$defs/apiSite"}, {"type": "null"}]},
         "identity": {
           "anyOf": [
             {

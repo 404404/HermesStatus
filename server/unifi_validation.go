@@ -129,7 +129,7 @@ func validateUniFiAPI(value *UniFiAPIStats) error {
 	if value.Status == "disabled" || len(value.Endpoints) > MaxUniFiAPIEndpoints {
 		return validationError(validationCodeInvalidValue, "unifi.api", "enabled API state is invalid")
 	}
-	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "clients": true, "networks": true, "legacy_stat_device": true, "lags": true, "topology": true, "port_anomalies": true, "wan_official": true, "wan_enriched": true, "wan_isp_status": true, "wan_load_balance": true, "wan_slas": true}
+	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "clients": true, "networks": true, "legacy_stat_device": true, "lags": true, "topology": true, "port_anomalies": true, "wan_official": true, "wan_enriched": true, "wan_isp_status": true, "wan_load_balance": true, "wan_load_balance_config": true, "wan_slas": true, "legacy_stat_health": true, "legacy_stat_sysinfo": true}
 	seen := map[string]bool{}
 	okCount, failedCount := 0, 0
 	for _, endpoint := range value.Endpoints {
@@ -193,6 +193,13 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 	if value == nil {
 		return nil
 	}
+	if value.Site != nil {
+		for field, item := range map[string]*string{"integration_id": value.Site.IntegrationID, "internal_reference": value.Site.InternalReference, "name": value.Site.Name} {
+			if err := validateOptionalString("unifi.api.telemetry.site."+field, item, MaxUniFiTextLength); err != nil {
+				return err
+			}
+		}
+	}
 	if value.Identity != nil {
 		for field, item := range map[string]*string{"model": value.Identity.Model, "display_name": value.Identity.DisplayName, "firmware": value.Identity.Firmware, "status": value.Identity.Status} {
 			if err := validateOptionalString("unifi.api.telemetry.identity."+field, item, MaxUniFiTextLength); err != nil {
@@ -215,10 +222,13 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 	}
 	for index, item := range value.WANs {
 		prefix := "unifi.api.telemetry.wans[" + strconv.Itoa(index) + "]"
-		for field, text := range map[string]*string{"id": item.ID, "name": item.Name, "interface": item.Interface, "isp": item.ISP, "link_state": item.LinkState, "gateway": item.Gateway, "sla_status": item.SLAStatus, "failover_state": item.FailoverState, "load_balancing_state": item.LoadBalancingState} {
+		for field, text := range map[string]*string{"id": item.ID, "network_group": item.NetworkGroup, "role": item.Role, "asn": item.ASN, "name": item.Name, "interface": item.Interface, "isp": item.ISP, "link_state": item.LinkState, "gateway": item.Gateway, "sla_status": item.SLAStatus, "failover_state": item.FailoverState, "load_balancing_state": item.LoadBalancingState} {
 			if err := validateOptionalString(prefix+"."+field, text, MaxUniFiTextLength); err != nil {
 				return err
 			}
+		}
+		if item.Role != nil && *item.Role != "active" && *item.Role != "backup" && *item.Role != "unknown" {
+			return validationError(validationCodeInvalidValue, prefix+".role", "is invalid")
 		}
 		for field, number := range map[string]*float64{"uptime_seconds": item.UptimeSeconds, "downtime_seconds": item.DowntimeSeconds, "latency_ms": item.LatencyMs, "packet_loss_percent": item.PacketLossPercent, "jitter_ms": item.JitterMs, "link_speed_mbps": item.LinkSpeedMbps} {
 			if err := validateOptionalFloat(prefix+"."+field, number, float64(MaxSafeInteger)); err != nil {
@@ -228,6 +238,16 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 		for field, number := range map[string]*int64{"rx_bps": item.RxBPS, "tx_bps": item.TxBPS, "rx_bytes": item.RxBytes, "tx_bytes": item.TxBytes, "configured_upstream_bps": item.ConfiguredUpstreamBPS, "configured_downstream_bps": item.ConfiguredDownstreamBPS} {
 			if err := validateCounter(prefix+"."+field, number, MaxSafeInteger); err != nil {
 				return err
+			}
+		}
+		if item.Speedtest != nil {
+			if err := validateDateTime(prefix+".speedtest.timestamp", item.Speedtest.Timestamp, true); err != nil {
+				return err
+			}
+			for field, number := range map[string]*float64{"latency_ms": item.Speedtest.LatencyMs, "download_mbps": item.Speedtest.DownloadMbps, "upload_mbps": item.Speedtest.UploadMbps} {
+				if err := validateOptionalFloat(prefix+".speedtest."+field, number, float64(MaxSafeInteger)); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -600,6 +620,13 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 		return nil
 	}
 	result := *input
+	if input.Site != nil {
+		site := *input.Site
+		site.IntegrationID = sanitizeStringPointer(site.IntegrationID)
+		site.InternalReference = sanitizeStringPointer(site.InternalReference)
+		site.Name = sanitizeStringPointer(site.Name)
+		result.Site = &site
+	}
 	if input.Identity != nil {
 		identity := *input.Identity
 		identity.Model = sanitizeStringPointer(identity.Model)
@@ -622,6 +649,9 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 	for index := range result.WANs {
 		item := &result.WANs[index]
 		item.ID = sanitizeStringPointer(item.ID)
+		item.NetworkGroup = sanitizeStringPointer(item.NetworkGroup)
+		item.Role = sanitizeStringPointer(item.Role)
+		item.ASN = sanitizeStringPointer(item.ASN)
 		item.Name = sanitizeStringPointer(item.Name)
 		item.Interface = sanitizeStringPointer(item.Interface)
 		item.ISP = sanitizeStringPointer(item.ISP)
@@ -630,6 +660,11 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 		item.SLAStatus = sanitizeStringPointer(item.SLAStatus)
 		item.FailoverState = sanitizeStringPointer(item.FailoverState)
 		item.LoadBalancingState = sanitizeStringPointer(item.LoadBalancingState)
+		if item.Speedtest != nil {
+			speedtest := *item.Speedtest
+			speedtest.Timestamp = sanitizeStringPointer(speedtest.Timestamp)
+			item.Speedtest = &speedtest
+		}
 	}
 	result.Uplinks = append([]UniFiAPIUplink(nil), input.Uplinks...)
 	if input.Uplinks != nil && result.Uplinks == nil {

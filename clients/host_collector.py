@@ -1990,7 +1990,15 @@ class HostExtensionCollector(object):
         unifi_collector=None,
         unifi_interval=None,
         unifi_clock=None,
+        hardware_enabled=True,
+        filesystem_enabled=True,
+        docker_enabled=True,
+        hermes_enabled=True,
     ):
+        self.hardware_enabled = bool(hardware_enabled)
+        self.filesystem_enabled = bool(filesystem_enabled)
+        self.docker_enabled = bool(docker_enabled)
+        self.hermes_enabled = bool(hermes_enabled)
         self.host_os_release_file = host_os_release_file or os.getenv(
             "HOST_OS_RELEASE_FILE", "/host/etc/os-release"
         )
@@ -2084,6 +2092,10 @@ class HostExtensionCollector(object):
                 pass
 
     def collect_hardware_once(self):
+        if not self.hardware_enabled:
+            payload = not_reported_hardware()
+            self._store("hardware", payload)
+            return payload
         try:
             payload = collect_hardware(
                 self.cpu_model,
@@ -2093,7 +2105,7 @@ class HostExtensionCollector(object):
                 command_runner=self.command_runner,
                 smart_devices=self.smart_devices,
                 primary_smart_device=self.primary_smart_device,
-                filesystem_probes=self.filesystem_probes,
+                filesystem_probes=self.filesystem_probes if self.filesystem_enabled else [],
                 system_identity=self.system_identity,
                 sys_block_root=self.sys_block_root,
                 cpu_details=self.cpu_details,
@@ -2110,6 +2122,10 @@ class HostExtensionCollector(object):
         return payload
 
     def collect_docker_once(self):
+        if not self.docker_enabled:
+            payload = not_reported_docker()
+            self._store("docker", payload)
+            return payload
         try:
             payload = collect_docker(
                 self.docker_socket,
@@ -2128,6 +2144,10 @@ class HostExtensionCollector(object):
         return payload
 
     def collect_hermes_once(self):
+        if not self.hermes_enabled:
+            payload = not_reported_hermes()
+            self._store("hermes", payload)
+            return payload
         payload = read_hermes_snapshot(self.hermes_status_file, self.hermes_export_enabled)
         self._store("hermes", payload)
         return payload
@@ -2214,13 +2234,18 @@ class HostExtensionCollector(object):
         if self._started:
             return
         self._started = True
-        tasks = (
-            (self.collect_hardware_once, self.hardware_interval, "hardware-collector"),
-            (self.collect_docker_once, self.docker_interval, "docker-collector"),
-            (self.collect_hermes_once, self.hermes_snapshot_interval, "hermes-snapshot-reader"),
+        tasks = []
+        if self.hardware_enabled:
+            tasks.append((self.collect_hardware_once, self.hardware_interval, "hardware-collector"))
+        if self.docker_enabled:
+            tasks.append((self.collect_docker_once, self.docker_interval, "docker-collector"))
+        if self.hermes_enabled:
+            tasks.append((self.collect_hermes_once, self.hermes_snapshot_interval, "hermes-snapshot-reader"))
+        tasks.extend((
             (self.collect_lucky_once, self.lucky_interval, "lucky-collector"),
             (self.collect_easytier_once, self.easytier_interval, "easytier-collector"),
-        )
+        ))
+        tasks = tuple(tasks)
         unifi_task = (self.collect_unifi_once, self.unifi_interval, "unifi-collector") if self.unifi_collector is not None else None
         # Device v2 can send an update immediately after start(). Populate every
         # independent domain synchronously first so a fresh container never

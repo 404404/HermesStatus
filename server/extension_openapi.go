@@ -545,6 +545,13 @@ func extensionOpenAPISchemas() map[string]any {
 		"firmware":            nullableString(MaxCPUModelLength, "UniFi API firmware"),
 		"application_version": nullableString(MaxCPUModelLength, "UniFi application version"),
 	}, "additionalProperties": false}
+	uniFiAPISite := map[string]any{"type": "object", "properties": map[string]any{
+		"integration_id": nullableString(MaxUniFiTextLength, "Integration site UUID"), "internal_reference": nullableString(MaxUniFiTextLength, "Controller internal site reference"), "name": nullableString(MaxUniFiTextLength, "UniFi site name"),
+	}, "additionalProperties": false}
+	uniFiAPISpeedtest := map[string]any{"type": "object", "properties": map[string]any{
+		"observed": map[string]any{"type": "boolean"}, "timestamp": nullableString(MaxTimestampLength, "Latest historical speed-test timestamp"),
+		"latency_ms": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "download_mbps": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "upload_mbps": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+	}, "additionalProperties": false}
 	uniFiAPIIdentity := map[string]any{"type": "object", "properties": map[string]any{
 		"model": nullableString(MaxUniFiTextLength, "UniFi API device model"), "display_name": nullableString(MaxUniFiTextLength, "UniFi API display name"),
 		"firmware": nullableString(MaxUniFiTextLength, "UniFi API firmware"), "status": nullableString(MaxUniFiTextLength, "UniFi API status"),
@@ -555,7 +562,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"update_available": map[string]any{"type": []string{"boolean", "null"}}, "state": nullableString(MaxUniFiTextLength, "Controller state"),
 	}, "additionalProperties": false}
 	uniFiAPIWAN := map[string]any{"type": "object", "properties": map[string]any{
-		"id": nullableString(MaxUniFiTextLength, "WAN identifier"), "name": nullableString(MaxUniFiTextLength, "WAN name"), "interface": nullableString(MaxUniFiTextLength, "WAN interface"),
+		"id": nullableString(MaxUniFiTextLength, "WAN identifier"), "network_group": nullableString(MaxUniFiTextLength, "WAN network group"), "role": map[string]any{"type": "string", "enum": []string{"active", "backup", "unknown"}}, "asn": nullableString(MaxUniFiTextLength, "WAN ASN"), "name": nullableString(MaxUniFiTextLength, "WAN name"), "interface": nullableString(MaxUniFiTextLength, "WAN interface"),
 		"isp": nullableString(MaxUniFiTextLength, "ISP"), "link_state": nullableString(MaxUniFiTextLength, "WAN link state"),
 		"online": map[string]any{"type": []string{"boolean", "null"}}, "active": map[string]any{"type": []string{"boolean", "null"}}, "standby": map[string]any{"type": []string{"boolean", "null"}},
 		"uptime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "downtime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
@@ -563,7 +570,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"rx_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
 		"rx_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
 		"configured_upstream_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "configured_downstream_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
-		"failover_state": nullableString(MaxUniFiTextLength, "WAN failover state"), "load_balancing_state": nullableString(MaxUniFiTextLength, "WAN load-balancing state"),
+		"failover_state": nullableString(MaxUniFiTextLength, "WAN failover state"), "load_balancing_state": nullableString(MaxUniFiTextLength, "WAN load-balancing state"), "speedtest": map[string]any{"anyOf": []any{schemaRef("UniFiAPISpeedtest"), map[string]any{"type": "null"}}},
 	}, "additionalProperties": false}
 	uniFiAPIUplink := map[string]any{"type": "object", "properties": map[string]any{
 		"name": nullableString(MaxUniFiTextLength, "Uplink name"), "link_state": nullableString(MaxUniFiTextLength, "Uplink state"), "speed_mbps": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
@@ -607,6 +614,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"total": map[string]any{"type": "integer", "minimum": 0}, "vlan": map[string]any{"type": "integer", "minimum": 0},
 	})
 	uniFiAPITelemetry := requiredObject([]string{"identity", "controller", "wans", "uplinks", "temperatures", "clients", "devices", "networks", "ports", "port_summary", "lags", "topology", "anomalies"}, map[string]any{
+		"site":     map[string]any{"anyOf": []any{schemaRef("UniFiAPISite"), map[string]any{"type": "null"}}},
 		"identity": nullableRef("UniFiAPIIdentity"), "controller": nullableRef("UniFiAPIController"),
 		"wans":         map[string]any{"type": "array", "maxItems": MaxUniFiAPIWans, "items": schemaRef("UniFiAPIWAN")},
 		"uplinks":      map[string]any{"type": "array", "maxItems": MaxUniFiAPIUplinks, "items": schemaRef("UniFiAPIUplink")},
@@ -738,6 +746,8 @@ func extensionOpenAPISchemas() map[string]any {
 		"UniFiAPIStats":                 uniFiAPI,
 		"UniFiAPIIdentity":              uniFiAPIIdentity,
 		"UniFiAPIController":            uniFiAPIController,
+		"UniFiAPISite":                  uniFiAPISite,
+		"UniFiAPISpeedtest":             uniFiAPISpeedtest,
 		"UniFiAPIWAN":                   uniFiAPIWAN,
 		"UniFiAPIUplink":                uniFiAPIUplink,
 		"UniFiAPITemperature":           uniFiAPITemperature,

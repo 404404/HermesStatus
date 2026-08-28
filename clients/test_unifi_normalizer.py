@@ -70,6 +70,12 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(result["storage"]["tf"]["present"], "not_present")
 
 
+    def test_public_shape_keeps_fixed_power_limits_in_profile_only(self):
+        result = normalize(load_profile(self.profiles, "udw"), fixture("udw-raw.json"))
+        self.assertNotIn("power", result)
+        self.assertNotIn("poe", result)
+        self.assertNotIn("max_power_w", result["power_supplies"][0])
+
     def test_optional_diagnostics_do_not_break_core(self):
         raw = fixture("ucg-max-raw.json")
         raw["diagnostics"] = {"collection_status": "unavailable"}

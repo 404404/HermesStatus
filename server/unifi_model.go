@@ -83,6 +83,7 @@ type UniFiAPISummary struct {
 }
 
 type UniFiAPITelemetry struct {
+	Site         *UniFiAPISite           `json:"site,omitempty"`
 	Identity     *UniFiAPIIdentity       `json:"identity"`
 	Controller   *UniFiAPIController     `json:"controller"`
 	WANs         []UniFiAPIWAN           `json:"wans"`
@@ -96,6 +97,12 @@ type UniFiAPITelemetry struct {
 	LAGs         []UniFiAPILAG           `json:"lags"`
 	Topology     *UniFiAPITopology       `json:"topology"`
 	Anomalies    *UniFiAPIAnomalies      `json:"anomalies"`
+}
+
+type UniFiAPISite struct {
+	IntegrationID     *string `json:"integration_id,omitempty"`
+	InternalReference *string `json:"internal_reference,omitempty"`
+	Name              *string `json:"name,omitempty"`
 }
 
 type UniFiAPIIdentity struct {
@@ -114,30 +121,42 @@ type UniFiAPIController struct {
 }
 
 type UniFiAPIWAN struct {
-	ID                      *string  `json:"id,omitempty"`
-	Name                    *string  `json:"name,omitempty"`
-	Interface               *string  `json:"interface,omitempty"`
-	ISP                     *string  `json:"isp,omitempty"`
-	LinkState               *string  `json:"link_state,omitempty"`
-	Gateway                 *string  `json:"gateway,omitempty"`
-	SLAStatus               *string  `json:"sla_status,omitempty"`
-	Online                  *bool    `json:"online,omitempty"`
-	Active                  *bool    `json:"active,omitempty"`
-	Standby                 *bool    `json:"standby,omitempty"`
-	UptimeSeconds           *float64 `json:"uptime_seconds,omitempty"`
-	DowntimeSeconds         *float64 `json:"downtime_seconds,omitempty"`
-	LatencyMs               *float64 `json:"latency_ms,omitempty"`
-	PacketLossPercent       *float64 `json:"packet_loss_percent,omitempty"`
-	JitterMs                *float64 `json:"jitter_ms,omitempty"`
-	LinkSpeedMbps           *float64 `json:"link_speed_mbps,omitempty"`
-	RxBPS                   *int64   `json:"rx_bps,omitempty"`
-	TxBPS                   *int64   `json:"tx_bps,omitempty"`
-	RxBytes                 *int64   `json:"rx_bytes,omitempty"`
-	TxBytes                 *int64   `json:"tx_bytes,omitempty"`
-	ConfiguredUpstreamBPS   *int64   `json:"configured_upstream_bps,omitempty"`
-	ConfiguredDownstreamBPS *int64   `json:"configured_downstream_bps,omitempty"`
-	FailoverState           *string  `json:"failover_state,omitempty"`
-	LoadBalancingState      *string  `json:"load_balancing_state,omitempty"`
+	ID                      *string            `json:"id,omitempty"`
+	NetworkGroup            *string            `json:"network_group,omitempty"`
+	Role                    *string            `json:"role,omitempty"`
+	ASN                     *string            `json:"asn,omitempty"`
+	Name                    *string            `json:"name,omitempty"`
+	Interface               *string            `json:"interface,omitempty"`
+	ISP                     *string            `json:"isp,omitempty"`
+	LinkState               *string            `json:"link_state,omitempty"`
+	Gateway                 *string            `json:"gateway,omitempty"`
+	SLAStatus               *string            `json:"sla_status,omitempty"`
+	Online                  *bool              `json:"online,omitempty"`
+	Active                  *bool              `json:"active,omitempty"`
+	Standby                 *bool              `json:"standby,omitempty"`
+	UptimeSeconds           *float64           `json:"uptime_seconds,omitempty"`
+	DowntimeSeconds         *float64           `json:"downtime_seconds,omitempty"`
+	LatencyMs               *float64           `json:"latency_ms,omitempty"`
+	PacketLossPercent       *float64           `json:"packet_loss_percent,omitempty"`
+	JitterMs                *float64           `json:"jitter_ms,omitempty"`
+	LinkSpeedMbps           *float64           `json:"link_speed_mbps,omitempty"`
+	RxBPS                   *int64             `json:"rx_bps,omitempty"`
+	TxBPS                   *int64             `json:"tx_bps,omitempty"`
+	RxBytes                 *int64             `json:"rx_bytes,omitempty"`
+	TxBytes                 *int64             `json:"tx_bytes,omitempty"`
+	ConfiguredUpstreamBPS   *int64             `json:"configured_upstream_bps,omitempty"`
+	ConfiguredDownstreamBPS *int64             `json:"configured_downstream_bps,omitempty"`
+	FailoverState           *string            `json:"failover_state,omitempty"`
+	LoadBalancingState      *string            `json:"load_balancing_state,omitempty"`
+	Speedtest               *UniFiAPISpeedtest `json:"speedtest,omitempty"`
+}
+
+type UniFiAPISpeedtest struct {
+	Observed     bool     `json:"observed"`
+	Timestamp    *string  `json:"timestamp,omitempty"`
+	LatencyMs    *float64 `json:"latency_ms,omitempty"`
+	DownloadMbps *float64 `json:"download_mbps,omitempty"`
+	UploadMbps   *float64 `json:"upload_mbps,omitempty"`
 }
 
 type UniFiAPIUplink struct {
