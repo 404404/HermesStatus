@@ -244,6 +244,8 @@ async function run(){
   assert.match(portTelemetryMarkup, /1\.00 KB/);
   assert.match(portTelemetryMarkup, /3\.32 W/);
   assert.doesNotMatch(portTelemetryMarkup, /<th>RX<\/th>|<th>TX<\/th>|<th>连接<\/th>/);
+  assert.equal(app.unifiPortLinkText({up: false, speed_mbps: 1000, max_speed_mbps: 2500}), '未连接');
+  assert.equal(app.unifiPortPoeText({poe: {supported: false, power_w: 0}}), '-');
   assert.doesNotMatch(portTelemetryMarkup, /mac_table|mac_address|192\\.168/);
   assert.match(apiTelemetryMarkup, /UniFi 设备型号/);
   assert.match(apiTelemetryMarkup, /UniFi Dream Wall/);
