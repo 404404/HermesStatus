@@ -76,7 +76,6 @@ def api_disabled():
         "last_attempt": None,
         "last_success": None,
         "endpoints": [],
-        "optional_failures": [],
         "summary": None,
         "telemetry": None,
         "error": None,
@@ -643,23 +642,27 @@ class UniFiAPICollector:
         endpoint_results = []
         payloads = {}
         failures = []
+        failure_details = {}
 
-        def call(name, path, *, required):
+        def call(name, path, *, required, report=True):
             try:
                 payload, status = self._request(self.config, path, key)
             except APIError as exc:
                 error = _safe_error(exc.code)
                 if exc.status is not None:
                     error["http_status"] = exc.status
-                endpoint_results.append({
-                    "name": name,
-                    "status": "unsupported" if exc.code == "api_endpoint_unsupported" else "error",
-                    "http_status": exc.status,
-                    "error": error,
-                })
+                failure_details[name] = error
+                if report:
+                    endpoint_results.append({
+                        "name": name,
+                        "status": "unsupported" if exc.code == "api_endpoint_unsupported" else "error",
+                        "http_status": exc.status,
+                        "error": error,
+                    })
                 failures.append((name, error, required))
                 return None
-            endpoint_results.append({"name": name, "status": "ok", "http_status": status, "error": None})
+            if report:
+                endpoint_results.append({"name": name, "status": "ok", "http_status": status, "error": None})
             payloads[name] = payload
             return payload
 
@@ -674,8 +677,12 @@ class UniFiAPICollector:
                 selected_site = _resolve_site(sites, self.site_selector)
             except APIError as exc:
                 error = _safe_error(exc.code)
-                endpoint_results.append({"name": "site_resolution", "status": "error", "http_status": None, "error": error})
-                failures.append(("site_resolution", error, True))
+                failure_details["sites"] = error
+                for item in endpoint_results:
+                    if item["name"] == "sites":
+                        item.update({"status": "error", "http_status": None, "error": error})
+                        break
+                failures.append(("sites", error, True))
         if selected_site is not None:
             site_id = selected_site["id"]
             devices = call("devices", _site_path(site_id, "devices"), required=True)
@@ -685,26 +692,46 @@ class UniFiAPICollector:
                     target = _target_device(device_records, self.target_profile)
                 except APIError as exc:
                     error = _safe_error(exc.code)
-                    endpoint_results.append({"name": "target_resolution", "status": "error", "http_status": None, "error": error})
-                    failures.append(("target_resolution", error, True))
+                    failure_details["devices"] = error
+                    for item in endpoint_results:
+                        if item["name"] == "devices":
+                            item.update({"status": "error", "http_status": None, "error": error})
+                            break
+                    failures.append(("devices", error, True))
                 if target is not None:
                     device_id = _identifier(target.get("id"))
-                    detail = call("device_detail", _site_path(site_id, "devices", device_id), required=True)
-                    call("device_stats", _site_path(site_id, "devices", device_id, "statistics/latest"), required=False)
+                    detail = call("device_detail", _site_path(site_id, "devices", device_id), required=True, report=False)
+                    stats = call("device_stats", _site_path(site_id, "devices", device_id, "statistics/latest"), required=True, report=False)
+                    if detail is None or stats is None:
+                        error = failure_details.get("device_detail") or failure_details.get("device_stats") or _safe_error("api_target_resolution")
+                        for item in endpoint_results:
+                            if item["name"] == "devices":
+                                item.update({"status": "error", "http_status": error.get("http_status"), "error": error})
+                                break
+                        failures.append(("devices", error, True))
                     call("clients", _site_path(site_id, "clients"), required=False)
                     call("networks", _site_path(site_id, "networks"), required=False)
 
         summary = _summary("info", payloads.get("info")) if "info" in payloads else None
         telemetry = _telemetry(payloads, site=selected_site, target=target)
+        successful_count = sum(1 for item in endpoint_results if item["status"] == "ok")
+        failed_count = sum(1 for item in endpoint_results if item["status"] != "ok")
         required_failures = [error for _, error, required in failures if required]
-        optional_failures = [name for name, _, required in failures if not required]
-        if required_failures:
+        if required_failures and successful_count and failed_count:
+            error = _safe_error("api_partial_failure")
+            status = "partial"
+            last_success = attempted if successful_count else None
+        elif required_failures:
             error = required_failures[0]
             status = "unavailable"
             last_success = None
+        elif failed_count:
+            error = _safe_error("api_partial_failure")
+            status = "partial"
+            last_success = attempted
         else:
             error = None
-            status = "partial" if optional_failures else "available"
+            status = "available"
             last_success = attempted
         return {
             "enabled": True,
@@ -712,7 +739,6 @@ class UniFiAPICollector:
             "last_attempt": attempted,
             "last_success": last_success,
             "endpoints": endpoint_results,
-            "optional_failures": optional_failures,
             "summary": summary,
             "telemetry": telemetry,
             "error": error,

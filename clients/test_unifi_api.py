@@ -88,7 +88,7 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(result["status"], "available")
         self.assertIsNone(result["error"])
         self.assertEqual([x["name"] for x in result["endpoints"]], [
-            "info", "sites", "devices", "device_detail", "device_stats", "clients", "networks"
+            "info", "sites", "devices", "clients", "networks"
         ])
         self.assertIn("/proxy/network/integration/v1/sites/site-a/devices", calls)
         self.assertIn("/proxy/network/integration/v1/sites/site-a/clients", calls)
@@ -108,8 +108,10 @@ class UniFiAPITests(unittest.TestCase):
         calls = []
         sites = [{"id": "site-a", "name": "A"}, {"id": "site-b", "name": "B"}]
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls, sites=sites), target_profile="udw").collect()
-        self.assertEqual(result["status"], "unavailable")
-        self.assertEqual(result["error"]["code"], "api_site_ambiguity")
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["error"]["code"], "api_partial_failure")
+        sites_endpoint = next(item for item in result["endpoints"] if item["name"] == "sites")
+        self.assertEqual(sites_endpoint["error"]["code"], "api_site_ambiguity")
         self.assertFalse(any(path.endswith("/devices") for path in calls))
 
     def test_explicit_site_selector_is_deterministic(self):
@@ -136,15 +138,16 @@ class UniFiAPITests(unittest.TestCase):
         calls = []
         devices = [{"id": "ap-1", "model": "U6", "name": "AP", "state": "ONLINE"}]
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls, devices=devices), target_profile="udw").collect()
-        self.assertEqual(result["status"], "unavailable")
-        self.assertEqual(result["error"]["code"], "api_target_resolution")
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["error"]["code"], "api_partial_failure")
+        self.assertEqual(next(item for item in result["endpoints"] if item["name"] == "devices")["error"]["code"], "api_target_resolution")
 
     def test_optional_endpoint_failure_is_partial_capability_not_global_error(self):
         calls = []
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls, fail="/clients"), target_profile="udw").collect()
         self.assertEqual(result["status"], "partial")
-        self.assertIsNone(result["error"])
-        self.assertEqual(result["optional_failures"], ["clients"])
+        self.assertEqual(result["error"]["code"], "api_partial_failure")
+        self.assertEqual(next(item for item in result["endpoints"] if item["name"] == "clients")["status"], "unsupported")
         self.assertIsNotNone(result["telemetry"]["devices"])
 
     def test_required_auth_failure_is_unavailable(self):
