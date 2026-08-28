@@ -95,6 +95,23 @@ def _cache_section(cache, names):
 
 
 def _cache_fans(cache):
+    # UDW polling cache exposes system fan tachometers under thermal.
+    # Check this top-level section before recursive compatibility lookup;
+    # PSU records also contain a nested fan map.
+    thermal = cache.get("thermal") if isinstance(cache, dict) else None
+    if isinstance(thermal, dict):
+        thermal_result = {}
+        for key in sorted(thermal, key=lambda item: (not str(item).isdigit(), str(item))):
+            child = thermal.get(key)
+            if not isinstance(child, dict):
+                continue
+            rpm = child.get("fan_speed", child.get("rpm"))
+            if isinstance(rpm, (int, float)) and not isinstance(rpm, bool) and rpm >= 0:
+                thermal_result[f"fan{len(thermal_result) + 1}"] = rpm
+            if len(thermal_result) >= 16:
+                break
+        if thermal_result:
+            return thermal_result
     section = _cache_section(cache, ("fans", "fan"))
     if isinstance(section, dict):
         result = {}
@@ -115,6 +132,20 @@ def _cache_fans(cache):
                 if isinstance(ident, str) and isinstance(rpm, (int, float)) and not isinstance(rpm, bool):
                     result[ident] = rpm
         return result
+    thermal = _cache_section(cache, ("thermal",))
+    if isinstance(thermal, dict):
+        thermal_result = {}
+        for key in sorted(thermal, key=lambda item: (not str(item).isdigit(), str(item))):
+            child = thermal.get(key)
+            if not isinstance(child, dict):
+                continue
+            rpm = child.get("fan_speed", child.get("rpm"))
+            if isinstance(rpm, (int, float)) and not isinstance(rpm, bool) and rpm >= 0:
+                thermal_result[f"fan{len(thermal_result) + 1}"] = rpm
+            if len(thermal_result) >= 16:
+                break
+        if thermal_result:
+            return thermal_result
     result = {}
     def visit(value, depth=0):
         if depth > 4 or len(result) >= 16:
@@ -190,10 +221,15 @@ def _power(profile, hardware_cache=None):
         "id": f"psu{index}", "supported": "supported", "present": present,
         "observed": False, "state": "not_observed", "error": None,
     } for index in range(1, slots + 1)]
-    records = _cache_records(hardware_cache, ("power_supplies", "psus", "power_supply")) if hardware_cache else []
+    records = _cache_records(hardware_cache, ("power_supplies", "psus", "power_supply", "psu")) if hardware_cache else []
     for record in records:
-        ident = str(record.get("id", record.get("slot", "")))
+        # DSM cache uses zero-based keys and stable psu1/psu2 labels.
+        ident = str(record.get("label", record.get("id", record.get("slot", ""))))
         index = next((i for i in range(len(result)) if result[i]["id"].lower() == ident.lower() or str(i + 1) == ident), None)
+        if index is None and ident.isdigit():
+            zero_based = int(ident)
+            if 0 <= zero_based < len(result):
+                index = zero_based
         if index is None:
             continue
         item = result[index]
@@ -201,6 +237,9 @@ def _power(profile, hardware_cache=None):
             item["present"] = "present" if record["present"] else "not_present"
         watts = record.get("power_w", record.get("power"))
         fan_rpm = record.get("fan_rpm", record.get("rpm"))
+        if fan_rpm is None and isinstance(record.get("fan"), dict):
+            fan_values = [value for value in record["fan"].values() if isinstance(value, (int, float)) and not isinstance(value, bool)]
+            fan_rpm = fan_values[0] if fan_values else None
         if isinstance(watts, (int, float)) and not isinstance(watts, bool) and watts >= 0:
             item["power_w"] = watts
         if isinstance(fan_rpm, (int, float)) and not isinstance(fan_rpm, bool) and fan_rpm >= 0:
@@ -222,6 +261,21 @@ def _storage(profile, hardware_cache=None):
             "capacity_bytes": capability["capacity_bytes"],
         }
     records = _cache_records(hardware_cache, ("storage", "storages", "disks", "block_devices")) if hardware_cache else []
+    if hardware_cache:
+        flash_meta = {item.get("id"): item for item in _cache_records(hardware_cache, ("flash",))}
+        for record in _cache_records(hardware_cache, ("flash_sysfs",)):
+            item = dict(record)
+            metadata = flash_meta.get(record.get("id"), {})
+            info = record.get("info") if isinstance(record.get("info"), dict) else {}
+            item["category"] = "sata_ssd"
+            item.setdefault("present", metadata.get("present", bool(record.get("node"))))
+            if info.get("size") is not None:
+                item.setdefault("capacity_bytes", info.get("size"))
+            records.append(item)
+        for record in _cache_records(hardware_cache, ("sdcard",)):
+            item = dict(record)
+            item["category"] = "tf"
+            records.append(item)
     aliases = {"sata_ssd": {"sata_ssd", "sata", "ssd"}, "tf": {"tf", "sd", "mmc", "tf_card"}, "nvme": {"nvme"}}
     for record in records:
         category = str(record.get("category", record.get("type", record.get("id", "")))).lower().replace("-", "_")

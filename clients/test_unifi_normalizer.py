@@ -50,6 +50,26 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(second["system"]["uptime_seconds"], 23456.78)
         self.assertEqual(second["system"]["load_average"]["fifteen_minutes"], 0.39)
 
+    def test_udw_hw_polling_cache_maps_fan_psu_and_storage(self):
+        raw = fixture("udw-raw.json")
+        raw["diagnostics"] = {"collection_status": "available", "hardware_cache_status": "available", "hardware_cache": {
+            "thermal": {"1": {"fan_speed": 1611}, "2": {"fan_speed": 2657}, "3": {"fan_speed": -1}},
+            "flash": {"1": {"node": "sda", "present": True}},
+            "flash_sysfs": {"1": {"node": "sda", "info": {"size": 128000000000}}},
+            "sdcard": {"1": {"node": None, "present": False}},
+            "psu": {"0": {"label": "psu1", "present": True, "power": 48.0, "fan": {"0": 3672}}, "1": {"label": "psu2", "present": False, "power": 0, "fan": {"0": 0}}}
+        }}
+        result = normalize(load_profile(self.profiles, "udw"), raw)
+        self.assertEqual([fan["rpm"] for fan in result["fans"]], [1611, 2657])
+        self.assertEqual(result["power_supplies"][0]["present"], "present")
+        self.assertEqual(result["power_supplies"][0]["power_w"], 48.0)
+        self.assertEqual(result["power_supplies"][0]["fan_rpm"], 3672)
+        self.assertTrue(result["power_supplies"][0]["observed"])
+        self.assertEqual(result["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
+        self.assertTrue(result["storage"]["sata_ssd"]["observed"])
+        self.assertEqual(result["storage"]["tf"]["present"], "not_present")
+
+
     def test_optional_diagnostics_do_not_break_core(self):
         raw = fixture("ucg-max-raw.json")
         raw["diagnostics"] = {"collection_status": "unavailable"}
