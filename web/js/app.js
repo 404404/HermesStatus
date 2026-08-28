@@ -1383,6 +1383,51 @@ function unifiLinkBandwidth(value){
   return `${formatInteger(number)} Mbps`;
 }
 
+function unifiPortRate(value){
+  const number = finiteNumber(value);
+  if(number === null || number < 0) return '-';
+  if(number >= 1e9) return `${(number / 1e9).toFixed(number >= 1e10 ? 0 : 1)} Gbps`;
+  if(number >= 1e6) return `${(number / 1e6).toFixed(number >= 1e7 ? 0 : 1)} Mbps`;
+  if(number >= 1e3) return `${(number / 1e3).toFixed(number >= 1e4 ? 0 : 1)} Kbps`;
+  return `${formatInteger(number)} bps`;
+}
+
+function unifiPortStatus(port){
+  if(port?.up === true) return '在线';
+  if(port?.enabled === false) return '已禁用';
+  if(port?.up === false) return '离线';
+  return '未知';
+}
+
+function unifiPortPoeText(port){
+  const poe = safeObject(port?.poe);
+  if(!Object.keys(poe).length) return '-';
+  const power = finiteNumber(poe.power_w);
+  if(power !== null) return `${power.toFixed(power >= 10 ? 0 : 2)} W`;
+  if(poe.supported === false) return '非 PoE';
+  if(poe.active === true) return '已启用';
+  if(poe.enabled === false) return '未启用';
+  return '-';
+}
+
+function unifiPortTelemetryMarkup(unifi){
+  const api = safeObject(unifi?.api);
+  if(!api.enabled || api.status === 'disabled') return '<div class="unifi-api-unavailable">API 未启用；端口遥测不可用。</div>';
+  const telemetry = safeObject(api.telemetry);
+  const ports = Array.isArray(telemetry.ports) ? telemetry.ports.slice(0, 64) : [];
+  if(!ports.length) return `<div class="unifi-api-unavailable">API ${api.status === 'partial' ? '部分可用' : '已连接'}，当前未取得端口数据。</div>`;
+  const identity = safeObject(telemetry.identity);
+  const model = textOrDash(identity.model || identity.display_name);
+  const rows = ports.map(port => {
+    const label = textOrDash(port.name) === '-' ? `端口 ${formatInteger(port.port_idx)}` : `${textOrDash(port.name)} (${formatInteger(port.port_idx)})`;
+    const media = textOrDash(port.media);
+    const link = `${unifiLinkBandwidth(port.speed_mbps)}${media === '-' ? '' : ` · ${media}`}`;
+    const peer = finiteNumber(port.peer_count);
+    return `<tr><td class="strong-cell">${escapeHtml(model)}</td><td>${escapeHtml(label)}</td><td>${escapeHtml(unifiPortStatus(port))}</td><td>${escapeHtml(link)}</td><td>${escapeHtml(unifiPortRate(port.rx_bps))}</td><td>${escapeHtml(unifiPortRate(port.tx_bps))}</td><td>${escapeHtml(unifiPortPoeText(port))}</td><td>${escapeHtml(peer === null ? '-' : formatInteger(peer))}</td></tr>`;
+  }).join('');
+  return `<div class="table-wrap"><table class="data unifi-ports-table"><thead><tr><th>设备</th><th>端口</th><th>状态</th><th>链路</th><th>RX</th><th>TX</th><th>PoE</th><th>连接</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
 function renderUniFi(view){
   const unifi = safeObject(view.unifi);
   const summary = unifiTransportSummary(unifi);
@@ -1405,6 +1450,7 @@ function renderUniFi(view){
   byId('unifiSummary').innerHTML = summaryRows.map(([label, value]) => detailRow(label, value, 'wrap-value')).join('');
   byId('unifiMeta').textContent = configured ? `Profile：${textOrDash(unifi.profile)} · ${summary.text}` : '未配置 UniFi 目标';
   byId('unifiApiTelemetry').innerHTML = configured ? unifiApiTelemetryMarkup(unifi) : '<div class="unifi-api-unavailable">未配置 UniFi 目标。</div>';
+  byId('unifiPorts').innerHTML = configured ? unifiPortTelemetryMarkup(unifi) : '<div class="unifi-api-unavailable">未配置 UniFi 目标。</div>';
   byId('unifiStorage').innerHTML = configured ? unifiStorageMarkup(unifi) : '<div class="table-empty">未配置 UniFi 目标。</div>';
   byId('unifiFansBody').innerHTML = configured ? unifiFanRows(unifi) : '<tr><td colspan="6" class="table-empty">未配置 UniFi 目标。</td></tr>';
   byId('unifiPowerBody').innerHTML = configured ? unifiPowerRows(unifi) : '<tr><td colspan="7" class="table-empty">未配置 UniFi 目标。</td></tr>';
@@ -2078,6 +2124,8 @@ const exported = {
   unifiTransportSummary,
   unifiApiStatusText,
   unifiApiTelemetryMarkup,
+  unifiPortTelemetryMarkup,
+  unifiPortRate,
   unifiLinkBandwidth,
   unifiSystemRows,
   unifiSystemCards,

@@ -13,6 +13,7 @@ import math
 import os
 import ssl
 import stat
+import time
 from datetime import datetime, timezone
 from http.client import HTTPSConnection
 from urllib.parse import quote, urlsplit
@@ -31,6 +32,10 @@ MAX_API_TEXT = 128
 MAX_API_TEMPERATURES = 16
 MAX_API_WANS = 16
 MAX_API_UPLINKS = 32
+MAX_API_PORTS = 64
+MAX_API_LAGS = 16
+MAX_API_TOPOLOGY_LINKS = 32
+MAX_API_ANOMALIES = 16
 
 
 class APIError(RuntimeError):
@@ -144,6 +149,35 @@ def _number(value, *, integer=False, minimum=0):
     if integer and number.is_integer():
         return int(number)
     return number
+
+
+def _decimal(value, *, minimum=0):
+    parsed = _number(value, minimum=minimum)
+    if parsed is not None:
+        return parsed
+    if isinstance(value, str):
+        try:
+            number = float(value.strip())
+        except ValueError:
+            return None
+        if math.isfinite(number) and number >= minimum:
+            return number
+    return None
+
+
+def _counter(mapping, *keys):
+    value = _first(mapping, *keys)
+    parsed = _number(value, integer=True)
+    if parsed is not None:
+        return parsed
+    if isinstance(value, str):
+        try:
+            number = float(value.strip())
+        except ValueError:
+            return None
+        if math.isfinite(number) and number >= 0 and number.is_integer():
+            return int(number)
+    return None
 
 
 def _boolean(value):
@@ -537,6 +571,172 @@ def _wans_and_uplinks(devices, target_detail=None):
     return wans or None, uplinks or None
 
 
+def _legacy_target(payload, target):
+    """Select the legacy device only by the already-qualified device id."""
+    target_id = _identifier(target.get("id")) if isinstance(target, dict) else None
+    if not target_id:
+        return None
+    records = _items(payload.get("data") if isinstance(payload, dict) else payload)
+    for item in records:
+        if _identifier(item.get("device_id")) == target_id:
+            return item
+    return None
+
+
+def _poe_record(port):
+    supported = _boolean(_first(port, "port_poe"))
+    if supported is None:
+        caps = _counter(port, "poe_caps")
+        if caps is not None:
+            supported = caps > 0
+    if supported is None and not any(key in port for key in ("poe_enable", "poe_power", "poe_mode", "poe_class")):
+        return None
+    result = {"supported": supported}
+    for output, keys in (("enabled", ("poe_enable", "poe_enabled")), ("good", ("poe_good", "poeGood"))):
+        value = _boolean(_first(port, *keys))
+        if value is not None:
+            result[output] = value
+    power = _decimal(_first(port, "poe_power", "power_w", "powerW"), minimum=0)
+    if power is not None:
+        result["power_w"] = power
+        result["active"] = power > 0
+    for output, keys in (("state", ("poe_state",)), ("mode", ("poe_mode",)), ("class", ("poe_class", "poe_standard"))):
+        value = _text(_first(port, *keys))
+        if value:
+            result[output] = value
+    for output, keys in (("voltage_v", ("poe_voltage", "voltage_v")), ("current_ma", ("poe_current", "current_ma"))):
+        value = _decimal(_first(port, *keys), minimum=0)
+        if value is not None:
+            result[output] = value
+    return result
+
+
+def _port_record(port, *, device_id, previous_samples, sample_time):
+    if not isinstance(port, dict):
+        return None
+    index = _counter(port, "port_idx", "idx", "portIndex")
+    if index is None or index < 1 or index > 65535:
+        return None
+    result = {"device_id": device_id, "port_idx": index}
+    for output, keys in (
+        ("name", ("name", "display_name", "displayName", "ifname")),
+        ("media", ("media", "connector", "type")),
+        ("duplex", ("full_duplex", "fullDuplex")),
+        ("autoneg", ("autoneg", "auto_negotiation")),
+        ("enabled", ("enable", "enabled")),
+        ("up", ("up", "link_up", "is_up")),
+        ("uplink", ("is_uplink", "uplink")),
+    ):
+        value = _first(port, *keys)
+        if output in {"duplex", "autoneg", "enabled", "up", "uplink"}:
+            value = _boolean(value)
+        else:
+            value = _text(value)
+        if value is not None:
+            result[output] = value
+    speed = _decimal(_first(port, "speed", "speedMbps", "speed_mbps", "linkSpeedMbps"), minimum=0)
+    if speed is not None:
+        result["speed_mbps"] = speed
+    counter_keys = {
+        "rx_bytes": ("rx_bytes", "rxBytes"), "tx_bytes": ("tx_bytes", "txBytes"),
+        "rx_packets": ("rx_packets", "rxPackets"), "tx_packets": ("tx_packets", "txPackets"),
+        "rx_errors": ("rx_errors", "rxErrors"), "tx_errors": ("tx_errors", "txErrors"),
+        "rx_dropped": ("rx_dropped", "rxDropped"), "tx_dropped": ("tx_dropped", "txDropped"),
+        "rx_multicast": ("rx_multicast", "rxMulticast"), "tx_multicast": ("tx_multicast", "txMulticast"),
+        "rx_broadcast": ("rx_broadcast", "rxBroadcast"), "tx_broadcast": ("tx_broadcast", "txBroadcast"),
+    }
+    counters = {}
+    for output, keys in counter_keys.items():
+        value = _counter(port, *keys)
+        if value is not None:
+            counters[output] = value
+    result.update(counters)
+    sample_key = (device_id, index)
+    previous = previous_samples.get(sample_key)
+    current_sample = {"time": sample_time, "speed_mbps": result.get("speed_mbps"), "up": result.get("up"), **{key: counters[key] for key in ("rx_bytes", "tx_bytes") if key in counters}}
+    if previous and current_sample.get("up") is True and all(key in previous and key in current_sample for key in ("rx_bytes", "tx_bytes")):
+        elapsed = sample_time - previous["time"]
+        same_speed = previous.get("speed_mbps") == current_sample.get("speed_mbps")
+        same_link = previous.get("up") == current_sample.get("up")
+        if 0 < elapsed <= 3600 and same_speed and same_link:
+            deltas = {key: current_sample[key] - previous[key] for key in ("rx_bytes", "tx_bytes")}
+            if all(value >= 0 for value in deltas.values()):
+                max_bps = (current_sample.get("speed_mbps") or 0) * 1_000_000 * 2
+                rates = {key.replace("_bytes", "_bps"): int(round(value / elapsed)) for key, value in deltas.items()}
+                if not max_bps or all(value <= max_bps for value in rates.values()):
+                    result.update(rates)
+                    if current_sample.get("speed_mbps"):
+                        result["rx_utilization_pct"] = round(rates["rx_bps"] * 8 / (current_sample["speed_mbps"] * 1_000_000) * 100, 2)
+                        result["tx_utilization_pct"] = round(rates["tx_bps"] * 8 / (current_sample["speed_mbps"] * 1_000_000) * 100, 2)
+    previous_samples[sample_key] = current_sample
+    poe = _poe_record(port)
+    if poe is not None:
+        result["poe"] = poe
+    connection = port.get("last_connection")
+    if isinstance(connection, dict) and connection.get("connected") is True:
+        result["peer_count"] = 1
+    return result
+
+
+def _ports(legacy_payload, target, previous_samples, sample_time):
+    legacy = _legacy_target(legacy_payload, target)
+    if legacy is None:
+        return None, None
+    device_id = _identifier(target.get("id"))
+    records = []
+    for port in (legacy.get("port_table") or [])[:MAX_API_PORTS]:
+        item = _port_record(port, device_id=device_id, previous_samples=previous_samples, sample_time=sample_time)
+        if item is not None:
+            records.append(item)
+    summary = {"total": len(records), "up": sum(1 for item in records if item.get("up") is True), "down": sum(1 for item in records if item.get("up") is False), "poe_active": 0, "poe_total_power_w": None}
+    poe_items = [item.get("poe", {}) for item in records if isinstance(item.get("poe"), dict)]
+    summary["poe_active"] = sum(1 for item in poe_items if item.get("active") is True)
+    powers = [item.get("power_w") for item in poe_items if isinstance(item.get("power_w"), (int, float))]
+    if powers:
+        summary["poe_total_power_w"] = round(sum(powers), 2)
+    return records, summary
+
+
+def _lag_records(payload):
+    records = []
+    for item in _items(payload)[:MAX_API_LAGS]:
+        lag_id = _text(_first(item, "lag_id", "lagId", "id"))
+        members = _first(item, "lag_member", "lagMember", "members", "ports")
+        if isinstance(members, list):
+            for member in members[:MAX_API_PORTS]:
+                value = _text(member if isinstance(member, str) else _first(member, "id", "port_idx", "portIdx", "name"))
+                if lag_id and value:
+                    records.append({"lag_id": lag_id, "lag_member": value})
+    return records
+
+
+def _topology_summary(payload):
+    links = []
+    for item in _items(payload)[:MAX_API_TOPOLOGY_LINKS]:
+        source = _identifier(_first(item, "sourceDeviceId", "source_device_id", "source"))
+        target = _identifier(_first(item, "targetDeviceId", "target_device_id", "target"))
+        state = _text(_first(item, "state", "status", "linkState"))
+        if source or target or state:
+            record = {}
+            if source: record["source_device_id"] = source
+            if target: record["target_device_id"] = target
+            if state: record["state"] = state
+            links.append(record)
+    return {"link_count": len(links), "links": links}
+
+
+def _anomaly_summary(payload):
+    items = _items(payload)
+    affected = set()
+    recent = []
+    for item in items[:MAX_API_ANOMALIES]:
+        port = _text(_first(item, "port", "port_name", "portName", "port_idx", "portIdx"))
+        kind = _text(_first(item, "type", "category", "severity"))
+        if port: affected.add(port)
+        if kind and len(recent) < 4: recent.append(kind)
+    return {"anomaly_count": len(items), "affected_port_count": len(affected), "recent_types": recent}
+
+
 def _latest_statistics(stats):
     if not isinstance(stats, dict):
         return None
@@ -567,7 +767,7 @@ def _latest_statistics(stats):
     return result or None
 
 
-def _telemetry(payloads, *, site=None, target=None):
+def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sample_time=None):
     info = payloads.get("info")
     devices = _items(payloads.get("devices"))
     clients = _items(payloads.get("clients"))
@@ -580,6 +780,7 @@ def _telemetry(payloads, *, site=None, target=None):
     identity = _identity(info, devices, target_detail or target)
     controller = _controller(info, target_detail or target)
     wans, uplinks = _wans_and_uplinks(devices, target_detail)
+    ports, port_summary = _ports(payloads.get("legacy_stat_device"), target, previous_samples if previous_samples is not None else {}, sample_time if sample_time is not None else time.monotonic()) if target is not None and payloads.get("legacy_stat_device") is not None else (None, None)
     telemetry = {
         "identity": identity,
         "controller": controller,
@@ -589,6 +790,11 @@ def _telemetry(payloads, *, site=None, target=None):
         "clients": _client_summary(clients),
         "devices": _device_summary(devices),
         "networks": _network_summary(networks),
+        "ports": ports,
+        "port_summary": port_summary,
+        "lags": _lag_records(payloads["lags"]) if payloads.get("lags") is not None else None,
+        "topology": _topology_summary(payloads["topology"]) if payloads.get("topology") is not None else None,
+        "anomalies": _anomaly_summary(payloads["port_anomalies"]) if payloads.get("port_anomalies") is not None else None,
     }
     return telemetry if any(value is not None for value in telemetry.values()) else None
 
@@ -646,6 +852,7 @@ class UniFiAPICollector:
         self._request = request or _request
         self.target_profile = target_profile or getattr(config, "profile_id", None)
         self.site_selector = getattr(config, "site_id", None)
+        self._port_samples = {}
 
     def collect(self):
         attempted = _now()
@@ -727,9 +934,15 @@ class UniFiAPICollector:
                         failures.append(("devices", error, True))
                     call("clients", _site_path(site_id, "clients"), required=False)
                     call("networks", _site_path(site_id, "networks"), required=False)
+                    internal_reference = _identifier(selected_site.get("internal_reference"))
+                    if internal_reference:
+                        call("legacy_stat_device", f"/proxy/network/api/s/{quote(internal_reference, safe='')}/stat/device", required=False)
+                    call("lags", _site_path(site_id, "switching/lags"), required=False)
+                    call("topology", f"/proxy/network/v2/api/site/{quote(site_id, safe='')}/topology", required=False)
+                    call("port_anomalies", f"/proxy/network/v2/api/site/{quote(site_id, safe='')}/ports/port-anomalies", required=False)
 
         summary = _summary("info", payloads.get("info")) if "info" in payloads else None
-        telemetry = _telemetry(payloads, site=selected_site, target=target)
+        telemetry = _telemetry(payloads, site=selected_site, target=target, previous_samples=self._port_samples, sample_time=time.monotonic())
         successful_count = sum(1 for item in endpoint_results if item["status"] == "ok")
         failed_count = sum(1 for item in endpoint_results if item["status"] != "ok")
         required_failures = [error for _, error, required in failures if required]

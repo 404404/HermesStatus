@@ -79,9 +79,14 @@ const (
 	MaxUniFiFans                = 8
 	MaxUniFiPowerSupplies       = 4
 	MaxUniFiIgnoredObservations = 8
+	MaxUniFiAPIEndpoints        = 12
 	MaxUniFiAPIWans             = 16
 	MaxUniFiAPIUplinks          = 32
 	MaxUniFiAPITemperatures     = 16
+	MaxUniFiAPIPorts            = 64
+	MaxUniFiAPILags             = 16
+	MaxUniFiAPITopologyLinks    = 32
+	MaxUniFiAPIAnomalyTypes     = 4
 )
 
 type DiskSMARTStatus string

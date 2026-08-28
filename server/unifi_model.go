@@ -91,6 +91,11 @@ type UniFiAPITelemetry struct {
 	Clients      *UniFiAPIClientSummary  `json:"clients"`
 	Devices      *UniFiAPIDeviceSummary  `json:"devices"`
 	Networks     *UniFiAPINetworkSummary `json:"networks"`
+	Ports        []UniFiAPIPort          `json:"ports"`
+	PortSummary  *UniFiAPIPortSummary    `json:"port_summary"`
+	LAGs         []UniFiAPILAG           `json:"lags"`
+	Topology     *UniFiAPITopology       `json:"topology"`
+	Anomalies    *UniFiAPIAnomalies      `json:"anomalies"`
 }
 
 type UniFiAPIIdentity struct {
@@ -144,6 +149,80 @@ type UniFiAPITemperature struct {
 	Label   string  `json:"label"`
 	Celsius float64 `json:"celsius"`
 	Source  string  `json:"source"`
+}
+
+type UniFiAPIPort struct {
+	DeviceID         string       `json:"device_id"`
+	PortIndex        int          `json:"port_idx"`
+	Name             *string      `json:"name,omitempty"`
+	Media            *string      `json:"media,omitempty"`
+	Enabled          *bool        `json:"enabled,omitempty"`
+	Up               *bool        `json:"up,omitempty"`
+	SpeedMbps        *float64     `json:"speed_mbps,omitempty"`
+	Duplex           *bool        `json:"duplex,omitempty"`
+	Autoneg          *bool        `json:"autoneg,omitempty"`
+	Uplink           *bool        `json:"uplink,omitempty"`
+	RxBytes          *int64       `json:"rx_bytes,omitempty"`
+	TxBytes          *int64       `json:"tx_bytes,omitempty"`
+	RxPackets        *int64       `json:"rx_packets,omitempty"`
+	TxPackets        *int64       `json:"tx_packets,omitempty"`
+	RxErrors         *int64       `json:"rx_errors,omitempty"`
+	TxErrors         *int64       `json:"tx_errors,omitempty"`
+	RxDropped        *int64       `json:"rx_dropped,omitempty"`
+	TxDropped        *int64       `json:"tx_dropped,omitempty"`
+	RxMulticast      *int64       `json:"rx_multicast,omitempty"`
+	TxMulticast      *int64       `json:"tx_multicast,omitempty"`
+	RxBroadcast      *int64       `json:"rx_broadcast,omitempty"`
+	TxBroadcast      *int64       `json:"tx_broadcast,omitempty"`
+	RxBPS            *int64       `json:"rx_bps,omitempty"`
+	TxBPS            *int64       `json:"tx_bps,omitempty"`
+	RxUtilizationPct *float64     `json:"rx_utilization_pct,omitempty"`
+	TxUtilizationPct *float64     `json:"tx_utilization_pct,omitempty"`
+	PoE              *UniFiAPIPoE `json:"poe,omitempty"`
+	PeerCount        *int         `json:"peer_count,omitempty"`
+}
+
+type UniFiAPIPoE struct {
+	Supported *bool    `json:"supported,omitempty"`
+	Enabled   *bool    `json:"enabled,omitempty"`
+	Active    *bool    `json:"active,omitempty"`
+	State     *string  `json:"state,omitempty"`
+	Mode      *string  `json:"mode,omitempty"`
+	Class     *string  `json:"class,omitempty"`
+	PowerW    *float64 `json:"power_w,omitempty"`
+	VoltageV  *float64 `json:"voltage_v,omitempty"`
+	CurrentMA *float64 `json:"current_ma,omitempty"`
+	Good      *bool    `json:"good,omitempty"`
+}
+
+type UniFiAPIPortSummary struct {
+	Total          int      `json:"total"`
+	Up             int      `json:"up"`
+	Down           int      `json:"down"`
+	PoEActive      int      `json:"poe_active"`
+	PoETotalPowerW *float64 `json:"poe_total_power_w,omitempty"`
+}
+
+type UniFiAPILAG struct {
+	LAGID  string `json:"lag_id"`
+	Member string `json:"lag_member"`
+}
+
+type UniFiAPITopologyLink struct {
+	SourceDeviceID *string `json:"source_device_id,omitempty"`
+	TargetDeviceID *string `json:"target_device_id,omitempty"`
+	State          *string `json:"state,omitempty"`
+}
+
+type UniFiAPITopology struct {
+	LinkCount int                    `json:"link_count"`
+	Links     []UniFiAPITopologyLink `json:"links"`
+}
+
+type UniFiAPIAnomalies struct {
+	AnomalyCount      int      `json:"anomaly_count"`
+	AffectedPortCount int      `json:"affected_port_count"`
+	RecentTypes       []string `json:"recent_types"`
 }
 
 type UniFiAPIClientSummary struct {

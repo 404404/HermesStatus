@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key
+from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _port_record
 
 
 class UniFiAPITests(unittest.TestCase):
@@ -79,6 +79,12 @@ class UniFiAPITests(unittest.TestCase):
                 return {"data": [{"id": "c1", "type": "WIRED"}, {"id": "c2", "type": "WIRELESS"}]}, 200
             if path.endswith("/networks"):
                 return {"data": [{"id": "n1", "vlanId": 10}, {"id": "n2", "management": True}]}, 200
+            if path.startswith("/proxy/network/api/s/") and path.endswith("/stat/device"):
+                return {"data": [{"device_id": "udw-1", "model": "UDW", "port_table": [{"port_idx": 1, "name": "Port 1", "media": "GE", "up": True, "enable": True, "speed": 1000, "full_duplex": True, "autoneg": True, "is_uplink": True, "rx_bytes": 1000, "tx_bytes": 2000, "rx_packets": 10, "tx_packets": 20, "rx_errors": 0, "tx_errors": 1, "rx_dropped": 2, "tx_dropped": 3, "port_poe": False, "poe_power": "0.00", "last_connection": {"connected": True}}]}]}, 200
+            if path.endswith("/switching/lags"):
+                return {"data": []}, 200
+            if path.endswith("/topology") or path.endswith("/ports/port-anomalies"):
+                raise APIError("api_endpoint_unsupported", status=404)
             raise AssertionError(f"unexpected request path: {path}")
 
         return request
@@ -86,10 +92,11 @@ class UniFiAPITests(unittest.TestCase):
     def test_single_site_selection_and_site_scoped_paths(self):
         calls = []
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls), target_profile="udw").collect()
-        self.assertEqual(result["status"], "available")
-        self.assertIsNone(result["error"])
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["error"]["code"], "api_partial_failure")
         self.assertEqual([x["name"] for x in result["endpoints"]], [
-            "info", "sites", "devices", "clients", "networks"
+            "info", "sites", "devices", "clients", "networks",
+            "legacy_stat_device", "lags", "topology", "port_anomalies"
         ])
         self.assertIn("/proxy/network/integration/v1/sites/site-a/devices", calls)
         self.assertIn("/proxy/network/integration/v1/sites/site-a/clients", calls)
@@ -102,6 +109,15 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(telemetry["devices"]["total"], 3)
         self.assertEqual(telemetry["clients"], {"total": 2, "wired": 1, "wireless": 1, "observed": True})
         self.assertEqual(telemetry["networks"], {"total": 2, "vlan": 1})
+        self.assertEqual(len(telemetry["ports"]), 1)
+        self.assertEqual(telemetry["ports"][0]["port_idx"], 1)
+        self.assertEqual(telemetry["ports"][0]["rx_bytes"], 1000)
+        self.assertNotIn("rx_bps", telemetry["ports"][0])
+        self.assertEqual(telemetry["port_summary"]["up"], 1)
+        self.assertEqual(telemetry["port_summary"]["down"], 0)
+        self.assertEqual(telemetry["lags"], [])
+        self.assertIsNone(telemetry["topology"])
+        self.assertIsNone(telemetry["anomalies"])
         # Latest-statistics rates are intentionally not projected into the
         # strict Device v2 uplink model (which only accepts link metadata).
         self.assertTrue(telemetry["uplinks"])
@@ -109,6 +125,32 @@ class UniFiAPITests(unittest.TestCase):
                             for item in telemetry["uplinks"]))
         target_uplink = next(item for item in telemetry["uplinks"] if item.get("name") == "UDW")
         self.assertEqual(target_uplink["speed_mbps"], 2500)
+
+    def test_port_counter_delta_and_reset_are_bounded(self):
+        previous = {}
+        base = {"port_idx": 7, "up": True, "speed": 1000, "rx_bytes": 1000, "tx_bytes": 2000}
+        first = _port_record(base, device_id="device", previous_samples=previous, sample_time=10.0)
+        self.assertNotIn("rx_bps", first)
+        second = _port_record({**base, "rx_bytes": 3000, "tx_bytes": 6000}, device_id="device", previous_samples=previous, sample_time=11.0)
+        self.assertEqual(second["rx_bps"], 2000)
+        self.assertEqual(second["tx_bps"], 4000)
+        self.assertEqual(second["rx_utilization_pct"], 0.0)
+        reset = _port_record({**base, "rx_bytes": 10, "tx_bytes": 20}, device_id="device", previous_samples=previous, sample_time=12.0)
+        self.assertNotIn("rx_bps", reset)
+
+    def test_down_port_does_not_emit_rates_or_utilization(self):
+        previous = {}
+        _port_record({"port_idx": 1, "up": False, "speed": 1000, "rx_bytes": 10, "tx_bytes": 20}, device_id="device", previous_samples=previous, sample_time=1.0)
+        item = _port_record({"port_idx": 1, "up": False, "speed": 1000, "rx_bytes": 100, "tx_bytes": 200}, device_id="device", previous_samples=previous, sample_time=2.0)
+        self.assertNotIn("rx_bps", item)
+        self.assertNotIn("tx_utilization_pct", item)
+
+    def test_poe_missing_is_not_fabricated(self):
+        item = _port_record({"port_idx": 2, "up": True, "speed": 1000}, device_id="device", previous_samples={}, sample_time=1.0)
+        self.assertNotIn("poe", item)
+        item = _port_record({"port_idx": 3, "up": True, "speed": 1000, "port_poe": False, "poe_power": "0.00"}, device_id="device", previous_samples={}, sample_time=1.0)
+        self.assertEqual(item["poe"]["supported"], False)
+        self.assertEqual(item["poe"]["power_w"], 0.0)
 
     def test_multiple_sites_fail_closed_without_selector(self):
         calls = []
@@ -125,7 +167,8 @@ class UniFiAPITests(unittest.TestCase):
         sites = [{"id": "site-a", "name": "A"}, {"id": "site-b", "name": "B"}]
         self.config.site_id = "site-b"
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls, sites=sites), target_profile="udw").collect()
-        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["error"]["code"], "api_partial_failure")
         self.assertIn("/proxy/network/integration/v1/sites/site-b/devices", calls)
 
     def test_target_resolution_does_not_depend_on_device_order(self):
@@ -136,7 +179,8 @@ class UniFiAPITests(unittest.TestCase):
             {"id": "switch-1", "model": "USW", "name": "Switch", "state": "ONLINE"},
         ]
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls, devices=devices), target_profile="udw").collect()
-        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["error"]["code"], "api_partial_failure")
         self.assertEqual(result["telemetry"]["identity"]["model"], "UDW")
 
     def test_missing_target_is_explicit_error(self):

@@ -206,6 +206,9 @@ body.light .health-card{background:#fff}
 .unifi-api-telemetry{padding:0 1.35rem 1.1rem}
 .unifi-api-table{min-width:560px!important}
 .unifi-api-table td,.unifi-api-table th{white-space:nowrap}
+.unifi-ports{padding:0 1.35rem 1.1rem}
+.unifi-ports-table{min-width:900px!important}
+.unifi-ports-table td,.unifi-ports-table th{white-space:nowrap}
 .unifi-api-unavailable{color:var(--text-dim);padding:.25rem 0}
 .unifi-storage-table{min-width:940px!important;table-layout:auto}
 .unifi-storage-table th,.unifi-storage-table td{white-space:nowrap}

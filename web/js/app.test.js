@@ -83,6 +83,7 @@ async function run(){
   assert.match(appSource, /EasyTier远端节点数/);
   assert.match(appSource, /EasyTier流量统计/);
   assert.match(indexMarkup, /id="unifiApiTelemetry"/);
+  assert.match(indexMarkup, /id="unifiPorts"/);
 	assert.doesNotMatch(appSource, /easytierCommandsBody/);
   assert.match(appSource, /easytierPeersBody/);
   assert.match(appSource, /easytierExpectationBody/);
@@ -215,10 +216,21 @@ async function run(){
     controller: {application_version: '10.5.67', state: 'ONLINE'},
     uplinks: [{name: 'UniFi Dream Wall', link_state: 'ONLINE', speed_mbps: 2500}, {name: 'USW Flex Mini', link_state: 'ONLINE', speed_mbps: 1000}],
     clients: {total: 19, wired: 14, wireless: 5, observed: true},
-    networks: {total: 3, vlan: 3}
+    networks: {total: 3, vlan: 3},
+    ports: [{device_id: 'udw-1', port_idx: 7, name: 'LAN 7', media: '2.5GE', up: true, enabled: true, speed_mbps: 2500, rx_bps: 1000000, tx_bps: 2000000, poe: {supported: true, active: true, power_w: 3.32}, peer_count: 1}],
+    port_summary: {total: 1, up: 1, down: 0, poe_active: 1, poe_total_power_w: 3.32},
+    lags: [], topology: null, anomalies: null
   }};
   const systemCards = app.unifiSystemCards({...udwUniFi, api: apiFixture});
   const apiTelemetryMarkup = app.unifiApiTelemetryMarkup({...udwUniFi, api: apiFixture});
+  const portTelemetryMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: apiFixture});
+  assert.match(portTelemetryMarkup, /unifi-ports-table/);
+  assert.match(portTelemetryMarkup, /LAN 7/);
+  assert.match(portTelemetryMarkup, /2\.5 GbE/);
+  assert.match(portTelemetryMarkup, /1\.0 Mbps/);
+  assert.match(portTelemetryMarkup, /2\.0 Mbps/);
+  assert.match(portTelemetryMarkup, /3\.32 W/);
+  assert.doesNotMatch(portTelemetryMarkup, /mac_table|mac_address|192\\.168/);
   assert.match(apiTelemetryMarkup, /UniFi 设备型号/);
   assert.match(apiTelemetryMarkup, /UniFi Dream Wall/);
   assert.match(apiTelemetryMarkup, /在线/);

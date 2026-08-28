@@ -123,10 +123,10 @@ func validateUniFiAPI(value *UniFiAPIStats) error {
 		}
 		return nil
 	}
-	if value.Status == "disabled" || len(value.Endpoints) > 5 {
+	if value.Status == "disabled" || len(value.Endpoints) > MaxUniFiAPIEndpoints {
 		return validationError(validationCodeInvalidValue, "unifi.api", "enabled API state is invalid")
 	}
-	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "clients": true, "networks": true}
+	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "clients": true, "networks": true, "legacy_stat_device": true, "lags": true, "topology": true, "port_anomalies": true}
 	seen := map[string]bool{}
 	okCount, failedCount := 0, 0
 	for _, endpoint := range value.Endpoints {
@@ -279,6 +279,92 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 	}
 	if value.Networks != nil && (value.Networks.Total < 0 || value.Networks.VLAN < 0 || value.Networks.VLAN > value.Networks.Total) {
 		return validationError(validationCodeInvalidValue, "unifi.api.telemetry.networks", "counts are invalid")
+	}
+	if len(value.Ports) > MaxUniFiAPIPorts || len(value.LAGs) > MaxUniFiAPILags {
+		return validationError(validationCodeInvalidValue, "unifi.api.telemetry.ports", "array exceeds the allowed size")
+	}
+	for index, item := range value.Ports {
+		prefix := "unifi.api.telemetry.ports[" + strconv.Itoa(index) + "]"
+		if err := validateRequiredString(prefix+".device_id", item.DeviceID, MaxUniFiTextLength); err != nil {
+			return err
+		}
+		if item.PortIndex < 1 || item.PortIndex > 65535 {
+			return validationError(validationCodeInvalidValue, prefix+".port_idx", "is invalid")
+		}
+		for field, text := range map[string]*string{"name": item.Name, "media": item.Media} {
+			if err := validateOptionalString(prefix+"."+field, text, MaxUniFiTextLength); err != nil {
+				return err
+			}
+		}
+		if err := validateOptionalFloat(prefix+".speed_mbps", item.SpeedMbps, float64(MaxSafeInteger)); err != nil {
+			return err
+		}
+		for field, number := range map[string]*int64{"rx_bytes": item.RxBytes, "tx_bytes": item.TxBytes, "rx_packets": item.RxPackets, "tx_packets": item.TxPackets, "rx_errors": item.RxErrors, "tx_errors": item.TxErrors, "rx_dropped": item.RxDropped, "tx_dropped": item.TxDropped, "rx_multicast": item.RxMulticast, "tx_multicast": item.TxMulticast, "rx_broadcast": item.RxBroadcast, "tx_broadcast": item.TxBroadcast, "rx_bps": item.RxBPS, "tx_bps": item.TxBPS} {
+			if err := validateCounter(prefix+"."+field, number, MaxSafeInteger); err != nil {
+				return err
+			}
+		}
+		for field, number := range map[string]*float64{"rx_utilization_pct": item.RxUtilizationPct, "tx_utilization_pct": item.TxUtilizationPct} {
+			if err := validateOptionalFloat(prefix+"."+field, number, 100); err != nil {
+				return err
+			}
+		}
+		if item.PeerCount != nil && (*item.PeerCount < 0 || int64(*item.PeerCount) > MaxSafeInteger) {
+			return validationError(validationCodeInvalidValue, prefix+".peer_count", "is invalid")
+		}
+		if item.PoE != nil {
+			poe := item.PoE
+			for field, text := range map[string]*string{"state": poe.State, "mode": poe.Mode, "class": poe.Class} {
+				if err := validateOptionalString(prefix+".poe."+field, text, MaxUniFiTextLength); err != nil {
+					return err
+				}
+			}
+			for field, number := range map[string]*float64{"power_w": poe.PowerW, "voltage_v": poe.VoltageV, "current_ma": poe.CurrentMA} {
+				if err := validateOptionalFloat(prefix+".poe."+field, number, float64(MaxSafeInteger)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if value.PortSummary != nil {
+		if value.PortSummary.Total < 0 || value.PortSummary.Up < 0 || value.PortSummary.Down < 0 || value.PortSummary.Up+value.PortSummary.Down > value.PortSummary.Total || value.PortSummary.PoEActive < 0 || value.PortSummary.PoEActive > value.PortSummary.Total {
+			return validationError(validationCodeInvalidValue, "unifi.api.telemetry.port_summary", "counts are invalid")
+		}
+		if err := validateOptionalFloat("unifi.api.telemetry.port_summary.poe_total_power_w", value.PortSummary.PoETotalPowerW, float64(MaxSafeInteger)); err != nil {
+			return err
+		}
+	}
+	for index, item := range value.LAGs {
+		prefix := "unifi.api.telemetry.lags[" + strconv.Itoa(index) + "]"
+		if err := validateRequiredString(prefix+".lag_id", item.LAGID, MaxUniFiTextLength); err != nil {
+			return err
+		}
+		if err := validateRequiredString(prefix+".lag_member", item.Member, MaxUniFiTextLength); err != nil {
+			return err
+		}
+	}
+	if value.Topology != nil {
+		if len(value.Topology.Links) > MaxUniFiAPITopologyLinks || value.Topology.LinkCount < 0 || value.Topology.LinkCount != len(value.Topology.Links) {
+			return validationError(validationCodeInvalidValue, "unifi.api.telemetry.topology", "is invalid")
+		}
+		for index, item := range value.Topology.Links {
+			prefix := "unifi.api.telemetry.topology.links[" + strconv.Itoa(index) + "]"
+			for field, text := range map[string]*string{"source_device_id": item.SourceDeviceID, "target_device_id": item.TargetDeviceID, "state": item.State} {
+				if err := validateOptionalString(prefix+"."+field, text, MaxUniFiTextLength); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if value.Anomalies != nil {
+		if value.Anomalies.AnomalyCount < 0 || value.Anomalies.AffectedPortCount < 0 || value.Anomalies.AffectedPortCount > value.Anomalies.AnomalyCount || len(value.Anomalies.RecentTypes) > MaxUniFiAPIAnomalyTypes {
+			return validationError(validationCodeInvalidValue, "unifi.api.telemetry.anomalies", "is invalid")
+		}
+		for _, text := range value.Anomalies.RecentTypes {
+			if err := validateRequiredString("unifi.api.telemetry.anomalies.recent_types", text, MaxUniFiTextLength); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -525,6 +611,52 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 		item.LinkState = sanitizeStringPointer(item.LinkState)
 		item.Duplex = sanitizeStringPointer(item.Duplex)
 		item.WANID = sanitizeStringPointer(item.WANID)
+	}
+	result.Ports = append([]UniFiAPIPort(nil), input.Ports...)
+	if input.Ports != nil && result.Ports == nil {
+		result.Ports = make([]UniFiAPIPort, 0)
+	}
+	for index := range result.Ports {
+		item := &result.Ports[index]
+		item.DeviceID = SanitizeText(item.DeviceID)
+		item.Name = sanitizeStringPointer(item.Name)
+		item.Media = sanitizeStringPointer(item.Media)
+		if item.PoE != nil {
+			poe := *item.PoE
+			poe.State = sanitizeStringPointer(poe.State)
+			poe.Mode = sanitizeStringPointer(poe.Mode)
+			poe.Class = sanitizeStringPointer(poe.Class)
+			item.PoE = &poe
+		}
+	}
+	result.LAGs = append([]UniFiAPILAG(nil), input.LAGs...)
+	if input.LAGs != nil && result.LAGs == nil {
+		result.LAGs = make([]UniFiAPILAG, 0)
+	}
+	for index := range result.LAGs {
+		result.LAGs[index].LAGID = SanitizeText(result.LAGs[index].LAGID)
+		result.LAGs[index].Member = SanitizeText(result.LAGs[index].Member)
+	}
+	if input.Topology != nil {
+		topology := *input.Topology
+		topology.Links = append([]UniFiAPITopologyLink(nil), input.Topology.Links...)
+		if topology.Links == nil {
+			topology.Links = make([]UniFiAPITopologyLink, 0)
+		}
+		for index := range topology.Links {
+			topology.Links[index].SourceDeviceID = sanitizeStringPointer(topology.Links[index].SourceDeviceID)
+			topology.Links[index].TargetDeviceID = sanitizeStringPointer(topology.Links[index].TargetDeviceID)
+			topology.Links[index].State = sanitizeStringPointer(topology.Links[index].State)
+		}
+		result.Topology = &topology
+	}
+	if input.Anomalies != nil {
+		anomalies := *input.Anomalies
+		anomalies.RecentTypes = append([]string(nil), input.Anomalies.RecentTypes...)
+		for index := range anomalies.RecentTypes {
+			anomalies.RecentTypes[index] = SanitizeText(anomalies.RecentTypes[index])
+		}
+		result.Anomalies = &anomalies
 	}
 	result.Temperatures = append([]UniFiAPITemperature(nil), input.Temperatures...)
 	if input.Temperatures != nil && result.Temperatures == nil {

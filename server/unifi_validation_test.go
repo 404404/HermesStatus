@@ -147,6 +147,43 @@ func TestUniFiAPITelemetryProjectionAndPartialFailure(t *testing.T) {
 	}
 }
 
+func TestUniFiAPIPortTelemetryRoundTripAndNoRawTable(t *testing.T) {
+	stats := validUniFiFixture("udw")
+	now := "2026-08-27T01:02:03Z"
+	status := 200
+	poePower := 3.32
+	peerCount := 1
+	stats.API = &UniFiAPIStats{
+		Enabled: true, Status: "available", LastAttempt: &now, LastSuccess: &now,
+		Endpoints: []UniFiAPIEndpoint{{Name: "info", Status: "ok", HTTPStatus: &status}},
+		Telemetry: &UniFiAPITelemetry{
+			Identity: &UniFiAPIIdentity{Model: unifiString("UDW")},
+			WANs:     []UniFiAPIWAN{}, Uplinks: []UniFiAPIUplink{}, Temperatures: []UniFiAPITemperature{},
+			Ports:       []UniFiAPIPort{{DeviceID: "udw-1", PortIndex: 7, Name: unifiString("LAN 7"), Media: unifiString("2.5GE"), Up: func() *bool { v := true; return &v }(), SpeedMbps: unifiFloat(2500), RxBytes: unifiInt64(100), TxBytes: unifiInt64(200), RxBPS: unifiInt64(1000), TxBPS: unifiInt64(2000), PoE: &UniFiAPIPoE{Supported: func() *bool { v := true; return &v }(), PowerW: &poePower}, PeerCount: &peerCount}},
+			PortSummary: &UniFiAPIPortSummary{Total: 1, Up: 1, Down: 0, PoEActive: 1, PoETotalPowerW: &poePower},
+			LAGs:        []UniFiAPILAG{}, Topology: nil, Anomalies: nil,
+		},
+		Error: nil,
+	}
+	if err := ValidateUniFiStats(&stats); err != nil {
+		t.Fatalf("port telemetry rejected: %v", err)
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "mac_table") || strings.Contains(string(raw), "mac_address") {
+		t.Fatal("raw MAC table fields must not be projected")
+	}
+	decoded, err := DecodeUniFiStatsJSON(raw)
+	if err != nil {
+		t.Fatalf("port telemetry round trip rejected: %v", err)
+	}
+	if decoded.API == nil || decoded.API.Telemetry == nil || len(decoded.API.Telemetry.Ports) != 1 || decoded.API.Telemetry.Ports[0].PoE == nil || decoded.API.Telemetry.Ports[0].PoE.PowerW == nil {
+		t.Fatalf("port telemetry was not preserved: %#v", decoded.API)
+	}
+}
+
 func TestUniFiStorageMediaCapabilitiesRoundTrip(t *testing.T) {
 	stats := validUniFiFixture("udw")
 	capacity := int64(128000000000)
