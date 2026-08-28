@@ -69,7 +69,9 @@ class UniFiAPITests(unittest.TestCase):
                         "loadAverage1Min": 1.1, "loadAverage5Min": 1.2,
                         "loadAverage15Min": 1.3, "uptimeSec": 1234,
                         "lastHeartbeatAt": "2026-01-01T00:00:00Z",
-                        "uplink": {"rxRateBps": 100, "txRateBps": 200}}, 200
+                        "uplink": {"rxRateBps": 100, "txRateBps": 200},
+                        "wans": [{"id": "wan1", "status": {"state": "ONLINE", "isp": "Example ISP", "speedMbps": 2500},
+                                  "metrics": {"latencyMs": 2.5, "packetLossPercent": 0.0, "jitterMs": 0.1}}]}, 200
             if "/devices/" in path:
                 return {"id": "udw-1", "model": "UDW", "name": "UDW", "firmwareVersion": "5.0", "state": "ONLINE",
                         "interfaces": {"ports": [{"idx": 1, "state": "UP", "speedMbps": 2500, "maxSpeedMbps": 2500}, {"idx": 2, "state": "DOWN", "maxSpeedMbps": 1000}]}}, 200
@@ -107,6 +109,11 @@ class UniFiAPITests(unittest.TestCase):
         self.assertNotIn("/proxy/network/integration/v1/clients", calls)
         self.assertNotIn("/proxy/network/integration/v1/networks", calls)
         telemetry = result["telemetry"]
+        self.assertEqual(telemetry["wans"][0]["id"], "wan1")
+        self.assertEqual(telemetry["wans"][0]["isp"], "Example ISP")
+        self.assertEqual(telemetry["wans"][0]["link_speed_mbps"], 2500.0)
+        self.assertEqual(telemetry["wans"][0]["latency_ms"], 2.5)
+        self.assertEqual(telemetry["wans"][0]["packet_loss_percent"], 0.0)
         self.assertEqual(telemetry["identity"]["model"], "UDW")
         self.assertEqual(telemetry["devices"]["total"], 3)
         self.assertEqual(telemetry["clients"], {"total": 2, "wired": 1, "wireless": 1, "observed": True})

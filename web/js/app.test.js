@@ -184,7 +184,7 @@ async function run(){
   assert.equal(app.unifiApiStatusText({...udwUniFi, api: {status: 'unavailable', error: {code: 'api_auth_failure'}}}), '认证失败');
   assert.match(app.unifiSystemRows(udwUniFi).map(row => row.join(' ')).join(' '), /64\.2℃/);
   assert.match(app.unifiSystemRows(udwUniFi).map(row => row.join(' ')).join(' '), /2\.00 GB \/ 4\.00 GB/);
-  assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /数据不足（首个有效样本）/);
+  assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /CPU 使用率[\s\S]*usage-bar[\s\S]*-/);
   assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /可用内存回退估算/);
   assert.match(app.unifiFanRows(udwUniFi), /1,698 RPM/);
   assert.match(app.unifiFanRows(ucgMaxUniFi), /已观察到 0 RPM/);
@@ -225,7 +225,7 @@ async function run(){
     networks: {total: 3, vlan: 3},
     ports: [
       {device_id: 'udw-1', port_idx: 10, name: 'Port 10', media: 'GE', up: false, enabled: true, uplink: false, speed_mbps: 0, max_speed_mbps: 1000, rx_bytes: 0, tx_bytes: 0, poe: {supported: false}},
-      {device_id: 'udw-1', port_idx: 2, name: 'Port 2', media: 'GE', up: true, enabled: true, uplink: false, speed_mbps: 1000, max_speed_mbps: 2500, rx_bytes: 1000, tx_bytes: 2000, poe: {supported: true, active: true, power_w: 3.32, max_power_w: 30}, peer_count: 1},
+      {device_id: 'udw-1', port_idx: 2, name: 'Port 2', media: 'GE', up: true, enabled: true, uplink: false, speed_mbps: 1000, max_speed_mbps: 2500, rx_bytes: 1000, tx_bytes: 2000, tx_errors: 2, tx_dropped: 3, rx_errors: 0, rx_dropped: 1, poe: {supported: true, active: true, power_w: 3.32, max_power_w: 30}, peer_count: 1},
       {device_id: 'udw-1', port_idx: 7, name: 'Port 7', media: '2.5GE', up: true, enabled: true, uplink: true, speed_mbps: 2500, max_speed_mbps: 2500, rx_bytes: 1000, tx_bytes: 2000, rx_bps: 1000000, tx_bps: 2000000, poe: {supported: true, active: true, power_w: 3.32, max_power_w: 30}, peer_count: 1},
       {device_id: 'switch-1', port_idx: 1, name: 'Port 1', media: 'GE', up: true, enabled: true, uplink: false, speed_mbps: 1000, max_speed_mbps: 1000, rx_bytes: 0, tx_bytes: 0, poe: {supported: false}}
     ],
@@ -246,11 +246,15 @@ async function run(){
   assert.match(portTelemetryMarkup, /2\.00 KB/);
   assert.match(portTelemetryMarkup, /1\.00 KB/);
   assert.match(portTelemetryMarkup, /3\.32 W/);
-  assert.match(portTelemetryMarkup, /错误 \/ 丢弃/);
+  assert.match(portTelemetryMarkup, /发送 \/ 接收 \(错误\/丢弃\)/);
+  assert.match(portTelemetryMarkup, /2 \/ 3 \/ 0 \/ 1/);
+  assert.match(portTelemetryMarkup, /PoE 总功率：6\.64 W \/ 60 W/);
+  assert.match(portTelemetryMarkup, /未连接 \/ 1 GbE/);
+  assert.match(portTelemetryMarkup, /发送 \/ 接收 \(错误\/丢弃\)/);
   assert.match(wanMarkup, /Example ISP/);
   assert.match(wanMarkup, /0\.0 ms \/ 0\.00% \/ 0\.0 ms/);
   assert.doesNotMatch(portTelemetryMarkup, /<th>RX<\/th>|<th>TX<\/th>|<th>连接<\/th>/);
-  assert.equal(app.unifiPortLinkText({up: false, speed_mbps: 1000, max_speed_mbps: 2500}), '未连接');
+  assert.equal(app.unifiPortLinkText({up: false, speed_mbps: 1000, max_speed_mbps: 10000}), '未连接 / 10 GbE');
   assert.equal(app.unifiPortPoeText({poe: {supported: false, power_w: 0}}), '-');
   assert.doesNotMatch(portTelemetryMarkup, /mac_table|mac_address|192\\.168/);
   assert.match(apiTelemetryMarkup, /UniFi 设备型号/);
@@ -284,10 +288,12 @@ async function run(){
   assert.match(systemCards, /power-on-days/);
   assert.match(systemCards, /data-fit-single-line="unifi-primary-value"/);
   assert.match(systemCards, /Annapurna AL324/);
+  const unavailableCards = app.unifiSystemCards({...ucgMaxUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, identity: {model: 'UDW', display_name: 'UDW', status: 'ONLINE'}}}});
+  assert.match(unavailableCards, /<div class="usage-bar"[\s\S]*<span>-<\/span>/);
   assert.match(systemCards, /2\.00 GB \/ 4\.00 GB/);
   assert.match(systemCards, /<h2>CPU<\/h2>[\s\S]*Annapurna AL324/);
   assert.match(portTelemetryMarkup, /UniFi Dream Wall/);
-  assert.match(portTelemetryMarkup, /USW Flex Mini|switch-1/);
+  assert.match(portTelemetryMarkup, /USW Flex Mini/);
   assert.ok(portTelemetryMarkup.indexOf('>2</td>') < portTelemetryMarkup.indexOf('>7</td>'));
   assert.ok(portTelemetryMarkup.indexOf('>7</td>') < portTelemetryMarkup.indexOf('>10</td>'));
   assert.doesNotMatch(portTelemetryMarkup, /已连接 · 上联/);

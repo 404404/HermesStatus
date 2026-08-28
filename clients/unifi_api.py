@@ -479,49 +479,73 @@ def _temperature_records(devices):
 def _wan_record(item):
     if not isinstance(item, dict):
         return None
+    # Official responses and statistics may nest link/health/traffic fields
+    # one level below the WAN record. Flatten only reviewed object keys so the
+    # projection remains bounded and typed; arbitrary payload keys are never
+    # emitted.
+    source = dict(item)
+    for nested_name in ("link", "status", "health", "metrics", "statistics", "performance", "uplink"):
+        nested = item.get(nested_name)
+        if isinstance(nested, dict):
+            for key, value in nested.items():
+                source.setdefault(key, value)
     result = {}
     for output, keys in (
-        ("id", ("id", "wan_id", "wanId")),
-        ("name", ("name", "display_name", "displayName")),
-        ("interface", ("interface", "interface_name", "interfaceName", "ifname")),
-        ("isp", ("isp", "provider", "provider_name", "providerName")),
-        ("link_state", ("link_state", "linkState", "state", "status")),
-        ("gateway", ("gateway", "gateway_name", "gatewayName")),
-        ("sla_status", ("sla_status", "slaStatus", "health", "health_status")),
+        ("id", ("id", "wan_id", "wanId", "interface_id", "interfaceId")),
+        ("name", ("name", "display_name", "displayName", "label")),
+        ("interface", ("interface", "interface_name", "interfaceName", "ifname", "interface_id", "interfaceId")),
+        ("isp", ("isp", "provider", "provider_name", "providerName", "carrier", "vendor")),
+        ("link_state", ("link_state", "linkState", "link_status", "linkStatus", "state", "status", "connection_state", "connectionState")),
+        ("gateway", ("gateway", "gateway_name", "gatewayName", "gateway_address", "gatewayAddress")),
+        ("sla_status", ("sla_status", "slaStatus", "health", "health_status", "healthStatus")),
         ("failover_state", ("failover_state", "failoverState")),
         ("load_balancing_state", ("load_balancing_state", "loadBalancingState")),
     ):
-        value = _text(_first(item, *keys))
+        value = _text(_first(source, *keys))
         if value:
             result[output] = value
     for output, keys in (
-        ("online", ("online", "is_online", "isOnline")),
+        ("online", ("online", "is_online", "isOnline", "connected")),
         ("active", ("active", "is_active", "isActive")),
         ("standby", ("standby", "is_standby", "isStandby")),
     ):
-        value = _boolean(_first(item, *keys))
+        value = _boolean(_first(source, *keys))
         if value is not None:
             result[output] = value
     for output, keys, integer in (
         ("uptime_seconds", ("uptime_seconds", "uptimeSeconds", "uptime"), False),
         ("downtime_seconds", ("downtime_seconds", "downtimeSeconds", "downtime"), False),
-        ("latency_ms", ("latency_ms", "latencyMs", "latency"), False),
-        ("packet_loss_percent", ("packet_loss_percent", "packetLossPercent", "packet_loss", "loss_percent"), False),
+        ("latency_ms", ("latency_ms", "latencyMs", "latency", "round_trip_ms", "roundTripMs"), False),
+        ("packet_loss_percent", ("packet_loss_percent", "packetLossPercent", "packet_loss", "loss_percent", "lossPercent"), False),
         ("jitter_ms", ("jitter_ms", "jitterMs", "jitter"), False),
-        ("link_speed_mbps", ("link_speed_mbps", "linkSpeedMbps", "speed_mbps", "speedMbps"), False),
-        ("rx_bps", ("rx_bps", "rxBps", "download_bps", "downloadBps"), True),
-        ("tx_bps", ("tx_bps", "txBps", "upload_bps", "uploadBps"), True),
+        ("link_speed_mbps", ("link_speed_mbps", "linkSpeedMbps", "speed_mbps", "speedMbps", "speed"), False),
+        ("rx_bps", ("rx_bps", "rxBps", "download_bps", "downloadBps", "rx_rate_bps", "rxRateBps"), True),
+        ("tx_bps", ("tx_bps", "txBps", "upload_bps", "uploadBps", "tx_rate_bps", "txRateBps"), True),
         ("rx_bytes", ("rx_bytes", "rxBytes", "download_bytes", "downloadBytes"), True),
         ("tx_bytes", ("tx_bytes", "txBytes", "upload_bytes", "uploadBytes"), True),
         ("configured_upstream_bps", ("configured_upstream_bps", "upstream_bps", "upstreamBps"), True),
         ("configured_downstream_bps", ("configured_downstream_bps", "downstream_bps", "downstreamBps"), True),
     ):
-        value = _number(_first(item, *keys), integer=integer)
+        value = _number(_first(source, *keys), integer=integer)
         if value is not None:
             result[output] = value
     if not result:
         return None
     return result
+
+
+def _statistics_wans(payload):
+    """Extract only explicitly WAN-named records from latest statistics."""
+    if not isinstance(payload, dict):
+        return []
+    records = []
+    for key in ("wans", "wan", "wan_interfaces", "wanInterfaces", "wan_status", "wanStatus"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            records.extend(item for item in value[:MAX_API_WANS] if isinstance(item, dict))
+        elif isinstance(value, dict):
+            records.append(value)
+    return records[:MAX_API_WANS]
 
 
 def _wan_items(payload):
@@ -896,7 +920,9 @@ def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sampl
     # explicitly represented by the server model.
     identity = _identity(info, devices, target_detail or target)
     controller = _controller(info, target_detail or target)
-    wans, uplinks = _wans_and_uplinks(devices, target_detail, [payloads.get(name) for name, _ in WAN_ENDPOINTS if payloads.get(name) is not None])
+    extra_wans = [payloads.get(name) for name, _ in WAN_ENDPOINTS if payloads.get(name) is not None]
+    extra_wans.append(_statistics_wans(payloads.get("device_stats")))
+    wans, uplinks = _wans_and_uplinks(devices, target_detail, extra_wans)
     ports, port_summary = _ports(payloads.get("legacy_stat_device"), target, previous_samples if previous_samples is not None else {}, sample_time if sample_time is not None else time.monotonic(), target_detail=target_detail) if target is not None and payloads.get("legacy_stat_device") is not None else (None, None)
     telemetry = {
         "identity": identity,
