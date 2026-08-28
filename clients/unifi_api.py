@@ -479,11 +479,41 @@ def _wan_record(item):
     return result
 
 
-def _wans_and_uplinks(devices):
+def _detail_link_speed(target_detail):
+    """Return the highest observed target port speed, if the API exposes it."""
+    if not isinstance(target_detail, dict):
+        return None
+    interfaces = target_detail.get("interfaces")
+    ports = interfaces.get("ports") if isinstance(interfaces, dict) else None
+    if not isinstance(ports, list):
+        return None
+    observed = []
+    advertised = []
+    for port in ports[:MAX_API_UPLINKS]:
+        if not isinstance(port, dict):
+            continue
+        state = str(_first(port, "state", "status", "linkState") or "").strip().lower()
+        speed = _number(_first(port, "speedMbps", "speed_mbps", "linkSpeedMbps"), minimum=0)
+        maximum = _number(_first(port, "maxSpeedMbps", "max_speed_mbps"), minimum=0)
+        if speed is not None and state not in {"down", "offline", "disconnected", "disabled"}:
+            observed.append(speed)
+        if maximum is not None:
+            advertised.append(maximum)
+    values = observed or advertised
+    return max(values) if values else None
+
+
+def _wans_and_uplinks(devices, target_detail=None):
     wans, uplinks = [], []
+    target_id = _identifier(target_detail.get("id")) if isinstance(target_detail, dict) else None
+    target_speed = _detail_link_speed(target_detail)
     for device in devices:
+        source_device = device
+        if target_id and _identifier(device.get("id")) == target_id and target_speed is not None:
+            source_device = dict(device)
+            source_device["speed_mbps"] = target_speed
         records = _nested_records(device, "wans", "wan", "wan_interfaces", "uplinks", "interfaces")
-        expanded = [device] + list(records)
+        expanded = [source_device] + list(records)
         for record in records:
             expanded.extend(_nested_records(record, "uplinks", "interfaces"))
         for item in expanded:
@@ -495,7 +525,7 @@ def _wans_and_uplinks(devices):
                     wans.append(record)
             elif len(uplinks) < MAX_API_UPLINKS:
                 uplink = {}
-                for output, keys in (("name", ("name", "interface", "interface_name", "interfaceName")), ("link_state", ("link_state", "linkState", "state", "status")), ("duplex", ("duplex",)), ("wan_id", ("wan_id", "wanId"))):
+                for output, keys in (("name", ("model", "model_name", "modelName", "device_model", "name", "interface", "interface_name", "interfaceName")), ("link_state", ("link_state", "linkState", "state", "status")), ("duplex", ("duplex",)), ("wan_id", ("wan_id", "wanId"))):
                     value = _text(_first(item, *keys))
                     if value:
                         uplink[output] = value
@@ -549,7 +579,7 @@ def _telemetry(payloads, *, site=None, target=None):
     # explicitly represented by the server model.
     identity = _identity(info, devices, target_detail or target)
     controller = _controller(info, target_detail or target)
-    wans, uplinks = _wans_and_uplinks(devices)
+    wans, uplinks = _wans_and_uplinks(devices, target_detail)
     telemetry = {
         "identity": identity,
         "controller": controller,

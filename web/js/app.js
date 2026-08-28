@@ -600,7 +600,7 @@ function statusText(value){
 		not_configured: '未配置', error: '异常', valid: '有效', expiring: '即将到期',
 		expired: '已过期', not_yet_valid: '尚未生效', invalid: '无效',
 		supported: '支持', unsupported: '不支持', matched: '匹配', mismatch: '不匹配', not_observable: '未观察到',
-    online: '在线', offline: '离线', never_seen: '从未上线', disabled: '已禁用',
+    online: '在线', offline: '离线', up: '在线', connected: '在线', adopted: '在线', active: '在线', down: '离线', disconnected: '离线', never_seen: '从未上线', disabled: '已禁用',
     identity_error: '身份异常', matched: '身份匹配', missing_fqdn: '缺少身份信息',
     fqdn_mismatch: '身份不匹配'
   };
@@ -1208,11 +1208,32 @@ function unifiSystemCards(unifi){
   const values = unifiSystemValues(unifi);
   const {system, cpu, memoryPercent, loadText, cpuText, memoryText} = values;
   const hasSystem = Object.keys(system).length > 0;
-  if(!hasSystem) return '<div class="table-empty">暂无可显示的通用遥测。</div>';
+  if(!hasSystem) return '<div class="table-empty">暂无可显示的 UniFi 遥测。</div>';
+  const api = safeObject(unifi?.api);
+  const telemetry = safeObject(api.telemetry);
+  const identity = safeObject(telemetry.identity);
+  const controller = safeObject(telemetry.controller);
+  const clients = safeObject(telemetry.clients);
+  const networks = safeObject(telemetry.networks);
+  const deviceName = textOrDash(identity.display_name || identity.name || identity.model);
+  const deviceModel = textOrDash(identity.model);
+  const deviceStatus = identity.status ? statusText(identity.status) : '-';
+  const deviceVersion = textOrDash(identity.firmware);
+  const appStatus = controller.state ? statusText(controller.state) : '-';
+  const appVersion = textOrDash(controller.application_version);
+  const connectedClients = [clients.wired, clients.wireless, clients.total].map(formatInteger).join(' / ');
+  const networkSummary = [networks.total, networks.vlan].map(formatInteger).join(' / ');
   const uptime = formatUptimeHours(system.uptime_seconds);
   const model = unifiCpuModel(unifi);
   const memoryValue = memoryText === '-' ? '内存数据不可用' : memoryText;
-  return `<div class="unifi-system-cards overview-grid" aria-label="UniFi 通用遥测">
+  const secondary = value => `<div class="card-mini-meta">${escapeHtml(value)}</div>`;
+  const version = value => value === '-' ? '' : ` <span class="unifi-status-version">(${escapeHtml(value)})</span>`;
+  return `<div class="unifi-system-cards overview-grid" aria-label="UniFi 摘要">
+    <article class="summary-card metric-card unifi-device-card">
+      <h2>设备</h2>
+      <div class="card-value" data-fit-single-line="unifi-device-name" title="${escapeHtml(deviceName)}">${escapeHtml(deviceName)}</div>
+      <div class="card-subvalue" title="${escapeHtml(deviceModel)}">${escapeHtml(deviceModel)}</div>
+    </article>
     <article class="summary-card resource-card">
       <h2>CPU</h2>
       <div class="card-detail resource-value unifi-primary-value" data-fit-single-line="unifi-primary-value" title="${escapeHtml(model)}">${escapeHtml(model)}</div>
@@ -1223,18 +1244,36 @@ function unifiSystemCards(unifi){
       <div class="card-detail resource-value unifi-memory-detail" title="${escapeHtml(memoryValue)}">${escapeHtml(memoryValue)}</div>
       ${memoryPercent === null ? '<div class="card-value unifi-card-unavailable">数据不可用</div>' : resourceBar(memoryPercent, 'UniFi 内存使用率')}
     </article>
-    <article class="summary-card metric-card">
-      <h2>CPU 温度</h2>
-      <div class="card-detail resource-value unifi-primary-value" data-fit-single-line="unifi-primary-value">${escapeHtml(formatCelsius(system.cpu_temperature_c))}</div>
-    </article>
-    <article class="summary-card metric-card">
+    <article class="summary-card metric-card unifi-load-card">
       <h2>负载</h2>
       <div class="card-value" data-fit-single-line="unifi-load" title="${escapeHtml(loadText)}">${escapeHtml(loadText)}</div>
-      <div class="card-mini-meta">1m / 5m / 15m</div>
+      ${secondary('1m / 5m / 15m')}
+    </article>
+    <article class="summary-card metric-card unifi-client-card">
+      <h2>连接客户端</h2>
+      <div class="card-value" data-fit-single-line="unifi-client-counts" title="${escapeHtml(connectedClients)}">${escapeHtml(connectedClients)}</div>
+      ${secondary('有线 / 无线 / 总数')}
+    </article>
+    <article class="summary-card metric-card">
+      <h2>CPU 温度</h2>
+      <div class="card-value unifi-primary-value" data-fit-single-line="unifi-primary-value">${escapeHtml(formatCelsius(system.cpu_temperature_c))}</div>
     </article>
     <article class="summary-card metric-card">
       <h2>运行时间</h2>
       <div class="card-value unifi-uptime-value">${escapeHtml(uptime.split(' (')[0])}${uptime.includes(' (') ? ` <span class="power-on-days">(${escapeHtml(uptime.split(' (')[1].replace(/\)$/, ''))})</span>` : ''}</div>
+    </article>
+    <article class="summary-card metric-card unifi-status-card">
+      <h2>设备状态</h2>
+      <div class="card-value">${escapeHtml(deviceStatus)}${version(deviceVersion)}</div>
+    </article>
+    <article class="summary-card metric-card unifi-status-card">
+      <h2>网络应用</h2>
+      <div class="card-value">${escapeHtml(appStatus)}${version(appVersion)}</div>
+    </article>
+    <article class="summary-card metric-card unifi-network-card">
+      <h2>网络摘要</h2>
+      <div class="card-value" data-fit-single-line="unifi-network-summary">${escapeHtml(networkSummary)}</div>
+      ${secondary('(网络 / VLAN)')}
     </article>
   </div>`;
 }
@@ -1277,10 +1316,11 @@ function unifiStorageRows(unifi){
   return Object.entries(labels).filter(([key]) => Object.prototype.hasOwnProperty.call(storage, key)).map(([key, label]) => {
     const capability = safeObject(storage[key]);
     const unsupported = capability.supported === 'unsupported';
+    const notInstalled = capability.present === 'not_present' || capability.present === 'not_populated';
     const capacity = finiteNumber(capability.capacity_bytes);
-    const capacityText = unsupported ? '-' : capacity === null ? '容量未知' : formatBytes(capacity);
-    const observation = unsupported ? '-' : capability.observed === true ? '已观察到' : '未观察到';
-    const usage = unsupported ? {usedText: '-', percentMarkup: '-'} : unifiStorageUsage(capability);
+    const capacityText = unsupported || notInstalled ? '-' : capacity === null ? '容量未知' : formatBytes(capacity);
+    const observation = unsupported || notInstalled ? '-' : capability.observed === true ? '已观察到' : '未观察到';
+    const usage = unsupported || notInstalled ? {usedText: '-', percentMarkup: '-'} : unifiStorageUsage(capability);
     const value = [
       badge(capability.supported),
       escapeHtml(unsupported ? '-' : unifiPresenceText(capability.present)),
@@ -1300,11 +1340,12 @@ function unifiStorageMarkup(unifi){
   const rows = entries.map(([key, label]) => {
     const capability = safeObject(storage[key]);
     const unsupported = capability.supported === 'unsupported';
-    const usage = unsupported ? {usedText: '-', percentMarkup: '-'} : unifiStorageUsage(capability);
+    const notInstalled = capability.present === 'not_present' || capability.present === 'not_populated';
+    const usage = unsupported || notInstalled ? {usedText: '-', percentMarkup: '-'} : unifiStorageUsage(capability);
     const capacity = finiteNumber(capability.capacity_bytes);
     const presence = unsupported ? '-' : unifiPresenceText(capability.present);
-    const observation = unsupported ? '-' : capability.observed === true ? '已观察到' : '未观察到';
-    const capacityText = unsupported ? '-' : capacity === null ? '容量未知' : formatBytes(capacity);
+    const observation = unsupported || notInstalled ? '-' : capability.observed === true ? '已观察到' : '未观察到';
+    const capacityText = unsupported || notInstalled ? '-' : capacity === null ? '容量未知' : formatBytes(capacity);
     return `<tr><td class="strong-cell">${escapeHtml(label)}</td><td>${badge(capability.supported)}</td><td>${escapeHtml(presence)}</td><td>${escapeHtml(observation)}</td><td>${escapeHtml(capacityText)}</td><td>${escapeHtml(usage.usedText)}</td><td class="table-usage">${usage.percentMarkup}</td></tr>`;
   }).join('');
   return `<div class="table-wrap"><table class="data unifi-storage-table"><thead><tr><th>类型</th><th>支持能力</th><th>在位</th><th>观测</th><th>容量</th><th>已用 / 总容量</th><th>使用率</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -1324,44 +1365,22 @@ function unifiApiTelemetryMarkup(unifi){
   if(!api.enabled || api.status === 'disabled') return '<div class="unifi-api-unavailable">API 未启用；SSH 遥测仍作为主数据源。</div>';
   const telemetry = safeObject(api.telemetry);
   if(!Object.keys(telemetry).length) return `<div class="unifi-api-unavailable">API ${api.status === 'partial' ? '部分可用' : '暂无可用'}，未取得可显示摘要。</div>`;
-  const cards = [];
   const identity = safeObject(telemetry.identity);
-  if(Object.keys(identity).length){
-    cards.push(`<article class="unifi-api-card"><h3>设备身份</h3><dl class="detail-list">${detailRow('型号', escapeHtml(textOrDash(identity.model)))}${detailRow('名称', escapeHtml(textOrDash(identity.display_name)))}${detailRow('固件', escapeHtml(textOrDash(identity.firmware)))}${detailRow('状态', escapeHtml(textOrDash(identity.status)))}${detailRow('运行时间', escapeHtml(formatUptime(identity.uptime_seconds)))}</dl></article>`);
-  }
-  const controller = safeObject(telemetry.controller);
-  if(Object.keys(controller).length){
-    cards.push(`<article class="unifi-api-card"><h3>Network 应用</h3><dl class="detail-list">${detailRow('应用版本', escapeHtml(textOrDash(controller.application_version)))}${detailRow('构建', escapeHtml(textOrDash(controller.build)))}${detailRow('状态', escapeHtml(textOrDash(controller.state)))}${detailRow('可更新', escapeHtml(unifiApiBoolean(controller.update_available)))}</dl></article>`);
-  }
-  const clients = safeObject(telemetry.clients);
-  if(Object.keys(clients).length){
-    cards.push(`<article class="unifi-api-card"><h3>连接客户端</h3><dl class="detail-list">${detailRow('总数', escapeHtml(formatInteger(clients.total)))}${detailRow('有线', escapeHtml(formatInteger(clients.wired)))}${detailRow('无线', escapeHtml(formatInteger(clients.wireless)))}</dl></article>`);
-  }
-  const devices = safeObject(telemetry.devices);
-  if(Object.keys(devices).length){
-    cards.push(`<article class="unifi-api-card"><h3>UniFi 设备</h3><dl class="detail-list">${detailRow('总数', escapeHtml(formatInteger(devices.total)))}${detailRow('在线', escapeHtml(formatInteger(devices.online)))}${detailRow('离线', escapeHtml(formatInteger(devices.offline)))}</dl></article>`);
-  }
-  const networks = safeObject(telemetry.networks);
-  if(Object.keys(networks).length){
-    cards.push(`<article class="unifi-api-card"><h3>网络摘要</h3><dl class="detail-list">${detailRow('网络数', escapeHtml(formatInteger(networks.total)))}${detailRow('VLAN', escapeHtml(formatInteger(networks.vlan)))}</dl></article>`);
-  }
-  let markup = cards.length ? `<div class="unifi-api-grid">${cards.join('')}</div>` : '';
-  const wans = Array.isArray(telemetry.wans) ? telemetry.wans : [];
-  if(wans.length){
-    const rows = wans.map(wan => `<tr><td class="strong-cell">${escapeHtml(textOrDash(wan.name || wan.id))}</td><td>${escapeHtml(textOrDash(wan.interface))}</td><td>${escapeHtml(unifiApiBoolean(wan.online))}</td><td>${escapeHtml(textOrDash(wan.isp))}</td><td>${escapeHtml(unifiApiNumber(wan.latency_ms, ' ms'))}</td><td>${escapeHtml(unifiApiNumber(wan.packet_loss_percent, '%'))}</td><td>${escapeHtml(wan.rx_bps === undefined ? '-' : `${formatTrafficBytes(wan.rx_bps)}/s`)}</td><td>${escapeHtml(wan.tx_bps === undefined ? '-' : `${formatTrafficBytes(wan.tx_bps)}/s`)}</td></tr>`).join('');
-    markup += `<div class="table-wrap"><table class="data unifi-api-table"><thead><tr><th>WAN</th><th>接口</th><th>状态</th><th>ISP</th><th>延迟</th><th>丢包</th><th>RX</th><th>TX</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }
-  const uplinks = Array.isArray(telemetry.uplinks) ? telemetry.uplinks : [];
-  if(uplinks.length){
-    const rows = uplinks.map(item => `<tr><td class="strong-cell">${escapeHtml(textOrDash(item.name))}</td><td>${escapeHtml(textOrDash(item.link_state))}</td><td>${escapeHtml(item.speed_mbps === undefined ? '-' : `${formatInteger(item.speed_mbps)} Mbps`)}</td><td>${escapeHtml(textOrDash(item.duplex))}</td><td>${escapeHtml(textOrDash(item.wan_id))}</td></tr>`).join('');
-    markup += `<div class="table-wrap"><table class="data unifi-api-table"><thead><tr><th>上行接口</th><th>链路</th><th>速率</th><th>双工</th><th>WAN</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }
-  const temperatures = Array.isArray(telemetry.temperatures) ? telemetry.temperatures : [];
-  if(temperatures.length){
-    const rows = temperatures.map(item => `<tr><td class="strong-cell">${escapeHtml(item.label)}</td><td>${escapeHtml(formatCelsius(item.celsius))}</td><td>${escapeHtml(item.source)}</td></tr>`).join('');
-    markup += `<div class="table-wrap"><table class="data unifi-api-table"><thead><tr><th>传感器</th><th>温度</th><th>来源</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }
-  return markup || '<div class="unifi-api-unavailable">API 已连接，但当前响应未提供可显示的摘要字段。</div>';
+  const rawUplinks = Array.isArray(telemetry.uplinks) ? telemetry.uplinks : [];
+  const uplinks = rawUplinks.length ? rawUplinks : (identity.model ? [{name: identity.model, link_state: identity.status}] : []);
+  if(!uplinks.length) return '<div class="unifi-api-unavailable">API 已连接，但当前响应未提供可显示的 UniFi 设备。</div>';
+  const rows = uplinks.map(item => `<tr><td class="strong-cell">${escapeHtml(textOrDash(item.name))}</td><td>${escapeHtml(item.link_state ? statusText(item.link_state) : '-')}</td><td>${escapeHtml(unifiLinkBandwidth(item.speed_mbps))}</td></tr>`).join('');
+  return `<div class="table-wrap"><table class="data unifi-api-table"><thead><tr><th>UniFi 设备型号</th><th>状态</th><th>链路</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function unifiLinkBandwidth(value){
+  const number = finiteNumber(value);
+  if(number === null || number <= 0) return '-';
+  if(number >= 10000) return '10 GbE';
+  if(number >= 2500) return '2.5 GbE';
+  if(number >= 1000) return `${Number.isInteger(number / 1000) ? number / 1000 : (number / 1000).toFixed(1)} GbE`;
+  if(number >= 100) return 'FE';
+  return `${formatInteger(number)} Mbps`;
 }
 
 function renderUniFi(view){
@@ -2059,6 +2078,7 @@ const exported = {
   unifiTransportSummary,
   unifiApiStatusText,
   unifiApiTelemetryMarkup,
+  unifiLinkBandwidth,
   unifiSystemRows,
   unifiSystemCards,
   unifiFanRows,

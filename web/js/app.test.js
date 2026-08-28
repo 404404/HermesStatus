@@ -198,6 +198,10 @@ async function run(){
   assert.match(storageMarkup, /unifi-storage-table/);
   assert.match(storageMarkup, /64\.0 GB \/ 128 GB/);
   assert.match(storageMarkup, /50%/);
+  const notInstalledStorage = app.unifiStorageMarkup(udwUniFi);
+  const tfRow = notInstalledStorage.match(/<tr>[^]*?<\/tr>/g).find(row => row.includes('>TF<'));
+  assert.match(tfRow, /未安装/);
+  assert.equal((tfRow.match(/(?:<td>-<\/td>|<td class=\"table-usage\">-<\/td>)/g) || []).length, 4);
   const unsupportedStorageMarkup = app.unifiStorageMarkup({...udwUniFi, storage: {
     nvme: {supported: 'unsupported', present: 'not_present', observed: false, capacity_bytes: 1000000000, used_bytes: 100},
   }});
@@ -206,39 +210,53 @@ async function run(){
   assert.match(unsupportedStorageMarkup, /<td>-<\/td>/g);
   assert.match(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /不支持[\s\S]*未安装/);
   assert.match(app.unifiPowerRows(udwUniFi), /未提供/);
-  const systemCards = app.unifiSystemCards(udwUniFi);
-  const apiTelemetryMarkup = app.unifiApiTelemetryMarkup({...udwUniFi, api: {enabled: true, status: 'available', telemetry: {
-    identity: {model: 'UDW', display_name: 'Gateway', firmware: '5.0.1', status: 'online'},
-    controller: {application_version: '9.1.2', build: 'b1', state: 'healthy'},
-    wans: [{name: 'WAN1', interface: 'eth0', online: true, isp: 'Example ISP', latency_ms: 0, packet_loss_percent: 0, rx_bps: 0, tx_bps: 1000}],
-    uplinks: [{name: 'eth0', link_state: 'up', speed_mbps: 1000}],
-    temperatures: [{id: 'cpu', label: 'CPU', celsius: 64.5, source: 'unifi-api'}],
-    clients: {total: 2, wired: 1, wireless: 1, observed: true},
-    devices: {total: 2, online: 2, offline: 0, by_type: {gateway: 1, switch: 1}},
-    networks: {total: 2, vlan: 1}
-  }}});
-  assert.match(apiTelemetryMarkup, /设备身份/);
-  assert.match(apiTelemetryMarkup, /5\.0\.1/);
-  assert.match(apiTelemetryMarkup, /WAN1/);
-  assert.match(apiTelemetryMarkup, /0 ms/);
-  assert.match(apiTelemetryMarkup, /0%/);
-  assert.match(apiTelemetryMarkup, /连接客户端/);
+  const apiFixture = {enabled: true, status: 'available', telemetry: {
+    identity: {model: 'UniFi Dream Wall', display_name: 'UDW', firmware: '5.1.31', status: 'ONLINE'},
+    controller: {application_version: '10.5.67', state: 'ONLINE'},
+    uplinks: [{name: 'UniFi Dream Wall', link_state: 'ONLINE', speed_mbps: 2500}, {name: 'USW Flex Mini', link_state: 'ONLINE', speed_mbps: 1000}],
+    clients: {total: 19, wired: 14, wireless: 5, observed: true},
+    networks: {total: 3, vlan: 3}
+  }};
+  const systemCards = app.unifiSystemCards({...udwUniFi, api: apiFixture});
+  const apiTelemetryMarkup = app.unifiApiTelemetryMarkup({...udwUniFi, api: apiFixture});
+  assert.match(apiTelemetryMarkup, /UniFi 设备型号/);
+  assert.match(apiTelemetryMarkup, /UniFi Dream Wall/);
+  assert.match(apiTelemetryMarkup, /在线/);
+  assert.match(apiTelemetryMarkup, /2\.5 GbE/);
+  assert.equal(app.unifiLinkBandwidth(100), 'FE');
+  assert.equal(app.unifiLinkBandwidth(1000), '1 GbE');
+  assert.equal(app.unifiLinkBandwidth(10000), '10 GbE');
+  assert.doesNotMatch(apiTelemetryMarkup, /WAN|双工|速率|设备身份|连接客户端/);
   assert.match(apiTelemetryMarkup, /unifi-api-table/);
+  assert.match(systemCards, /<h2>设备<\/h2>/);
+  assert.match(systemCards, /UDW/);
+  assert.match(systemCards, /UniFi Dream Wall/);
   assert.match(systemCards, /<h2>CPU<\/h2>/);
   assert.match(systemCards, /<h2>内存<\/h2>/);
   assert.doesNotMatch(systemCards, /<h2>CPU 使用率<\/h2>/);
   assert.doesNotMatch(systemCards, /<h2>内存使用率<\/h2>/);
   assert.match(systemCards, /CPU 温度/);
   assert.match(systemCards, /负载/);
+  assert.match(systemCards, /14 \/ 5 \/ 19/);
+  assert.match(systemCards, /有线 \/ 无线 \/ 总数/);
   assert.match(systemCards, /运行时间/);
+  assert.match(systemCards, /设备状态/);
+  assert.match(systemCards, /在线.*5\.1\.31/);
+  assert.match(systemCards, /网络应用/);
+  assert.match(systemCards, /10\.5\.67/);
+  assert.match(systemCards, /网络摘要/);
+  assert.match(systemCards, /3 \/ 3/);
   assert.match(systemCards, /power-on-days/);
   assert.match(systemCards, /data-fit-single-line="unifi-primary-value"/);
   assert.match(systemCards, /Annapurna AL324/);
   assert.match(systemCards, /2\.00 GB \/ 4\.00 GB/);
-  assert.ok(systemCards.indexOf('<h2>CPU</h2>') < systemCards.indexOf('<h2>内存</h2>'));
-  assert.ok(systemCards.indexOf('<h2>内存</h2>') < systemCards.indexOf('CPU 温度'));
-  assert.ok(systemCards.indexOf('CPU 温度') < systemCards.indexOf('负载'));
-  assert.ok(systemCards.indexOf('负载') < systemCards.indexOf('运行时间'));
+  const cardLabels = ['设备', 'CPU', '内存', '负载', '连接客户端', 'CPU 温度', '运行时间', '设备状态', '网络应用', '网络摘要'];
+  let previous = -1;
+  for(const label of cardLabels){
+    const position = systemCards.indexOf(`<h2>${label}</h2>`);
+    assert.ok(position > previous, `${label} card order`);
+    previous = position;
+  }
   assert.doesNotMatch(app.unifiFanRows(udwUniFi), /fan3|fan4/);
   const unavailableUniFi = {...ucgMaxUniFi, stale: true, system: null, fans: [], power_supplies: [], updated_at: null,
     transport: {status: 'unavailable', last_attempt: '2026-08-27T01:02:04Z', last_success: '2026-08-27T01:02:03Z'},
@@ -740,7 +758,7 @@ async function run(){
   assert.match(indexMarkup, /<th>转速<\/th>/);
   assert.match(indexMarkup, /<th>功率<\/th>/);
   assert.match(indexMarkup, /<th>风扇转速<\/th>/);
-  assert.match(indexMarkup, /观测=本轮实时读数；未观察到不等于未安装/);
+  assert.match(indexMarkup, /未安装时容量与使用情况显示为 -/);
   assert.match(indexMarkup, /观测=本轮是否取得转速读数/);
   assert.doesNotMatch(indexMarkup, /raw thermal|PWM|cpuload|remote command/i);
   assert.match(appSource, /function renderUniFi\(view\)/);

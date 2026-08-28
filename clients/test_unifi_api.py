@@ -71,7 +71,8 @@ class UniFiAPITests(unittest.TestCase):
                         "lastHeartbeatAt": "2026-01-01T00:00:00Z",
                         "uplink": {"rxRateBps": 100, "txRateBps": 200}}, 200
             if "/devices/" in path:
-                return {"id": "udw-1", "model": "UDW", "name": "UDW", "firmwareVersion": "5.0", "state": "ONLINE"}, 200
+                return {"id": "udw-1", "model": "UDW", "name": "UDW", "firmwareVersion": "5.0", "state": "ONLINE",
+                        "interfaces": {"ports": [{"state": "UP", "speedMbps": 2500}, {"state": "DOWN", "maxSpeedMbps": 1000}]}}, 200
             if path.endswith("/devices"):
                 return {"data": devices}, 200
             if path.endswith("/clients"):
@@ -106,6 +107,8 @@ class UniFiAPITests(unittest.TestCase):
         self.assertTrue(telemetry["uplinks"])
         self.assertTrue(all(set(item) <= {"name", "link_state", "speed_mbps", "duplex", "wan_id"}
                             for item in telemetry["uplinks"]))
+        target_uplink = next(item for item in telemetry["uplinks"] if item.get("name") == "UDW")
+        self.assertEqual(target_uplink["speed_mbps"], 2500)
 
     def test_multiple_sites_fail_closed_without_selector(self):
         calls = []
