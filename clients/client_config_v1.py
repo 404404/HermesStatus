@@ -272,6 +272,8 @@ def _validate_unifi(value: Any) -> tuple[dict[str, Any], bool]:
         ssh_port = 22
     api = _obj(value["api"], "collectors.unifi.api")
     api_enabled = _bool(api.get("enabled"), "collectors.unifi.api.enabled") if "enabled" in api else _error("collectors.unifi.api.enabled is required")
+    if not ssh_enabled and not api_enabled:
+        _error("collectors.unifi requires at least one enabled transport")
     if api_enabled and not ssh_enabled:
         _error("collectors.unifi.ssh is required when collectors.unifi.api is enabled")
     if api_enabled:
@@ -355,6 +357,8 @@ def parse_unified_document(document: Mapping[str, Any]) -> dict[str, Any]:
     hardware_enabled = _validate_enabled_only(collectors["hardware"], "collectors.hardware")
     filesystem_enabled, filesystem_probes = _validate_filesystem(collectors["filesystem"])
     smart_enabled, smart_devices, primary = _validate_smart(collectors["smart"])
+    if not hardware_enabled and (filesystem_enabled or smart_enabled):
+        _error("collectors.hardware.enabled must be true when filesystem or smart is enabled")
     docker_enabled = _validate_enabled_only(collectors["docker"], "collectors.docker")
     hermes_enabled = _validate_enabled_only(collectors["hermes"], "collectors.hermes")
     lucky, _ = _validate_lucky(collectors["lucky"])

@@ -22,8 +22,12 @@ class _Config:
 class _Raw:
     def __init__(self, results):
         self.results = iter(results)
+        self.diagnostics_calls = 0
     def collect(self):
         return next(self.results)
+    def diagnostics(self):
+        self.diagnostics_calls += 1
+        return {"collection_status": "ok"}
 
 
 class UniFiContractTests(unittest.TestCase):
@@ -127,6 +131,13 @@ class UniFiContractTests(unittest.TestCase):
         self.assertTrue(result["stale"])
         self.assertIsNone(result["system"])
         self.assertEqual(result["error"]["code"], "parse_failure")
+
+    def test_failed_core_transport_skips_optional_diagnostics(self):
+        failed = {"collected_at": "2026-08-23T00:03:00+00:00", "transport": {"ok": False, "error": "ssh_auth_failure"}}
+        raw = _Raw([failed])
+        result = UniFiDomainCollector(_Config(), raw_collector=raw).collect()
+        self.assertEqual(raw.diagnostics_calls, 0)
+        self.assertEqual(result["diagnostics"]["collection_status"], "unavailable")
 
 
 if __name__ == "__main__":

@@ -100,6 +100,53 @@ class ClientArgumentTests(unittest.TestCase):
                 namespace = runpy.run_path(str(CLIENT_DIR / filename))
                 self.assertEqual(namespace["parse_cli_args"](arguments), expected)
 
+    def test_linux_entrypoint_honors_unified_collector_settings(self):
+        from multi_device_contracts import ClientV2Config
+
+        config = ClientV2Config(
+            server_url="https://status.example.invalid",
+            device_id="device-alpha",
+            device_name=None,
+            device_fqdn=None,
+            token_file="/run/secrets/token",
+            unified_collectors={
+                "hardware": {"enabled": False},
+                "filesystem": {"enabled": False, "probes": []},
+                "smart": {"enabled": False},
+                "docker": {"enabled": False},
+                "hermes": {"enabled": False},
+                "lucky": {"enabled": False},
+                "easytier": {"enabled": False},
+                "unifi": {"enabled": False},
+            },
+        )
+        namespace = runpy.run_path(str(CLIENT_DIR / "client-linux.py"))
+        captured = {}
+
+        class CapturingCollector(object):
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+        with mock.patch.dict(
+            namespace["_device_v2_extension_collector"].__globals__,
+            {
+                "HostExtensionCollector": CapturingCollector,
+                "collect_client_build": lambda protocol: {"protocol": protocol},
+            },
+        ), mock.patch(
+            "client_config_v1.materialize_unified_collectors",
+            return_value={
+                "lucky": {"enabled": False},
+                "easytier": {"enabled": False},
+                "unifi": {"enabled": False},
+            },
+        ):
+            namespace["_device_v2_extension_collector"](config, [])
+        self.assertFalse(captured["hardware_enabled"])
+        self.assertFalse(captured["filesystem_enabled"])
+        self.assertFalse(captured["docker_enabled"])
+        self.assertFalse(captured["hermes_enabled"])
+
     def test_both_clients_use_the_same_device_v2_protocol_owners(self):
         if "psutil" not in sys.modules and importlib.util.find_spec("psutil") is None:
             sys.modules["psutil"] = types.ModuleType("psutil")

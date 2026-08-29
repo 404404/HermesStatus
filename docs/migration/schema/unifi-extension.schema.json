@@ -510,7 +510,7 @@
         },
         "endpoints": {
           "type": "array",
-          "maxItems": 5,
+          "maxItems": 24,
           "items": {
             "$ref": "#/$defs/apiEndpoint"
           }
@@ -552,11 +552,11 @@
       "properties": {
         "name": {
           "enum": [
-            "info",
-            "sites",
-            "devices",
-            "clients",
-            "networks"
+            "info", "sites", "devices", "clients", "networks", "lags",
+            "legacy_stat_device", "legacy_stat_health", "legacy_stat_sysinfo",
+            "topology", "port_anomalies", "wan_official", "wan_enriched",
+            "wan_isp_status", "wan_load_balance", "wan_load_balance_config",
+            "wan_slas"
           ]
         },
         "status": {

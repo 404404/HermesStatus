@@ -33,6 +33,9 @@ from device_client_transport import (
 )
 from multi_device_contracts import ClientContractError
 from unifi_collector import UniFiDomainCollector
+from lucky_collector import LuckyCollector
+from easytier_collector import EasyTierCollector
+from multi_device_contracts import UniFiConfig, UniFiAPIConfig
 
 def _env_str(name, default):
     value = os.getenv(name)
@@ -532,15 +535,85 @@ def _device_v2_extension_collector(config, arguments):
         {"mountpoint": probe.mountpoint, "probe_path": probe.probe_path}
         for probe in config.filesystem_probes
     ]
-    unifi_collector = UniFiDomainCollector(config.unifi) if config.unifi is not None else None
-    return HostExtensionCollector(
+    unified = config.unified_collectors
+    runtime = None
+    if unified is not None:
+        from client_config_v1 import materialize_unified_collectors
+        runtime = materialize_unified_collectors(unified)
+    if runtime is None:
+        lucky_collector = None
+        easytier_collector = None
+        unifi_collector = UniFiDomainCollector(config.unifi) if config.unifi is not None else None
+        hardware_enabled = filesystem_enabled = docker_enabled = hermes_enabled = True
+    else:
+        lucky_values = runtime.get("lucky") or {"enabled": False}
+        lucky_collector = LuckyCollector(
+            enabled=bool(lucky_values.get("enabled")),
+            base_url=lucky_values.get("base_url", "https://127.0.0.1:16601"),
+            auth_mode=lucky_values.get("auth_mode", "none"),
+            token_file=lucky_values.get("token_file"),
+            timeout=lucky_values.get("timeout_seconds", 5),
+            warning_days=lucky_values.get("warning_days", 30),
+            version_check_ttl=lucky_values.get("version_check_ttl", 21600),
+            verify_tls=bool(lucky_values.get("verify_tls", True)),
+        )
+        easy_values = runtime.get("easytier") or {"enabled": False}
+        easy_env = {
+            "EASYTIER_ENABLED": "true" if easy_values.get("enabled") else "false",
+            "EASYTIER_CLI_PATH": easy_values.get("cli_path", "/usr/local/bin/easytier-cli"),
+            "EASYTIER_RPC_PORTAL": easy_values.get("rpc_portal", "127.0.0.1:15888"),
+            "EASYTIER_TIMEOUT_SECONDS": str(easy_values.get("timeout_seconds", 5)),
+            "EASYTIER_INTERVAL_SECONDS": str(easy_values.get("interval_seconds", 30)),
+        }
+        if easy_values.get("administrative_role") is not None:
+            easy_env["EASYTIER_ADMINISTRATIVE_ROLE"] = str(easy_values["administrative_role"])
+        easytier_collector = EasyTierCollector(environ=easy_env)
+        unifi_values = runtime.get("unifi") or {"enabled": False}
+        unifi_collector = None
+        if unifi_values.get("enabled"):
+            ssh = unifi_values.get("ssh") or {}
+            api_values = unifi_values.get("api") or {}
+            api_config = None
+            if api_values.get("enabled"):
+                api_config = UniFiAPIConfig(
+                    enabled=True,
+                    base_url=api_values["base_url"],
+                    api_key_file=api_values["api_key_file"],
+                    ca_file=api_values.get("ca_file"),
+                    tls_sha256=api_values.get("tls_sha256"),
+                    timeout_seconds=api_values.get("timeout_seconds", 5),
+                    site_id=api_values.get("site_id"),
+                )
+            unifi_collector = UniFiDomainCollector(UniFiConfig(
+                profile_id=unifi_values["profile"],
+                host=unifi_values["host"],
+                port=ssh.get("port", unifi_values["port"]),
+                username=ssh.get("username") or "root",
+                credential_file=ssh.get("credential_file") or "",
+                known_hosts_file=ssh.get("known_hosts_file") or "",
+                connect_timeout_seconds=unifi_values.get("connect_timeout_seconds", 10),
+                interval_seconds=unifi_values.get("interval_seconds", 60),
+                api=api_config,
+            ))
+        hardware_enabled = bool((unified.get("hardware") or {}).get("enabled"))
+        filesystem_enabled = bool((unified.get("filesystem") or {}).get("enabled"))
+        docker_enabled = bool((unified.get("docker") or {}).get("enabled"))
+        hermes_enabled = bool((unified.get("hermes") or {}).get("enabled"))
+    kwargs = dict(
         smart_devices=smart_devices,
         primary_smart_device=config.primary_smart_device,
         filesystem_probes=filesystem_probes,
         client_build=collect_client_build(protocol="device_v2"),
         easytier_args=arguments,
         unifi_collector=unifi_collector,
+        lucky_collector=lucky_collector,
+        easytier_collector=easytier_collector,
+        hardware_enabled=hardware_enabled,
+        filesystem_enabled=filesystem_enabled,
+        docker_enabled=docker_enabled,
+        hermes_enabled=hermes_enabled,
     )
+    return HostExtensionCollector(**kwargs)
 
 
 if __name__ == '__main__':

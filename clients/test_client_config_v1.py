@@ -106,6 +106,23 @@ class UnifiedClientConfigTests(unittest.TestCase):
         with self.assertRaises(ClientContractError):
             parse_config_json(json.dumps(value))
 
+    def test_unifi_with_no_enabled_transport_is_rejected(self):
+        value = document()
+        value["collectors"]["unifi"] = {
+            "enabled": True, "profile": "udw", "host": "192.0.2.1", "port": 22,
+            "interval_seconds": 60,
+            "ssh": {"enabled": False},
+            "api": {"enabled": False},
+        }
+        with self.assertRaises(ClientContractError):
+            parse_config_json(json.dumps(value))
+
+    def test_hardware_cannot_be_disabled_with_storage_collectors(self):
+        value = document()
+        value["collectors"]["hardware"] = {"enabled": False}
+        with self.assertRaises(ClientContractError):
+            parse_config_json(json.dumps(value))
+
     def test_malformed_unifi_api_port_is_rejected(self):
         value = document()
         value["collectors"]["unifi"] = {
