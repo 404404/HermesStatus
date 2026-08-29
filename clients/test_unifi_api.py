@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _port_record, _ports, _merge_wans, _site_records, _v2_site_path, _legacy_site_path
+from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _port_record, _ports, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
 
 
 class UniFiAPITests(unittest.TestCase):
@@ -230,6 +230,44 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(summary["poe_total_source"], "device_reported")
         self.assertEqual(summary["poe_max_power_w"], 420.0)
 
+    def test_udw_v2_wan_shape_maps_nested_identity_and_top_level_speedtest(self):
+        enriched = [
+            {"configuration": {"_id": "wan-primary-id", "name": "WAN", "wan_networkgroup": "WAN"},
+             "details": {"service_provider": {"name": "Example ISP", "asn": 64500}}},
+            {"configuration": {"_id": "wan-backup-id", "name": "WAN2", "wan_networkgroup": "WAN2"},
+             "details": {"service_provider": {"name": "Backup ISP", "asn": 64501}}},
+        ]
+        load_balance = {"wan_interfaces": [
+            {"name": "WAN", "state": "ACTIVE", "wan_networkgroup": "WAN"},
+            {"name": "WAN2", "state": "BACKUP", "wan_networkgroup": "WAN2"},
+        ]}
+        isp_status = [
+            {"speedtest_historical": [
+                {"download_mbps": 900, "interface_name": "WAN", "latency_ms": 2.5,
+                 "time": 1704067200, "upload_mbps": 100, "wan_networkgroup": "WAN"},
+                {"download_mbps": 910, "interface_name": "WAN", "latency_ms": 2.4,
+                 "time": 1704067205, "upload_mbps": 101, "wan_networkgroup": "WAN"},
+            ]},
+            {"speedtest_historical": [
+                {"download_mbps": 300, "interface_name": "WAN2", "latency_ms": 8,
+                 "time": 1704067200, "upload_mbps": 40, "wan_networkgroup": "WAN2"},
+            ]},
+        ]
+
+        self.assertEqual(_network_groups(enriched), ["WAN", "WAN2"])
+        result = _merge_wans(enriched, load_balance, isp_status)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["id"], "wan-primary-id")
+        self.assertEqual(result[0]["isp"], "Example ISP")
+        self.assertEqual(result[0]["asn"], "64500")
+        self.assertEqual(result[0]["role"], "active")
+        self.assertEqual(result[0]["speedtest"]["download_mbps"], 910.0)
+        self.assertTrue(result[0]["speedtest"]["timestamp"].startswith("2024-01-01T00:00:05"))
+        self.assertEqual(result[1]["id"], "wan-backup-id")
+        self.assertEqual(result[1]["role"], "backup")
+        self.assertEqual(result[1]["speedtest"]["upload_mbps"], 40.0)
+        self.assertEqual(_statistics_wans({"data": [{"model": "UDW", "name": "UDW", "state": "ONLINE"}]}), [])
+
     def test_wan_merge_preserves_identity_and_historical_speedtest(self):
         result = _merge_wans(
             {"data": [{"id": "wan1", "name": "Primary", "online": True}]},
@@ -240,6 +278,14 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(result[0]["asn"], "64500")
         self.assertEqual(result[0]["speedtest"]["latency_ms"], 2.5)
         self.assertNotIn("packet_loss_percent", result[0])
+
+    def test_wan_merge_excludes_device_uplink_records(self):
+        result = _merge_wans({"data": [
+            {"id": "wan1", "name": "WAN1", "networkGroup": "WAN"},
+            {"name": "UDW", "model": "UniFi Dream Wall", "state": "ONLINE"},
+            {"name": "USW Flex Mini", "model": "USW Flex Mini", "state": "ONLINE"},
+        ]})
+        self.assertEqual([item.get("id") for item in result], ["wan1"])
 
     def test_down_port_does_not_emit_rates_or_utilization(self):
         previous = {}

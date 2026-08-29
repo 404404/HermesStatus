@@ -490,6 +490,11 @@ def _temperature_records(devices):
 
 
 def _timestamp_value(value):
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
+        try:
+            return datetime.fromtimestamp(value, timezone.utc).isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
     text = _text(value)
     if not text:
         return None
@@ -533,7 +538,7 @@ def _latest_speedtest(item):
     if not isinstance(item, dict):
         return None
     candidates = []
-    for key in ("speedtest_history", "speedtestHistory", "speedtests", "history", "historical"):
+    for key in ("speedtest_historical", "speedtest_history", "speedtestHistory", "speedtests", "history", "historical"):
         value = item.get(key)
         if isinstance(value, list):
             candidates.extend(value[:MAX_API_ITEMS])
@@ -557,14 +562,51 @@ def _wan_record(item):
     # Flatten only reviewed one-level status/link objects; no raw payload is
     # ever copied into the Device v2 projection.
     source = dict(item)
-    for nested_name in ("link", "status", "health", "metrics", "statistics", "performance", "uplink"):
+    for nested_name in ("configuration", "link", "status", "health", "metrics", "statistics", "performance", "uplink"):
         nested = item.get(nested_name)
         if isinstance(nested, dict):
             for key, value in nested.items():
                 source.setdefault(key, value)
+    details = item.get("details")
+    if isinstance(details, dict):
+        for key, value in details.items():
+            source.setdefault(key, value)
+        provider = details.get("service_provider")
+        if isinstance(provider, dict):
+            if provider.get("name") is not None:
+                source.setdefault("isp", provider["name"])
+            if provider.get("asn") is not None:
+                source.setdefault("asn", provider["asn"])
+            for key, value in provider.items():
+                if key not in {"name", "asn"}:
+                    source.setdefault(key, value)
+
+    # v2 ISP status carries the WAN identity beside the historical samples,
+    # not on the response object itself. Use only the latest reviewed sample
+    # to associate that response with its network group/interface.
+    historical = item.get("speedtest_historical")
+    if isinstance(historical, list):
+        reviewed = [
+            (index, candidate, _speedtest_record(candidate))
+            for index, candidate in enumerate(historical[:MAX_API_ITEMS])
+            if isinstance(candidate, dict)
+        ]
+        if reviewed:
+            with_timestamp = [entry for entry in reviewed if entry[2] and entry[2].get("timestamp")]
+            _, latest_raw, _ = max(
+                with_timestamp or reviewed,
+                key=lambda entry: (entry[2].get("timestamp", "") if entry[2] else "", entry[0]),
+            )
+            for output, keys in (
+                ("network_group", ("wan_networkgroup", "network_group", "networkGroup")),
+                ("interface", ("interface_name", "interfaceName", "interface")),
+            ):
+                value = _first(latest_raw, *keys)
+                if value is not None:
+                    source.setdefault(output, value)
     result = {}
     for output, keys in (
-        ("id", ("id", "wan_id", "wanId", "interface_id", "interfaceId")),
+        ("id", ("id", "_id", "wan_id", "wanId", "interface_id", "interfaceId")),
         ("name", ("name", "display_name", "displayName", "label")),
         ("interface", ("interface", "interface_name", "interfaceName", "ifname", "interface_id", "interfaceId")),
         ("network_group", ("network_group", "networkGroup", "networkgroup", "wan_networkgroup", "wanNetworkgroup")),
@@ -585,6 +627,13 @@ def _wan_record(item):
         if value:
             result[output] = value
     role = _text(_first(source, "role", "wan_role", "wanRole", "failover_role", "failoverRole"))
+    if not role:
+        state_role = _text(_first(source, "state"))
+        if state_role and state_role.casefold() in {
+            "active", "primary", "main", "master", "preferred",
+            "backup", "standby", "secondary", "failover",
+        }:
+            role = state_role
     if role:
         role_token = role.casefold()
         result["role"] = "active" if role_token in {"active", "primary", "main", "master", "preferred"} else "backup" if role_token in {"backup", "standby", "secondary", "failover"} else "unknown"
@@ -656,11 +705,23 @@ def _statistics_wans(payload):
     """Extract only explicitly WAN-named records from reviewed statistics."""
     records = _known_wan_records(payload)
     if records:
-        return records[:MAX_API_WANS]
+        explicit_container = isinstance(payload, dict) and any(
+            key in payload for key in ("wans", "wan", "wan_interfaces", "wanInterfaces", "wan_status", "wanStatus")
+        )
+        markers = {
+            "wan_id", "wanId", "network_group", "networkGroup", "wan_networkgroup", "wanNetworkgroup",
+            "isp", "isp_name", "isp_organization", "asn", "speedtest", "speedtest_history",
+            "speedtestHistory", "speedtest_historical",
+        }
+        return [item for item in records if explicit_container or markers.intersection(item)][:MAX_API_WANS]
     return []
 
 
 def _wan_items(payload):
+    if isinstance(payload, dict) and any(key in payload for key in ("configuration", "details", "speedtest_historical")):
+        direct = _wan_record(payload)
+        if direct:
+            return [payload]
     records = _known_wan_records(payload)
     if records:
         return records
@@ -671,6 +732,35 @@ def _wan_items(payload):
     return [item for item in _items(payload)[:MAX_API_WANS] if isinstance(item, dict)]
 
 
+def _is_gateway_wan_record(item, record=None):
+    """Accept only records with an explicit gateway-WAN identity marker.
+
+    Controller responses can place gateway WANs and device/uplink records in
+    the same bounded collection. A model name or generic link state is not a
+    WAN identity, so those records must not leak into the WAN table.
+    """
+    if not isinstance(item, dict):
+        return False
+    flattened = record if isinstance(record, dict) else _wan_record(item) or {}
+    values = []
+    for source in (item, flattened):
+        for key in ("id", "wan_id", "wanId", "name", "interface", "interface_name", "interfaceName",
+                    "network_group", "networkGroup", "networkgroup", "wan_networkgroup", "wanNetworkgroup"):
+            value = _text(source.get(key)) if isinstance(source, dict) else None
+            if value:
+                values.append(value.casefold().replace("_", "").replace("-", "").replace(" ", ""))
+    for value in values:
+        if value == "wan" or value.startswith("wan") or value.startswith("pppoe") or value.startswith("internet"):
+            return True
+    # A supplemental record may carry an ISP identity while using a friendly
+    # name such as "Primary"; it is still a gateway WAN when that identity is
+    # paired with an explicit ISP/ASN or reviewed speed-test observation.
+    if any(key in item for key in ("isp", "isp_name", "ispName", "isp_organization", "asn", "isp_asn", "ispAsn",
+                                   "speedtest", "speedtest_history", "speedtestHistory", "speedtest_historical")):
+        return any(value in {"primary", "backup", "main", "secondary", "active", "standby"} for value in values)
+    return False
+
+
 def _merge_wans(*payloads):
     merged = {}
     for payload in payloads:
@@ -678,7 +768,7 @@ def _merge_wans(*payloads):
         for candidate in candidates:
             for item in _wan_items(candidate):
                 record = _wan_record(item)
-                if not record:
+                if not record or not _is_gateway_wan_record(item, record):
                     continue
                 aliases = {str(record.get(field)).casefold() for field in ("id", "network_group", "interface", "name") if record.get(field)}
                 key = next((existing for existing, current in merged.items() if aliases.intersection({str(current.get(field)).casefold() for field in ("id", "network_group", "interface", "name") if current.get(field)})), None)
@@ -702,7 +792,8 @@ def _merge_wans(*payloads):
 def _network_groups(payload):
     result = []
     for item in _known_wan_records(payload):
-        value = _identifier(_first(item, "network_group", "networkGroup", "networkgroup", "wan_networkgroup", "wanNetworkgroup", "id", "name"))
+        record = _wan_record(item) or {}
+        value = _identifier(_first(record, "network_group", "networkGroup", "networkgroup", "wan_networkgroup", "wanNetworkgroup", "id", "name"))
         if value and value not in result:
             result.append(value)
         if len(result) >= MAX_API_WANS:
