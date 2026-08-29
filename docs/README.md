@@ -2,7 +2,9 @@
 
 [中文文档](zh-CN/README.md)
 
-This set documents the current `2.5` development line. It describes deployed behavior, strict trust boundaries, and known limitations; it does not document a promotion workflow or a port as a product environment.
+This set documents the current `2.5` development line. It describes deployed
+behavior, strict trust boundaries, candidate deployment and known limitations;
+the release candidate workflow does not itself promote Stable 2.3.
 
 | Document | Purpose |
 | --- | --- |

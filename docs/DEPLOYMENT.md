@@ -17,6 +17,11 @@ mounts, state paths and restart count before changing a service.
 Never use a mutable tag as the evidence for a qualification result.  A running
 container's OCI revision label and digest must match the intended revision.
 
+For the 2.5 release candidate, use the same immutable `2.5-<sha12>` tag for
+Server and Client and verify the full OCI revision and digest before recreation.
+Stable `2.3` remains unchanged; do not create or move a `2.5` or `latest` alias
+during candidate qualification.
+
 ## Device v2 deployment
 
 The Client must use its fixed JSON config file and read-only mounts for the
@@ -50,3 +55,30 @@ deployment, verify UniFi separately from host health: profile selection,
 transport state, timestamp progression, and stale/error presentation are
 expected evidence; a remote target failure must not be repaired by changing
 Docker privileges or by recreating the remote console.
+
+## Synology DSM manual cutover
+
+Use the operator-ready Compose from `deploy/compose/client-synology.example.yml`
+with the final immutable Client candidate tag. Prepare:
+
+```text
+/volume1/docker/status/
+├── config/client-config.json
+├── secrets/device-token
+└── status/
+```
+
+The config is mounted read-only at
+`/run/secrets/hermesstatus/client-config.json`; the Device v2 token remains a
+separate read-only mount at `/run/secrets/hermesstatus-device-token`. Preserve
+the existing SMART device and filesystem probe allowlists, DSM VERSION,
+`network_mode: host`, `pid: host`, read-only rootfs, no-new-privileges, Docker
+socket, and tmpfs settings. Add only individually reviewed block-device nodes.
+
+Before cutover, capture the current 2.3 container, image digest, config and
+status path. In DSM Container Manager, stop the old 2.3 Client, then recreate
+the 2.5 Client with the exact candidate. Never run both clients concurrently
+when they share a `device.id` and token. Verify Server health, fresh Device v2
+reports and each enabled collector. For rollback, stop the 2.5 Client and
+start the captured 2.3 container/image; do not delete its state or credentials
+until acceptance is complete.

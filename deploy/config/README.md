@@ -19,6 +19,11 @@ root:root and mode 0600 and mount it read-only. Use a tmpfs at /run/hermesstatus
 The legacy client-v2.json schema remains accepted for rollback compatibility;
 new deployments should use this unified document.
 
+Collector support is platform-specific: `linux` and `synology` are the current
+host-collected targets; `macos` and `windows` remain schema-compatible but do
+not imply complete parity for SMART, Docker, DSM or UniFi sources. Configuration
+enum support and collector implementation coverage are separate concerns.
+
 Canonical host locations:
 
 - GK50/Linux: `/home/hermes/status/config/client-config.json`

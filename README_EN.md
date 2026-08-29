@@ -12,9 +12,23 @@ HermesStatus is a self-hosted, multi-device status dashboard. The Python Client 
 - **Hermes** — Profile summaries when installed. `not_installed` is a usable optional state, not a device failure.
 - **Lucky** — loopback-only, read-only HTTP(S) collection of version, DDNS, web services, port forwards, and certificate summaries. Tokens are read only from protected files.
 - **EasyTier** — read-only CLI and loopback RPC collection of node, peer, route, connector, traffic, and configured-vs-observed state. No remote peers, unobserved direct/relay paths, and unconfigured optional capabilities are not failures.
-- **UniFi (2.5)** — explicit-profile, read-only SSH telemetry. V1 supports UDW and UCG Max generic CPU, memory, temperature, uptime and load observations plus evidence-backed fan, PSU and storage capability semantics.
+- **UniFi (2.5)** — explicit-profile, read-only SSH telemetry. V1 supports UDW and UCG Max generic CPU, memory, temperature, uptime and load observations plus evidence-backed fan, PSU and storage capability semantics. Optional local controller API data uses file-backed `X-API-Key` and certificate-pin validation.
 
 Network throughput, carrier probing, EasyTier management, remote command execution, auto-registration, history storage, and alerting are out of scope.
+
+## UniFi 2.5 boundary
+
+UniFi targets are explicitly selected by profile (`udw` or `ucg-max`). SSH uses
+fixed read-only commands, strict `known_hosts` validation, and file-backed
+credentials. The optional local UniFi API uses `X-API-Key`; secrets never enter
+argv, environment values, logs, telemetry, or the UI. Remote target health is
+kept independent from the collector host's Device v2 health.
+
+2.5 includes basic operational status for gateway WAN interfaces (for example
+WAN1/WAN2) when available; device uplinks are excluded. Richer ISP/ASN,
+latest speed-test, and SLA/loss semantics have been identified in local
+controller APIs but remain a planned 2.6 HermesStatus projection enhancement;
+this is an integration limitation, not an absence of UniFi APIs.
 
 ## Architecture
 
@@ -49,6 +63,14 @@ serverstatus --validate-device-config \
   --device-credentials /absolute/path/credentials.d \
   --legacy-device-mapping /absolute/path/legacy-device-mapping.json
 ```
+
+Use `/home/hermes/status/config/client-config.json` on GK50/Linux or
+`/volume1/docker/status/config/client-config.json` on Synology, mounted read-only
+as `/run/secrets/hermesstatus/client-config.json`. Keep the Device v2 token as
+the separate read-only `/run/secrets/hermesstatus-device-token` mount. The
+Synology candidate template and stop-before-start rollback procedure are in
+[`deploy/compose/README.md`](deploy/compose/README.md) and
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Least-privilege hardware collection
 
