@@ -7,6 +7,7 @@ responses are reduced to bounded, typed summaries before entering Device v2.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -46,6 +47,7 @@ MAX_API_PORTS = 64
 MAX_API_LAGS = 16
 MAX_API_TOPOLOGY_LINKS = 32
 MAX_API_ANOMALIES = 16
+API_COLLECTION_MAX_SECONDS = 30.0
 
 
 class APIError(RuntimeError):
@@ -1175,11 +1177,15 @@ def _request(config, path: str, key: str):
     try:
         expected = getattr(config, "tls_sha256", None)
         connection = HTTPSConnection(parsed.hostname, parsed.port or 443, context=_context(config.ca_file, expected), timeout=config.timeout_seconds)
-        connection.request("GET", path, headers={"X-API-Key": key, "Accept": "application/json"})
-        response = connection.getresponse()
+        # Establish and authenticate the TLS peer before transmitting the API
+        # credential.  This is essential for explicit pin-only deployments,
+        # whose SSL context intentionally does not use the public CA store.
+        connection.connect()
         cert = connection.sock.getpeercert(binary_form=True) if connection.sock else b""
         if expected and hashlib.sha256(cert).hexdigest().lower() != expected.lower():
             raise APIError("api_tls_failure")
+        connection.request("GET", path, headers={"X-API-Key": key, "Accept": "application/json"})
+        response = connection.getresponse()
         body = response.read(MAX_RESPONSE_BYTES + 1)
     except APIError:
         raise
@@ -1215,15 +1221,17 @@ def _request(config, path: str, key: str):
 
 
 class UniFiAPICollector:
-    def __init__(self, config, *, request=None, target_profile=None):
+    def __init__(self, config, *, request=None, target_profile=None, clock=None):
         self.config = config
         self._request = request or _request
         self.target_profile = target_profile or getattr(config, "profile_id", None)
         self.site_selector = getattr(config, "site_id", None)
         self._port_samples = {}
+        self._clock = clock or time.monotonic
 
     def collect(self):
         attempted = _now()
+        deadline = self._clock() + API_COLLECTION_MAX_SECONDS
         try:
             key = _read_key(self.config.api_key_file)
         except APIError as exc:
@@ -1235,9 +1243,17 @@ class UniFiAPICollector:
         failures = []
         failure_details = {}
 
+        def request_path(path):
+            remaining = deadline - self._clock()
+            if remaining <= 0:
+                raise APIError("api_timeout")
+            request_config = copy.copy(self.config)
+            object.__setattr__(request_config, "timeout_seconds", min(float(self.config.timeout_seconds), remaining))
+            return self._request(request_config, path, key)
+
         def call(name, path, *, required, report=True):
             try:
-                payload, status = self._request(self.config, path, key)
+                payload, status = request_path(path)
             except APIError as exc:
                 error = _safe_error(exc.code)
                 if exc.status is not None:
@@ -1262,13 +1278,15 @@ class UniFiAPICollector:
             errors = []
             for path in paths[:MAX_API_WANS]:
                 try:
-                    payload, status = self._request(self.config, path, key)
+                    payload, status = request_path(path)
                     successes.append(payload)
                 except APIError as exc:
                     error = _safe_error(exc.code)
                     if exc.status is not None:
                         error["http_status"] = exc.status
                     errors.append(error)
+                    if exc.code == "api_timeout" and self._clock() >= deadline:
+                        break
             if successes and not errors:
                 endpoint_results.append({"name": name, "status": "ok", "http_status": 200, "error": None})
                 payloads[name] = successes
@@ -1350,8 +1368,25 @@ class UniFiAPICollector:
                         if groups:
                             call_many("wan_isp_status", [_v2_site_path(internal_reference, f"wan/{quote(group, safe='')}/isp-status") for group in groups])
 
-        summary = _summary("info", payloads.get("info")) if "info" in payloads else None
-        telemetry = _telemetry(payloads, site=selected_site, target=target, previous_samples=self._port_samples, sample_time=time.monotonic())
+        summary = None
+        if "info" in payloads:
+            try:
+                summary = _summary("info", payloads.get("info"))
+            except APIError as exc:
+                error = _safe_error(exc.code)
+                failure_details["info"] = error
+                for item in endpoint_results:
+                    if item["name"] == "info":
+                        item.update({"status": "error", "error": error})
+                        break
+                failures.append(("info", error, True))
+        telemetry = None
+        try:
+            telemetry = _telemetry(payloads, site=selected_site, target=target, previous_samples=self._port_samples, sample_time=self._clock())
+        except (APIError, AttributeError, KeyError, TypeError, ValueError) as exc:
+            error = _safe_error(exc.code if isinstance(exc, APIError) else "api_parse_failure")
+            failure_details["normalization"] = error
+            failures.append(("normalization", error, True))
         successful_count = sum(1 for item in endpoint_results if item["status"] == "ok")
         failed_count = sum(1 for item in endpoint_results if item["status"] != "ok")
         required_failures = [error for _, error, required in failures if required]

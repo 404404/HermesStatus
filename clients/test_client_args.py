@@ -146,6 +146,8 @@ class ClientArgumentTests(unittest.TestCase):
         self.assertFalse(captured["filesystem_enabled"])
         self.assertFalse(captured["docker_enabled"])
         self.assertFalse(captured["hermes_enabled"])
+        self.assertEqual(captured["easytier_args"], ())
+        self.assertEqual(captured["hardware_interval"], config.collection_interval_seconds)
 
     def test_both_clients_use_the_same_device_v2_protocol_owners(self):
         if "psutil" not in sys.modules and importlib.util.find_spec("psutil") is None:

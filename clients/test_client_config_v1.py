@@ -65,6 +65,10 @@ class UnifiedClientConfigTests(unittest.TestCase):
         with self.assertRaises(ClientContractError):
             parse_config_json(json.dumps(value))
         value = document()
+        value["collectors"]["filesystem"]["probes"][0]["probe_path"] = "/tmp/../etc"
+        with self.assertRaises(ClientContractError):
+            parse_config_json(json.dumps(value))
+        value = document()
         value["schema_version"] = 2
         with self.assertRaises(ClientContractError):
             parse_config_json(json.dumps(value))
@@ -133,10 +137,17 @@ class UnifiedClientConfigTests(unittest.TestCase):
         }
         with self.assertRaises(ClientContractError):
             parse_config_json(json.dumps(value))
+
+    def test_unifi_api_hostname_comparison_is_case_insensitive(self):
         value = document()
-        value["collectors"]["filesystem"]["probes"][0]["probe_path"] = "/tmp/../etc"
-        with self.assertRaises(ClientContractError):
-            parse_config_json(json.dumps(value))
+        value["collectors"]["unifi"] = {
+            "enabled": True, "profile": "udw", "host": "UDW.Example.INVALID", "port": 22,
+            "interval_seconds": 60,
+            "ssh": {"enabled": True, "username": "root", "password": "secret", "known_hosts": ["UDW.Example.INVALID ssh-ed25519 AAAA"], "port": 22},
+            "api": {"enabled": True, "base_url": "https://udw.example.invalid", "api_key": "key", "tls_sha256": "a" * 64, "timeout_seconds": 5},
+        }
+        parsed = parse_config_json(json.dumps(value))
+        self.assertEqual(parsed["unified_collectors"]["unifi"]["host"], "UDW.Example.INVALID")
 
 
 if __name__ == "__main__":

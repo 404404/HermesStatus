@@ -604,7 +604,7 @@ def _device_v2_extension_collector(config, arguments):
         primary_smart_device=config.primary_smart_device,
         filesystem_probes=filesystem_probes,
         client_build=collect_client_build(protocol="device_v2"),
-        easytier_args=arguments,
+        easytier_args=arguments if runtime is None else (),
         unifi_collector=unifi_collector,
         lucky_collector=lucky_collector,
         easytier_collector=easytier_collector,
@@ -612,6 +612,7 @@ def _device_v2_extension_collector(config, arguments):
         filesystem_enabled=filesystem_enabled,
         docker_enabled=docker_enabled,
         hermes_enabled=hermes_enabled,
+        hardware_interval=config.collection_interval_seconds if runtime is not None else None,
     )
     return HostExtensionCollector(**kwargs)
 

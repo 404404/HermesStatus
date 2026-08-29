@@ -287,7 +287,7 @@ def _validate_unifi(value: Any) -> tuple[dict[str, Any], bool]:
             _error("collectors.unifi.api.base_url is invalid")
         if api_port is not None and not 1 <= api_port <= 65535:
             _error("collectors.unifi.api.base_url is invalid")
-        if parsed.scheme != "https" or parsed.hostname != host or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/"):
+        if parsed.scheme != "https" or parsed.hostname is None or parsed.hostname.lower() != host.lower() or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/"):
             _error("collectors.unifi.api.base_url is invalid")
         api_value = _string(api["api_key"], "collectors.unifi.api.api_key", MAX_SECRET_BYTES)
         fingerprint = _string(api["tls_sha256"], "collectors.unifi.api.tls_sha256", 64)

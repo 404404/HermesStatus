@@ -1,3 +1,4 @@
+import hashlib
 import os
 import ssl
 import tempfile
@@ -5,10 +6,11 @@ import unittest
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_api import API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _port_record, _ports, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
+from unifi_api import API_COLLECTION_MAX_SECONDS, API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _request, _port_record, _ports, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
 
 
 class UniFiAPITests(unittest.TestCase):
@@ -32,6 +34,67 @@ class UniFiAPITests(unittest.TestCase):
         verified = _context(None, None)
         self.assertTrue(verified.check_hostname)
         self.assertEqual(verified.verify_mode, ssl.CERT_REQUIRED)
+
+    def test_certificate_pin_is_verified_before_api_key_is_sent(self):
+        events = []
+        certificate = b"test-certificate"
+
+        class Socket:
+            def getpeercert(self, *, binary_form=False):
+                events.append("certificate")
+                return certificate if binary_form else {}
+
+        class Response:
+            status = 200
+            def read(self, limit):
+                return b"{}"
+            def getheader(self, name, default=""):
+                return "application/json"
+
+        class Connection:
+            def __init__(self, *args, **kwargs):
+                self.sock = None
+            def connect(self):
+                events.append("connect")
+                self.sock = Socket()
+            def request(self, method, path, headers):
+                events.append("request")
+                self.assert_key = "X-API-Key" in headers
+            def getresponse(self):
+                return Response()
+            def close(self):
+                pass
+
+        self.config.tls_sha256 = hashlib.sha256(certificate).hexdigest()
+        with patch("unifi_api.HTTPSConnection", Connection):
+            payload, status = _request(self.config, "/proxy/network/integration/v1/info", "redacted-test-key")
+        self.assertEqual((payload, status), ({}, 200))
+        self.assertEqual(events, ["connect", "certificate", "request"])
+
+    def test_pin_mismatch_never_transmits_api_key(self):
+        events = []
+
+        class Socket:
+            def getpeercert(self, *, binary_form=False):
+                events.append("certificate")
+                return b"wrong-certificate"
+
+        class Connection:
+            def __init__(self, *args, **kwargs):
+                self.sock = None
+            def connect(self):
+                events.append("connect")
+                self.sock = Socket()
+            def request(self, method, path, headers):
+                events.append("request")
+            def close(self):
+                pass
+
+        self.config.tls_sha256 = "a" * 64
+        with patch("unifi_api.HTTPSConnection", Connection), self.assertRaises(APIError) as captured:
+            _request(self.config, "/proxy/network/integration/v1/info", "redacted-test-key")
+        self.assertEqual(captured.exception.code, "api_tls_failure")
+        self.assertEqual(events, ["connect", "certificate"])
 
     def test_key_is_file_backed_and_not_returned_by_payload(self):
         self.assertEqual(_read_key(str(self.key)), "redacted-test-key")
@@ -358,6 +421,49 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(result["status"], "unavailable")
         self.assertEqual(result["error"]["code"], "api_auth_failure")
         self.assertEqual(result["error"]["http_status"], 401)
+
+    def test_collection_deadline_stops_later_requests(self):
+        class Clock:
+            value = 0.0
+            def __call__(self):
+                return self.value
+
+        clock = Clock()
+        calls = []
+        self.config.timeout_seconds = 30
+
+        def request(config, path, key):
+            calls.append(path)
+            self.assertLessEqual(config.timeout_seconds, API_COLLECTION_MAX_SECONDS)
+            clock.value = API_COLLECTION_MAX_SECONDS + 1
+            return {}, 200
+
+        result = UniFiAPICollector(self.config, request=request, target_profile="udw", clock=clock).collect()
+        self.assertEqual(calls, ["/proxy/network/integration/v1/info"])
+        self.assertEqual(result["status"], "partial")
+        sites = next(item for item in result["endpoints"] if item["name"] == "sites")
+        self.assertEqual(sites["error"]["code"], "api_timeout")
+
+    def test_invalid_api_shape_becomes_api_status(self):
+        def request(config, path, key):
+            if path.endswith("/info"):
+                return "unexpected-scalar", 200
+            if path.endswith("/sites"):
+                return {"data": []}, 200
+            raise AssertionError(path)
+
+        result = UniFiAPICollector(self.config, request=request, target_profile="udw").collect()
+        self.assertEqual(result["status"], "unavailable")
+        info = next(item for item in result["endpoints"] if item["name"] == "info")
+        self.assertEqual(info["error"]["code"], "api_parse_failure")
+
+    def test_telemetry_normalization_failure_is_contained(self):
+        calls = []
+        with patch("unifi_api._telemetry", side_effect=ValueError("unexpected shape")):
+            result = UniFiAPICollector(self.config, request=self._fixture_request(calls), target_profile="udw").collect()
+        self.assertEqual(result["status"], "partial")
+        self.assertIsNone(result["telemetry"])
+        self.assertEqual(result["error"]["code"], "api_partial_failure")
 
     def test_api_endpoint_registry_has_no_root_resources(self):
         self.assertEqual(API_ENDPOINTS, (

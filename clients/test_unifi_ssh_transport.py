@@ -67,6 +67,8 @@ class UniFiSSHTransportTests(unittest.TestCase):
                 output = _run_fixed("printf fixed", self._config(handle.name))
             self.assertEqual(output, "fixed\n")
             command = run.call_args.args[0]
+            self.assertEqual(command[0], "ssh")
+            self.assertNotIn("setsid", command)
             self.assertIn("-o", command)
             self.assertIn("PubkeyAuthentication=no", command)
             self.assertIn("PasswordAuthentication=no", command)

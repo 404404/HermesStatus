@@ -132,6 +132,19 @@ class UniFiContractTests(unittest.TestCase):
         self.assertIsNone(result["system"])
         self.assertEqual(result["error"]["code"], "parse_failure")
 
+    def test_non_finite_core_metrics_are_rejected(self):
+        cases = (
+            ("cpu_temperature_raw", "nan"),
+            ("uptime_raw", "inf 0"),
+            ("loadavg_raw", "0.1 -inf 0.3 1/1 1"),
+        )
+        for field, value in cases:
+            with self.subTest(field=field, value=value):
+                raw = fixture("ucg-max-raw.json")
+                raw["generic"][field] = value
+                with self.assertRaisesRegex(ValueError, "invalid generic observation"):
+                    normalize(self.ucg, raw)
+
     def test_failed_core_transport_skips_optional_diagnostics(self):
         failed = {"collected_at": "2026-08-23T00:03:00+00:00", "transport": {"ok": False, "error": "ssh_auth_failure"}}
         raw = _Raw([failed])

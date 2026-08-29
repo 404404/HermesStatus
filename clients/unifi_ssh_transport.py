@@ -113,7 +113,11 @@ def _run_fixed(remote_script, config):
         # executable reads the already-validated file only for the prompt.
         "HERMESSTATUS_UNIFI_CREDENTIAL_FILE": config.credential_file,
     })
-    command = ["setsid", "--wait", "ssh", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + config.known_hosts_file, "-o", "KbdInteractiveAuthentication=yes", "-o", "PasswordAuthentication=no", "-o", "PreferredAuthentications=keyboard-interactive", "-o", "PubkeyAuthentication=no", "-o", "ConnectTimeout=" + str(config.connect_timeout_seconds), "-p", str(config.port), config.username + "@" + config.host, remote_script]
+    # _run_bounded() already starts the fixed command in a new session so its
+    # process group can be terminated as one bounded unit.  Running an
+    # additional setsid wrapper would move ssh into a different session and
+    # leave it behind when the wrapper's process group is killed.
+    command = ["ssh", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + config.known_hosts_file, "-o", "KbdInteractiveAuthentication=yes", "-o", "PasswordAuthentication=no", "-o", "PreferredAuthentications=keyboard-interactive", "-o", "PubkeyAuthentication=no", "-o", "ConnectTimeout=" + str(config.connect_timeout_seconds), "-p", str(config.port), config.username + "@" + config.host, remote_script]
     try:
         completed = _run_bounded(command, env=env, timeout=config.connect_timeout_seconds + 15)
     except (subprocess.TimeoutExpired, TransportError) as exc:

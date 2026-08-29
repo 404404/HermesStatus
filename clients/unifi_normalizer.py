@@ -1,4 +1,5 @@
 """Profile-driven, bounded UniFi normalization for Device v2 telemetry."""
+import math
 from datetime import datetime, timezone
 
 
@@ -331,7 +332,15 @@ def normalize(profile, raw, previous=None):
         load = [float(value) for value in generic["loadavg_raw"].split()[:3]]
     except (TypeError, ValueError, IndexError) as exc:
         raise ValueError("invalid generic observation") from exc
-    if len(load) != 3 or temperature < -100 or temperature > 250 or uptime < 0 or any(value < 0 for value in load):
+    if (
+        len(load) != 3
+        or not math.isfinite(temperature)
+        or temperature < -100
+        or temperature > 250
+        or not math.isfinite(uptime)
+        or uptime < 0
+        or any(not math.isfinite(value) or value < 0 for value in load)
+    ):
         raise ValueError("invalid generic observation")
     diagnostics_raw = raw.get("diagnostics", {}) if isinstance(raw.get("diagnostics", {}), dict) else {}
     hardware_cache = diagnostics_raw.get("hardware_cache") if isinstance(diagnostics_raw.get("hardware_cache"), (dict, list)) else None
