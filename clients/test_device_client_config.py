@@ -87,6 +87,7 @@ class DeviceClientConfigTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        config_path.chmod(0o600)
         selection = load_client_selection(
             [
                 "HERMESSTATUS_SERVER_URL=https://cli.example.invalid",
@@ -134,6 +135,7 @@ class DeviceClientConfigTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        config_path.chmod(0o600)
         selection = load_client_selection(
             [
                 'HERMESSTATUS_SMART_DEVICES=[{"path":"/dev/nvme0n1","type":"nvme"}]',
@@ -216,7 +218,6 @@ class DeviceClientConfigTests(unittest.TestCase):
                 ClientContractError
             ):
                 load_client_selection([], environ=environment)
-
         with self.assertRaises(ClientContractError):
             load_client_selection(
                 ["HERMESSTATUS_DEVICE_TOKEN=plaintext-value"],
@@ -227,6 +228,13 @@ class DeviceClientConfigTests(unittest.TestCase):
                 ["HERMESSTATUS_SERVER_URL=https://status.example.invalid", "USER=s01"],
                 environ={},
             )
+
+    def test_unified_config_requires_private_owner_controlled_file(self):
+        path = self.root / "private-config.json"
+        path.write_text(json.dumps({"schema_version": 1}), encoding="utf-8")
+        path.chmod(0o644)
+        with self.assertRaises(ClientContractError):
+            load_client_selection([], environ={"HERMESSTATUS_CONFIG_FILE": str(path)})
 
     def test_strict_config_file_and_symlink_boundary(self):
         valid_document = {

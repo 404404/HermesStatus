@@ -41,7 +41,7 @@ class UniFiSSHTransportTests(unittest.TestCase):
         with tempfile.NamedTemporaryFile() as handle:
             os.chmod(handle.name, stat.S_IRUSR | stat.S_IWUSR)
             result = SimpleNamespace(returncode=255, stderr="Host key verification failed.", stdout="")
-            with patch("unifi_ssh_transport.subprocess.run", return_value=result), patch(
+            with patch("unifi_ssh_transport._run_bounded", return_value=result), patch(
                 "unifi_ssh_transport._askpass", return_value=handle.name
             ):
                 with self.assertRaises(TransportError) as captured:
@@ -52,7 +52,7 @@ class UniFiSSHTransportTests(unittest.TestCase):
         with tempfile.NamedTemporaryFile() as handle:
             os.chmod(handle.name, stat.S_IRUSR | stat.S_IWUSR)
             result = SimpleNamespace(returncode=255, stderr="Next authentication method: keyboard-interactive\nuserauth_kbdint: disable: no info_req_seen", stdout="")
-            with patch("unifi_ssh_transport.subprocess.run", return_value=result):
+            with patch("unifi_ssh_transport._run_bounded", return_value=result):
                 with self.assertRaises(TransportError) as captured:
                     _run_fixed("printf fixed", self._config(handle.name))
             self.assertEqual(str(captured.exception), "ssh_auth_failure")
@@ -63,7 +63,7 @@ class UniFiSSHTransportTests(unittest.TestCase):
             handle.flush()
             os.chmod(handle.name, stat.S_IRUSR | stat.S_IWUSR)
             result = SimpleNamespace(returncode=0, stderr="", stdout="fixed\n")
-            with patch("unifi_ssh_transport.subprocess.run", return_value=result) as run:
+            with patch("unifi_ssh_transport._run_bounded", return_value=result) as run:
                 output = _run_fixed("printf fixed", self._config(handle.name))
             self.assertEqual(output, "fixed\n")
             command = run.call_args.args[0]
@@ -83,7 +83,7 @@ class UniFiSSHTransportTests(unittest.TestCase):
             os.chmod(handle.name, stat.S_IRUSR | stat.S_IWUSR)
             self.assertEqual(_askpass(handle.name), ASKPASS_PATH)
             result = SimpleNamespace(returncode=0, stderr="", stdout="fixed\n")
-            with patch("unifi_ssh_transport.subprocess.run", return_value=result) as run:
+            with patch("unifi_ssh_transport._run_bounded", return_value=result) as run:
                 _run_fixed("printf fixed", self._config(handle.name))
             environment = run.call_args.kwargs["env"]
             self.assertEqual(environment["SSH_ASKPASS"], ASKPASS_PATH)
@@ -94,7 +94,7 @@ class UniFiSSHTransportTests(unittest.TestCase):
         with tempfile.NamedTemporaryFile() as handle:
             os.chmod(handle.name, stat.S_IRUSR | stat.S_IWUSR)
             result = SimpleNamespace(returncode=255, stderr="Permission denied (keyboard-interactive).", stdout="")
-            with patch("unifi_ssh_transport.subprocess.run", return_value=result), patch(
+            with patch("unifi_ssh_transport._run_bounded", return_value=result), patch(
                 "unifi_ssh_transport._askpass", return_value=handle.name
             ):
                 with self.assertRaises(TransportError) as captured:
@@ -111,7 +111,13 @@ class UniFiSSHTransportTests(unittest.TestCase):
         self.assertEqual(result["hardware_cache"]["fans"]["fan1"], 3820)
 
     def test_diagnostics_script_separates_cache_from_end_marker(self):
-        self.assertIn("head -c 65536 /var/run/ustd/hw_polling.cache\n  printf \"\\n\"", REMOTE_DIAGNOSTICS_SCRIPT)
+        self.assertIn("head -c 12000 /var/run/ustd/hw_polling.cache\n  printf \"\\n\"", REMOTE_DIAGNOSTICS_SCRIPT)
+
+    def test_read_only_known_hosts_permissions_are_accepted(self):
+        with tempfile.NamedTemporaryFile() as handle:
+            os.chmod(handle.name, 0o444)
+            with patch("unifi_ssh_transport.os.geteuid", return_value=0):
+                _validate_file(handle.name, "known_hosts_file", allow_root_readable=True)
 
 
     def test_diagnostics_marks_missing_hardware_cache_unavailable(self):

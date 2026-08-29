@@ -528,6 +528,7 @@ def _device_v2_extension_collector(config, arguments):
                     ca_file=api_values.get("ca_file"),
                     tls_sha256=api_values.get("tls_sha256"),
                     timeout_seconds=api_values.get("timeout_seconds", 5),
+                    site_id=api_values.get("site_id"),
                 )
             if not ssh.get("enabled") and api_config is None:
                 unifi_collector = None
@@ -535,7 +536,7 @@ def _device_v2_extension_collector(config, arguments):
                 unifi_collector = UniFiDomainCollector(UniFiConfig(
                     profile_id=unifi_values["profile"],
                     host=unifi_values["host"],
-                    port=unifi_values["port"],
+                    port=ssh.get("port", unifi_values["port"]),
                     username=ssh.get("username") or "root",
                     credential_file=ssh.get("credential_file") or "",
                     known_hosts_file=ssh.get("known_hosts_file") or "",

@@ -86,3 +86,6 @@ selected memory counters, uptime and load. Optional thermal/hwmon diagnostics
 are non-health-affecting. Transport, host-key, authentication, timeout and
 parse failures preserve the prior UniFi observation if one exists, mark it
 stale, and never zero-fill metrics or degrade the Device v2 collector host.
+
+UniFi `interval_seconds` is bounded to 30-180 seconds so the server freshness
+window remains meaningful.

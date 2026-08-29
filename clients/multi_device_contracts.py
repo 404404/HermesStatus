@@ -144,6 +144,7 @@ class UniFiAPIConfig:
     ca_file: str | None
     tls_sha256: str | None
     timeout_seconds: int
+    site_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -505,7 +506,7 @@ def _unifi_api_config_value(value: Any, host: str) -> UniFiAPIConfig | None:
             raise ClientContractError("disabled unifi.api must not contain target fields")
         return None
     required = {"enabled", "base_url", "api_key_file", "ca_file", "tls_sha256", "timeout_seconds"}
-    if set(config) != required:
+    if set(config) - (required | {"site_id"}) or not required <= set(config):
         raise ClientContractError("unifi.api contains unknown or missing fields")
     base_url = config["base_url"]
     if not isinstance(base_url, str) or base_url != base_url.strip():
@@ -533,7 +534,10 @@ def _unifi_api_config_value(value: Any, host: str) -> UniFiAPIConfig | None:
     else:
         fingerprint = None
     timeout = _int_range(config["timeout_seconds"], "unifi.api.timeout_seconds", 3, 30)
-    return UniFiAPIConfig(enabled=True, base_url=f"https://{parsed.hostname}:{parsed_port or 443}", api_key_file=api_key_file, ca_file=ca_file, tls_sha256=fingerprint, timeout_seconds=timeout)
+    site_id = config.get("site_id")
+    if site_id is not None and (not isinstance(site_id, str) or not DEVICE_ID_RE.fullmatch(site_id)):
+        raise ClientContractError("unifi.api.site_id is invalid")
+    return UniFiAPIConfig(enabled=True, base_url=f"https://{parsed.hostname}:{parsed_port or 443}", api_key_file=api_key_file, ca_file=ca_file, tls_sha256=fingerprint, timeout_seconds=timeout, site_id=site_id)
 
 
 def _unifi_config_value(value: Any) -> UniFiConfig | None:
@@ -570,7 +574,7 @@ def _unifi_config_value(value: Any) -> UniFiConfig | None:
     credential_file = validate_readonly_file_path(str(config["credential_file"]), "unifi.credential_file")
     known_hosts_file = validate_readonly_file_path(str(config["known_hosts_file"]), "unifi.known_hosts_file")
     connect_timeout = _int_range(config["connect_timeout_seconds"], "unifi.connect_timeout_seconds", 3, 60)
-    interval = _int_range(config["interval_seconds"], "unifi.interval_seconds", 30, 3600)
+    interval = _int_range(config["interval_seconds"], "unifi.interval_seconds", 30, 180)
     api = _unifi_api_config_value(config.get("api"), host) if "api" in config else None
     return UniFiConfig(
         profile_id=profile_id,

@@ -52,3 +52,5 @@ Lucky 监控只接受 loopback URL。HTTPS/HTTP 与证书验证必须明确配�
 V1 只接受 `udw` 和 `ucg-max` profile。profile 绝不根据 hostname、kernel、风扇、温度或观测值自动识别。两个文件均须只读挂载，并且是 Client 有效用户拥有的常规非 symlink 文件；credential 文件权限必须为 `0400` 或 `0600`，`known_hosts` 不能对组或其他用户可写。必须使用 `StrictHostKeyChecking=yes`；不得使用 `StrictHostKeyChecking=no`、明文 password 字段、HermesStatus 添加的 SSH key 或环境变量凭据。
 
 固定 core 仅观测 CPU 温度、聚合 CPU counter、选定内存 counter、uptime 与 load。可选 thermal/hwmon diagnostics 不影响健康判定。传输、host key、认证、超时和解析失败会保留已有 UniFi 观测（若有）并标记 stale；绝不填充为零，也不会使 Device v2 采集主机降级。
+
+UniFi 的 `interval_seconds` 限制为 30-180 秒，以匹配服务端 freshness 窗口。

@@ -95,6 +95,27 @@ class UnifiedClientConfigTests(unittest.TestCase):
         value["collectors"]["easytier"]["cli_path"] = "/bin/sh"
         with self.assertRaises(ClientContractError):
             parse_config_json(json.dumps(value))
+
+    def test_api_only_unifi_configuration_is_rejected(self):
+        value = document()
+        value["collectors"]["unifi"] = {
+            "enabled": True, "profile": "udw", "host": "192.0.2.1", "port": 22,
+            "interval_seconds": 60, "ssh": {"enabled": False},
+            "api": {"enabled": True, "base_url": "https://192.0.2.1", "api_key": "key", "tls_sha256": "a" * 64, "timeout_seconds": 5},
+        }
+        with self.assertRaises(ClientContractError):
+            parse_config_json(json.dumps(value))
+
+    def test_malformed_unifi_api_port_is_rejected(self):
+        value = document()
+        value["collectors"]["unifi"] = {
+            "enabled": True, "profile": "udw", "host": "192.0.2.1", "port": 22,
+            "interval_seconds": 60,
+            "ssh": {"enabled": True, "username": "root", "password": "secret", "known_hosts": ["192.0.2.1 ssh-ed25519 AAAA"], "port": 22},
+            "api": {"enabled": True, "base_url": "https://192.0.2.1:bad", "api_key": "key", "tls_sha256": "a" * 64, "timeout_seconds": 5},
+        }
+        with self.assertRaises(ClientContractError):
+            parse_config_json(json.dumps(value))
         value = document()
         value["collectors"]["filesystem"]["probes"][0]["probe_path"] = "/tmp/../etc"
         with self.assertRaises(ClientContractError):

@@ -501,7 +501,7 @@ def _timestamp_value(value):
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
-        return text
+        return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.isoformat()
@@ -965,7 +965,9 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_speed_mb
                 if delta < 0:
                     continue
                 rate_key = key.replace("_bytes", "_bps")
-                rate = int(round(delta / elapsed))
+                # Counters are bytes; the public contract names these rates
+                # in bits per second, matching the API rate fields.
+                rate = int(round(delta * 8 / elapsed))
                 # Validate each direction independently so one corrupt/reset
                 # counter cannot hide a valid observation in the other.
                 if max_bps and rate > max_bps:

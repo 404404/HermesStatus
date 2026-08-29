@@ -184,9 +184,9 @@ class UniFiAPITests(unittest.TestCase):
         first = _port_record(base, device_id="device", previous_samples=previous, sample_time=10.0)
         self.assertNotIn("rx_bps", first)
         second = _port_record({**base, "rx_bytes": 3000, "tx_bytes": 6000}, device_id="device", previous_samples=previous, sample_time=11.0)
-        self.assertEqual(second["rx_bps"], 2000)
-        self.assertEqual(second["tx_bps"], 4000)
-        self.assertEqual(second["rx_utilization_pct"], 0.0)
+        self.assertEqual(second["rx_bps"], 16000)
+        self.assertEqual(second["tx_bps"], 32000)
+        self.assertEqual(second["rx_utilization_pct"], 0.01)
         reset = _port_record({**base, "rx_bytes": 10, "tx_bytes": 20}, device_id="device", previous_samples=previous, sample_time=12.0)
         self.assertNotIn("rx_bps", reset)
 
@@ -195,10 +195,14 @@ class UniFiAPITests(unittest.TestCase):
         base = {"port_idx": 8, "up": True, "speed": 1000, "rx_bytes": 1000, "tx_bytes": 2000}
         _port_record(base, device_id="device", previous_samples=previous, sample_time=10.0)
         item = _port_record({**base, "rx_bytes": 2000, "tx_bytes": 10_000_000_000}, device_id="device", previous_samples=previous, sample_time=11.0)
-        self.assertEqual(item["rx_bps"], 1000)
+        self.assertEqual(item["rx_bps"], 8000)
         self.assertIn("rx_utilization_pct", item)
         self.assertNotIn("tx_bps", item)
         self.assertNotIn("tx_utilization_pct", item)
+
+    def test_malformed_speedtest_timestamp_is_omitted(self):
+        merged = _merge_wans({"data": [{"id": "wan1", "speedtestHistory": [{"timestamp": "not-a-date", "downloadMbps": 10}]}]})
+        self.assertNotIn("timestamp", merged[0].get("speedtest", {}))
 
     def test_speed_change_and_invalid_interval_discard_rates(self):
         previous = {}

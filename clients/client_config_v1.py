@@ -272,11 +272,19 @@ def _validate_unifi(value: Any) -> tuple[dict[str, Any], bool]:
         ssh_port = 22
     api = _obj(value["api"], "collectors.unifi.api")
     api_enabled = _bool(api.get("enabled"), "collectors.unifi.api.enabled") if "enabled" in api else _error("collectors.unifi.api.enabled is required")
+    if api_enabled and not ssh_enabled:
+        _error("collectors.unifi.ssh is required when collectors.unifi.api is enabled")
     if api_enabled:
-        _fields(api, {"enabled", "base_url", "api_key", "tls_sha256", "timeout_seconds"}, set(), "collectors.unifi.api")
+        _fields(api, {"enabled", "base_url", "api_key", "tls_sha256", "timeout_seconds"}, {"site_id"}, "collectors.unifi.api")
         base_url = _string(api["base_url"], "collectors.unifi.api.base_url", 2048)
         from urllib.parse import urlsplit
         parsed = urlsplit(base_url)
+        try:
+            api_port = parsed.port
+        except ValueError:
+            _error("collectors.unifi.api.base_url is invalid")
+        if api_port is not None and not 1 <= api_port <= 65535:
+            _error("collectors.unifi.api.base_url is invalid")
         if parsed.scheme != "https" or parsed.hostname != host or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/"):
             _error("collectors.unifi.api.base_url is invalid")
         api_value = _string(api["api_key"], "collectors.unifi.api.api_key", MAX_SECRET_BYTES)
@@ -284,17 +292,23 @@ def _validate_unifi(value: Any) -> tuple[dict[str, Any], bool]:
         if not _FINGERPRINT_RE.fullmatch(fingerprint):
             _error("collectors.unifi.api.tls_sha256 is invalid")
         api_timeout = _int(api["timeout_seconds"], "collectors.unifi.api.timeout_seconds", 3, 30)
+        site_id = api.get("site_id")
+        if site_id is not None:
+            site_id = _string(site_id, "collectors.unifi.api.site_id", 128)
+            if not _ID_RE.fullmatch(site_id):
+                _error("collectors.unifi.api.site_id is invalid")
     else:
         if set(api) != {"enabled"}:
             _error("disabled collectors.unifi.api must not contain target fields")
         base_url = api_value = fingerprint = None
         api_timeout = 5
+        site_id = None
     return {
         "enabled": True, "profile": profile, "host": host,
         "port": _int(value["port"], "collectors.unifi.port", 1, 65535),
-        "interval_seconds": _int(value["interval_seconds"], "collectors.unifi.interval_seconds", 30, 3600),
+        "interval_seconds": _int(value["interval_seconds"], "collectors.unifi.interval_seconds", 30, 180),
         "ssh": {"enabled": ssh_enabled, "username": username, "password": ssh_value, "known_hosts": known_hosts, "port": ssh_port},
-        "api": {"enabled": api_enabled, "base_url": base_url, "api_key": api_value, "tls_sha256": fingerprint, "timeout_seconds": api_timeout},
+        "api": {"enabled": api_enabled, "base_url": base_url, "api_key": api_value, "tls_sha256": fingerprint, "timeout_seconds": api_timeout, **({"site_id": site_id} if site_id is not None else {})},
     }, True
 
 
@@ -429,4 +443,3 @@ def materialize_unified_collectors(collectors: Mapping[str, Any], root: str = "/
 
     atexit.register(cleanup)
     return runtime
-

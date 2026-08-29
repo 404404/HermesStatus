@@ -2250,7 +2250,8 @@ class HostExtensionCollector(object):
         # Device v2 can send an update immediately after start(). Populate every
         # independent domain synchronously first so a fresh container never
         # publishes a partially initialised extension snapshot.
-        for function, _, _ in tasks:
+        initial_tasks = tasks + ((unifi_task,) if unifi_task else ())
+        for function, _, _ in initial_tasks:
             try:
                 function()
             except Exception:

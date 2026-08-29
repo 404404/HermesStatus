@@ -250,7 +250,7 @@
             "interval_seconds": {
               "type": "integer",
               "minimum": 30,
-              "maximum": 3600
+              "maximum": 180
             },
             "api": {
               "oneOf": [
@@ -309,6 +309,10 @@
                       "type": "integer",
                       "minimum": 3,
                       "maximum": 30
+                    },
+                    "site_id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
                     }
                   },
                   "additionalProperties": false

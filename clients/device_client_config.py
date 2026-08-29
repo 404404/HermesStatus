@@ -90,6 +90,7 @@ def load_client_selection(
             str(config_file_value),
             "config_file",
         )
+        _validate_config_file_security(config_path)
         file_values = parse_config_json(
             _read_regular_file(
                 config_path,
@@ -198,6 +199,23 @@ def _read_regular_file(path: str, *, maximum: int, error_code: str) -> bytes:
         return secure_read_bounded_regular_file(path, maximum)
     except SecureFileError:
         raise ClientContractError(error_code) from None
+
+
+def _validate_config_file_security(path: str) -> None:
+    """Require the unified secret bundle to be a private owner-controlled file."""
+    try:
+        metadata = os.stat(path, follow_symlinks=False)
+    except OSError:
+        raise ClientContractError("config file is unavailable") from None
+    if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+        raise ClientContractError("config file permissions are invalid")
+    if stat.S_IMODE(metadata.st_mode) & 0o077:
+        raise ClientContractError("config file permissions are invalid")
+    # The container commonly runs as root while the host-owned 0600 file is
+    # owned by the deployment user.  Root may read that private file; an
+    # unprivileged process must own it.
+    if metadata.st_uid != os.geteuid() and os.geteuid() != 0:
+        raise ClientContractError("config file ownership is invalid")
 
 
 def _read_descriptor(descriptor: int, maximum: int) -> bytes:

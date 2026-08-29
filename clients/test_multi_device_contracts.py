@@ -164,6 +164,16 @@ class ClientV2ConfigContractTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(ClientContractError):
                 resolve_client_config(file_values={**self.file_values, "unifi": mutation})
 
+    def test_unifi_api_site_selector_is_preserved(self):
+        unifi = {
+            "enabled": True, "profile": "udw", "host": "192.0.2.1", "port": 22,
+            "username": "root", "credential_file": "/run/secrets/unifi-password",
+            "known_hosts_file": "/run/secrets/unifi-known-hosts", "connect_timeout_seconds": 10,
+            "interval_seconds": 60, "api": {"enabled": True, "base_url": "https://192.0.2.1", "api_key_file": "/run/secrets/unifi-api", "ca_file": None, "tls_sha256": None, "timeout_seconds": 5, "site_id": "site-b"},
+        }
+        config = resolve_client_config(file_values={**self.file_values, "unifi": unifi})
+        self.assertEqual(config.unifi.api.site_id, "site-b")
+
     def test_fqdn_device_id_timeout_and_token_path_validation(self):
         mutations = [
             {"device_id": "INVALID ID"},
@@ -178,6 +188,16 @@ class ClientV2ConfigContractTests(unittest.TestCase):
                 ClientContractError
             ):
                 resolve_client_config(file_values={**self.file_values, **mutation})
+
+    def test_unifi_interval_is_bounded_to_server_freshness_window(self):
+        unifi = {
+            "enabled": True, "profile": "udw", "host": "192.0.2.1", "port": 22,
+            "username": "root", "credential_file": "/run/secrets/unifi-password",
+            "known_hosts_file": "/run/secrets/unifi-known-hosts", "connect_timeout_seconds": 10,
+            "interval_seconds": 181,
+        }
+        with self.assertRaises(ClientContractError):
+            resolve_client_config(file_values={**self.file_values, "unifi": unifi})
 
 
 class ClientV2MockTests(unittest.TestCase):
