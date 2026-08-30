@@ -216,7 +216,9 @@ class UniFiAPITests(unittest.TestCase):
         self.assertTrue(all(set(item) <= {"device_id", "name", "model", "model_id", "model_profile_status", "device_type", "management_ip", "online", "link_state", "speed_mbps", "duplex", "wan_id"}
                             for item in telemetry["uplinks"]))
         target_uplink = next(item for item in telemetry["uplinks"] if item.get("name") == "UDW")
-        self.assertEqual(target_uplink["speed_mbps"], 2500)
+        # Port negotiation is not a WAN link-speed source.
+        self.assertNotIn("speed_mbps", target_uplink)
+        self.assertEqual(telemetry["wans"][0]["link_speed_mbps"], 2500)
 
     def test_site_model_keeps_integration_and_internal_namespaces(self):
         sites = _site_records({"data": [{"id": "uuid-123", "internalReference": "default", "name": "Main"}]})
@@ -284,9 +286,23 @@ class UniFiAPITests(unittest.TestCase):
         self.assertTrue(item["duplex"] and item["autoneg"] and item["enabled"] and item["up"])
         self.assertFalse(item["uplink"])
         self.assertEqual(item["poe"]["power_w"], 6.8)
-        self.assertEqual(item["max_speed_mbps"], 2500)
+        # An unknown model cannot claim a static hardware maximum from its
+        # runtime port record.
+        self.assertNotIn("max_speed_mbps", item)
         self.assertEqual(item["poe"]["max_power_w"], 30)
         self.assertTrue(item["poe"]["active"])
+
+    def test_udw_wan_speed_uses_explicit_wan_record_not_target_ports(self):
+        from unifi_api import _wans_and_uplinks
+        devices = [{"id": "udw-1", "model": "UDW", "name": "UDW", "state": "ONLINE"}]
+        target_detail = {"id": "udw-1", "interfaces": {"ports": [{"idx": 1, "speedMbps": 2500, "maxSpeedMbps": 10000}]}}
+        wans, _ = _wans_and_uplinks(
+            devices,
+            target_detail,
+            [{"data": [{"id": "wan-main", "name": "WAN", "interface": "eth3", "role": "active", "link_speed_mbps": 1000}]}],
+        )
+        self.assertEqual(wans[0]["link_speed_mbps"], 1000)
+        self.assertNotIn("speedtest", wans[0])
 
     def test_device_reported_poe_total_wins_over_port_sum(self):
         legacy = {"data": [{"device_id": "device", "port_table": [

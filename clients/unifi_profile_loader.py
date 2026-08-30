@@ -78,7 +78,7 @@ def validate_profile(profile):
         if not isinstance(fan["id"], str) or fan["id"] in ids:
             raise ProfileError("duplicate or invalid fan id")
         ids.add(fan["id"])
-        if not isinstance(fan["supported"], bool) or fan["present"] not in PRESENCE:
+        if fan["supported"] not in {True, False, "unknown"} or fan["present"] not in PRESENCE:
             raise ProfileError("invalid fan capability")
     power = profile["power"]
     if not isinstance(power, dict) or not {"psu_slots", "presence", "sensor_mapping"} <= set(power) or set(power) - {"psu_slots", "presence", "sensor_mapping", "max_power_w"} or not isinstance(power["psu_slots"], int) or power["psu_slots"] < 0 or power["presence"] not in PRESENCE or power["sensor_mapping"] not in {"unknown"}:

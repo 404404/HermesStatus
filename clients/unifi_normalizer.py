@@ -201,7 +201,7 @@ def _fans(profile, raw_fans, hardware_cache=None):
             rpm = None
         output.append({
             "id": fan_id,
-            "supported": "supported" if capability["supported"] else "unsupported",
+            "supported": "supported" if capability["supported"] is True else "unsupported" if capability["supported"] is False else "unknown",
             "present": present,
             "observed": rpm is not None,
             "rpm": rpm,
@@ -305,6 +305,11 @@ def _storage(profile, hardware_cache=None, model=None):
         if name is None or name not in result:
             continue
         item = result[name]
+        # A runtime disk record cannot override an authoritative unsupported
+        # capability. In particular, a generic block-device probe must not
+        # turn UCG Max's unsupported SATA/TF entries into rendered storage.
+        if item.get("supported") == "unsupported":
+            continue
         if record.get("present") in {True, False}:
             item["present"] = "present" if record["present"] else "not_present"
         for output, keys in (("capacity_bytes", ("capacity_bytes", "total_bytes", "size_bytes")), ("used_bytes", ("used_bytes", "used")), ("available_bytes", ("available_bytes", "free_bytes", "available")), ("usage_percent", ("usage_percent", "used_percent", "usage_pct"))):

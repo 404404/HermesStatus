@@ -33,6 +33,7 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(ucg["cpu_model"], "Qualcomm IPQ5322")
         self.assertEqual(ucg["diagnostics"]["hwmon"]["source"], "linux.sensors_json")
         self.assertEqual(ucg["diagnostics"]["hwmon"]["expected_name"], "lm63")
+        self.assertEqual(ucg["fans"]["channels"][0]["supported"], "unknown")
         self.assertTrue(ucg["storage"]["nvme"]["supported"])
         self.assertFalse(ucg["storage"]["sata_ssd"]["supported"])
 

@@ -36,6 +36,7 @@ class NormalizerTests(unittest.TestCase):
         result = normalize(load_profile(self.profiles, "ucg-max"), fixture("ucg-max-raw.json"))
         self.assertEqual(result["fans"][0]["rpm"], 0)
         self.assertEqual(result["fans"][0]["state"], "observed_zero_rpm")
+        self.assertEqual(result["fans"][0]["supported"], "unknown")
         self.assertEqual(result["storage"]["nvme"]["present"], "unknown")
         self.assertFalse(result["storage"]["nvme"]["observed"])
         self.assertEqual(result["storage"]["nvme"]["supported"], "supported")

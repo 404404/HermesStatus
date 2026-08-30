@@ -37,7 +37,7 @@
     "channels": [
       {
         "id": "fan1",
-        "supported": true,
+        "supported": "unknown",
         "present": "unknown"
       }
     ]

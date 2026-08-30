@@ -807,30 +807,6 @@ def _network_groups(payload):
             break
     return result
 
-def _detail_link_speed(target_detail):
-    """Return the highest observed target port speed, if the API exposes it."""
-    if not isinstance(target_detail, dict):
-        return None
-    interfaces = target_detail.get("interfaces")
-    ports = interfaces.get("ports") if isinstance(interfaces, dict) else None
-    if not isinstance(ports, list):
-        return None
-    observed = []
-    advertised = []
-    for port in ports[:MAX_API_UPLINKS]:
-        if not isinstance(port, dict):
-            continue
-        state = str(_first(port, "state", "status", "linkState") or "").strip().lower()
-        speed = _number(_first(port, "speedMbps", "speed_mbps", "linkSpeedMbps"), minimum=0)
-        maximum = _number(_first(port, "maxSpeedMbps", "max_speed_mbps"), minimum=0)
-        if speed is not None and state not in {"down", "offline", "disconnected", "disabled"}:
-            observed.append(speed)
-        if maximum is not None:
-            advertised.append(maximum)
-    values = observed or advertised
-    return max(values) if values else None
-
-
 def _device_descriptor(device):
     if not isinstance(device, dict):
         return {}
@@ -885,16 +861,10 @@ def _annotate_wan_payload(payload, network_group):
 
 def _wans_and_uplinks(devices, target_detail=None, extra_wans=None):
     wans, uplinks = [], []
-    target_id = _identifier(target_detail.get("id")) if isinstance(target_detail, dict) else None
-    target_speed = _detail_link_speed(target_detail)
     for device in devices[:MAX_API_ITEMS]:
         descriptor = _device_descriptor(device)
-        source_device = device
-        if target_id and descriptor.get("device_id") == target_id and target_speed is not None:
-            source_device = dict(device)
-            source_device["speed_mbps"] = target_speed
         records = _nested_records(device, "wans", "wan", "wan_interfaces", "uplinks", "interfaces")
-        expanded = [source_device] + list(records)
+        expanded = [device] + list(records)
         for record in records:
             expanded.extend(_nested_records(record, "uplinks", "interfaces"))
         for item in expanded:
@@ -964,7 +934,7 @@ def _poe_record(port, *, max_power_w=None):
     return result
 
 
-def _port_record(port, *, device_id, previous_samples, sample_time, max_speed_mbps=None, max_power_w=None, static_port=None, model_id=None):
+def _port_record(port, *, device_id, previous_samples, sample_time, max_power_w=None, static_port=None, model_id=None):
     if not isinstance(port, dict):
         return None
     if static_port is not None:
@@ -1006,9 +976,10 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_speed_mb
     speed = _decimal(_first(port, "speed", "speedMbps", "speed_mbps", "linkSpeedMbps"), minimum=0)
     if speed is not None:
         result["speed_mbps"] = speed
-    maximum = None if static_port is not None else _decimal(_first(port, "max_speed", "maxSpeed", "max_speed_mbps", "maxSpeedMbps"), minimum=0)
-    if maximum is None:
-        maximum = (_decimal(static_port.get("max_speed_mbps"), minimum=0) if static_port is not None else max_speed_mbps)
+    # Maximum speed is a static hardware fact. Only a catalog-resolved model
+    # may provide it; an unknown model must not promote an API observation or
+    # a current negotiated speed into a hardware maximum.
+    maximum = _decimal(static_port.get("max_speed_mbps"), minimum=0) if static_port is not None else None
     if maximum is not None:
         result["max_speed_mbps"] = maximum
     counter_keys = {
@@ -1145,7 +1116,6 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
                 device_id=device_id,
                 previous_samples=previous_samples,
                 sample_time=sample_time,
-                max_speed_mbps=detail.get("max_speed_mbps"),
                 max_power_w=detail.get("max_power_w"),
                 static_port=static_ports.get(index),
                 model_id=model["canonical_sku"] if model else None,
