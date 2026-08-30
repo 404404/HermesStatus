@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 from unifi_profile_loader import load_profile
+from unifi_model_catalog import MODEL_DIRECTORY, load_catalog
 from unifi_normalizer import normalize
 
 def fixture(name):
@@ -14,6 +15,7 @@ def fixture(name):
 class NormalizerTests(unittest.TestCase):
     def setUp(self):
         self.profiles = ROOT / "unifi_profiles"
+        self.models = load_catalog(MODEL_DIRECTORY)
 
     def test_udw_normalization_and_fans(self):
         result = normalize(load_profile(self.profiles, "udw"), fixture("udw-raw.json"))
@@ -93,3 +95,14 @@ class NormalizerTests(unittest.TestCase):
         result = normalize(load_profile(self.profiles, "ucg-max"), raw)
         self.assertEqual(result["system"]["cpu_temperature_c"], 67.1)
         self.assertFalse(result["stale"])
+
+    def test_storage_and_power_capabilities_come_from_model_catalog(self):
+        profile = load_profile(self.profiles, "udw")
+        profile["power"]["psu_slots"] = 0
+        profile["power"]["max_power_w"] = None
+        profile["storage"]["sata_ssd"]["supported"] = False
+        profile["storage"]["sata_ssd"]["present"] = "not_populated"
+        result = normalize(profile, fixture("udw-raw.json"), model=self.models["UDW"])
+        self.assertEqual(result["power"], {"supported": True, "psu_slots": 2, "max_power_w": 550})
+        self.assertEqual(result["storage"]["sata_ssd"]["supported"], "supported")
+        self.assertEqual(result["storage"]["sata_ssd"]["present"], "present")

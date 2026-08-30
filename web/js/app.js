@@ -645,6 +645,20 @@ function unifiTransportSummary(unifi){
 function unifiErrorText(unifi){
   const code = String(safeObject(unifi.error).code || '').toLowerCase();
   const labels = {
+    invalid_value: 'UniFi 遥测数据校验失败',
+    invalid_json: 'UniFi 遥测 JSON 无效',
+    missing_field: 'UniFi 遥测字段缺失',
+    payload_too_large: 'UniFi 遥测数据过大',
+    api_configuration: 'UniFi API 配置无效',
+    api_key_file_error: 'UniFi API 密钥文件不可用',
+    api_auth_failure: 'UniFi API 身份验证失败',
+    api_tls_failure: 'UniFi API TLS 校验失败',
+    api_transport_failure: 'UniFi API 传输不可用',
+    api_timeout: 'UniFi API 请求超时',
+    api_http_error: 'UniFi API 返回错误',
+    api_parse_failure: 'UniFi API 响应解析失败',
+    api_endpoint_unsupported: 'UniFi API 端点不支持',
+    api_partial_failure: 'UniFi API 部分采集失败',
     host_key_failure: 'SSH 主机密钥验证失败',
     ssh_auth_failure: 'SSH 身份验证失败',
     ssh_timeout: 'SSH 采集超时',
@@ -1562,8 +1576,7 @@ function unifiPortTelemetryMarkup(unifi){
   const api = safeObject(unifi?.api);
   if(!api.enabled || api.status === 'disabled') return '<div class="unifi-api-unavailable">API 未启用；端口遥测不可用。</div>';
   const telemetry = safeObject(api.telemetry);
-  const ports = Array.isArray(telemetry.ports) ? telemetry.ports.slice(0, 64) : [];
-  const sortedPorts = ports.sort((a, b) => (finiteNumber(a?.port_idx) ?? Number.MAX_SAFE_INTEGER) - (finiteNumber(b?.port_idx) ?? Number.MAX_SAFE_INTEGER));
+  const ports = Array.isArray(telemetry.ports) ? telemetry.ports.slice() : [];
   const identity = safeObject(telemetry.identity);
   const descriptors = new Map();
   const uplinks = Array.isArray(telemetry.uplinks) ? telemetry.uplinks : [];
@@ -1571,7 +1584,7 @@ function unifiPortTelemetryMarkup(unifi){
     const id = typeof item?.device_id === 'string' ? item.device_id.trim() : '';
     if(!id) return;
     const current = descriptors.get(id) || {device_id: id};
-    for(const field of ['name', 'model', 'device_type', 'management_ip']){
+    for(const field of ['name', 'model', 'model_id', 'model_profile_status', 'device_type', 'management_ip']){
       if((current[field] === undefined || current[field] === null || current[field] === '') && item?.[field] !== undefined && item?.[field] !== null) current[field] = String(item[field]);
     }
     if(typeof item?.online === 'boolean') current.online = item.online;
@@ -1588,7 +1601,7 @@ function unifiPortTelemetryMarkup(unifi){
   const deviceLabel = (key, descriptor) => {
     let label = descriptor?.name || descriptor?.model || (key === 'default' ? identity.display_name || identity.model : key);
     label = textOrDash(label);
-    if(descriptor?.online === false) label += '（离线）';
+    if(descriptor?.online === false) label += ' (离线)';
     return label;
   };
   const orderedGroups = [...groups.entries()].sort((left, right) => {
@@ -1611,6 +1624,7 @@ function unifiPortTelemetryMarkup(unifi){
     key: 'unifi-device-' + index,
     sourceKey: key,
     label: deviceLabel(key, descriptors.get(key)),
+    modelProfileStatus: descriptors.get(key)?.model_profile_status || 'unknown',
     ports: items
   }));
   const tabs = groupEntries.map((group, index) => `<button id="${group.key}-tab" class="unifi-network-tab" type="button" role="tab" aria-selected="${index === 0 ? 'true' : 'false'}" aria-controls="${group.key}-panel" data-unifi-device-tab="${group.key}" tabindex="${index === 0 ? '0' : '-1'}">${escapeHtml(group.label)}</button>`).join('');
@@ -1646,7 +1660,8 @@ function unifiPortTelemetryMarkup(unifi){
     const body = rows || '<tr><td colspan="8" class="table-empty">当前未取得该设备端口数据。</td></tr>';
     const summary = groupPoeSummary(group.ports);
     const fallback = groupEntries.length === 1 || index === 0;
-    return `<section id="${group.key}-panel" class="unifi-device-panel" role="tabpanel" aria-labelledby="${group.key}-tab" data-unifi-device-panel="${group.key}"${index === 0 ? '' : ' hidden'}>${poeSummaryMarkup(summary, fallback)}<div class="table-wrap"><table class="data unifi-ports-table"><thead><tr><th>端口名称</th><th>端口编号</th><th>状态</th><th>链路</th><th>PoE</th><th>累计发送流量</th><th>累计接收流量</th><th>发送 / 接收 (错误/丢弃)</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
+    const modelNotice = group.modelProfileStatus === 'unknown' ? '<div class="unifi-model-unavailable">机型端口参数未维护</div>' : '';
+    return `<section id="${group.key}-panel" class="unifi-device-panel" role="tabpanel" aria-labelledby="${group.key}-tab" data-unifi-device-panel="${group.key}"${index === 0 ? '' : ' hidden'}>${modelNotice}${poeSummaryMarkup(summary, fallback)}<div class="table-wrap"><table class="data unifi-ports-table"><thead><tr><th>端口名称</th><th>端口编号</th><th>状态</th><th>链路</th><th>PoE</th><th>累计发送流量</th><th>累计接收流量</th><th>发送 / 接收 (错误/丢弃)</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
   }).join('');
   return `<div class="unifi-device-tabs" role="tablist" aria-label="UniFi 设备"><div class="unifi-network-tabs">${tabs}</div>${panels}</div>`;
 }

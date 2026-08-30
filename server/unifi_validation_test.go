@@ -342,3 +342,69 @@ func TestUniFiPersistenceRestoreAndStatsProjection(t *testing.T) {
 		t.Fatalf("stats omitted UniFi projection: %#v", server)
 	}
 }
+
+
+func syntheticUniFiAPIPortStats(ports []UniFiAPIPort) UniFiStats {
+	stats := validUniFiFixture("ucg-max")
+	now := "2026-08-27T01:02:03Z"
+	stats.API = &UniFiAPIStats{
+		Enabled: true, Status: "available", LastAttempt: &now, LastSuccess: &now,
+		Telemetry: &UniFiAPITelemetry{Ports: ports, WANs: []UniFiAPIWAN{}, Uplinks: []UniFiAPIUplink{}, Temperatures: []UniFiAPITemperature{}},
+	}
+	return stats
+}
+
+func syntheticUniFiPorts(count int) []UniFiAPIPort {
+	ports := make([]UniFiAPIPort, count)
+	for index := range ports {
+		ports[index] = UniFiAPIPort{DeviceID: "device-" + string(rune('a'+index/64)), PortIndex: index%64 + 1}
+	}
+	return ports
+}
+
+func TestUniFiSitePortObservationLimitAndUniqueJoinKey(t *testing.T) {
+	for _, count := range []int{64, 65, 97, MaxUniFiSitePortObservations} {
+		stats := syntheticUniFiAPIPortStats(syntheticUniFiPorts(count))
+		if err := ValidateUniFiStats(&stats); err != nil {
+			t.Fatalf("port count %d rejected: %v", count, err)
+		}
+	}
+
+	over := syntheticUniFiAPIPortStats(syntheticUniFiPorts(MaxUniFiSitePortObservations + 1))
+	assertValidationError(t, ValidateUniFiStats(&over), validationCodeInvalidValue)
+
+	duplicate := syntheticUniFiAPIPortStats([]UniFiAPIPort{
+		{DeviceID: "device-a", PortIndex: 1},
+		{DeviceID: "device-a", PortIndex: 1},
+	})
+	duplicateErr := ValidateUniFiStats(&duplicate)
+	assertValidationError(t, duplicateErr, validationCodeInvalidValue)
+	duplicateValidation, ok := duplicateErr.(*ExtensionValidationError)
+	if !ok || duplicateValidation.Field != "unifi.api.telemetry.ports" || duplicateValidation.Message != "contains duplicate device_id and port_idx" {
+		t.Fatalf("duplicate port key diagnostics changed: %#v", duplicateErr)
+	}
+
+	invalidIndex := syntheticUniFiAPIPortStats([]UniFiAPIPort{{DeviceID: "device-a", PortIndex: 0}})
+	invalidIndexErr := ValidateUniFiStats(&invalidIndex)
+	assertValidationError(t, invalidIndexErr, validationCodeInvalidValue)
+	invalidIndexValidation, ok := invalidIndexErr.(*ExtensionValidationError)
+	if !ok || invalidIndexValidation.Field != "unifi.api.telemetry.ports[0].port_idx" {
+		t.Fatalf("invalid port index field changed: %#v", invalidIndexErr)
+	}
+
+	malformedID := syntheticUniFiAPIPortStats([]UniFiAPIPort{{DeviceID: "", PortIndex: 1}})
+	malformedIDErr := ValidateUniFiStats(&malformedID)
+	assertValidationError(t, malformedIDErr, validationCodeInvalidValue)
+	malformedIDValidation, ok := malformedIDErr.(*ExtensionValidationError)
+	if !ok || malformedIDValidation.Field != "unifi.api.telemetry.ports[0].device_id" {
+		t.Fatalf("malformed device id field changed: %#v", malformedIDErr)
+	}
+
+	raw, err := json.Marshal(syntheticUniFiAPIPortStats(syntheticUniFiPorts(97)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeUniFiStatsJSON(raw); err != nil {
+		t.Fatalf("97-port strict JSON fixture rejected: %v", err)
+	}
+}

@@ -534,7 +534,7 @@ func extensionOpenAPISchemas() map[string]any {
 	uniFiPoEProfile := requiredObject([]string{"supported", "total_max_power_w", "port_max_power_w"}, map[string]any{
 		"supported":         map[string]any{"type": "boolean"},
 		"total_max_power_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
-		"port_max_power_w":  map[string]any{"type": "object", "maxProperties": MaxUniFiAPIPorts, "additionalProperties": map[string]any{"type": "number", "minimum": 0}},
+		"port_max_power_w":  map[string]any{"type": "object", "maxProperties": MaxUniFiPortsPerDevice, "additionalProperties": map[string]any{"type": "number", "minimum": 0}},
 	})
 	uniFiMemory := requiredObject([]string{"total_bytes", "available_bytes", "free_bytes", "buffers_bytes", "cached_bytes", "swap_total_bytes", "swap_free_bytes", "used_bytes", "used_percent", "available_source"}, map[string]any{
 		"total_bytes": nullableInteger(MaxSafeInteger, "Total memory bytes"), "available_bytes": nullableInteger(MaxSafeInteger, "Available memory bytes"), "free_bytes": nullableInteger(MaxSafeInteger, "Free memory bytes"),
@@ -549,7 +549,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"cpu_temperature_c": map[string]any{"type": []string{"number", "null"}, "minimum": MinTemperatureCelsius, "maximum": MaxTemperatureCelsius}, "memory": nullableRef("UniFiMemoryStats"), "uptime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "load_average": nullableRef("UniFiLoadAverage"),
 	})
 	uniFiAPIEndpoint := requiredObject([]string{"name", "status", "http_status", "error"}, map[string]any{
-		"name":        map[string]any{"type": "string", "enum": []string{"info", "sites", "devices", "clients", "networks"}},
+		"name":        map[string]any{"type": "string", "enum": []string{"info", "sites", "devices", "device_detail", "device_stats", "clients", "networks", "lags", "legacy_stat_device", "legacy_stat_health", "legacy_stat_sysinfo", "topology", "port_anomalies", "wan_official", "wan_enriched", "wan_isp_status", "wan_load_balance", "wan_load_balance_config", "wan_slas"}},
 		"status":      map[string]any{"type": "string", "enum": []string{"ok", "error", "unsupported"}},
 		"http_status": map[string]any{"type": []string{"integer", "null"}, "minimum": 100, "maximum": 599},
 		"error":       nullableRef("ExtensionError"),
@@ -580,7 +580,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"isp": nullableString(MaxUniFiTextLength, "ISP"), "link_state": nullableString(MaxUniFiTextLength, "WAN link state"),
 		"online": map[string]any{"type": []string{"boolean", "null"}}, "active": map[string]any{"type": []string{"boolean", "null"}}, "standby": map[string]any{"type": []string{"boolean", "null"}},
 		"uptime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "downtime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
-		"latency_ms": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "packet_loss_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100},
+		"latency_ms": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "jitter_ms": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "link_speed_mbps": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "packet_loss_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100},
 		"rx_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
 		"rx_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
 		"configured_upstream_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "configured_downstream_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
@@ -590,7 +590,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"name": nullableString(MaxUniFiTextLength, "Uplink name"), "link_state": nullableString(MaxUniFiTextLength, "Uplink state"), "speed_mbps": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
 		"duplex": nullableString(MaxUniFiTextLength, "Uplink duplex"), "wan_id": nullableString(MaxUniFiTextLength, "Associated WAN"),
 		"device_id": nullableString(MaxUniFiTextLength, "Owning UniFi device identity"), "management_ip": nullableString(MaxUniFiTextLength, "Owning UniFi management IP"),
-		"model": nullableString(MaxUniFiTextLength, "Owning UniFi device model"), "device_type": nullableString(MaxUniFiTextLength, "Owning UniFi device type"),
+		"model": nullableString(MaxUniFiTextLength, "Owning UniFi device model"), "model_id": nullableString(MaxUniFiTextLength, "Canonical hardware model"), "model_profile_status": map[string]any{"type": []string{"string", "null"}, "enum": []any{"known", "unknown", nil}}, "device_type": nullableString(MaxUniFiTextLength, "Owning UniFi device type"),
 		"online": map[string]any{"type": []string{"boolean", "null"}},
 	}, "additionalProperties": false}
 	uniFiAPITemperature := requiredObject([]string{"id", "label", "celsius", "source"}, map[string]any{
@@ -604,7 +604,7 @@ func extensionOpenAPISchemas() map[string]any {
 	}, "additionalProperties": false}
 	uniFiAPIPort := requiredObject([]string{"device_id", "port_idx"}, map[string]any{
 		"device_id": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength}, "port_idx": map[string]any{"type": "integer", "minimum": 1, "maximum": 65535},
-		"name": nullableString(MaxUniFiTextLength, "Port name"), "media": nullableString(MaxUniFiTextLength, "Port media"),
+		"name": nullableString(MaxUniFiTextLength, "Port name"), "media": nullableString(MaxUniFiTextLength, "Port media"), "connector": map[string]any{"type": []string{"string", "null"}, "enum": []any{"rj45", "sfp", "sfp_plus", "sfp28", "other", nil}}, "roles": map[string]any{"type": "array", "maxItems": 2, "items": map[string]any{"type": "string", "enum": []string{"lan", "wan"}}}, "poe_in": map[string]any{"type": []string{"boolean", "null"}}, "poe_out": map[string]any{"type": []string{"boolean", "null"}}, "poe_standard": map[string]any{"type": []string{"string", "null"}, "enum": []any{"poe", "poe+", "poe++", nil}}, "model_id": nullableString(MaxUniFiTextLength, "Canonical hardware model"), "model_profile_status": map[string]any{"type": []string{"string", "null"}, "enum": []any{"known", "unknown", nil}},
 		"enabled": map[string]any{"type": []string{"boolean", "null"}}, "up": map[string]any{"type": []string{"boolean", "null"}}, "uplink": map[string]any{"type": []string{"boolean", "null"}}, "duplex": map[string]any{"type": []string{"boolean", "null"}}, "autoneg": map[string]any{"type": []string{"boolean", "null"}},
 		"speed_mbps": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "max_speed_mbps": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
 		"rx_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "rx_packets": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_packets": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
@@ -614,7 +614,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"poe": map[string]any{"anyOf": []any{uniFiAPIPoE, map[string]any{"type": "null"}}}, "peer_count": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
 	})
 	uniFiAPIPortSummary := requiredObject([]string{"total", "up", "down", "poe_active"}, map[string]any{
-		"total": map[string]any{"type": "integer", "minimum": 0}, "up": map[string]any{"type": "integer", "minimum": 0}, "down": map[string]any{"type": "integer", "minimum": 0}, "poe_active": map[string]any{"type": "integer", "minimum": 0}, "poe_total_power_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"total": map[string]any{"type": "integer", "minimum": 0}, "up": map[string]any{"type": "integer", "minimum": 0}, "down": map[string]any{"type": "integer", "minimum": 0}, "poe_active": map[string]any{"type": "integer", "minimum": 0}, "poe_total_power_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "poe_total_source": map[string]any{"type": "string", "enum": []string{"", "device_reported", "port_sum", "unavailable"}}, "poe_max_power_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
 	})
 	uniFiAPILAG := requiredObject([]string{"lag_id", "lag_member"}, map[string]any{"lag_id": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength}, "lag_member": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength}})
 	uniFiAPITopologyLink := map[string]any{"type": "object", "properties": map[string]any{"source_device_id": nullableString(MaxUniFiTextLength, "Topology source"), "target_device_id": nullableString(MaxUniFiTextLength, "Topology target"), "state": nullableString(MaxUniFiTextLength, "Topology state")}, "additionalProperties": false}
@@ -637,7 +637,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"uplinks":      map[string]any{"type": "array", "maxItems": MaxUniFiAPIUplinks, "items": schemaRef("UniFiAPIUplink")},
 		"temperatures": map[string]any{"type": "array", "maxItems": MaxUniFiAPITemperatures, "items": schemaRef("UniFiAPITemperature")},
 		"clients":      nullableRef("UniFiAPIClientSummary"), "devices": nullableRef("UniFiAPIDeviceSummary"), "networks": nullableRef("UniFiAPINetworkSummary"),
-		"ports":        map[string]any{"type": []string{"array", "null"}, "maxItems": MaxUniFiAPIPorts, "items": schemaRef("UniFiAPIPort")},
+		"ports":        map[string]any{"type": []string{"array", "null"}, "maxItems": MaxUniFiSitePortObservations, "items": schemaRef("UniFiAPIPort")},
 		"port_summary": map[string]any{"anyOf": []any{schemaRef("UniFiAPIPortSummary"), map[string]any{"type": "null"}}},
 		"lags":         map[string]any{"type": []string{"array", "null"}, "maxItems": MaxUniFiAPILags, "items": schemaRef("UniFiAPILAG")},
 		"topology":     map[string]any{"anyOf": []any{schemaRef("UniFiAPITopology"), map[string]any{"type": "null"}}},

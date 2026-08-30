@@ -5,11 +5,14 @@ import copy
 from pathlib import Path
 
 from unifi_normalizer import normalize
+from unifi_model_catalog import MODEL_DIRECTORY, load_catalog, resolve_model
 from unifi_profile_loader import ProfileError, load_profile
 from unifi_raw_collector import RawCollector
 from unifi_api import UniFiAPICollector, api_disabled
 
 PROFILE_DIRECTORY = Path(__file__).with_name("unifi_profiles")
+MODEL_CATALOG = load_catalog(MODEL_DIRECTORY)
+MODEL_SKU_BY_PROFILE = {"ucg-max": "UCG-Max", "udw": "UDW"}
 
 
 def not_configured_unifi():
@@ -30,6 +33,22 @@ def not_configured_unifi():
 
 def not_collected_unifi(profile_id):
     result = not_configured_unifi()
+    model = resolve_model(MODEL_CATALOG, MODEL_SKU_BY_PROFILE.get(profile_id), kind="api_model")
+    if model is not None:
+        result["power"] = {
+            "supported": model["power"]["psu_slots"] > 0,
+            "psu_slots": model["power"]["psu_slots"],
+            "max_power_w": model["power"]["max_power_w"],
+        }
+        result["storage"] = {
+            name: {
+                "supported": "supported" if capability["supported"] is True else "unsupported" if capability["supported"] is False else "unknown",
+                "present": "not_present" if capability["present"] == "not_populated" else capability["present"],
+                "observed": False,
+                "capacity_bytes": capability["capacity_bytes"],
+            }
+            for name, capability in model["storage"].items()
+        }
     result.update({
         "configured": True, "profile": profile_id,
         "transport": {"status": "not_collected", "last_attempt": None, "last_success": None},
@@ -53,6 +72,10 @@ class UniFiDomainCollector:
             self.profile = load_profile(PROFILE_DIRECTORY, config.profile_id)
         except ProfileError as exc:
             raise ValueError("unknown_profile") from exc
+        model_sku = MODEL_SKU_BY_PROFILE.get(config.profile_id)
+        self.model = resolve_model(MODEL_CATALOG, model_sku, kind="api_model")
+        if self.model is None:
+            raise ValueError("unknown_model_catalog")
         hwmon_expected_name = self.profile.get("diagnostics", {}).get("hwmon", {}).get("expected_name")
         self.raw_collector = raw_collector or RawCollector(config, hwmon_expected_name=hwmon_expected_name)
         api_config = getattr(config, "api", None)
@@ -72,10 +95,10 @@ class UniFiDomainCollector:
             raw["diagnostics"] = {"collection_status": "unavailable"}
         raw["api"] = self.api_collector.collect() if self.api_collector is not None else api_disabled()
         try:
-            normalized = normalize(self.profile, raw, self.previous)
+            normalized = normalize(self.profile, raw, self.previous, self.model)
         except ValueError:
             raw = {"collected_at": raw.get("collected_at"), "transport": {"ok": False, "error": "parse_failure"}}
-            normalized = normalize(self.profile, raw, self.previous)
+            normalized = normalize(self.profile, raw, self.previous, self.model)
         public = _public(normalized)
         if not public["stale"]:
             self.previous = copy.deepcopy(public)

@@ -86,7 +86,7 @@ async function run(){
   assert.match(appSource, /EasyTier流量统计/);
   assert.match(indexMarkup, /id="unifiPorts"/);
   assert.match(indexMarkup, /id="unifiEmptyState"/);
-  assert.match(appSource, /已配置 UniFi 目标，但访问失败，请检查 SSH 密码和 API Key/);
+  assert.match(appSource, /invalid_value/);
   assert.match(appSource, /未配置 UniFi 目标/);
   assert.match(cssSource, /\.unifi-network-tabs\{[^}]*flex-wrap:wrap/);
   assert.match(cssSource, /\.unifi-network-tab\{[^}]*white-space:nowrap/);
@@ -315,8 +315,8 @@ async function run(){
   assert.match(systemCards, /2\.00 GB \/ 4\.00 GB/);
   assert.match(systemCards, /<h2>CPU<\/h2>[\s\S]*Annapurna AL324/);
   assert.match(portTelemetryMarkup, /UniFi Dream Wall/);
-  assert.match(portTelemetryMarkup, /USW Flex Mini（离线）/);
-  assert.ok(numericIpMarkup.indexOf('USW Flex Mini（离线）') < numericIpMarkup.indexOf('UniFi Dream Wall'));
+  assert.match(portTelemetryMarkup, /USW Flex Mini \(离线\)/);
+  assert.ok(numericIpMarkup.indexOf('USW Flex Mini (离线)') < numericIpMarkup.indexOf('UniFi Dream Wall'));
   assert.ok(portTelemetryMarkup.indexOf('>2</td>') < portTelemetryMarkup.indexOf('>7</td>'));
   assert.ok(portTelemetryMarkup.indexOf('>7</td>') < portTelemetryMarkup.indexOf('>10</td>'));
   assert.doesNotMatch(portTelemetryMarkup, /已连接 · 上联/);

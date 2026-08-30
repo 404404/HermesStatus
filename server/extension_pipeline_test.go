@@ -450,3 +450,30 @@ func connectNodeForUpdate(app *App, connectionID uint64) {
 	node.ConnectionID = connectionID
 	app.nodeMu.Unlock()
 }
+
+
+func TestUniFiValidationIssuePreservesSafePathAndReason(t *testing.T) {
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(structuredUpdatePayload(t, "update-normal.json", nil), &fields); err != nil {
+		t.Fatal(err)
+	}
+	rawUniFi, err := json.Marshal(syntheticUniFiAPIPortStats(syntheticUniFiPorts(MaxUniFiSitePortObservations + 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields["unifi"] = rawUniFi
+	payload, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, issues, err := decodeAgentUpdate(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) != 1 || issues[0].Domain != "unifi" || issues[0].Code != validationCodeInvalidValue {
+		t.Fatalf("unexpected UniFi validation issue: %#v", issues)
+	}
+	if issues[0].Field != "unifi.api.telemetry.ports" || issues[0].Reason != "array exceeds the allowed size" {
+		t.Fatalf("UniFi validation details changed: %#v", issues[0])
+	}
+}

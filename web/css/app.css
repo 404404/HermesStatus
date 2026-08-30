@@ -224,6 +224,7 @@ body.light .unifi-page-empty{background:var(--panel)}
 .unifi-ports-table td,.unifi-ports-table th{white-space:nowrap}
 .unifi-device-tabs{padding:0 1.35rem 1.1rem}
 .unifi-device-tabs .unifi-network-tabs{padding:0 0 .8rem;border-bottom:1px solid var(--border)}
+.unifi-model-unavailable{padding:.75rem 0;color:var(--text-dim);font-size:12px;font-weight:700}
 .unifi-device-panel[hidden]{display:none}
 .unifi-port-summary{width:50%;min-width:280px;padding:.8rem 0;display:flex;align-items:center;gap:.65rem;color:var(--text-dim);font-size:13px;font-weight:700}
 .unifi-poe-summary-value{flex:0 0 auto;color:var(--text);font-size:13px;font-weight:750;white-space:nowrap}

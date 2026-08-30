@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -23,6 +24,8 @@ const (
 type extensionDecodeIssue struct {
 	Domain        string
 	Code          string
+	Field         string
+	Reason        string
 	PayloadLength int
 }
 
@@ -111,7 +114,8 @@ func decodeClientBuildPayload(data []byte, issues *[]extensionDecodeIssue) *Clie
 	}
 	stats, err := decodeExtensionClientBuild(data)
 	if err != nil {
-		*issues = append(*issues, extensionDecodeIssue{Domain: "client_build", Code: extensionValidationCode(err), PayloadLength: len(data)})
+		code, field, reason := extensionValidationDetails(err)
+		*issues = append(*issues, extensionDecodeIssue{Domain: "client_build", Code: code, Field: field, Reason: reason, PayloadLength: len(data)})
 		return nil
 	}
 	return stats
@@ -193,17 +197,30 @@ func decodeDomainPayload[T any](
 	if err == nil {
 		return value
 	}
-	code := extensionValidationCode(err)
-	*issues = append(*issues, extensionDecodeIssue{Domain: domain, Code: code, PayloadLength: len(data)})
+	code, field, reason := extensionValidationDetails(err)
+	*issues = append(*issues, extensionDecodeIssue{Domain: domain, Code: code, Field: field, Reason: reason, PayloadLength: len(data)})
 	return degraded(code)
 }
 
-func extensionValidationCode(err error) string {
+func extensionValidationDetails(err error) (string, string, string) {
 	var validationErr *ExtensionValidationError
 	if errors.As(err, &validationErr) {
-		return validationErr.Code
+		return validationErr.Code, safeExtensionDiagnostic(validationErr.Field), safeExtensionDiagnostic(validationErr.Message)
 	}
-	return validationCodeInvalidValue
+	return validationCodeInvalidValue, "", ""
+}
+
+func extensionValidationCode(err error) string {
+	code, _, _ := extensionValidationDetails(err)
+	return code
+}
+
+func safeExtensionDiagnostic(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 160 || strings.ContainsAny(value, "\x00\r\n\t") {
+		return ""
+	}
+	return SanitizeText(value)
 }
 
 func hasAnyField(fields map[string]json.RawMessage, names ...string) bool {

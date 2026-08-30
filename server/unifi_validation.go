@@ -58,7 +58,7 @@ func ValidateUniFiStats(stats *UniFiStats) error {
 		if err := validateOptionalFloat("unifi.poe.total_max_power_w", stats.PoE.TotalMaxPowerW, float64(MaxSafeInteger)); err != nil {
 			return err
 		}
-		if len(stats.PoE.PortMaxPowerW) > MaxUniFiAPIPorts {
+		if len(stats.PoE.PortMaxPowerW) > MaxUniFiPortsPerDevice {
 			return validationError(validationCodeInvalidValue, "unifi.poe.port_max_power_w", "is too large")
 		}
 		for port, value := range stats.PoE.PortMaxPowerW {
@@ -274,10 +274,13 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 	}
 	for index, item := range value.Uplinks {
 		prefix := "unifi.api.telemetry.uplinks[" + strconv.Itoa(index) + "]"
-		for field, text := range map[string]*string{"name": item.Name, "link_state": item.LinkState, "duplex": item.Duplex, "wan_id": item.WANID, "device_id": item.DeviceID, "management_ip": item.ManagementIP, "model": item.Model, "device_type": item.DeviceType} {
+		for field, text := range map[string]*string{"name": item.Name, "link_state": item.LinkState, "duplex": item.Duplex, "wan_id": item.WANID, "device_id": item.DeviceID, "management_ip": item.ManagementIP, "model": item.Model, "model_id": item.ModelID, "model_profile_status": item.ModelProfileStatus, "device_type": item.DeviceType} {
 			if err := validateOptionalString(prefix+"."+field, text, MaxUniFiTextLength); err != nil {
 				return err
 			}
+		}
+		if item.ModelProfileStatus != nil && *item.ModelProfileStatus != "known" && *item.ModelProfileStatus != "unknown" {
+			return validationError(validationCodeInvalidValue, prefix+".model_profile_status", "is invalid")
 		}
 		if err := validateOptionalFloat(prefix+".speed_mbps", item.SpeedMbps, float64(MaxSafeInteger)); err != nil {
 			return err
@@ -324,9 +327,10 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 	if value.Networks != nil && (value.Networks.Total < 0 || value.Networks.VLAN < 0 || value.Networks.VLAN > value.Networks.Total) {
 		return validationError(validationCodeInvalidValue, "unifi.api.telemetry.networks", "counts are invalid")
 	}
-	if len(value.Ports) > MaxUniFiAPIPorts || len(value.LAGs) > MaxUniFiAPILags {
+	if len(value.Ports) > MaxUniFiSitePortObservations || len(value.LAGs) > MaxUniFiAPILags {
 		return validationError(validationCodeInvalidValue, "unifi.api.telemetry.ports", "array exceeds the allowed size")
 	}
+	seenPortKeys := map[string]struct{}{}
 	for index, item := range value.Ports {
 		prefix := "unifi.api.telemetry.ports[" + strconv.Itoa(index) + "]"
 		if err := validateRequiredString(prefix+".device_id", item.DeviceID, MaxUniFiTextLength); err != nil {
@@ -335,10 +339,37 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 		if item.PortIndex < 1 || item.PortIndex > 65535 {
 			return validationError(validationCodeInvalidValue, prefix+".port_idx", "is invalid")
 		}
-		for field, text := range map[string]*string{"name": item.Name, "media": item.Media} {
+		portKey := item.DeviceID + "\x00" + strconv.Itoa(item.PortIndex)
+		if _, exists := seenPortKeys[portKey]; exists {
+			return validationError(validationCodeInvalidValue, "unifi.api.telemetry.ports", "contains duplicate device_id and port_idx")
+		}
+		seenPortKeys[portKey] = struct{}{}
+		for field, text := range map[string]*string{"name": item.Name, "media": item.Media, "connector": item.Connector, "poe_standard": item.PoEStandard, "model_id": item.ModelID, "model_profile_status": item.ModelProfileStatus} {
 			if err := validateOptionalString(prefix+"."+field, text, MaxUniFiTextLength); err != nil {
 				return err
 			}
+		}
+		if item.Connector != nil && *item.Connector != "rj45" && *item.Connector != "sfp" && *item.Connector != "sfp_plus" && *item.Connector != "sfp28" && *item.Connector != "other" {
+			return validationError(validationCodeInvalidValue, prefix+".connector", "is invalid")
+		}
+		if item.PoEStandard != nil && *item.PoEStandard != "poe" && *item.PoEStandard != "poe+" && *item.PoEStandard != "poe++" {
+			return validationError(validationCodeInvalidValue, prefix+".poe_standard", "is invalid")
+		}
+		if item.ModelProfileStatus != nil && *item.ModelProfileStatus != "known" && *item.ModelProfileStatus != "unknown" {
+			return validationError(validationCodeInvalidValue, prefix+".model_profile_status", "is invalid")
+		}
+		if len(item.Roles) > 2 {
+			return validationError(validationCodeInvalidValue, prefix+".roles", "is too large")
+		}
+		seenRoles := map[string]struct{}{}
+		for _, role := range item.Roles {
+			if role != "lan" && role != "wan" {
+				return validationError(validationCodeInvalidValue, prefix+".roles", "contains an invalid role")
+			}
+			if _, exists := seenRoles[role]; exists {
+				return validationError(validationCodeInvalidValue, prefix+".roles", "contains a duplicate role")
+			}
+			seenRoles[role] = struct{}{}
 		}
 		if err := validateOptionalFloat(prefix+".speed_mbps", item.SpeedMbps, float64(MaxSafeInteger)); err != nil {
 			return err
@@ -697,6 +728,8 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 		item.LinkState = sanitizeStringPointer(item.LinkState)
 		item.Duplex = sanitizeStringPointer(item.Duplex)
 		item.WANID = sanitizeStringPointer(item.WANID)
+		item.ModelID = sanitizeStringPointer(item.ModelID)
+		item.ModelProfileStatus = sanitizeStringPointer(item.ModelProfileStatus)
 	}
 	result.Ports = append([]UniFiAPIPort(nil), input.Ports...)
 	if input.Ports != nil && result.Ports == nil {
@@ -707,6 +740,14 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 		item.DeviceID = SanitizeText(item.DeviceID)
 		item.Name = sanitizeStringPointer(item.Name)
 		item.Media = sanitizeStringPointer(item.Media)
+		item.Connector = sanitizeStringPointer(item.Connector)
+		item.PoEStandard = sanitizeStringPointer(item.PoEStandard)
+		item.ModelID = sanitizeStringPointer(item.ModelID)
+		item.ModelProfileStatus = sanitizeStringPointer(item.ModelProfileStatus)
+		item.Roles = append([]string(nil), item.Roles...)
+		for roleIndex := range item.Roles {
+			item.Roles[roleIndex] = SanitizeText(item.Roles[roleIndex])
+		}
 		if item.PoE != nil {
 			poe := *item.PoE
 			poe.State = sanitizeStringPointer(poe.State)
@@ -874,7 +915,7 @@ func sanitizeUniFiPoEPortLimits(input map[string]float64) map[string]float64 {
 	}
 	result := make(map[string]float64)
 	for key, value := range input {
-		if len(result) >= MaxUniFiAPIPorts || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+		if len(result) >= MaxUniFiPortsPerDevice || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
 			continue
 		}
 		result[SanitizeText(key)] = value

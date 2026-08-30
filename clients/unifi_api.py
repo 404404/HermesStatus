@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from http.client import HTTPSConnection
 from urllib.parse import quote, urlsplit
 
+from unifi_model_catalog import MODEL_DIRECTORY, load_catalog, resolve_model
+
 API_ENDPOINTS = (
     ("info", "/proxy/network/integration/v1/info"),
     ("sites", "/proxy/network/integration/v1/sites"),
@@ -43,11 +45,14 @@ MAX_API_TEXT = 128
 MAX_API_TEMPERATURES = 16
 MAX_API_WANS = 16
 MAX_API_UPLINKS = 32
-MAX_API_PORTS = 64
+MAX_UNIFI_PORTS_PER_DEVICE = 64
+MAX_UNIFI_SITE_PORT_OBSERVATIONS = 256
+MAX_API_LAG_MEMBERS = 64
 MAX_API_LAGS = 16
 MAX_API_TOPOLOGY_LINKS = 32
 MAX_API_ANOMALIES = 16
 API_COLLECTION_MAX_SECONDS = 30.0
+MODEL_CATALOG = load_catalog(MODEL_DIRECTORY)
 
 
 class APIError(RuntimeError):
@@ -841,6 +846,12 @@ def _device_descriptor(device):
         result["name"] = model
     if model:
         result["model"] = model
+    model_profile = resolve_model(MODEL_CATALOG, model)
+    if model_profile is not None:
+        result["model_id"] = model_profile["canonical_sku"]
+        result["model_profile_status"] = "known"
+    else:
+        result["model_profile_status"] = "unknown"
     device_type = _text(_first(device, "type", "device_type", "deviceType", "category", "role"))
     if device_type:
         result["device_type"] = device_type
@@ -953,13 +964,27 @@ def _poe_record(port, *, max_power_w=None):
     return result
 
 
-def _port_record(port, *, device_id, previous_samples, sample_time, max_speed_mbps=None, max_power_w=None):
+def _port_record(port, *, device_id, previous_samples, sample_time, max_speed_mbps=None, max_power_w=None, static_port=None, model_id=None):
     if not isinstance(port, dict):
         return None
-    index = _counter(port, "port_idx", "idx", "portIndex")
+    if static_port is not None:
+        index = _counter(static_port, "index", "port_idx", "idx", "portIndex")
+    else:
+        index = _counter(port, "port_idx", "idx", "portIndex")
     if index is None or index < 1 or index > 65535:
         return None
     result = {"device_id": device_id, "port_idx": index}
+    if static_port is not None:
+        result["name"] = static_port["label"]
+        result["connector"] = static_port["connector"]
+        result["media"] = static_port["connector"]
+        result["roles"] = list(static_port["roles"])
+        result["poe_in"] = static_port["poe_in"]
+        result["poe_out"] = static_port["poe_out"]
+        if static_port["poe_standard"] is not None:
+            result["poe_standard"] = static_port["poe_standard"]
+        if model_id:
+            result["model_id"] = model_id
     for output, keys in (
         ("name", ("name", "display_name", "displayName", "ifname")),
         ("media", ("media", "connector", "type")),
@@ -969,6 +994,8 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_speed_mb
         ("up", ("up", "link_up", "is_up")),
         ("uplink", ("is_uplink", "uplink")),
     ):
+        if static_port is not None and output in {"name", "media"}:
+            continue
         value = _first(port, *keys)
         if output in {"duplex", "autoneg", "enabled", "up", "uplink"}:
             value = _boolean(value)
@@ -979,9 +1006,9 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_speed_mb
     speed = _decimal(_first(port, "speed", "speedMbps", "speed_mbps", "linkSpeedMbps"), minimum=0)
     if speed is not None:
         result["speed_mbps"] = speed
-    maximum = _decimal(_first(port, "max_speed", "maxSpeed", "max_speed_mbps", "maxSpeedMbps"), minimum=0)
+    maximum = None if static_port is not None else _decimal(_first(port, "max_speed", "maxSpeed", "max_speed_mbps", "maxSpeedMbps"), minimum=0)
     if maximum is None:
-        maximum = max_speed_mbps
+        maximum = (_decimal(static_port.get("max_speed_mbps"), minimum=0) if static_port is not None else max_speed_mbps)
     if maximum is not None:
         result["max_speed_mbps"] = maximum
     counter_keys = {
@@ -1029,7 +1056,13 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_speed_mb
                         if rate_key in rates:
                             result[utilization_key] = round(rates[rate_key] * 8 / (speed * 1_000_000) * 100, 2)
     previous_samples[sample_key] = current_sample
-    poe = _poe_record(port, max_power_w=max_power_w)
+    poe_input = port
+    if static_port is not None:
+        poe_input = dict(port)
+        poe_input["port_poe"] = static_port["poe_out"]
+        if static_port["poe_standard"] is not None:
+            poe_input["poe_standard"] = static_port["poe_standard"]
+    poe = _poe_record(poe_input, max_power_w=max_power_w if static_port is None else static_port["poe_max_power_w"])
     if poe is not None:
         result["poe"] = poe
     connection = port.get("last_connection")
@@ -1047,7 +1080,7 @@ def _detail_port_capabilities(target_detail):
     if not isinstance(ports, list):
         return {}
     result = {}
-    for port in ports[:MAX_API_PORTS]:
+    for port in ports[:MAX_UNIFI_PORTS_PER_DEVICE]:
         if not isinstance(port, dict):
             continue
         index = _counter(port, "port_idx", "idx", "portIndex")
@@ -1081,30 +1114,75 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
     if not target_id:
         return None, None
     known_devices = {}
+    device_models = {}
     for device in [target] + list(devices or []):
         if not isinstance(device, dict):
             continue
         device_id = _identifier(_first(device, "id", "device_id", "deviceId", "_id", "external_id"))
         if device_id:
             known_devices[device_id] = device
+            model_name = _text(_first(device, "model", "model_name", "modelName", "device_model"))
+            device_models[device_id] = resolve_model(MODEL_CATALOG, model_name)
     records = _items(legacy_payload.get("data") if isinstance(legacy_payload, dict) else legacy_payload)
     matched = False
-    port_records = []
+    matched_device_ids = set()
+    runtime_by_key = {}
     for legacy in records:
         device_id = next((device_id for device_id in known_devices if any(_identifier(legacy.get(key)) == device_id for key in ("device_id", "_id", "external_id"))), None)
         if device_id is None:
             continue
         matched = True
+        matched_device_ids.add(device_id)
         detail_capabilities = _detail_port_capabilities(target_detail) if device_id == target_id else {}
-        for port in (legacy.get("port_table") if isinstance(legacy.get("port_table"), list) else [])[:MAX_API_PORTS]:
+        model = device_models.get(device_id)
+        static_ports = {port["index"]: port for port in model["ports"]} if model else {}
+        raw_ports = legacy.get("port_table") if isinstance(legacy.get("port_table"), list) else []
+        for port in raw_ports[:MAX_UNIFI_PORTS_PER_DEVICE]:
             index = _counter(port, "port_idx", "idx", "portIndex")
             detail = detail_capabilities.get(index, {})
-            item = _port_record(port, device_id=device_id, previous_samples=previous_samples, sample_time=sample_time,
-                                max_speed_mbps=detail.get("max_speed_mbps"), max_power_w=detail.get("max_power_w"))
+            item = _port_record(
+                port,
+                device_id=device_id,
+                previous_samples=previous_samples,
+                sample_time=sample_time,
+                max_speed_mbps=detail.get("max_speed_mbps"),
+                max_power_w=detail.get("max_power_w"),
+                static_port=static_ports.get(index),
+                model_id=model["canonical_sku"] if model else None,
+            )
             if item is not None:
-                port_records.append(item)
+                runtime_by_key.setdefault((device_id, item["port_idx"]), []).append(item)
     if not matched:
         return None, None
+
+    port_records = []
+    for device_id in sorted(matched_device_ids):
+        model = device_models.get(device_id)
+        static_ports = {port["index"]: port for port in model["ports"]} if model else {}
+        emitted = set()
+        for static in sorted(static_ports.values(), key=lambda port: port["index"]):
+            key = (device_id, static["index"])
+            entries = runtime_by_key.pop(key, [])
+            if entries:
+                port_records.extend(entries)
+            else:
+                item = _port_record(
+                    {},
+                    device_id=device_id,
+                    previous_samples=previous_samples,
+                    sample_time=sample_time,
+                    static_port=static,
+                    model_id=model["canonical_sku"],
+                )
+                if item is not None:
+                    port_records.append(item)
+            emitted.add(key)
+        for key in sorted(runtime_by_key):
+            if key[0] == device_id and key not in emitted:
+                port_records.extend(runtime_by_key.pop(key))
+    port_records.sort(key=lambda item: (item["device_id"], item["port_idx"]))
+    port_records = port_records[:MAX_UNIFI_SITE_PORT_OBSERVATIONS]
+
     summary = {"total": len(port_records), "up": sum(1 for item in port_records if item.get("up") is True), "down": sum(1 for item in port_records if item.get("up") is False), "poe_active": 0, "poe_total_power_w": None, "poe_total_source": "unavailable", "poe_max_power_w": None}
     poe_items = [item.get("poe", {}) for item in port_records if isinstance(item.get("poe"), dict)]
     summary["poe_active"] = sum(1 for item in poe_items if item.get("active") is True)
@@ -1126,7 +1204,7 @@ def _lag_records(payload):
         lag_id = _text(_first(item, "lag_id", "lagId", "id"))
         members = _first(item, "lag_member", "lagMember", "members", "ports")
         if isinstance(members, list):
-            for member in members[:MAX_API_PORTS]:
+            for member in members[:MAX_API_LAG_MEMBERS]:
                 value = _text(member if isinstance(member, str) else _first(member, "id", "port_idx", "portIdx", "name"))
                 if lag_id and value:
                     records.append({"lag_id": lag_id, "lag_member": value})

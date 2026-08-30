@@ -69,24 +69,29 @@ const (
 	MaxExtensionPayloadBytes = 1 << 20
 	// Storage inventory is bounded independently (64 physical disks and 128
 	// filesystems), so the former single-disk hardware limit is too small.
-	MaxHardwarePayloadBytes     = 256 * 1024
-	MaxDockerPayloadBytes       = 512 * 1024
-	MaxHermesPayloadBytes       = 1 << 20
-	MaxEasyTierPayloadBytes     = 64 * 1024
-	MaxUniFiPayloadBytes        = 64 * 1024
-	MaxEasyTierTextLength       = 128
-	MaxUniFiTextLength          = 128
-	MaxUniFiFans                = 8
-	MaxUniFiPowerSupplies       = 4
-	MaxUniFiIgnoredObservations = 8
-	MaxUniFiAPIEndpoints        = 24
-	MaxUniFiAPIWans             = 16
-	MaxUniFiAPIUplinks          = 32
-	MaxUniFiAPITemperatures     = 16
-	MaxUniFiAPIPorts            = 64
-	MaxUniFiAPILags             = 16
-	MaxUniFiAPITopologyLinks    = 32
-	MaxUniFiAPIAnomalyTypes     = 4
+	MaxHardwarePayloadBytes      = 256 * 1024
+	MaxDockerPayloadBytes        = 512 * 1024
+	MaxHermesPayloadBytes        = 1 << 20
+	MaxEasyTierPayloadBytes      = 64 * 1024
+	MaxUniFiPayloadBytes         = 64 * 1024
+	MaxEasyTierTextLength        = 128
+	MaxUniFiTextLength           = 128
+	MaxUniFiFans                 = 8
+	MaxUniFiPowerSupplies        = 4
+	MaxUniFiIgnoredObservations  = 8
+	MaxUniFiAPIEndpoints         = 24
+	MaxUniFiAPIWans              = 16
+	MaxUniFiAPIUplinks           = 32
+	MaxUniFiAPITemperatures      = 16
+	// Per-device limits cover one physical port table or static PoE map.
+	MaxUniFiPortsPerDevice       = 64
+	// Site-wide API telemetry is the bounded union of all device observations.
+	// 256 accepts the qualified 97-port site with margin while remaining bounded;
+	// the existing whole-domain payload limit still applies independently.
+	MaxUniFiSitePortObservations = 256
+	MaxUniFiAPILags              = 16
+	MaxUniFiAPITopologyLinks     = 32
+	MaxUniFiAPIAnomalyTypes      = 4
 )
 
 type DiskSMARTStatus string

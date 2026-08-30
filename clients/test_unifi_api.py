@@ -198,9 +198,11 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(telemetry["devices"]["total"], 3)
         self.assertEqual(telemetry["clients"], {"total": 2, "wired": 1, "wireless": 1, "observed": True})
         self.assertEqual(telemetry["networks"], {"total": 2, "vlan": 1})
-        self.assertEqual(len(telemetry["ports"]), 1)
+        self.assertEqual(len(telemetry["ports"]), 20)
         self.assertEqual(telemetry["ports"][0]["port_idx"], 1)
-        self.assertEqual(telemetry["ports"][0]["max_speed_mbps"], 2500)
+        self.assertEqual(telemetry["ports"][0]["max_speed_mbps"], 1000)
+        self.assertEqual(telemetry["ports"][0]["model_id"], "UDW")
+        self.assertEqual(telemetry["ports"][0]["connector"], "rj45")
         self.assertEqual(telemetry["ports"][0]["rx_bytes"], 1000)
         self.assertNotIn("rx_bps", telemetry["ports"][0])
         self.assertEqual(telemetry["port_summary"]["up"], 1)
@@ -211,7 +213,7 @@ class UniFiAPITests(unittest.TestCase):
         # Latest-statistics rates are intentionally not projected into the
         # strict Device v2 uplink model (which only accepts link metadata).
         self.assertTrue(telemetry["uplinks"])
-        self.assertTrue(all(set(item) <= {"device_id", "name", "model", "device_type", "management_ip", "online", "link_state", "speed_mbps", "duplex", "wan_id"}
+        self.assertTrue(all(set(item) <= {"device_id", "name", "model", "model_id", "model_profile_status", "device_type", "management_ip", "online", "link_state", "speed_mbps", "duplex", "wan_id"}
                             for item in telemetry["uplinks"]))
         target_uplink = next(item for item in telemetry["uplinks"] if item.get("name") == "UDW")
         self.assertEqual(target_uplink["speed_mbps"], 2500)
@@ -409,7 +411,7 @@ class UniFiAPITests(unittest.TestCase):
             {"device_id": "udw-1", "port_table": [{"port_idx": 1, "up": True}]},
         ]}
         records, _ = _ports(legacy, devices[2], {}, 1.0, devices=devices)
-        self.assertEqual([(item["device_id"], item["port_idx"]) for item in records], [("switch-1", 8), ("udw-1", 1)])
+        self.assertEqual([(item["device_id"], item["port_idx"]) for item in records], [("switch-1", 8)] + [("udw-1", index) for index in range(1, 21)])
 
     def test_target_resolution_does_not_depend_on_device_order(self):
         calls = []

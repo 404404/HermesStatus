@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HermesStatus UniFi model capability catalog V1",
+  "type": "object",
+  "required": ["schema_version", "canonical_sku", "display_name", "device_type", "runtime_aliases", "ports", "storage", "power"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "canonical_sku": {"type": "string", "minLength": 1, "maxLength": 128},
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 128},
+    "device_type": {"enum": ["gateway", "switch", "ap"]},
+    "runtime_aliases": {
+      "type": "object", "required": ["api_model", "sysid", "ssh_model"], "additionalProperties": false,
+      "properties": {
+        "api_model": {"$ref": "#/$defs/aliases"},
+        "sysid": {"$ref": "#/$defs/aliases"},
+        "ssh_model": {"$ref": "#/$defs/aliases"}
+      }
+    },
+    "ports": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/port"}},
+    "storage": {"type": "object", "required": ["nvme", "sata_ssd", "tf"], "additionalProperties": false, "properties": {"nvme": {"$ref": "#/$defs/storage"}, "sata_ssd": {"$ref": "#/$defs/storage"}, "tf": {"$ref": "#/$defs/storage"}}},
+    "power": {"type": "object", "required": ["psu_slots", "max_power_w"], "additionalProperties": false, "properties": {"psu_slots": {"type": "integer", "minimum": 0, "maximum": 4}, "max_power_w": {"type": ["number", "null"], "exclusiveMinimum": 0}}}
+  },
+  "$defs": {
+    "aliases": {"type": "array", "maxItems": 16, "items": {"type": "object", "required": ["value", "provenance", "runtime_verified", "evidence"], "additionalProperties": false, "properties": {"value": {"type": "string", "minLength": 1, "maxLength": 128}, "provenance": {"type": "string", "maxLength": 64}, "runtime_verified": {"type": "boolean"}, "evidence": {"type": "string", "minLength": 1, "maxLength": 256}}}},
+    "port": {"type": "object", "required": ["index", "label", "connector", "max_speed_mbps", "roles", "poe_in", "poe_out", "poe_standard", "poe_max_power_w", "combo_group"], "additionalProperties": false, "properties": {"index": {"type": "integer", "minimum": 1, "maximum": 65535}, "label": {"type": "string", "minLength": 1, "maxLength": 128}, "connector": {"enum": ["rj45", "sfp", "sfp_plus", "sfp28", "other"]}, "max_speed_mbps": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000}, "roles": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["lan", "wan"]}}, "poe_in": {"type": "boolean"}, "poe_out": {"type": "boolean"}, "poe_standard": {"type": ["string", "null"], "enum": ["poe", "poe+", "poe++", null]}, "poe_max_power_w": {"type": ["number", "null"], "exclusiveMinimum": 0}, "combo_group": {"type": ["string", "null"], "maxLength": 64}}},
+    "storage": {"type": "object", "required": ["supported", "present", "capacity_bytes"], "additionalProperties": false, "properties": {"supported": {"enum": [true, false, "unknown"]}, "present": {"enum": ["present", "not_populated", "unknown"]}, "capacity_bytes": {"type": ["integer", "null"], "minimum": 0}}}
+  }
+}
