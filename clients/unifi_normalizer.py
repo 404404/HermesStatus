@@ -211,8 +211,8 @@ def _fans(profile, raw_fans, hardware_cache=None):
     return output, ignored
 
 
-def _profile_power(profile):
-    config = profile["power"]
+def _profile_power(profile, model=None):
+    config = model.get("power") if isinstance(model, dict) else profile["power"]
     slots = config["psu_slots"]
     return {
         "supported": slots > 0,
@@ -231,8 +231,8 @@ def _profile_poe(profile):
     }
 
 
-def _power(profile, hardware_cache=None):
-    slots = profile["power"]["psu_slots"]
+def _power(profile, hardware_cache=None, model=None):
+    slots = _profile_power(profile, model)["psu_slots"]
     presence = profile["power"]["presence"]
     # `dynamic` is a model capability, not a runtime presence observation.
     # Preserve that uncertainty as `unknown` until a qualified sensor mapping
@@ -271,14 +271,15 @@ def _power(profile, hardware_cache=None):
     return result
 
 
-def _storage(profile, hardware_cache=None):
+def _storage(profile, hardware_cache=None, model=None):
     result = {}
-    for name, capability in profile["storage"].items():
+    capabilities = model.get("storage") if isinstance(model, dict) else profile["storage"]
+    for name, capability in capabilities.items():
         supported = capability["supported"]
         result[name] = {
             "supported": "supported" if supported is True else "unsupported" if supported is False else "unknown",
             "present": "not_present" if capability["present"] == "not_populated" else capability["present"],
-            "observed": capability["observed"] is True,
+            "observed": capability.get("observed") is True,
             "capacity_bytes": capability["capacity_bytes"],
         }
     records = _cache_records(hardware_cache, ("storage", "storages", "disks", "block_devices")) if hardware_cache else []
@@ -324,7 +325,7 @@ def _api_observation(raw, previous=None):
     return {"enabled": False, "status": "disabled", "last_attempt": None, "last_success": None, "endpoints": [], "summary": None, "error": None}
 
 
-def normalize(profile, raw, previous=None):
+def normalize(profile, raw, previous=None, model=None):
     now = _timestamp(raw)
     transport = raw.get("transport", {})
     if not transport.get("ok"):
@@ -333,12 +334,12 @@ def normalize(profile, raw, previous=None):
             "transport": {"status": "unavailable", "last_attempt": now,
                           "last_success": previous.get("updated_at") if previous else None},
             "api": _api_observation(raw, previous),
-            "power": _profile_power(profile),
+            "power": _profile_power(profile, model),
             "poe": _profile_poe(profile),
             "system": previous.get("system") if previous else None,
             "fans": previous.get("fans", []) if previous else [],
-            "power_supplies": previous.get("power_supplies", _power(profile)) if previous else _power(profile),
-            "storage": previous.get("storage", _storage(profile)) if previous else _storage(profile),
+            "power_supplies": previous.get("power_supplies", _power(profile, model=model)) if previous else _power(profile, model=model),
+            "storage": previous.get("storage", _storage(profile, model=model)) if previous else _storage(profile, model=model),
             "diagnostics": previous.get("diagnostics", {"collection_status": "unavailable", "ignored_observations": []}) if previous else {"collection_status": "unavailable", "ignored_observations": []},
             "updated_at": previous.get("updated_at") if previous else None,
             "stale": True,
@@ -378,7 +379,7 @@ def normalize(profile, raw, previous=None):
         "profile": profile["profile_id"],
         "transport": {"status": "available", "last_attempt": now, "last_success": now},
         "api": _api_observation(raw, previous),
-        "power": _profile_power(profile),
+        "power": _profile_power(profile, model),
         "poe": _profile_poe(profile),
         "system": {
             "cpu_model": profile.get("cpu_model"),
@@ -397,8 +398,8 @@ def normalize(profile, raw, previous=None):
             "load_average": {"one_minute": load[0], "five_minutes": load[1], "fifteen_minutes": load[2]},
         },
         "fans": fans,
-        "power_supplies": _power(profile, hardware_cache),
-        "storage": _storage(profile, hardware_cache),
+        "power_supplies": _power(profile, hardware_cache, model),
+        "storage": _storage(profile, hardware_cache, model),
         "diagnostics": {"collection_status": diagnostic_status, "ignored_observations": ignored, "hardware_cache_status": diagnostics_raw.get("hardware_cache_status", "unavailable")},
         "updated_at": now,
         "stale": False,
