@@ -1,0 +1,14 @@
+{
+  "target_id": "udw",
+  "profile_id": "udw",
+  "collected_at": "2026-08-23T12:00:00+00:00",
+  "generic": {
+    "cpu_temperature_raw": "64.0",
+    "proc_stat_cpu": "cpu  1000 100 300 8000 200 0 0 0 0 0",
+    "meminfo": {"MemTotal": "4096000", "MemAvailable": "2048000", "MemFree": "1024000", "Buffers": "100000", "Cached": "300000", "SwapTotal": "0", "SwapFree": "0"},
+    "uptime_raw": "12345.67 10000.00",
+    "loadavg_raw": "1.16 1.29 1.17 1/100 42"
+  },
+  "diagnostics": {"fans": {"fan1": 1698, "fan2": 2752, "fan3": 0, "fan4": 0}, "thermal_zones": [{"id": "thermal_zone0", "type": "cpu-thermal", "temperature_c": 82.0}], "hwmon": {"name": "adt7475", "temp1_c": 64.2}},
+  "transport": {"ok": true, "error": null}
+}

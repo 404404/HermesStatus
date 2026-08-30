@@ -74,7 +74,7 @@ func validStorageFixture() StorageStats {
 func validClientBuildFixture() *ClientBuildInfo {
 	buildTime := "2026-07-28T12:00:00Z"
 	return &ClientBuildInfo{
-		Version: "2.3", Revision: strings.Repeat("a", 40), BuildTime: &buildTime, Protocol: "device_v2",
+		Version: "2.5", Revision: strings.Repeat("a", 40), BuildTime: &buildTime, Protocol: "device_v2",
 	}
 }
 
@@ -332,9 +332,9 @@ func TestServerBuildInfoIsSafeAndStatsProjected(t *testing.T) {
 	previousVersion, previousCommit, previousBuildTime := version, commit, buildTime
 	t.Setenv("HERMESSTATUS_DEPLOYMENT_ENV", "staging")
 	defer func() { version, commit, buildTime = previousVersion, previousCommit, previousBuildTime }()
-	version, commit, buildTime = "2.3", strings.Repeat("b", 40), "2026-07-28T12:00:00Z"
+	version, commit, buildTime = "2.5", strings.Repeat("b", 40), "2026-07-28T12:00:00Z"
 	build := serverBuildInfo()
-	if build.Version != "2.3" || build.Revision != strings.Repeat("b", 40) || build.BuildTime == nil || build.Deployment != "staging" {
+	if build.Version != "2.5" || build.Revision != strings.Repeat("b", 40) || build.BuildTime == nil || build.Deployment != "staging" {
 		t.Fatalf("server build projection is invalid: %#v", build)
 	}
 	stats := newTestApp(t, minimalTestConfig()).SnapshotStats()

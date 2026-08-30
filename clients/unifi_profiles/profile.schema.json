@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HermesStatus UniFi profile V1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "profile_id",
+    "platform",
+    "generic",
+    "diagnostics",
+    "fans",
+    "power",
+    "storage",
+    "health_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "profile_id": {
+      "enum": [
+        "udw",
+        "ucg-max"
+      ]
+    },
+    "platform": {
+      "const": "unifi_console"
+    },
+    "storage": {
+      "type": "object",
+      "required": [
+        "nvme",
+        "sata_ssd",
+        "tf"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "nvme": {
+          "type": "object",
+          "required": [
+            "supported",
+            "present",
+            "observed",
+            "capacity_bytes"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "supported": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "present": {
+              "enum": [
+                "present",
+                "not_populated",
+                "unknown",
+                "dynamic"
+              ]
+            },
+            "observed": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "capacity_bytes": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "sata_ssd": {
+          "type": "object",
+          "required": [
+            "supported",
+            "present",
+            "observed",
+            "capacity_bytes"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "supported": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "present": {
+              "enum": [
+                "present",
+                "not_populated",
+                "unknown",
+                "dynamic"
+              ]
+            },
+            "observed": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "capacity_bytes": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "tf": {
+          "type": "object",
+          "required": [
+            "supported",
+            "present",
+            "observed",
+            "capacity_bytes"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "supported": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "present": {
+              "enum": [
+                "present",
+                "not_populated",
+                "unknown",
+                "dynamic"
+              ]
+            },
+            "observed": {
+              "enum": [
+                true,
+                false,
+                "unknown"
+              ]
+            },
+            "capacity_bytes": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "cpu_model": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "poe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supported",
+        "total_max_power_w",
+        "port_max_power_w"
+      ],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "total_max_power_w": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "port_max_power_w": {
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      }
+    },
+    "power": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "psu_slots",
+        "presence",
+        "sensor_mapping",
+        "max_power_w"
+      ],
+      "properties": {
+        "psu_slots": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "presence": {
+          "enum": [
+            "present",
+            "not_populated",
+            "unknown",
+            "dynamic"
+          ]
+        },
+        "sensor_mapping": {
+          "const": "unknown"
+        },
+        "max_power_w": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

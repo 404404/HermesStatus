@@ -13,8 +13,8 @@ SPEC.loader.exec_module(MODULE)
 REVISION = "a" * 40
 CREATED = "2026-07-21T00:00:00Z"
 SOURCE = "https://github.com/404404/HermesStatus"
-PRODUCT_VERSION = "2.3"
-CANDIDATE_TAG = "2.3-" + REVISION[:12]
+PRODUCT_VERSION = "2.5"
+CANDIDATE_TAG = "2.5-" + REVISION[:12]
 
 
 def valid_inspect():
@@ -57,10 +57,10 @@ class ImageProvenanceTests(unittest.TestCase):
     def test_publisher_preserves_component_metadata(self):
         workflow = (
             pathlib.Path(__file__).resolve().parents[2]
-            / ".github/workflows/publish-2.3-candidate-images.yml"
+            / ".github/workflows/publish-2.5-candidate-images.yml"
         ).read_text(encoding="utf-8")
-        self.assertIn("name: Publish 2.3 Candidate Images", workflow)
-        self.assertIn('PRODUCT_VERSION: "2.3"', workflow)
+        self.assertIn("name: Publish 2.5 Candidate Images", workflow)
+        self.assertIn('PRODUCT_VERSION: "2.5"', workflow)
         self.assertIn('echo "candidate_tag=${PRODUCT_VERSION}-${GITHUB_SHA::12}"', workflow)
         self.assertIn('echo "product_version=${PRODUCT_VERSION}"', workflow)
         self.assertNotIn("2.3-preview", workflow)
@@ -81,8 +81,8 @@ class ImageProvenanceTests(unittest.TestCase):
         workflow = (
             pathlib.Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
         ).read_text(encoding="utf-8")
-        self.assertIn('echo "candidate_tag=2.3-${GITHUB_SHA::12}"', workflow)
-        self.assertIn('echo "product_version=2.3"', workflow)
+        self.assertIn('echo "candidate_tag=2.5-${GITHUB_SHA::12}"', workflow)
+        self.assertIn('echo "product_version=2.5"', workflow)
         self.assertIn("VERSION=${{ steps.provenance.outputs.product_version }}", workflow)
         self.assertIn("hermesstatus-server:${{ steps.provenance.outputs.candidate_tag }}", workflow)
         self.assertIn("hermesstatus-client:${{ steps.provenance.outputs.candidate_tag }}", workflow)
@@ -92,6 +92,20 @@ class ImageProvenanceTests(unittest.TestCase):
             pathlib.Path(__file__).resolve().parents[2] / "Dockerfile.server"
         ).read_text(encoding="utf-8")
         self.assertIn("COPY server/contracts ./contracts", dockerfile)
+
+    def test_client_dockerfile_copies_all_unifi_runtime_modules(self):
+        dockerfile = (
+            pathlib.Path(__file__).resolve().parents[2] / "Dockerfile.client"
+        ).read_text(encoding="utf-8")
+        for module in (
+            "unifi_collector.py",
+            "unifi_profile_loader.py",
+            "unifi_source_registry.py",
+            "unifi_raw_collector.py",
+            "unifi_ssh_transport.py",
+            "unifi_normalizer.py",
+        ):
+            self.assertIn("COPY clients/" + module + " /app/" + module, dockerfile)
 
     def test_client_dockerfile_sets_client_component_metadata(self):
         dockerfile = (
@@ -116,7 +130,7 @@ class ImageProvenanceTests(unittest.TestCase):
 
     def test_candidate_tag_must_match_full_revision_prefix(self):
         with self.assertRaises(MODULE.ValidationError):
-            MODULE.validate_candidate_tag("2.3-bbbbbbbbbbbb", PRODUCT_VERSION, REVISION)
+            MODULE.validate_candidate_tag("2.5-bbbbbbbbbbbb", PRODUCT_VERSION, REVISION)
 
     def test_oci_version_rejects_candidate_tag(self):
         payload = valid_inspect()
@@ -143,7 +157,7 @@ class ImageProvenanceTests(unittest.TestCase):
 
     def test_server_runtime_values_must_use_formal_product_version(self):
         values = MODULE.parse_server_version(
-            "serverstatus 2.3 commit=" + REVISION + " built=" + CREATED + "\n"
+            "serverstatus 2.5 commit=" + REVISION + " built=" + CREATED + "\n"
         )
         MODULE.validate_server_runtime_values(
             values, version=PRODUCT_VERSION, revision=REVISION, created=CREATED

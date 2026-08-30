@@ -15,6 +15,7 @@ const (
 	luckyStaleAfter        = 900 * time.Second
 	luckyVersionStaleAfter = 24 * time.Hour
 	easyTierStaleAfter     = 90 * time.Second
+	uniFiStaleAfter        = 180 * time.Second
 	profileStaleAfter      = 900 * time.Second
 	maxFutureClockSkew     = 300 * time.Second
 )
@@ -41,7 +42,7 @@ func decodeAgentUpdate(data []byte) (AgentStats, ExtensionStats, []extensionDeco
 
 	extension := newNotReportedExtensionStats()
 	issues := make([]extensionDecodeIssue, 0, 3)
-	hasStructured := hasAnyField(fields, "hardware", "docker", "hermes", "lucky", "easytier", "client_build")
+	hasStructured := hasAnyField(fields, "hardware", "docker", "hermes", "lucky", "easytier", "unifi", "client_build")
 	versionCode := ""
 	if raw, ok := fields["extension_version"]; ok {
 		var version string
@@ -83,6 +84,14 @@ func decodeAgentUpdate(data []byte) (AgentStats, ExtensionStats, []extensionDeco
 			extension.EasyTier = newDegradedEasyTierStats(versionCode)
 		} else {
 			extension.EasyTier = decodeDomainPayload("easytier", raw, MaxEasyTierPayloadBytes, DecodeEasyTierStatsJSON, newDegradedEasyTierStats, &issues)
+		}
+	}
+	if raw, ok := fields["unifi"]; ok {
+		if versionCode != "" {
+			issues = append(issues, extensionDecodeIssue{Domain: "unifi", Code: versionCode, PayloadLength: len(raw)})
+			extension.UniFi = newDegradedUniFiStats(versionCode)
+		} else {
+			extension.UniFi = decodeDomainPayload("unifi", raw, MaxUniFiPayloadBytes, DecodeUniFiStatsJSON, newDegradedUniFiStats, &issues)
 		}
 	}
 	if raw, ok := fields["client_build"]; ok {
@@ -216,6 +225,7 @@ func newNotReportedExtensionStats() ExtensionStats {
 	hermesStats := NewNotReportedHermesStats()
 	luckyStats := NewNotReportedLuckyStats()
 	easyTierStats := NewNotReportedEasyTierStats()
+	uniFiStats := NewNotReportedUniFiStats()
 	return ExtensionStats{
 		ExtensionVersion: ExtensionSchemaVersion,
 		Hardware:         &hardware,
@@ -223,6 +233,7 @@ func newNotReportedExtensionStats() ExtensionStats {
 		Hermes:           &hermesStats,
 		Lucky:            &luckyStats,
 		EasyTier:         &easyTierStats,
+		UniFi:            &uniFiStats,
 	}
 }
 
@@ -276,6 +287,7 @@ func extensionSnapshotAt(stats ExtensionStats, receivedAt time.Time) ExtensionSn
 		Hermes:           stats.Hermes,
 		Lucky:            stats.Lucky,
 		EasyTier:         stats.EasyTier,
+		UniFi:            stats.UniFi,
 		ClientBuild:      stats.ClientBuild,
 	}
 }
@@ -288,6 +300,7 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 		Hermes:           input.Hermes,
 		Lucky:            input.Lucky,
 		EasyTier:         input.EasyTier,
+		UniFi:            input.UniFi,
 		ClientBuild:      input.ClientBuild,
 	})
 	if stats.ExtensionVersion != ExtensionSchemaVersion {
@@ -308,6 +321,9 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 	if stats.EasyTier == nil {
 		stats.EasyTier = pointerTo(NewNotReportedEasyTierStats())
 	}
+	if stats.UniFi == nil {
+		stats.UniFi = pointerTo(NewNotReportedUniFiStats())
+	}
 	receivedAt := input.ReceivedAt
 	if _, err := time.Parse(time.RFC3339, receivedAt); err != nil {
 		receivedAt = now.UTC().Format(time.RFC3339Nano)
@@ -321,6 +337,12 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 	applyDomainFreshness("hermes", stats.Hermes.UpdatedAt, hermesStaleAfter, now, &stats.Hermes.Stale, &stats.Hermes.Error)
 	applyDomainFreshness("lucky", stats.Lucky.UpdatedAt, luckyStaleAfter, now, &stats.Lucky.Stale, &stats.Lucky.Error)
 	applyDomainFreshness("easytier", stats.EasyTier.UpdatedAt, easyTierStaleAfter, now, &stats.EasyTier.Stale, &stats.EasyTier.Error)
+	if stats.UniFi.Configured && stats.UniFi.Transport.Status == UniFiTransportAvailable {
+		applyDomainFreshness("unifi", stats.UniFi.UpdatedAt, uniFiStaleAfter, now, &stats.UniFi.Stale, &stats.UniFi.Error)
+		if stats.UniFi.Stale && stats.UniFi.Error == nil {
+			stats.UniFi.Error = newPipelineError("unifi", "stale")
+		}
+	}
 	applyLuckyModuleFreshness("lucky.ip_resolution", stats.Lucky.IPResolution.UpdatedAt, now, &stats.Lucky.IPResolution.Stale, &stats.Lucky.IPResolution.Error)
 	applyLuckyModuleFreshness("lucky.dynamic_dns", stats.Lucky.DynamicDNS.UpdatedAt, now, &stats.Lucky.DynamicDNS.Stale, &stats.Lucky.DynamicDNS.Error)
 	applyLuckyModuleFreshness("lucky.web_services", stats.Lucky.WebServices.UpdatedAt, now, &stats.Lucky.WebServices.Stale, &stats.Lucky.WebServices.Error)
@@ -340,6 +362,7 @@ func snapshotExtension(input ExtensionSnapshot, now time.Time) ExtensionSnapshot
 		Hermes:           stats.Hermes,
 		Lucky:            stats.Lucky,
 		EasyTier:         stats.EasyTier,
+		UniFi:            stats.UniFi,
 		ClientBuild:      stats.ClientBuild,
 	}
 }

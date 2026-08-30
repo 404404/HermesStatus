@@ -1,47 +1,84 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.example.invalid/hermesstatus/client-v2-config.schema.json",
-  "title": "HermesStatus 2.3 Client configuration",
+  "title": "HermesStatus 2.5 Client configuration",
   "type": "object",
-  "required": ["version", "server", "device", "collection"],
+  "required": [
+    "version",
+    "server",
+    "device",
+    "collection"
+  ],
   "properties": {
-    "version": {"const": 1},
+    "version": {
+      "const": 1
+    },
     "server": {
       "type": "object",
-      "required": ["url", "verify_tls", "connect_timeout_seconds", "read_timeout_seconds"],
+      "required": [
+        "url",
+        "verify_tls",
+        "connect_timeout_seconds",
+        "read_timeout_seconds"
+      ],
       "properties": {
         "url": {
           "type": "string",
           "pattern": "^https://[^/?#@\\\\\\s]+/?$",
           "maxLength": 2048
         },
-        "verify_tls": {"const": true, "default": true},
+        "verify_tls": {
+          "const": true,
+          "default": true
+        },
         "ca_file": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "pattern": "^/[^\\u0000]*$",
           "maxLength": 4096
         },
-        "connect_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 60},
-        "read_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300}
+        "connect_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        },
+        "read_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        }
       },
       "additionalProperties": false
     },
     "device": {
       "type": "object",
-      "required": ["id", "name", "fqdn", "token_file"],
+      "required": [
+        "id",
+        "name",
+        "fqdn",
+        "token_file"
+      ],
       "properties": {
         "id": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
         },
         "name": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
         },
         "fqdn": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "maxLength": 253,
           "pattern": "^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.?$"
         },
@@ -55,9 +92,15 @@
     },
     "collection": {
       "type": "object",
-      "required": ["interval_seconds"],
+      "required": [
+        "interval_seconds"
+      ],
       "properties": {
-        "interval_seconds": {"type": "integer", "minimum": 10, "maximum": 3600}
+        "interval_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600
+        }
       },
       "additionalProperties": false
     },
@@ -69,31 +112,217 @@
           "maxItems": 64,
           "items": {
             "type": "object",
-            "required": ["path"],
+            "required": [
+              "path"
+            ],
             "properties": {
-              "path": {"type": "string", "minLength": 6, "maxLength": 132, "pattern": "^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$"},
-              "type": {"type": ["string", "null"], "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9,._+-]{0,63}$"},
-              "label": {"type": ["string", "null"], "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F]+$"}
+              "path": {
+                "type": "string",
+                "minLength": 6,
+                "maxLength": 132,
+                "pattern": "^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$"
+              },
+              "type": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9,._+-]{0,63}$"
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128,
+                "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+              }
             },
             "additionalProperties": false
           }
         },
-        "primary_smart_device": {"type": ["string", "null"], "minLength": 6, "maxLength": 132, "pattern": "^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$"},
+        "primary_smart_device": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 6,
+          "maxLength": 132,
+          "pattern": "^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$"
+        },
         "filesystem_probes": {
           "type": "array",
           "maxItems": 128,
           "items": {
             "type": "object",
-            "required": ["mountpoint", "probe_path"],
+            "required": [
+              "mountpoint",
+              "probe_path"
+            ],
             "properties": {
-              "mountpoint": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^/[^\\u0000-\\u001F\\u007F]*$"},
-              "probe_path": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^/[^\\u0000-\\u001F\\u007F]*$"}
+              "mountpoint": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "pattern": "^/[^\\u0000-\\u001F\\u007F]*$"
+              },
+              "probe_path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "^/[^\\u0000-\\u001F\\u007F]*$"
+              }
             },
             "additionalProperties": false
           }
         }
       },
       "additionalProperties": false
+    },
+    "unifi": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "const": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "enabled",
+            "profile",
+            "host",
+            "port",
+            "username",
+            "credential_file",
+            "known_hosts_file",
+            "connect_timeout_seconds",
+            "interval_seconds"
+          ],
+          "properties": {
+            "enabled": {
+              "const": true
+            },
+            "profile": {
+              "enum": [
+                "udw",
+                "ucg-max"
+              ]
+            },
+            "host": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "username": {
+              "type": "string",
+              "pattern": "^[a-z_][a-z0-9_-]{0,31}$"
+            },
+            "credential_file": {
+              "type": "string",
+              "pattern": "^/[^\\u0000]*$",
+              "maxLength": 4096
+            },
+            "known_hosts_file": {
+              "type": "string",
+              "pattern": "^/[^\\u0000]*$",
+              "maxLength": 4096
+            },
+            "connect_timeout_seconds": {
+              "type": "integer",
+              "minimum": 3,
+              "maximum": 60
+            },
+            "interval_seconds": {
+              "type": "integer",
+              "minimum": 30,
+              "maximum": 180
+            },
+            "api": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "enabled"
+                  ],
+                  "properties": {
+                    "enabled": {
+                      "const": false
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "enabled",
+                    "base_url",
+                    "api_key_file",
+                    "ca_file",
+                    "tls_sha256",
+                    "timeout_seconds"
+                  ],
+                  "properties": {
+                    "enabled": {
+                      "const": true
+                    },
+                    "base_url": {
+                      "type": "string",
+                      "pattern": "^https://[^/?#]+(?::443)?/?$",
+                      "maxLength": 512
+                    },
+                    "api_key_file": {
+                      "type": "string",
+                      "pattern": "^/[^\\u0000]*$",
+                      "maxLength": 4096
+                    },
+                    "ca_file": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^/[^\\u0000]*$",
+                      "maxLength": 4096
+                    },
+                    "tls_sha256": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^[0-9A-Fa-f]{64}$"
+                    },
+                    "timeout_seconds": {
+                      "type": "integer",
+                      "minimum": 3,
+                      "maximum": 30
+                    },
+                    "site_id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "additionalProperties": false,

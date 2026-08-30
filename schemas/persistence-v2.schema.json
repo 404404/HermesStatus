@@ -68,6 +68,7 @@
             "hermes": {"type": "object"},
             "lucky": {"type": "object"},
             "easytier": {"$ref": "../docs/migration/schema/easytier-extension.schema.json"},
+            "unifi": {"$ref": "../docs/migration/schema/unifi-extension.schema.json"},
             "client_build": {"$ref": "#/$defs/clientBuild"}
           },
           "additionalProperties": false

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "server": {
+    "url": "https://status.example.invalid:21443",
+    "verify_tls": true,
+    "connect_timeout_seconds": 10,
+    "read_timeout_seconds": 30,
+    "ca_file": "/run/secrets/hermesstatus/ca.crt"
+  },
+  "device": {
+    "id": "synology-client",
+    "display_name": "Synology Client",
+    "platform": "synology"
+  },
+  "collection": {"interval_seconds": 60},
+  "collectors": {
+    "hardware": {"enabled": true},
+    "filesystem": {
+      "enabled": true,
+      "probes": [
+        {"mountpoint": "/volume1", "probe_path": "/host-storage/volume1"},
+        {"mountpoint": "/volume2", "probe_path": "/host-storage/volume2"}
+      ]
+    },
+    "smart": {"enabled": false},
+    "docker": {"enabled": true},
+    "hermes": {"enabled": true},
+    "lucky": {"enabled": false},
+    "easytier": {"enabled": false},
+    "unifi": {"enabled": false}
+  }
+}

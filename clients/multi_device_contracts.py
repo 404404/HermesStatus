@@ -35,12 +35,6 @@ ALLOWED_STATS_FIELDS = {
     "load_1",
     "load_5",
     "load_15",
-    "ping_10010",
-    "ping_189",
-    "ping_10086",
-    "time_10010",
-    "time_189",
-    "time_10086",
     "tcp",
     "udp",
     "process",
@@ -70,6 +64,7 @@ ALLOWED_STATS_FIELDS = {
     "hermes",
     "lucky",
     "easytier",
+    "unifi",
     "client_build",
     "hardware_json",
     "docker_json",
@@ -82,6 +77,9 @@ RFC3339_UTC_RE = re.compile(
 )
 SMART_DEVICE_PATH_RE = re.compile(r"^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$")
 SMART_DEVICE_TYPE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9,._+-]{0,63}$")
+UNIFI_PROFILE_IDS = frozenset({"udw", "ucg-max"})
+UNIFI_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+UNIFI_API_FINGERPRINT_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
 ENV_TO_FIELD = {
     "HERMESSTATUS_SERVER_URL": "server_url",
@@ -112,6 +110,9 @@ ALLOWED_FIELDS = {
     "smart_devices",
     "primary_smart_device",
     "filesystem_probes",
+    "unifi",
+    "platform",
+    "unified_collectors",
 }
 FORBIDDEN_AMBIGUOUS_KEYS = {"DOMAIN", "TOKEN", "PASSWORD", "AUTHORIZATION"}
 
@@ -134,6 +135,34 @@ class FilesystemProbeConfig:
 
 
 @dataclass(frozen=True)
+class UniFiAPIConfig:
+    """Fixed, file-backed, read-only UniFi Network API configuration."""
+
+    enabled: bool
+    base_url: str
+    api_key_file: str
+    ca_file: str | None
+    tls_sha256: str | None
+    timeout_seconds: int
+    site_id: str | None = None
+
+
+@dataclass(frozen=True)
+class UniFiConfig:
+    """Explicit, file-backed, read-only SSH target configuration."""
+
+    profile_id: str
+    host: str
+    port: int
+    username: str
+    credential_file: str
+    known_hosts_file: str
+    connect_timeout_seconds: int
+    interval_seconds: int
+    api: UniFiAPIConfig | None = None
+
+
+@dataclass(frozen=True)
 class ClientV2Config:
     server_url: str
     device_id: str
@@ -148,7 +177,10 @@ class ClientV2Config:
     smart_devices: tuple[SmartDeviceConfig, ...] | None = None
     primary_smart_device: str | None = None
     filesystem_probes: tuple[FilesystemProbeConfig, ...] = ()
+    unifi: UniFiConfig | None = None
     loopback_test_profile: bool = False
+    platform: str = "linux"
+    unified_collectors: Mapping[str, Any] | None = None
 
 
 class MockTransport(Protocol):
@@ -173,10 +205,14 @@ def parse_config_json(data: str | bytes) -> dict[str, Any]:
         raise ClientContractError("config is not valid JSON") from exc
     if not isinstance(document, dict):
         raise ClientContractError("config root must be an object")
+    if "schema_version" in document:
+        from client_config_v1 import parse_unified_document
+
+        return parse_unified_document(document)
     _require_fields(
         document,
         {"version", "server", "device", "collection"},
-        {"hardware"},
+        {"hardware", "unifi"},
         "config",
     )
     if document["version"] != 1:
@@ -215,6 +251,8 @@ def parse_config_json(data: str | bytes) -> dict[str, Any]:
         for key in ("smart_devices", "primary_smart_device", "filesystem_probes"):
             if key in hardware:
                 values[key] = hardware[key]
+    if "unifi" in document:
+        values["unifi"] = document["unifi"]
     return values
 
 
@@ -333,6 +371,7 @@ def resolve_client_config(
     ):
         raise ClientContractError("primary_smart_device is not configured")
     filesystem_probes = _filesystem_probes_value(merged.get("filesystem_probes"))
+    unifi = _unifi_config_value(merged.get("unifi"))
     return ClientV2Config(
         server_url=server_url,
         device_id=device_id,
@@ -347,7 +386,10 @@ def resolve_client_config(
         smart_devices=smart_devices,
         primary_smart_device=primary_smart_device,
         filesystem_probes=filesystem_probes,
+        unifi=unifi,
         loopback_test_profile=loopback_test_profile,
+        platform=str(merged.get("platform") or "linux"),
+        unified_collectors=merged.get("unified_collectors"),
     )
 
 
@@ -450,6 +492,101 @@ def _filesystem_probes_value(value: Any) -> tuple[FilesystemProbeConfig, ...]:
         mountpoints.add(mountpoint)
         probes.append(FilesystemProbeConfig(mountpoint=mountpoint, probe_path=probe_path))
     return tuple(probes)
+
+
+
+def _unifi_api_config_value(value: Any, host: str) -> UniFiAPIConfig | None:
+    if value is None:
+        return None
+    config = _json_value(value, "unifi.api")
+    if not isinstance(config, dict) or "enabled" not in config or not isinstance(config["enabled"], bool):
+        raise ClientContractError("unifi.api is invalid")
+    if not config["enabled"]:
+        if set(config) != {"enabled"}:
+            raise ClientContractError("disabled unifi.api must not contain target fields")
+        return None
+    required = {"enabled", "base_url", "api_key_file", "ca_file", "tls_sha256", "timeout_seconds"}
+    if set(config) - (required | {"site_id"}) or not required <= set(config):
+        raise ClientContractError("unifi.api contains unknown or missing fields")
+    base_url = config["base_url"]
+    if not isinstance(base_url, str) or base_url != base_url.strip():
+        raise ClientContractError("unifi.api.base_url is invalid")
+    try:
+        parsed = urlsplit(base_url)
+        parsed_port = parsed.port
+    except ValueError as exc:
+        raise ClientContractError("unifi.api.base_url is invalid") from exc
+    if parsed.scheme != "https" or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment or parsed.path not in ("", "/"):
+        raise ClientContractError("unifi.api.base_url is invalid")
+    if parsed.hostname is None or parsed.hostname.lower() != host.lower() or (parsed_port is not None and parsed_port != 443):
+        raise ClientContractError("unifi.api.base_url is invalid")
+    api_key_file = validate_readonly_file_path(str(config["api_key_file"]), "unifi.api.api_key_file")
+    ca_file = config["ca_file"]
+    if ca_file not in (None, ""):
+        ca_file = validate_readonly_file_path(str(ca_file), "unifi.api.ca_file")
+    else:
+        ca_file = None
+    fingerprint = config["tls_sha256"]
+    if fingerprint not in (None, ""):
+        if not isinstance(fingerprint, str) or not UNIFI_API_FINGERPRINT_RE.fullmatch(fingerprint):
+            raise ClientContractError("unifi.api.tls_sha256 is invalid")
+        fingerprint = fingerprint.lower()
+    else:
+        fingerprint = None
+    timeout = _int_range(config["timeout_seconds"], "unifi.api.timeout_seconds", 3, 30)
+    site_id = config.get("site_id")
+    if site_id is not None and (not isinstance(site_id, str) or not DEVICE_ID_RE.fullmatch(site_id)):
+        raise ClientContractError("unifi.api.site_id is invalid")
+    return UniFiAPIConfig(enabled=True, base_url=f"https://{parsed.hostname}:{parsed_port or 443}", api_key_file=api_key_file, ca_file=ca_file, tls_sha256=fingerprint, timeout_seconds=timeout, site_id=site_id)
+
+
+def _unifi_config_value(value: Any) -> UniFiConfig | None:
+    """Validate V1 UniFi config without accepting remote execution input."""
+    if value is None:
+        return None
+    config = _json_value(value, "unifi")
+    if not isinstance(config, dict) or "enabled" not in config:
+        raise ClientContractError("unifi is invalid")
+    enabled = config.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ClientContractError("unifi.enabled is invalid")
+    if not enabled:
+        if set(config) != {"enabled"}:
+            raise ClientContractError("disabled unifi configuration must not contain target fields")
+        return None
+    required = {
+        "enabled", "profile", "host", "port", "username", "credential_file",
+        "known_hosts_file", "connect_timeout_seconds", "interval_seconds",
+    }
+    allowed = required | {"api"}
+    if set(config) - allowed or not required <= set(config):
+        raise ClientContractError("unifi contains unknown or missing fields")
+    profile_id = config["profile"]
+    if not isinstance(profile_id, str) or profile_id not in UNIFI_PROFILE_IDS:
+        raise ClientContractError("unifi.profile is invalid")
+    host = config["host"]
+    if not isinstance(host, str) or host != host.strip() or not _safe_network_host(host.lower()):
+        raise ClientContractError("unifi.host is invalid")
+    port = _int_range(config["port"], "unifi.port", 1, 65535)
+    username = config["username"]
+    if not isinstance(username, str) or not UNIFI_USERNAME_RE.fullmatch(username):
+        raise ClientContractError("unifi.username is invalid")
+    credential_file = validate_readonly_file_path(str(config["credential_file"]), "unifi.credential_file")
+    known_hosts_file = validate_readonly_file_path(str(config["known_hosts_file"]), "unifi.known_hosts_file")
+    connect_timeout = _int_range(config["connect_timeout_seconds"], "unifi.connect_timeout_seconds", 3, 60)
+    interval = _int_range(config["interval_seconds"], "unifi.interval_seconds", 30, 180)
+    api = _unifi_api_config_value(config.get("api"), host) if "api" in config else None
+    return UniFiConfig(
+        profile_id=profile_id,
+        host=host,
+        port=port,
+        username=username,
+        credential_file=credential_file,
+        known_hosts_file=known_hosts_file,
+        connect_timeout_seconds=connect_timeout,
+        interval_seconds=interval,
+        api=api,
+    )
 
 
 def validate_server_url(

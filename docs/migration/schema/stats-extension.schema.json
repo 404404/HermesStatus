@@ -38,6 +38,9 @@
     "easytier": {
       "$ref": "easytier-extension.schema.json"
     },
+    "unifi": {
+      "$ref": "unifi-extension.schema.json"
+    },
     "client_build": {
       "$ref": "agent-update-extension.schema.json#/$defs/clientBuild"
     }

@@ -133,13 +133,16 @@ func persistedDeviceFromNode(
 		}
 		observations["last_request_digest"] = raw
 	}
-	domains := make(map[string]json.RawMessage, 6)
+	domains := make(map[string]json.RawMessage, 7)
 	domainValues := map[string]any{
 		"hardware": node.Extension.Hardware,
 		"docker":   node.Extension.Docker,
 		"hermes":   node.Extension.Hermes,
 		"lucky":    node.Extension.Lucky,
 		"easytier": node.Extension.EasyTier,
+	}
+	if node.Extension.UniFi != nil {
+		domainValues["unifi"] = node.Extension.UniFi
 	}
 	// A typed nil pointer in an interface map serializes as JSON null. Build
 	// provenance is optional for older clients, so omit it instead of emitting
@@ -397,6 +400,13 @@ func restorePersistedDeviceFields(node *NodeState, persisted contracts.Persisted
 			return err
 		}
 		node.Extension.EasyTier = &value
+	}
+	if raw, exists := persisted.Domains["unifi"]; exists {
+		var value UniFiStats
+		if err := decodeStrictRuntime(raw, &value); err != nil || ValidateUniFiStats(&value) != nil {
+			return errors.New("persisted unifi telemetry is invalid")
+		}
+		node.Extension.UniFi = &value
 	}
 	if raw, exists := persisted.Domains["client_build"]; exists {
 		var value ClientBuildInfo

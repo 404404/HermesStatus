@@ -255,22 +255,48 @@ func TestCheckedInManualRegistrationExamplesPassProductionValidation(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Git cannot represent the production-required non-group-writable mode for
+	// credential JSON. Stage the checked-in, non-secret examples with the same
+	// secure mode required at runtime before validating their content.
+	validationRoot := t.TempDir()
+	credentialsRoot := filepath.Join(validationRoot, "credentials.d")
+	if err := os.Mkdir(credentialsRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"device-registry.example.json",
+		"legacy-device-mapping.example.json",
+	} {
+		data, err := os.ReadFile(filepath.Join(exampleRoot, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(validationRoot, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"compute-01.json", "storage-01.json"} {
+		data, err := os.ReadFile(filepath.Join(exampleRoot, "credentials.d", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(credentialsRoot, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	exitCode := runDeviceConfigValidation(
 		Options{
 			RegistryPath: filepath.Join(
-				exampleRoot,
+				validationRoot,
 				"device-registry.example.json",
 			),
 			LegacyMappingPath: filepath.Join(
-				exampleRoot,
+				validationRoot,
 				"legacy-device-mapping.example.json",
 			),
-			DeviceCredentialsDir: filepath.Join(
-				exampleRoot,
-				"credentials.d",
-			),
+			DeviceCredentialsDir: credentialsRoot,
 		},
 		&stdout,
 		&stderr,

@@ -24,3 +24,7 @@ Client 必须使用固定 JSON 配置和 Device token/CA 的只读挂载。不�
 ## 部署后验证
 
 确认成功上报会变为 fresh，恢复状态在下一次已接受上报前为 stale，浏览器仍经现有 stats 文档读取数据。确认日志、进程参数、环境输出、stats 投影与 UI 均不包含 secret。
+
+## UniFi target 部署
+
+UniFi 只能通过已评审的 Device v2 JSON 配置和两个固定只读 secret 挂载启用：credential 文件与专用 `known_hosts` 文件。重建 Client 前必须校验两者的文件类型、owner 与权限。镜像可以包含 profile 库，但不得包含站点相关凭据、host key、target 或原始 discovery 输出。部署后应将 UniFi 与主机健康分开验证：profile 选择、传输状态、时间戳推进和 stale/error 展示才是预期证据；远端 target 失败不能通过扩大 Docker 权限或重建远端 console 来“修复”。

@@ -47,12 +47,6 @@
         "load_1": {"type": "number"},
         "load_5": {"type": "number"},
         "load_15": {"type": "number"},
-        "ping_10010": {"type": "number"},
-        "ping_189": {"type": "number"},
-        "ping_10086": {"type": "number"},
-        "time_10010": {"type": "integer"},
-        "time_189": {"type": "integer"},
-        "time_10086": {"type": "integer"},
         "tcp": {"type": "integer"},
         "udp": {"type": "integer"},
         "process": {"type": "integer"},
@@ -91,6 +85,9 @@
         },
         "easytier": {
           "$ref": "../docs/migration/schema/easytier-extension.schema.json"
+        },
+        "unifi": {
+          "$ref": "../docs/migration/schema/unifi-extension.schema.json"
         },
         "client_build": {"$ref": "#/$defs/clientBuild"},
         "hardware_json": {"type": "string", "maxLength": 262144},

@@ -148,6 +148,24 @@ class HostCollectorTests(unittest.TestCase):
         )
         self.assertEqual(collector.easytier_interval, 75)
 
+    def test_configured_unifi_starts_not_collected_without_blocking_host_collection(self):
+        class UniFiFixture(object):
+            class config:
+                profile_id = "udw"
+                interval_seconds = 60
+            def collect(self):
+                raise AssertionError("must not run during host construction")
+        collector = HostExtensionCollector(
+            host_os_release_file=str(FIXTURES / "os-release"), status_dir="",
+            command_runner=lambda command, timeout: (0, ""), docker_request=lambda path: [],
+            unifi_collector=UniFiFixture(),
+        )
+        unifi = collector.extension_payload()["unifi"]
+        self.assertTrue(unifi["configured"])
+        self.assertEqual(unifi["profile"], "udw")
+        self.assertEqual(unifi["transport"]["status"], "not_collected")
+        self.assertTrue(unifi["stale"])
+
     def test_host_os_uses_mounted_pretty_name(self):
         name, error = collect_host_os(str(FIXTURES / "os-release"))
         self.assertEqual(name, "Example Linux 24.04 LTS")
@@ -830,13 +848,13 @@ class HostCollectorTests(unittest.TestCase):
         self.assertIsNone(collect_client_build({}))
         self.assertEqual(
             collect_client_build({
-                "HERMESSTATUS_CLIENT_VERSION": "2.3",
+                "HERMESSTATUS_CLIENT_VERSION": "2.5",
                 "HERMESSTATUS_CLIENT_REVISION": "abcdef0123abcdef0123abcdef0123abcdef0123",
                 "HERMESSTATUS_CLIENT_BUILD_TIME": "2026-08-11T00:00:00Z",
                 "HERMESSTATUS_CLIENT_PROTOCOL": "device_v2",
             }),
             {
-                "version": "2.3",
+                "version": "2.5",
                 "revision": "abcdef0123abcdef0123abcdef0123abcdef0123",
                 "build_time": "2026-08-11T00:00:00Z",
                 "protocol": "device_v2",
@@ -844,14 +862,14 @@ class HostCollectorTests(unittest.TestCase):
         )
         self.assertIsNone(
             collect_client_build({
-                "HERMESSTATUS_CLIENT_VERSION": "2.3",
+                "HERMESSTATUS_CLIENT_VERSION": "2.5",
                 "HERMESSTATUS_CLIENT_REVISION": "unknown",
                 "HERMESSTATUS_CLIENT_PROTOCOL": "device_v2",
             })
         )
 
     def test_extension_payload_exposes_client_build_at_the_root(self):
-        build = {"version": "2.3", "revision": "abcdef012345", "protocol": "device_v2", "build_time": None}
+        build = {"version": "2.5", "revision": "abcdef012345", "protocol": "device_v2", "build_time": None}
         collector = HostExtensionCollector(
             host_os_release_file=str(FIXTURES / "os-release"),
             client_build=build,

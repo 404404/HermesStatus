@@ -21,3 +21,7 @@ Server 对 count、字符串、counter、timestamp、CIDR 与 enum 设定边界�
 ## 漏洞报告
 
 不要在 issue 中包含 secret 或真实基础设施标识。请通过仓库的私有安全联系渠道或维护者渠道提交最小可复现、已脱敏的描述。
+
+## UniFi 远端观测边界
+
+UniFi V1 不提供通用 `run_remote(command)` 接口。profile 只能引用代码侧 symbolic source ID；Client 通过 argv 数组执行固定、打包的只读 SSH script，并使用有界 timeout、`setsid --wait`、keyboard-interactive 认证及 `StrictHostKeyChecking=yes`。password 仅由短生命周期的本地 askpass helper 从经校验的受保护文件读取；不会写入 argv、日志、stats、fixture、UI、镜像 label 或环境变量值。host-key 失败只是安全的遥测错误，绝不是接受替换 key 的理由。Client 不安装 key、不扫描网络、不修改 UniFi 配置、不读取配置数据库，也不执行风扇/PWM/存储控制命令。

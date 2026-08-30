@@ -6,7 +6,7 @@
     <meta name="description" content="HermesStatus 多设备云监控面板" />
     <title>云监控</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="css/app.css?v=20260813-6" />
+    <link rel="stylesheet" href="css/app.css?v=20260828-1" />
 </head>
 <body>
     <header class="topbar">
@@ -21,6 +21,7 @@
         <nav class="nav" aria-label="主导航" role="tablist">
             <button id="homeTab" type="button" class="active" role="tab" aria-selected="true" aria-controls="homePage" aria-current="page" data-page-target="home">主页</button>
             <button id="hardwareTab" type="button" role="tab" aria-selected="false" aria-controls="hardwarePage" tabindex="-1" data-page-target="hardware">硬件信息</button>
+            <button id="unifiTab" type="button" role="tab" aria-selected="false" aria-controls="unifiPage" tabindex="-1" data-page-target="unifi">UniFi</button>
             <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
             <button id="luckyTab" type="button" role="tab" aria-selected="false" aria-controls="luckyPage" tabindex="-1" data-page-target="lucky">Lucky</button>
             <button id="easytierTab" type="button" role="tab" aria-selected="false" aria-controls="easytierPage" tabindex="-1" data-page-target="easytier">EasyTier</button>
@@ -214,6 +215,37 @@
                     <div class="table-wrap"><table class="data easytier-table"><thead><tr><th>项目</th><th>Expected</th><th>Observed</th><th>结果</th></tr></thead><tbody id="easytierExpectationBody"></tbody></table></div>
                 </section>
             </div>
+
+            <div id="unifiPage" class="page-panel" role="tabpanel" aria-labelledby="unifiTab" data-page="unifi" hidden>
+                <div id="unifiEmptyState" class="unifi-page-empty" role="status" hidden></div>
+                <section class="unifi-system-section" aria-label="UniFi 摘要">
+                    <div id="unifiSystem" class="unifi-system"></div>
+                </section>
+                <section class="data-section" aria-labelledby="unifiSummaryTitle">
+                    <div class="section-head"><h2 id="unifiSummaryTitle">UniFi 采集状态</h2><span id="unifiMeta" class="section-meta"></span></div>
+                    <dl id="unifiSummary" class="detail-list unifi-summary"></dl>
+                </section>
+                <section class="data-section" aria-labelledby="unifiNetworkTitle">
+                    <div class="section-head"><h2 id="unifiNetworkTitle">UniFi设备端口状态</h2><span class="section-meta">仅显示已验证的只读摘要</span></div>
+                    <div id="unifiPorts" class="unifi-ports"></div>
+                </section>
+                <section class="data-section" aria-labelledby="unifiWanTitle">
+                    <div class="section-head"><h2 id="unifiWanTitle">WAN / ISP / SLA</h2><span class="section-meta">仅显示只读观测到的链路与质量指标</span></div>
+                    <div id="unifiWan" class="unifi-wan"></div>
+                </section>
+                <section class="data-section" aria-labelledby="unifiStorageTitle">
+                    <div class="section-head"><h2 id="unifiStorageTitle">存储能力</h2><span class="section-meta">未安装时容量与使用情况显示为 -</span></div>
+                    <div id="unifiStorage" class="unifi-storage"></div>
+                </section>
+                <section class="data-section" aria-labelledby="unifiFansTitle">
+                    <div class="section-head"><h2 id="unifiFansTitle">风扇</h2></div>
+                    <div class="table-wrap"><table class="data unifi-fans-table"><thead><tr><th>通道</th><th>支持能力</th><th>物理在位</th><th>转速</th><th>采集错误</th></tr></thead><tbody id="unifiFansBody"></tbody></table></div>
+                </section>
+                <section class="data-section" aria-labelledby="unifiPowerTitle">
+                    <div class="section-head"><h2 id="unifiPowerTitle">电源</h2><span class="section-meta">功率和电源风扇转速需有数据源</span></div>
+                    <div class="table-wrap"><table class="data unifi-power-table"><thead><tr><th>槽位</th><th>支持能力</th><th>物理在位</th><th>功率</th><th>风扇转速</th><th>采集错误</th></tr></thead><tbody id="unifiPowerBody"></tbody></table></div>
+                </section>
+            </div>
         </div>
     </main>
 
@@ -250,6 +282,6 @@
         <button id="aboutButton" type="button" class="footer-button" aria-haspopup="dialog">关于 / 构建信息</button>
     </footer>
 
-    <script src="js/app.js?v=20260823-1" defer></script>
+    <script src="js/app.js?v=20260828-1" defer></script>
 </body>
 </html>

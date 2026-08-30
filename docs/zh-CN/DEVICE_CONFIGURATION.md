@@ -56,3 +56,23 @@ DSM 存储是分层的。为目标数据卷配置窄范围只读 probe，并将�
 3. 校验 Server 和 Client 配置。
 4. 执行非修改 preflight，再部署不可变镜像。
 5. 在 UI 确认身份、HTTPS ingestion、fresh 状态与展示名称。
+
+## UniFi target（可选）
+
+仅在需要已验证 target 时，才将 `unifi` 对象加入同一个 Device v2 文件。UDW 与 UCG Max 都使用管理员显式选择的 profile；未知 profile 必须 fail-closed。配置中不存在 command、path、token、SSH-key 或 shell 字段：
+
+```json
+"unifi": {
+  "enabled": true,
+  "profile": "ucg-max",
+  "host": "console.example.invalid",
+  "port": 22,
+  "username": "root",
+  "credential_file": "/run/secrets/unifi-password",
+  "known_hosts_file": "/run/secrets/unifi-known-hosts",
+  "connect_timeout_seconds": 10,
+  "interval_seconds": 60
+}
+```
+
+禁用时严格使用 `"unifi": {"enabled": false}`，或移除可选对象。credential 与 known-host 文件须分别以 root-owned 只读方式挂载。profile capability 不能证明硬件物理存在：UCG Max 的 `fan1=0` 是观测值，不是风扇健康失败；未知 NVMe capability/presence 必须继续保持 unknown。

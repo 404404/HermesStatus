@@ -1,0 +1,7 @@
+{
+  "profile_id": "ucg-max",
+  "platform": "unifi_console",
+  "system": {"cpu_temperature_c": 67.1, "cpu_usage_pct": null, "uptime_seconds": 23456.78, "load_average": {"1m": 0.34, "5m": 0.42, "15m": 0.39}},
+  "fan1_zero_health": "unknown",
+  "nvme": {"supported": "unknown", "present": "unknown", "observed": false, "capacity_bytes": null}, "sata_ssd": {"supported": "unknown", "present": "unknown", "observed": false, "capacity_bytes": null}, "tf": {"supported": "unknown", "present": "unknown", "observed": false, "capacity_bytes": null}
+}

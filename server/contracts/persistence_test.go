@@ -96,6 +96,21 @@ func TestPersistenceRejectsCorruptVersion(t *testing.T) {
 	}
 }
 
+func TestPersistenceAllowsUniFiDomainAndRejectsUnknownDomains(t *testing.T) {
+	snapshot, err := DecodePersistenceV2(fixture(t, "valid", "persistence-v2.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.Devices[0].Domains["unifi"] = json.RawMessage(`{"configured":false}`)
+	if err := ValidatePersistenceV2(snapshot); err != nil {
+		t.Fatalf("UniFi persistence domain was rejected: %v", err)
+	}
+	snapshot.Devices[0].Domains["unifi_command"] = json.RawMessage(`{}`)
+	if err := ValidatePersistenceV2(snapshot); err == nil {
+		t.Fatal("unknown persistence domain was accepted")
+	}
+}
+
 func TestPersistenceRequestDigestIsCanonicalAndBounded(t *testing.T) {
 	snapshot, err := DecodePersistenceV2(fixture(t, "valid", "persistence-v2.json"))
 	if err != nil {

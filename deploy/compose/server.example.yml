@@ -1,0 +1,20 @@
+services:
+  server:
+    image: ghcr.io/404404/hermesstatus-server:${HERMESSTATUS_SERVER_TAG:?set immutable 2.5 candidate tag}
+    container_name: hermesstatus-server-2x
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m,mode=1777,nosuid,nodev,noexec
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    ports:
+      - "21443:80"
+    volumes:
+      - ${SERVER_CONFIG_HOST:-./server-config.json}:/etc/hermesstatus/config.json:ro
+      - ${SERVER_STATE_HOST:-./server-state}:/app/data

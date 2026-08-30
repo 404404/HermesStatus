@@ -1,0 +1,7 @@
+{
+  "profile_id": "udw",
+  "platform": "unifi_console",
+  "system": {"cpu_temperature_c": 64.0, "cpu_usage_pct": null, "uptime_seconds": 12345.67, "load_average": {"1m": 1.16, "5m": 1.29, "15m": 1.17}},
+  "fans": [{"id": "fan1", "rpm": 1698}, {"id": "fan2", "rpm": 2752}],
+  "ignored_fans": ["fan3", "fan4"], "storage": {"nvme": {"supported": "unsupported", "present": "not_present", "observed": false, "capacity_bytes": null}, "sata_ssd": {"supported": "supported", "present": "present", "observed": false, "capacity_bytes": 128000000000}, "tf": {"supported": "supported", "present": "not_present", "observed": false, "capacity_bytes": null}}
+}

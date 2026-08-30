@@ -56,3 +56,30 @@ DSM storage is layered. Configure narrow read-only probes for the intended data 
 3. Validate Server and Client configuration.
 4. Run a non-mutating preflight, then deploy an immutable image.
 5. Confirm identity, HTTPS ingestion, fresh state and display name in the UI.
+
+## UniFi target (optional)
+
+Add the `unifi` object to the same Device v2 file only when a qualified target
+is intended. Both UDW and UCG Max use an administrator-selected profile; an
+unknown profile fails closed. The configuration has no command, path, token,
+SSH-key or shell field:
+
+```json
+"unifi": {
+  "enabled": true,
+  "profile": "ucg-max",
+  "host": "console.example.invalid",
+  "port": 22,
+  "username": "root",
+  "credential_file": "/run/secrets/unifi-password",
+  "known_hosts_file": "/run/secrets/unifi-known-hosts",
+  "connect_timeout_seconds": 10,
+  "interval_seconds": 60
+}
+```
+
+To disable the integration, use exactly `"unifi": {"enabled": false}` or
+remove the optional object. The credential and known-host files are separate,
+root-owned, read-only mounts. Profile capability does not prove hardware
+presence: UCG Max `fan1=0` is an observed value, not a fan-health failure;
+unknown NVMe capability/presence remains unknown.

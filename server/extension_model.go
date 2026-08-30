@@ -69,11 +69,24 @@ const (
 	MaxExtensionPayloadBytes = 1 << 20
 	// Storage inventory is bounded independently (64 physical disks and 128
 	// filesystems), so the former single-disk hardware limit is too small.
-	MaxHardwarePayloadBytes = 256 * 1024
-	MaxDockerPayloadBytes   = 512 * 1024
-	MaxHermesPayloadBytes   = 1 << 20
-	MaxEasyTierPayloadBytes = 64 * 1024
-	MaxEasyTierTextLength   = 128
+	MaxHardwarePayloadBytes     = 256 * 1024
+	MaxDockerPayloadBytes       = 512 * 1024
+	MaxHermesPayloadBytes       = 1 << 20
+	MaxEasyTierPayloadBytes     = 64 * 1024
+	MaxUniFiPayloadBytes        = 64 * 1024
+	MaxEasyTierTextLength       = 128
+	MaxUniFiTextLength          = 128
+	MaxUniFiFans                = 8
+	MaxUniFiPowerSupplies       = 4
+	MaxUniFiIgnoredObservations = 8
+	MaxUniFiAPIEndpoints        = 24
+	MaxUniFiAPIWans             = 16
+	MaxUniFiAPIUplinks          = 32
+	MaxUniFiAPITemperatures     = 16
+	MaxUniFiAPIPorts            = 64
+	MaxUniFiAPILags             = 16
+	MaxUniFiAPITopologyLinks    = 32
+	MaxUniFiAPIAnomalyTypes     = 4
 )
 
 type DiskSMARTStatus string
@@ -120,6 +133,7 @@ type ExtensionStats struct {
 	Hermes           *HermesStats   `json:"hermes"`
 	Lucky            *LuckyStats    `json:"lucky,omitempty"`
 	EasyTier         *EasyTierStats `json:"easytier,omitempty"`
+	UniFi            *UniFiStats    `json:"unifi,omitempty"`
 	// ClientBuild is an optional build provenance report. It is not an
 	// identity input and is intentionally absent for older clients.
 	ClientBuild *ClientBuildInfo `json:"client_build,omitempty"`
@@ -133,6 +147,7 @@ type ExtensionSnapshot struct {
 	Hermes           *HermesStats     `json:"hermes"`
 	Lucky            *LuckyStats      `json:"lucky"`
 	EasyTier         *EasyTierStats   `json:"easytier"`
+	UniFi            *UniFiStats      `json:"unifi"`
 	ClientBuild      *ClientBuildInfo `json:"client_build,omitempty"`
 }
 

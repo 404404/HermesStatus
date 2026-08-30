@@ -4,7 +4,7 @@
 # 依赖于psutil跨平台库
 # 版本：1.1.0, 支持Python版本：3.6+
 # 支持操作系统： Linux, Windows, OSX, Sun Solaris, FreeBSD, OpenBSD and NetBSD, both 32-bit and 64-bit architectures
-# 说明: 默认情况下修改server和user就可以了。丢包率监测方向可以自定义，例如：CU = "www.facebook.com"。
+# 说明: 默认情况下修改 SERVER 和 USER 即可。
 
 SERVER = ""
 USER = ""
@@ -12,12 +12,6 @@ USER = ""
 
 PASSWORD = "USER_DEFAULT_PASSWORD"
 PORT = 35601
-CU = "cu.tz.cloudcpp.com"
-CT = "ct.tz.cloudcpp.com"
-CM = "cm.tz.cloudcpp.com"
-PROBEPORT = 80
-PROBE_PROTOCOL_PREFER = "ipv4"  # ipv4, ipv6
-PING_PACKET_HISTORY_LEN = 100
 INTERVAL = 1
 
 import socket
@@ -30,7 +24,6 @@ import errno
 import psutil
 import threading
 import platform
-from queue import Queue
 
 from host_collector import HostExtensionCollector, add_extension_payload, collect_client_build
 from device_client_config import ClientMode, load_client_selection
@@ -38,7 +31,10 @@ from device_client_transport import (
     create_device_v2_runner,
     install_monitor_definitions,
 )
-from multi_device_contracts import ClientContractError
+from multi_device_contracts import ClientContractError, UniFiConfig, UniFiAPIConfig
+from unifi_collector import UniFiDomainCollector
+from lucky_collector import LuckyCollector
+from easytier_collector import EasyTierCollector
 
 def _env_str(name, default):
     value = os.getenv(name)
@@ -61,12 +57,6 @@ USER = _env_str("SERVERSTATUS_USER", _env_str("USER", USER)) if USER == "" else 
 PASSWORD = _env_str("PASSWORD", PASSWORD)
 PORT = _env_int("PORT", PORT)
 INTERVAL = _env_int("INTERVAL", INTERVAL)
-PROBEPORT = _env_int("PROBEPORT", PROBEPORT)
-PROBE_PROTOCOL_PREFER = _env_str("PROBE_PROTOCOL_PREFER", PROBE_PROTOCOL_PREFER)
-PING_PACKET_HISTORY_LEN = _env_int("PING_PACKET_HISTORY_LEN", PING_PACKET_HISTORY_LEN)
-CU = _env_str("CU", CU)
-CT = _env_str("CT", CT)
-CM = _env_str("CM", CM)
 
 def parse_cli_args(arguments):
     overrides = {}
@@ -214,16 +204,6 @@ def get_network(ip_version):
     except:
         return False
 
-lostRate = {
-    '10010': 0.0,
-    '189': 0.0,
-    '10086': 0.0
-}
-pingTime = {
-    '10010': 0,
-    '189': 0,
-    '10086': 0
-}
 netSpeed = {
     'netrx': 0.0,
     'nettx': 0.0,
@@ -238,44 +218,6 @@ diskIO = {
 }
 monitorServer = {}
 monitorServerLock = threading.RLock()
-
-def _ping_thread(host, mark, port):
-    lostPacket = 0
-    packet_queue = Queue(maxsize=PING_PACKET_HISTORY_LEN)
-
-    while True:
-        # flush dns, every time.
-        IP = host
-        if host.count(':') < 1:  # if not plain ipv6 address, means ipv4 address or hostname
-            try:
-                if PROBE_PROTOCOL_PREFER == 'ipv4':
-                    IP = socket.getaddrinfo(host, None, socket.AF_INET)[0][4][0]
-                else:
-                    IP = socket.getaddrinfo(host, None, socket.AF_INET6)[0][4][0]
-            except Exception:
-                pass
-
-        if packet_queue.full():
-            if packet_queue.get() == 0:
-                lostPacket -= 1
-        try:
-            b = timeit.default_timer()
-            socket.create_connection((IP, port), timeout=1).close()
-            pingTime[mark] = int((timeit.default_timer() - b) * 1000)
-            packet_queue.put(1)
-        except socket.error as error:
-            if error.errno == errno.ECONNREFUSED:
-                pingTime[mark] = int((timeit.default_timer() - b) * 1000)
-                packet_queue.put(1)
-            #elif error.errno == errno.ETIMEDOUT:
-            else:
-                lostPacket += 1
-                packet_queue.put(0)
-
-        if packet_queue.qsize() > 30:
-            lostRate[mark] = float(lostPacket) / packet_queue.qsize()
-
-        time.sleep(INTERVAL)
 
 def _net_speed():
     while True:
@@ -355,46 +297,14 @@ def _disk_io():
             diskIO["write"] = disks_after.write_bytes - disks_before.write_bytes
 
 def get_realtime_data():
-    '''
-    real time get system data
-    :return:
-    '''
-    t1 = threading.Thread(
-        target=_ping_thread,
-        kwargs={
-            'host': CU,
-            'mark': '10010',
-            'port': PROBEPORT
-        }
-    )
-    t2 = threading.Thread(
-        target=_ping_thread,
-        kwargs={
-            'host': CT,
-            'mark': '189',
-            'port': PROBEPORT
-        }
-    )
-    t3 = threading.Thread(
-        target=_ping_thread,
-        kwargs={
-            'host': CM,
-            'mark': '10086',
-            'port': PROBEPORT
-        }
-    )
-    t4 = threading.Thread(
-        target=_net_speed,
-    )
-    t5 = threading.Thread(
-        target=_disk_io,
-    )
-    for ti in [t1, t2, t3, t4, t5]:
-        ti.daemon = True
-        ti.start()
+    """Start local throughput and disk-I/O sampling threads."""
+    for target in (_net_speed, _disk_io):
+        thread = threading.Thread(target=target)
+        thread.daemon = True
+        thread.start()
 
 def _monitor_thread(name, host, interval, type, generation=None):
-    # 参考 _ping_thread 风格：每轮解析一次目标，按协议族偏好解析 IP，测 TCP 建连耗时
+    # Each configured custom monitor measures its own TCP connection latency.
     while True:
         if not _monitor_owned(name, generation):
             break
@@ -433,16 +343,8 @@ def _monitor_thread(name, host, interval, type, generation=None):
                 time.sleep(interval)
                 continue
 
-            # 2) 解析 IP（按偏好族），与 _ping_thread 保持一致的判定
+            # 2) Use the platform resolver for the configured monitor target.
             IP = addr
-            if addr.count(':') < 1:  # 非纯 IPv6，可能是 IPv4 或域名
-                try:
-                    if PROBE_PROTOCOL_PREFER == 'ipv4':
-                        IP = socket.getaddrinfo(addr, None, socket.AF_INET)[0][4][0]
-                    else:
-                        IP = socket.getaddrinfo(addr, None, socket.AF_INET6)[0][4][0]
-                except Exception:
-                    pass
 
             # 3) 测 TCP 建连耗时（timeout=1s）；ECONNREFUSED 也记为耗时
             try:
@@ -532,12 +434,6 @@ def _device_v2_stats_collector(extension_collector):
             'network_tx': netSpeed.get("nettx"),
             'network_in': net_in,
             'network_out': net_out,
-            'ping_10010': lostRate.get('10010') * 100,
-            'ping_189': lostRate.get('189') * 100,
-            'ping_10086': lostRate.get('10086') * 100,
-            'time_10010': pingTime.get('10010'),
-            'time_189': pingTime.get('189'),
-            'time_10086': pingTime.get('10086'),
             'io_read': diskIO.get("read"),
             'io_write': diskIO.get("write"),
             'os': extension_collector.host_os,
@@ -590,13 +486,93 @@ def _device_v2_extension_collector(config, arguments):
         {"mountpoint": probe.mountpoint, "probe_path": probe.probe_path}
         for probe in config.filesystem_probes
     ]
-    return HostExtensionCollector(
-        smart_devices=smart_devices,
-        primary_smart_device=config.primary_smart_device,
-        filesystem_probes=filesystem_probes,
-        client_build=collect_client_build(protocol="device_v2"),
-        easytier_args=arguments,
-    )
+    unified = config.unified_collectors
+    runtime = None
+    if unified is not None:
+        from client_config_v1 import materialize_unified_collectors
+        runtime = materialize_unified_collectors(unified)
+    if runtime is not None:
+        lucky_values = runtime.get("lucky") or {"enabled": False}
+        lucky_collector = LuckyCollector(
+            enabled=bool(lucky_values.get("enabled")),
+            base_url=lucky_values.get("base_url", "https://127.0.0.1:16601"),
+            auth_mode=lucky_values.get("auth_mode", "none"),
+            token_file=lucky_values.get("token_file"),
+            timeout=lucky_values.get("timeout_seconds", 5),
+            warning_days=lucky_values.get("warning_days", 30),
+            version_check_ttl=lucky_values.get("version_check_ttl", 21600),
+            verify_tls=bool(lucky_values.get("verify_tls", True)),
+        )
+        easy_values = runtime.get("easytier") or {"enabled": False}
+        easy_env = {
+            "EASYTIER_ENABLED": "true" if easy_values.get("enabled") else "false",
+            "EASYTIER_CLI_PATH": easy_values.get("cli_path", "/usr/local/bin/easytier-cli"),
+            "EASYTIER_RPC_PORTAL": easy_values.get("rpc_portal", "127.0.0.1:15888"),
+            "EASYTIER_TIMEOUT_SECONDS": str(easy_values.get("timeout_seconds", 5)),
+            "EASYTIER_INTERVAL_SECONDS": str(easy_values.get("interval_seconds", 30)),
+        }
+        if easy_values.get("administrative_role") is not None:
+            easy_env["EASYTIER_ADMINISTRATIVE_ROLE"] = str(easy_values["administrative_role"])
+        easytier_collector = EasyTierCollector(environ=easy_env)
+        unifi_values = runtime.get("unifi") or {"enabled": False}
+        unifi_collector = None
+        if unifi_values.get("enabled"):
+            ssh = unifi_values.get("ssh") or {}
+            api_values = unifi_values.get("api") or {}
+            api_config = None
+            if api_values.get("enabled"):
+                api_config = UniFiAPIConfig(
+                    enabled=True,
+                    base_url=api_values["base_url"],
+                    api_key_file=api_values["api_key_file"],
+                    ca_file=api_values.get("ca_file"),
+                    tls_sha256=api_values.get("tls_sha256"),
+                    timeout_seconds=api_values.get("timeout_seconds", 5),
+                    site_id=api_values.get("site_id"),
+                )
+            if not ssh.get("enabled") and api_config is None:
+                unifi_collector = None
+            else:
+                unifi_collector = UniFiDomainCollector(UniFiConfig(
+                    profile_id=unifi_values["profile"],
+                    host=unifi_values["host"],
+                    port=ssh.get("port", unifi_values["port"]),
+                    username=ssh.get("username") or "root",
+                    credential_file=ssh.get("credential_file") or "",
+                    known_hosts_file=ssh.get("known_hosts_file") or "",
+                    connect_timeout_seconds=unifi_values.get("connect_timeout_seconds", 10),
+                    interval_seconds=unifi_values.get("interval_seconds", 60),
+                    api=api_config,
+                ))
+        else:
+            unifi_collector = None
+        smart_values = unified.get("smart") or {}
+        smart_enabled = bool(smart_values.get("enabled"))
+        if not smart_enabled:
+            smart_devices = []
+    else:
+        lucky_collector = None
+        easytier_collector = None
+        unifi_collector = UniFiDomainCollector(config.unifi) if config.unifi is not None else None
+    collector_kwargs = {
+        "smart_devices": smart_devices,
+        "primary_smart_device": config.primary_smart_device,
+        "filesystem_probes": filesystem_probes,
+        "client_build": collect_client_build(protocol="device_v2"),
+        "easytier_args": arguments if runtime is None else (),
+        "unifi_collector": unifi_collector,
+    }
+    if runtime is not None:
+        collector_kwargs.update({
+            "lucky_collector": lucky_collector,
+            "easytier_collector": easytier_collector,
+            "hardware_enabled": bool((unified.get("hardware") or {}).get("enabled")),
+            "filesystem_enabled": bool((unified.get("filesystem") or {}).get("enabled")),
+            "docker_enabled": bool((unified.get("docker") or {}).get("enabled")),
+            "hermes_enabled": bool((unified.get("hermes") or {}).get("enabled")),
+            "hardware_interval": config.collection_interval_seconds,
+        })
+    return HostExtensionCollector(**collector_kwargs)
 
 
 if __name__ == '__main__':
@@ -711,12 +687,6 @@ if __name__ == '__main__':
                 array['network_tx'] = netSpeed.get("nettx")
                 array['network_in'] = NET_IN
                 array['network_out'] = NET_OUT
-                array['ping_10010'] = lostRate.get('10010') * 100
-                array['ping_189'] = lostRate.get('189') * 100
-                array['ping_10086'] = lostRate.get('10086') * 100
-                array['time_10010'] = pingTime.get('10010')
-                array['time_189'] = pingTime.get('189')
-                array['time_10086'] = pingTime.get('10086')
                 array['tcp'], array['udp'], array['process'], array['thread'] = tupd()
                 array['io_read'] = diskIO.get("read")
                 array['io_write'] = diskIO.get("write")

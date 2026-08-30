@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HermesStatus unified Client configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "server", "device", "collectors"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "server": {
+      "type": "object", "additionalProperties": false,
+      "required": ["url", "verify_tls", "connect_timeout_seconds", "read_timeout_seconds"],
+      "properties": {
+        "url": {"type": "string"}, "verify_tls": {"type": "boolean"},
+        "connect_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 60},
+        "read_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300},
+        "ca_file": {"type": ["string", "null"]}
+      }
+    },
+    "device": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "display_name", "platform"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"},
+        "display_name": {"type": "string"},
+        "platform": {"enum": ["linux", "synology", "macos", "windows"]},
+        "fqdn": {"type": ["string", "null"]}
+      }
+    },
+    "collection": {
+      "type": "object", "additionalProperties": false,
+      "required": ["interval_seconds"],
+      "properties": {"interval_seconds": {"type": "integer", "minimum": 10, "maximum": 3600}}
+    },
+    "collectors": {
+      "type": "object", "additionalProperties": false,
+      "required": ["hardware", "filesystem", "smart", "docker", "hermes", "lucky", "easytier", "unifi"],
+      "properties": {
+        "hardware": {"$ref": "#/$defs/enabled"},
+        "filesystem": {"$ref": "#/$defs/filesystem"},
+        "docker": {"$ref": "#/$defs/enabled"},
+        "hermes": {"$ref": "#/$defs/enabled"},
+        "smart": {"$ref": "#/$defs/smart"},
+        "lucky": {"$ref": "#/$defs/lucky"},
+        "easytier": {"$ref": "#/$defs/easytier"},
+        "unifi": {"$ref": "#/$defs/unifi"}
+      }
+    }
+  },
+  "$defs": {
+    "enabled": {
+      "type": "object", "additionalProperties": false,
+      "required": ["enabled"], "properties": {"enabled": {"type": "boolean"}}
+    },
+    "filesystem": {
+      "type": "object", "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "probes": {"type": "array", "maxItems": 16, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["mountpoint", "probe_path"],
+          "properties": {"mountpoint": {"type": "string"}, "probe_path": {"type": "string"}}
+        }}
+      }
+    },
+    "smart": {
+      "oneOf": [
+        {"type": "object", "required": ["enabled"], "properties": {"enabled": {"const": false}}, "additionalProperties": false},
+        {"type": "object", "required": ["enabled"], "properties": {
+          "enabled": {"const": true},
+          "primary_device": {"type": ["string", "null"], "pattern": "^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$"},
+          "devices": {"type": "array", "maxItems": 64, "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": {"type": "string", "pattern": "^/dev/[A-Za-z0-9][A-Za-z0-9._+-]{0,126}$"},
+              "type": {"type": ["string", "null"]},
+              "label": {"type": ["string", "null"]}
+            }
+          }}
+        }, "additionalProperties": false}
+      ]
+    },
+    "lucky": {
+      "oneOf": [
+        {"type": "object", "required": ["enabled"], "properties": {"enabled": {"const": false}}, "additionalProperties": false},
+        {"type": "object", "required": ["enabled", "base_url", "auth_mode", "verify_tls", "timeout_seconds", "warning_days", "version_check_ttl"], "properties": {
+          "enabled": {"const": true},
+          "base_url": {"type": "string", "pattern": "^(https?|http)://(127\\.0\\.0\\.1|localhost|\\[?::1\\]?)(:[0-9]{1,5})?/?$"},
+          "auth_mode": {"enum": ["none", "open_token", "admin_token"]},
+          "verify_tls": {"type": "boolean"},
+          "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 30},
+          "warning_days": {"type": "integer", "minimum": 1, "maximum": 365},
+          "version_check_ttl": {"type": "integer", "minimum": 3600, "maximum": 86400},
+          "open_token": {"type": "string", "maxLength": 4096}
+        },
+        "allOf": [
+            {"if": {"properties": {"auth_mode": {"const": "none"}}}, "then": {"not": {"required": ["open_token"]}}},
+            {"if": {"properties": {"auth_mode": {"enum": ["open_token", "admin_token"]}}}, "then": {"required": ["open_token"]}}
+          ],
+          "additionalProperties": false}
+      ]
+    },
+    "easytier": {
+      "oneOf": [
+        {"type": "object", "required": ["enabled"], "properties": {"enabled": {"const": false}}, "additionalProperties": false},
+        {"type": "object", "required": ["enabled", "cli_path", "rpc_portal", "timeout_seconds", "interval_seconds", "administrative_role"], "properties": {
+          "enabled": {"const": true},
+          "cli_path": {"enum": ["/usr/local/bin/easytier-cli", "/usr/local/libexec/hermesstatus/easytier-cli"]},
+          "rpc_portal": {"const": "127.0.0.1:15888"},
+          "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 30},
+          "interval_seconds": {"type": "integer", "minimum": 5, "maximum": 3600},
+          "administrative_role": {"enum": [null, "", "site_router", "endpoint", "bootstrap_listener", "relay_capable", "observer"]}
+        }, "additionalProperties": false}
+      ]
+    },
+    "unifi": {
+      "oneOf": [
+        {"type": "object", "required": ["enabled"], "properties": {"enabled": {"const": false}}, "additionalProperties": false},
+        {"type": "object", "required": ["enabled", "profile", "host", "port", "interval_seconds", "ssh", "api"], "properties": {
+          "enabled": {"const": true},
+          "profile": {"enum": ["udw", "ucg-max"]},
+          "host": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$"},
+          "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+          "interval_seconds": {"type": "integer", "minimum": 30, "maximum": 180},
+          "ssh": {"oneOf": [
+            {"type": "object", "required": ["enabled"], "properties": {"enabled": {"const": false}}, "additionalProperties": false},
+            {"type": "object", "required": ["enabled", "username", "password", "known_hosts", "port"], "properties": {
+              "enabled": {"const": true}, "username": {"type": "string", "pattern": "^[a-z_][a-z0-9_-]{0,31}$"},
+              "password": {"type": "string", "maxLength": 4096}, "known_hosts": {"type": "array", "minItems": 1, "maxItems": 16, "items": {"type": "string", "maxLength": 1024}},
+              "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+            }, "additionalProperties": false}
+          ]},
+          "api": {"oneOf": [
+            {"type": "object", "required": ["enabled"], "properties": {"enabled": {"const": false}}, "additionalProperties": false},
+            {"type": "object", "required": ["enabled", "base_url", "api_key", "tls_sha256", "timeout_seconds"], "properties": {
+              "enabled": {"const": true}, "base_url": {"type": "string", "pattern": "^https://[^/?#]+(?::[0-9]{1,5})?/?$"}, "api_key": {"type": "string", "maxLength": 4096},
+              "tls_sha256": {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"}, "timeout_seconds": {"type": "integer", "minimum": 3, "maximum": 30},
+              "site_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"}
+            }, "additionalProperties": false}
+          ]},
+          "allOf": [
+            {"anyOf": [
+              {"properties": {"ssh": {"required": ["enabled"], "properties": {"enabled": {"const": true}}}}},
+              {"properties": {"api": {"required": ["enabled"], "properties": {"enabled": {"const": true}}}}}
+            ]},
+            {"if": {"properties": {"api": {"required": ["enabled"], "properties": {"enabled": {"const": true}}}}},
+             "then": {"properties": {"ssh": {"required": ["enabled"], "properties": {"enabled": {"const": true}}}}}}
+          ]
+        }, "additionalProperties": false}
+      ]
+    }
+  }
+}

@@ -91,6 +91,7 @@ func DecodeExtensionSnapshotJSON(data []byte) (*ExtensionSnapshot, error) {
 		Hermes:           snapshot.Hermes,
 		Lucky:            snapshot.Lucky,
 		EasyTier:         snapshot.EasyTier,
+		UniFi:            snapshot.UniFi,
 		ClientBuild:      snapshot.ClientBuild,
 	})
 	snapshot.ExtensionVersion = stats.ExtensionVersion
@@ -99,6 +100,7 @@ func DecodeExtensionSnapshotJSON(data []byte) (*ExtensionSnapshot, error) {
 	snapshot.Hermes = stats.Hermes
 	snapshot.Lucky = stats.Lucky
 	snapshot.EasyTier = stats.EasyTier
+	snapshot.UniFi = stats.UniFi
 	snapshot.ClientBuild = stats.ClientBuild
 	if ContainsSecretLikeText(snapshot.ReceivedAt) {
 		snapshot.ReceivedAt = RedactedValue
@@ -208,6 +210,11 @@ func ValidateExtensionStats(stats *ExtensionStats) error {
 			return err
 		}
 	}
+	if stats.UniFi != nil {
+		if err := ValidateUniFiStats(stats.UniFi); err != nil {
+			return err
+		}
+	}
 	if stats.ClientBuild != nil {
 		if err := ValidateClientBuildInfo(stats.ClientBuild); err != nil {
 			return err
@@ -230,6 +237,7 @@ func ValidateExtensionSnapshot(snapshot *ExtensionSnapshot) error {
 		Hermes:           snapshot.Hermes,
 		Lucky:            snapshot.Lucky,
 		EasyTier:         snapshot.EasyTier,
+		UniFi:            snapshot.UniFi,
 		ClientBuild:      snapshot.ClientBuild,
 	}
 	if err := ValidateExtensionStats(stats); err != nil {
@@ -1318,6 +1326,10 @@ func SanitizeExtensionStats(input ExtensionStats) ExtensionStats {
 		easytier := SanitizeEasyTierStats(*input.EasyTier)
 		result.EasyTier = &easytier
 	}
+	if input.UniFi != nil {
+		unifi := SanitizeUniFiStats(*input.UniFi)
+		result.UniFi = &unifi
+	}
 	if input.ClientBuild != nil {
 		build := *input.ClientBuild
 		build.Version = SanitizeText(build.Version)
@@ -1441,6 +1453,11 @@ func validateRequiredExtensionFields(data []byte, snapshot bool) error {
 	}
 	if raw, ok := root["easytier"]; ok {
 		if err := validateRequiredEasyTier(raw); err != nil {
+			return err
+		}
+	}
+	if raw, ok := root["unifi"]; ok {
+		if err := validateRequiredUniFi(raw); err != nil {
 			return err
 		}
 	}
