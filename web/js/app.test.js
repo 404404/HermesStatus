@@ -8,6 +8,7 @@ const app = require('./app.js');
 const ROOT = path.resolve(__dirname, '../..');
 const indexMarkup = fs.readFileSync(path.join(ROOT, 'web/index.html'), 'utf8');
 const appSource = fs.readFileSync(path.join(ROOT, 'web/js/app.js'), 'utf8');
+const cssSource = fs.readFileSync(path.join(ROOT, 'web/css/app.css'), 'utf8');
 
 function fixture(name){
   return JSON.parse(fs.readFileSync(path.join(ROOT, `testdata/migration/stats-${name}.json`), 'utf8'));
@@ -87,6 +88,8 @@ async function run(){
   assert.match(indexMarkup, /id="unifiEmptyState"/);
   assert.match(appSource, /已配置 UniFi 目标，但访问失败，请检查 SSH 密码和 API Key/);
   assert.match(appSource, /未配置 UniFi 目标/);
+  assert.match(cssSource, /\.unifi-network-tabs\{[^}]*flex-wrap:wrap/);
+  assert.match(cssSource, /\.unifi-network-tab\{[^}]*white-space:nowrap/);
 
 	assert.doesNotMatch(appSource, /easytierCommandsBody/);
   assert.match(appSource, /easytierPeersBody/);
@@ -150,6 +153,7 @@ async function run(){
       {id: 'fan1', supported: 'supported', present: 'present', observed: true, rpm: 1698, state: 'observed', error: null},
       {id: 'fan2', supported: 'supported', present: 'present', observed: true, rpm: 2752, state: 'observed', error: null}
     ],
+    power: {supported: true, psu_slots: 2, max_power_w: 550},
     power_supplies: [{id: 'psu1', supported: 'supported', present: 'unknown', observed: true, state: 'observed', power_w: 47, max_power_w: 550, error: null}],
     poe: {supported: true, total_max_power_w: 420, port_max_power_w: {1: 15.4, 2: 15.4, 3: 15.4, 4: 15.4, 5: 30, 6: 30, 7: 30, 8: 30, 9: 60, 10: 60, 11: 60, 12: 60}},
     storage: {
@@ -164,6 +168,7 @@ async function run(){
     system: {...udwUniFi.system, cpu_usage_percent: null, cpu_usage_reason: 'insufficient_delta', cpu_temperature_c: null,
       memory: {...udwUniFi.system.memory, available_source: 'fallback_memfree_buffers_cached'}},
     fans: [{id: 'fan1', supported: 'supported', present: 'unknown', observed: true, rpm: 0, state: 'observed_zero_rpm', error: null}],
+    power: {supported: false, psu_slots: 0, max_power_w: null},
     power_supplies: [], poe: {supported: false, total_max_power_w: null, port_max_power_w: {}}, storage: {
       nvme: {supported: 'unknown', present: 'unknown', observed: false, capacity_bytes: null},
       sata_ssd: {supported: 'unknown', present: 'unknown', observed: false, capacity_bytes: null},
@@ -221,10 +226,14 @@ async function run(){
   assert.match(unsupportedStorageMarkup, /<td>-<\/td>/g);
   assert.match(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /不支持[\s\S]*未安装/);
   assert.match(app.unifiPowerRows(udwUniFi), /未提供/);
+  assert.match(app.unifiPowerRows(ucgMaxUniFi), /该机型无相关参数可供展示/);
   const apiFixture = {enabled: true, status: 'available', telemetry: {
     identity: {model: 'UniFi Dream Wall', display_name: 'UDW', firmware: '5.1.31', status: 'ONLINE'},
     controller: {application_version: '10.5.67', state: 'ONLINE'},
-    uplinks: [{name: 'UniFi Dream Wall', link_state: 'ONLINE', speed_mbps: 2500}, {name: 'USW Flex Mini', link_state: 'ONLINE', speed_mbps: 1000}],
+    uplinks: [
+      {name: 'UniFi Dream Wall', device_id: 'udw-1', model: 'UDW', device_type: 'gateway', management_ip: '192.168.1.1', online: true, link_state: 'ONLINE', speed_mbps: 2500},
+      {name: 'USW Flex Mini', device_id: 'switch-1', model: 'USW Flex Mini', device_type: 'switch', management_ip: '192.168.1.2', online: false, link_state: 'OFFLINE', speed_mbps: 1000}
+    ],
     clients: {total: 19, wired: 14, wireless: 5, observed: true},
     networks: {total: 3, vlan: 3},
     ports: [
@@ -239,6 +248,10 @@ async function run(){
   const systemCards = app.unifiSystemCards({...udwUniFi, api: apiFixture});
   const apiTelemetryMarkup = app.unifiApiTelemetryMarkup({...udwUniFi, api: apiFixture});
   const portTelemetryMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: apiFixture});
+  const numericIpMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, uplinks: [
+    {...apiFixture.telemetry.uplinks[0], management_ip: '192.168.1.10'},
+    {...apiFixture.telemetry.uplinks[1], management_ip: '192.168.1.2'}
+  ]}}});
   const wanMarkup = app.unifiWanMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, wans: [{id: 'wan1', name: 'WAN', online: true, role: 'active', isp: 'Example ISP', asn: '64500', link_speed_mbps: 2500, speedtest: {observed: true, timestamp: '2026-01-01T00:00:00Z', latency_ms: 2.5, download_mbps: 900, upload_mbps: 100}}]}}});
   assert.match(portTelemetryMarkup, /unifi-ports-table/);
   assert.match(portTelemetryMarkup, /Port 7/);
@@ -302,10 +315,12 @@ async function run(){
   assert.match(systemCards, /2\.00 GB \/ 4\.00 GB/);
   assert.match(systemCards, /<h2>CPU<\/h2>[\s\S]*Annapurna AL324/);
   assert.match(portTelemetryMarkup, /UniFi Dream Wall/);
-  assert.match(portTelemetryMarkup, /USW Flex Mini/);
+  assert.match(portTelemetryMarkup, /USW Flex Mini（离线）/);
+  assert.ok(numericIpMarkup.indexOf('USW Flex Mini（离线）') < numericIpMarkup.indexOf('UniFi Dream Wall'));
   assert.ok(portTelemetryMarkup.indexOf('>2</td>') < portTelemetryMarkup.indexOf('>7</td>'));
   assert.ok(portTelemetryMarkup.indexOf('>7</td>') < portTelemetryMarkup.indexOf('>10</td>'));
   assert.doesNotMatch(portTelemetryMarkup, /已连接 · 上联/);
+  assert.doesNotMatch(portTelemetryMarkup, /switch-1/);
   assert.doesNotMatch(app.unifiPortTelemetryMarkup({...ucgMaxUniFi, api: apiFixture}), /PoE 总功率/);
   assert.doesNotMatch(systemCards, /card-mini-meta"[^>]*>\(网络 \/ VLAN\)<\/div>/);
   const cardLabels = ['设备名称/型号', 'CPU', '内存', '负载', '连接客户端', 'CPU 温度', '运行时间', '控制器状态 (版本)', '网络应用状态 (版本)', '网络摘要'];

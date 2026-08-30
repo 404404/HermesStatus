@@ -112,6 +112,31 @@ class UniFiSSHTransportTests(unittest.TestCase):
         self.assertEqual(result["hardware_cache_status"], "available")
         self.assertEqual(result["hardware_cache"]["fans"]["fan1"], 3820)
 
+    def test_diagnostics_extracts_hwmon_rpm_and_preserves_zero(self):
+        text = "\n".join([
+            "__HS_THERMAL__", "__HS_HWMON__",
+            '{"lm63-i2c-2-4c":{"fan1":{"fan1_input":0.000,"fan1_min":0.000},"fan2":{"fan2_input":1732.000},"pwm1":{"pwm1":75}}}',
+            "__HS_HW_CACHE__", "__HS_END__",
+        ])
+        result = parse_diagnostics(text)
+        self.assertEqual(result["fans"], {"fan1": 0, "fan2": 1732})
+
+    def test_diagnostics_filters_fans_to_the_approved_hwmon_chip(self):
+        text = "\n".join([
+            "__HS_THERMAL__", "__HS_HWMON__",
+            '{"other-chip":{"fan1":{"fan1_input":1732}}}',
+            "__HS_HW_CACHE__", "__HS_END__",
+        ])
+        self.assertEqual(parse_diagnostics(text, "lm63")["fans"], {})
+
+    def test_diagnostics_ignores_malformed_or_non_rpm_fan_values(self):
+        text = "\n".join([
+            "__HS_THERMAL__", "__HS_HWMON__",
+            '{"lm63":{"fan1":{"fan1_input":"1732"},"fan2":{"fan2_input":-1.0},"fan3":{"fan3_input":1732.5},"pwm1":{"pwm1":50}}}',
+            "__HS_HW_CACHE__", "__HS_END__",
+        ])
+        self.assertEqual(parse_diagnostics(text)["fans"], {})
+
     def test_diagnostics_script_separates_cache_from_end_marker(self):
         self.assertIn("head -c 12000 /var/run/ustd/hw_polling.cache\n  printf \"\\n\"", REMOTE_DIAGNOSTICS_SCRIPT)
 

@@ -26,6 +26,8 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(result["storage"]["sata_ssd"]["supported"], "supported")
         self.assertEqual(result["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
         self.assertEqual(result["storage"]["tf"]["present"], "not_present")
+        self.assertEqual(result["power"]["max_power_w"], 550)
+        self.assertTrue(result["poe"]["supported"])
         self.assertEqual(result["system"]["cpu_usage_percent"], None)
 
     def test_ucg_max_zero_rpm_is_not_failure_and_nvme_unknown(self):
@@ -34,9 +36,11 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(result["fans"][0]["state"], "observed_zero_rpm")
         self.assertEqual(result["storage"]["nvme"]["present"], "unknown")
         self.assertFalse(result["storage"]["nvme"]["observed"])
-        self.assertEqual(result["storage"]["nvme"]["supported"], "unknown")
-        self.assertEqual(result["storage"]["sata_ssd"]["supported"], "unknown")
-        self.assertEqual(result["storage"]["tf"]["present"], "unknown")
+        self.assertEqual(result["storage"]["nvme"]["supported"], "supported")
+        self.assertEqual(result["storage"]["sata_ssd"]["supported"], "unsupported")
+        self.assertEqual(result["storage"]["tf"]["present"], "not_present")
+        self.assertEqual(result["system"]["cpu_model"], "Qualcomm IPQ5322")
+        self.assertFalse(result["power"]["supported"])
 
     def test_memory_uptime_load_and_cpu_delta(self):
         profile = load_profile(self.profiles, "ucg-max")
@@ -70,11 +74,18 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(result["storage"]["tf"]["present"], "not_present")
 
 
-    def test_public_shape_keeps_fixed_power_limits_in_profile_only(self):
+    def test_public_shape_exposes_fixed_profile_power_and_poe_metadata(self):
         result = normalize(load_profile(self.profiles, "udw"), fixture("udw-raw.json"))
-        self.assertNotIn("power", result)
-        self.assertNotIn("poe", result)
+        self.assertEqual(result["power"], {"supported": True, "psu_slots": 2, "max_power_w": 550})
+        self.assertEqual(result["poe"]["total_max_power_w"], 420)
         self.assertNotIn("max_power_w", result["power_supplies"][0])
+
+    def test_fan_observation_is_ignored_when_target_identity_does_not_match_profile(self):
+        raw = fixture("ucg-max-raw.json")
+        raw["target_id"] = "udw"
+        result = normalize(load_profile(self.profiles, "ucg-max"), raw)
+        self.assertIsNone(result["fans"][0]["rpm"])
+        self.assertFalse(result["fans"][0]["observed"])
 
     def test_optional_diagnostics_do_not_break_core(self):
         raw = fixture("ucg-max-raw.json")

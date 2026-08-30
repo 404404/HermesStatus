@@ -28,8 +28,9 @@
       "health_affecting": false
     },
     "hwmon": {
-      "source": "linux.sys.hwmon",
-      "health_affecting": false
+      "source": "linux.sensors_json",
+      "health_affecting": false,
+      "expected_name": "lm63"
     }
   },
   "fans": {
@@ -49,20 +50,20 @@
   },
   "storage": {
     "nvme": {
-      "supported": "unknown",
+      "supported": true,
       "present": "unknown",
       "observed": false,
       "capacity_bytes": null
     },
     "sata_ssd": {
-      "supported": "unknown",
-      "present": "unknown",
+      "supported": false,
+      "present": "not_populated",
       "observed": false,
       "capacity_bytes": null
     },
     "tf": {
-      "supported": "unknown",
-      "present": "unknown",
+      "supported": false,
+      "present": "not_populated",
       "observed": false,
       "capacity_bytes": null
     }
@@ -75,5 +76,6 @@
     "supported": false,
     "total_max_power_w": null,
     "port_max_power_w": {}
-  }
+  },
+  "cpu_model": "Qualcomm IPQ5322"
 }

@@ -46,6 +46,27 @@ func ValidateUniFiStats(stats *UniFiStats) error {
 			return err
 		}
 	}
+	if stats.Power != nil {
+		if stats.Power.PSUSlots < 0 || stats.Power.PSUSlots > MaxUniFiPowerSupplies {
+			return validationError(validationCodeInvalidValue, "unifi.power.psu_slots", "is invalid")
+		}
+		if err := validateOptionalFloat("unifi.power.max_power_w", stats.Power.MaxPowerW, float64(MaxSafeInteger)); err != nil {
+			return err
+		}
+	}
+	if stats.PoE != nil {
+		if err := validateOptionalFloat("unifi.poe.total_max_power_w", stats.PoE.TotalMaxPowerW, float64(MaxSafeInteger)); err != nil {
+			return err
+		}
+		if len(stats.PoE.PortMaxPowerW) > MaxUniFiAPIPorts {
+			return validationError(validationCodeInvalidValue, "unifi.poe.port_max_power_w", "is too large")
+		}
+		for port, value := range stats.PoE.PortMaxPowerW {
+			if port == "" || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > float64(MaxSafeInteger) {
+				return validationError(validationCodeInvalidValue, "unifi.poe.port_max_power_w", "contains an invalid value")
+			}
+		}
+	}
 	if !stats.Configured {
 		if stats.Profile != nil || stats.System != nil || stats.Stale || stats.Error != nil || stats.Transport.Status != UniFiTransportDisabled || (stats.API != nil && (stats.API.Enabled || stats.API.Status != "disabled")) {
 			return validationError(validationCodeInvalidValue, "unifi", "disabled telemetry must not claim a collection result")
@@ -253,7 +274,7 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 	}
 	for index, item := range value.Uplinks {
 		prefix := "unifi.api.telemetry.uplinks[" + strconv.Itoa(index) + "]"
-		for field, text := range map[string]*string{"name": item.Name, "link_state": item.LinkState, "duplex": item.Duplex, "wan_id": item.WANID} {
+		for field, text := range map[string]*string{"name": item.Name, "link_state": item.LinkState, "duplex": item.Duplex, "wan_id": item.WANID, "device_id": item.DeviceID, "management_ip": item.ManagementIP, "model": item.Model, "device_type": item.DeviceType} {
 			if err := validateOptionalString(prefix+"."+field, text, MaxUniFiTextLength); err != nil {
 				return err
 			}
@@ -785,6 +806,24 @@ func SanitizeUniFiStats(input UniFiStats) UniFiStats {
 	}
 	result.UpdatedAt = sanitizeStringPointer(result.UpdatedAt)
 	result.Error = sanitizeExtensionError(result.Error)
+	if input.Power != nil {
+		power := *input.Power
+		if power.PSUSlots < 0 || power.PSUSlots > MaxUniFiPowerSupplies {
+			power.PSUSlots = 0
+		}
+		if power.MaxPowerW != nil && (*power.MaxPowerW < 0 || math.IsNaN(*power.MaxPowerW) || math.IsInf(*power.MaxPowerW, 0)) {
+			power.MaxPowerW = nil
+		}
+		result.Power = &power
+	}
+	if input.PoE != nil {
+		poe := *input.PoE
+		poe.PortMaxPowerW = sanitizeUniFiPoEPortLimits(input.PoE.PortMaxPowerW)
+		if poe.TotalMaxPowerW != nil && (*poe.TotalMaxPowerW < 0 || math.IsNaN(*poe.TotalMaxPowerW) || math.IsInf(*poe.TotalMaxPowerW, 0)) {
+			poe.TotalMaxPowerW = nil
+		}
+		result.PoE = &poe
+	}
 	result.Fans = append([]UniFiFanStats(nil), input.Fans...)
 	result.PowerSupplies = append([]UniFiPowerStats(nil), input.PowerSupplies...)
 	result.Diagnostics.Ignored = append([]UniFiIgnoredObservation(nil), input.Diagnostics.Ignored...)
@@ -826,5 +865,19 @@ func SanitizeUniFiStats(input UniFiStats) UniFiStats {
 	sort.SliceStable(result.Fans, func(i, j int) bool { return result.Fans[i].ID < result.Fans[j].ID })
 	sort.SliceStable(result.PowerSupplies, func(i, j int) bool { return result.PowerSupplies[i].ID < result.PowerSupplies[j].ID })
 	sort.SliceStable(result.Diagnostics.Ignored, func(i, j int) bool { return result.Diagnostics.Ignored[i].ID < result.Diagnostics.Ignored[j].ID })
+	return result
+}
+
+func sanitizeUniFiPoEPortLimits(input map[string]float64) map[string]float64 {
+	if input == nil {
+		return map[string]float64{}
+	}
+	result := make(map[string]float64)
+	for key, value := range input {
+		if len(result) >= MaxUniFiAPIPorts || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+			continue
+		}
+		result[SanitizeText(key)] = value
+	}
 	return result
 }

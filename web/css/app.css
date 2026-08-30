@@ -210,8 +210,8 @@ body.light .unifi-page-empty{background:var(--panel)}
 .unifi-card-unavailable{font-size:16px;line-height:1.3}
 .unifi-load-card{min-width:0}
 .unifi-fans-table,.unifi-power-table{min-width:980px!important}
-.unifi-network-tabs{display:flex;gap:.55rem;padding:0 1.35rem .8rem;border-bottom:1px solid var(--border)}
-.unifi-network-tab{border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--text-dim);padding:.48rem .8rem;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.unifi-network-tabs{display:flex;flex-wrap:wrap;align-items:stretch;gap:.55rem;padding:0 1.35rem .8rem;border-bottom:1px solid var(--border)}
+.unifi-network-tab{flex:0 0 auto;white-space:nowrap;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--text-dim);padding:.48rem .8rem;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
 .unifi-network-tab:hover{border-color:var(--accent);color:var(--text)}
 .unifi-network-tab:focus-visible{outline:2px solid var(--accent-glow);outline-offset:2px}
 .unifi-network-tab[aria-selected="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--text)}

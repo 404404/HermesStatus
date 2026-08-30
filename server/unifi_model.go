@@ -44,6 +44,8 @@ type UniFiStats struct {
 	API           *UniFiAPIStats      `json:"api,omitempty"`
 	System        *UniFiSystemStats   `json:"system"`
 	Fans          []UniFiFanStats     `json:"fans"`
+	Power         *UniFiPowerProfile  `json:"power,omitempty"`
+	PoE           *UniFiPoEProfile    `json:"poe,omitempty"`
 	PowerSupplies []UniFiPowerStats   `json:"power_supplies"`
 	Storage       UniFiStorageStats   `json:"storage"`
 	Diagnostics   UniFiDiagnostics    `json:"diagnostics"`
@@ -160,11 +162,16 @@ type UniFiAPISpeedtest struct {
 }
 
 type UniFiAPIUplink struct {
-	Name      *string  `json:"name,omitempty"`
-	LinkState *string  `json:"link_state,omitempty"`
-	SpeedMbps *float64 `json:"speed_mbps,omitempty"`
-	Duplex    *string  `json:"duplex,omitempty"`
-	WANID     *string  `json:"wan_id,omitempty"`
+	Name         *string  `json:"name,omitempty"`
+	LinkState    *string  `json:"link_state,omitempty"`
+	SpeedMbps    *float64 `json:"speed_mbps,omitempty"`
+	Duplex       *string  `json:"duplex,omitempty"`
+	WANID        *string  `json:"wan_id,omitempty"`
+	DeviceID     *string  `json:"device_id,omitempty"`
+	ManagementIP *string  `json:"management_ip,omitempty"`
+	Model        *string  `json:"model,omitempty"`
+	DeviceType   *string  `json:"device_type,omitempty"`
+	Online       *bool    `json:"online,omitempty"`
 }
 
 type UniFiAPITemperature struct {
@@ -320,6 +327,18 @@ type UniFiPowerStats struct {
 	FanRPM       *int                  `json:"fan_rpm,omitempty"`
 	TemperatureC *float64              `json:"temperature_c,omitempty"`
 	Error        *ExtensionError       `json:"error"`
+}
+
+type UniFiPowerProfile struct {
+	Supported bool     `json:"supported"`
+	PSUSlots  int      `json:"psu_slots"`
+	MaxPowerW *float64 `json:"max_power_w"`
+}
+
+type UniFiPoEProfile struct {
+	Supported      bool               `json:"supported"`
+	TotalMaxPowerW *float64           `json:"total_max_power_w"`
+	PortMaxPowerW  map[string]float64 `json:"port_max_power_w"`
 }
 
 type UniFiStorageStats struct {

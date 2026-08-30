@@ -1,6 +1,6 @@
 # UniFi monitoring (V1)
 
-UniFi monitoring is a profile-driven, read-only remote-observation domain in the HermesStatus 2.5 development line. It is intentionally limited to qualified UDW and UCG Max console models. It is not a UniFi controller integration, device discovery feature, inventory system, management API, remote shell, or configuration channel.
+UniFi monitoring is a profile-driven, read-only remote-observation domain in the HermesStatus 2.6 development line. It is intentionally limited to qualified UDW and UCG Max console models. It is not a UniFi controller integration, device discovery feature, inventory system, management API, remote shell, or configuration channel.
 
 ## Data model
 
@@ -25,9 +25,9 @@ The Generic Collector V1 is shared by both profiles: `ubnt-systool cputemp`, agg
 Profile selection is explicit (`udw` or `ucg-max`) and an unknown profile is rejected. Profiles express model capability, while the normalized payload separately preserves `supported`, `present`, and `observed`. These are not interchangeable.
 
 - UDW exposes four controller fan channels, but only `fan1` and `fan2` are physically populated in the qualified profile. `fan3`/`fan4` observations are ignored as `profile_not_populated`; zero does not become failure. Two PSU slots are capability metadata; current slot presence is dynamic/unknown until a proven sensor mapping exists.
-- UCG Max has five thermal zones and `lm63` diagnostics, but their physical mapping is unknown. `fan1=0` remains an `observed_zero_rpm` value with physical presence unknown. NVMe not observed is not evidence of an absent physical NVMe device.
+- UCG Max has five thermal zones; `lm63` `fan1_input` is a verified hwmon RPM observation. `fan1=0` remains an `observed_zero_rpm` value with physical presence unknown. The profile declares NVMe capability and does not declare SATA SSD or TF capability; NVMe not observed is not evidence of an absent physical NVMe device.
 
-Raw thermal zones, hwmon detail, cputemp diagnostics, PWM, unmapped PSU sensors, and uncertain NVMe diagnostics remain out of V1 UI and automatic health inference.
+Raw thermal zones, hwmon detail, cputemp diagnostics, PWM, unmapped PSU sensors, and uncertain NVMe diagnostics remain out of the V1 UI and automatic health inference. Storage capabilities and the power profile are read from the selected model file: UDW exposes TF and internal SATA SSD capability plus PSU details; non-UDW models show `该机型无相关参数可供展示` for power.
 
 ## Failure and freshness
 
@@ -39,4 +39,4 @@ The profile file cannot define a command. The code-side source registry has no a
 
 ## Initial UI
 
-The UniFi tab renders only profile, transport/freshness, CPU use, CPU temperature, memory, uptime, load, and bounded fan/PSU/storage capability state. It shares the browser's existing single stats document and refresh timer; it creates no separate polling endpoint.
+The UniFi tab renders only profile, transport/freshness, CPU use, CPU temperature, memory, uptime, load, and bounded fan/PSU/storage capability state. Port tabs are keyed by authoritative device identity, sorted by numeric management IP, keep labels on one line, and wrap the tab row when needed; an explicit offline device is labelled with `（离线）`. It shares the browser's existing single stats document and refresh timer; it creates no separate polling endpoint.

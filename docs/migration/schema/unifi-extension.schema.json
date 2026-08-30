@@ -60,6 +60,12 @@
         "$ref": "#/$defs/power"
       }
     },
+    "power": {
+      "$ref": "#/$defs/powerProfile"
+    },
+    "poe": {
+      "$ref": "#/$defs/poeProfile"
+    },
     "storage": {
       "$ref": "#/$defs/storage"
     },
@@ -351,9 +357,32 @@
         "state": {
           "$ref": "#/$defs/observation"
         },
+        "power_w": {"type": ["number", "null"], "minimum": 0},
+        "fan_rpm": {"type": ["integer", "null"], "minimum": 0, "maximum": 100000},
+        "temperature_c": {"type": ["number", "null"], "minimum": -100, "maximum": 250},
         "error": {
           "$ref": "agent-update-extension.schema.json#/$defs/error"
         }
+      },
+      "additionalProperties": false
+    },
+    "powerProfile": {
+      "type": "object",
+      "required": ["supported", "psu_slots", "max_power_w"],
+      "properties": {
+        "supported": {"type": "boolean"},
+        "psu_slots": {"type": "integer", "minimum": 0, "maximum": 4},
+        "max_power_w": {"type": ["number", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "poeProfile": {
+      "type": "object",
+      "required": ["supported", "total_max_power_w", "port_max_power_w"],
+      "properties": {
+        "supported": {"type": "boolean"},
+        "total_max_power_w": {"type": ["number", "null"], "minimum": 0},
+        "port_max_power_w": {"type": "object", "maxProperties": 64, "additionalProperties": {"type": "number", "minimum": 0}}
       },
       "additionalProperties": false
     },
@@ -842,7 +871,12 @@
             "null"
           ],
           "maxLength": 128
-        }
+        },
+        "device_id": {"type": ["string", "null"], "maxLength": 128},
+        "management_ip": {"type": ["string", "null"], "maxLength": 128},
+        "model": {"type": ["string", "null"], "maxLength": 128},
+        "device_type": {"type": ["string", "null"], "maxLength": 128},
+        "online": {"type": ["boolean", "null"]}
       },
       "additionalProperties": false
     },

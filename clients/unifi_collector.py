@@ -53,7 +53,8 @@ class UniFiDomainCollector:
             self.profile = load_profile(PROFILE_DIRECTORY, config.profile_id)
         except ProfileError as exc:
             raise ValueError("unknown_profile") from exc
-        self.raw_collector = raw_collector or RawCollector(config)
+        hwmon_expected_name = self.profile.get("diagnostics", {}).get("hwmon", {}).get("expected_name")
+        self.raw_collector = raw_collector or RawCollector(config, hwmon_expected_name=hwmon_expected_name)
         api_config = getattr(config, "api", None)
         self.api_collector = UniFiAPICollector(api_config, target_profile=config.profile_id) if api_config is not None and getattr(api_config, "enabled", False) else None
         self.previous = None

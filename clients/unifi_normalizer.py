@@ -211,6 +211,26 @@ def _fans(profile, raw_fans, hardware_cache=None):
     return output, ignored
 
 
+def _profile_power(profile):
+    config = profile["power"]
+    slots = config["psu_slots"]
+    return {
+        "supported": slots > 0,
+        "psu_slots": slots,
+        "max_power_w": config.get("max_power_w"),
+    }
+
+
+def _profile_poe(profile):
+    config = profile.get("poe") if isinstance(profile.get("poe"), dict) else {}
+    limits = config.get("port_max_power_w")
+    return {
+        "supported": config.get("supported") is True,
+        "total_max_power_w": config.get("total_max_power_w"),
+        "port_max_power_w": dict(limits) if isinstance(limits, dict) else {},
+    }
+
+
 def _power(profile, hardware_cache=None):
     slots = profile["power"]["psu_slots"]
     presence = profile["power"]["presence"]
@@ -313,6 +333,8 @@ def normalize(profile, raw, previous=None):
             "transport": {"status": "unavailable", "last_attempt": now,
                           "last_success": previous.get("updated_at") if previous else None},
             "api": _api_observation(raw, previous),
+            "power": _profile_power(profile),
+            "poe": _profile_poe(profile),
             "system": previous.get("system") if previous else None,
             "fans": previous.get("fans", []) if previous else [],
             "power_supplies": previous.get("power_supplies", _power(profile)) if previous else _power(profile),
@@ -344,7 +366,11 @@ def normalize(profile, raw, previous=None):
         raise ValueError("invalid generic observation")
     diagnostics_raw = raw.get("diagnostics", {}) if isinstance(raw.get("diagnostics", {}), dict) else {}
     hardware_cache = diagnostics_raw.get("hardware_cache") if isinstance(diagnostics_raw.get("hardware_cache"), (dict, list)) else None
-    fans, ignored = _fans(profile, diagnostics_raw.get("fans", {}), hardware_cache)
+    target_id = raw.get("target_id")
+    profile_id = raw.get("profile_id")
+    target_matches_profile = target_id in (None, profile["profile_id"]) and profile_id in (None, profile["profile_id"])
+    fan_observations = diagnostics_raw.get("fans", {}) if target_matches_profile else {}
+    fans, ignored = _fans(profile, fan_observations, hardware_cache if target_matches_profile else None)
     diagnostic_status = "available" if raw.get("diagnostics") else "not_collected"
     if raw.get("diagnostics", {}).get("collection_status") == "unavailable":
         diagnostic_status = "unavailable"
@@ -352,6 +378,8 @@ def normalize(profile, raw, previous=None):
         "profile": profile["profile_id"],
         "transport": {"status": "available", "last_attempt": now, "last_success": now},
         "api": _api_observation(raw, previous),
+        "power": _profile_power(profile),
+        "poe": _profile_poe(profile),
         "system": {
             "cpu_model": profile.get("cpu_model"),
             "cpu_usage_percent": cpu_pct,

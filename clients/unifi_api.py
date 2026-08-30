@@ -826,13 +826,60 @@ def _detail_link_speed(target_detail):
     return max(values) if values else None
 
 
+def _device_descriptor(device):
+    if not isinstance(device, dict):
+        return {}
+    result = {}
+    device_id = _identifier(_first(device, "id", "device_id", "deviceId", "_id", "external_id"))
+    if device_id:
+        result["device_id"] = device_id
+    name = _text(_first(device, "name", "display_name", "displayName", "hostname", "label"))
+    model = _text(_first(device, "model", "model_name", "modelName", "device_model"))
+    if name:
+        result["name"] = name
+    elif model:
+        result["name"] = model
+    if model:
+        result["model"] = model
+    device_type = _text(_first(device, "type", "device_type", "deviceType", "category", "role"))
+    if device_type:
+        result["device_type"] = device_type
+    management_ip = _text(_first(device, "management_ip", "managementIp", "ip_address", "ipAddress", "ip", "ipAddressV4", "host"))
+    if management_ip:
+        result["management_ip"] = management_ip
+    online = _status_online(_first(device, "online", "is_online", "isOnline", "status", "state"))
+    if online is not None:
+        result["online"] = online
+    return result
+
+
+def _annotate_wan_payload(payload, network_group):
+    """Attach the request's explicit WAN identity to supplemental status records."""
+    if not network_group:
+        return payload
+    if isinstance(payload, list):
+        return [dict(item, network_group=network_group) if isinstance(item, dict) and not item.get("network_group") and not item.get("networkGroup") else item for item in payload[:MAX_API_ITEMS]]
+    if not isinstance(payload, dict):
+        return payload
+    result = dict(payload)
+    for key in ("data", "items", "results"):
+        records = result.get(key)
+        if isinstance(records, list):
+            result[key] = [dict(item, network_group=network_group) if isinstance(item, dict) and not item.get("network_group") and not item.get("networkGroup") else item for item in records[:MAX_API_ITEMS]]
+            return result
+    if not any(result.get(key) for key in ("network_group", "networkGroup", "wan_networkgroup", "wanNetworkgroup")):
+        result["network_group"] = network_group
+    return result
+
+
 def _wans_and_uplinks(devices, target_detail=None, extra_wans=None):
     wans, uplinks = [], []
     target_id = _identifier(target_detail.get("id")) if isinstance(target_detail, dict) else None
     target_speed = _detail_link_speed(target_detail)
-    for device in devices:
+    for device in devices[:MAX_API_ITEMS]:
+        descriptor = _device_descriptor(device)
         source_device = device
-        if target_id and _identifier(device.get("id")) == target_id and target_speed is not None:
+        if target_id and descriptor.get("device_id") == target_id and target_speed is not None:
             source_device = dict(device)
             source_device["speed_mbps"] = target_speed
         records = _nested_records(device, "wans", "wan", "wan_interfaces", "uplinks", "interfaces")
@@ -847,10 +894,10 @@ def _wans_and_uplinks(devices, target_detail=None, extra_wans=None):
                 if record:
                     wans.append(record)
             elif len(uplinks) < MAX_API_UPLINKS:
-                uplink = {}
+                uplink = dict(descriptor)
                 for output, keys in (("name", ("model", "model_name", "modelName", "device_model", "name", "interface", "interface_name", "interfaceName")), ("link_state", ("link_state", "linkState", "state", "status")), ("duplex", ("duplex",)), ("wan_id", ("wan_id", "wanId"))):
                     value = _text(_first(item, *keys))
-                    if value:
+                    if value and output not in uplink:
                         uplink[output] = value
                 speed = _number(_first(item, "speed_mbps", "speedMbps", "link_speed_mbps", "linkSpeedMbps"))
                 if speed is not None:
@@ -858,7 +905,6 @@ def _wans_and_uplinks(devices, target_detail=None, extra_wans=None):
                 if uplink:
                     uplinks.append(uplink)
     return (_merge_wans(extra_wans, wans) if extra_wans else (wans or None)), uplinks or None
-
 
 def _legacy_target(payload, target):
     """Select the legacy device only by the already-qualified device id."""
@@ -1030,22 +1076,37 @@ def _device_poe_totals(target_detail):
     return current, maximum
 
 
-def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=None):
-    legacy = _legacy_target(legacy_payload, target)
-    if legacy is None:
+def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=None, devices=None):
+    target_id = _identifier(target.get("id")) if isinstance(target, dict) else None
+    if not target_id:
         return None, None
-    device_id = _identifier(target.get("id"))
-    capabilities = _detail_port_capabilities(target_detail)
-    records = []
-    for port in (legacy.get("port_table") or [])[:MAX_API_PORTS]:
-        index = _counter(port, "port_idx", "idx", "portIndex")
-        detail = capabilities.get(index, {})
-        item = _port_record(port, device_id=device_id, previous_samples=previous_samples, sample_time=sample_time,
-                            max_speed_mbps=detail.get("max_speed_mbps"), max_power_w=detail.get("max_power_w"))
-        if item is not None:
-            records.append(item)
-    summary = {"total": len(records), "up": sum(1 for item in records if item.get("up") is True), "down": sum(1 for item in records if item.get("up") is False), "poe_active": 0, "poe_total_power_w": None, "poe_total_source": "unavailable", "poe_max_power_w": None}
-    poe_items = [item.get("poe", {}) for item in records if isinstance(item.get("poe"), dict)]
+    known_devices = {}
+    for device in [target] + list(devices or []):
+        if not isinstance(device, dict):
+            continue
+        device_id = _identifier(_first(device, "id", "device_id", "deviceId", "_id", "external_id"))
+        if device_id:
+            known_devices[device_id] = device
+    records = _items(legacy_payload.get("data") if isinstance(legacy_payload, dict) else legacy_payload)
+    matched = False
+    port_records = []
+    for legacy in records:
+        device_id = next((device_id for device_id in known_devices if any(_identifier(legacy.get(key)) == device_id for key in ("device_id", "_id", "external_id"))), None)
+        if device_id is None:
+            continue
+        matched = True
+        detail_capabilities = _detail_port_capabilities(target_detail) if device_id == target_id else {}
+        for port in (legacy.get("port_table") if isinstance(legacy.get("port_table"), list) else [])[:MAX_API_PORTS]:
+            index = _counter(port, "port_idx", "idx", "portIndex")
+            detail = detail_capabilities.get(index, {})
+            item = _port_record(port, device_id=device_id, previous_samples=previous_samples, sample_time=sample_time,
+                                max_speed_mbps=detail.get("max_speed_mbps"), max_power_w=detail.get("max_power_w"))
+            if item is not None:
+                port_records.append(item)
+    if not matched:
+        return None, None
+    summary = {"total": len(port_records), "up": sum(1 for item in port_records if item.get("up") is True), "down": sum(1 for item in port_records if item.get("up") is False), "poe_active": 0, "poe_total_power_w": None, "poe_total_source": "unavailable", "poe_max_power_w": None}
+    poe_items = [item.get("poe", {}) for item in port_records if isinstance(item.get("poe"), dict)]
     summary["poe_active"] = sum(1 for item in poe_items if item.get("active") is True)
     powers = [item.get("power_w") for item in poe_items if isinstance(item.get("power_w"), (int, float))]
     device_current, device_max = _device_poe_totals(target_detail)
@@ -1057,8 +1118,7 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
         summary["poe_total_source"] = "port_sum"
     if device_max is not None:
         summary["poe_max_power_w"] = round(device_max, 2)
-    return records, summary
-
+    return port_records, summary
 
 def _lag_records(payload):
     records = []
@@ -1130,7 +1190,7 @@ def _latest_statistics(stats):
     return result or None
 
 
-def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sample_time=None):
+def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sample_time=None, target_profile=None):
     info = payloads.get("info")
     devices = _items(payloads.get("devices"))
     clients = _items(payloads.get("clients"))
@@ -1145,7 +1205,11 @@ def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sampl
     extra_wans = [payloads.get(name) for name, _ in WAN_ENDPOINTS if payloads.get(name) is not None]
     extra_wans.extend((_statistics_wans(payloads.get("device_stats")), _statistics_wans(payloads.get("legacy_stat_health")), _statistics_wans(payloads.get("legacy_stat_sysinfo")), _statistics_wans(payloads.get("legacy_stat_device"))))
     wans, uplinks = _wans_and_uplinks(devices, target_detail, extra_wans)
-    ports, port_summary = _ports(payloads.get("legacy_stat_device"), target, previous_samples if previous_samples is not None else {}, sample_time if sample_time is not None else time.monotonic(), target_detail=target_detail) if target is not None and payloads.get("legacy_stat_device") is not None else (None, None)
+    ports, port_summary = _ports(payloads.get("legacy_stat_device"), target, previous_samples if previous_samples is not None else {}, sample_time if sample_time is not None else time.monotonic(), target_detail=target_detail, devices=devices) if target is not None and payloads.get("legacy_stat_device") is not None else (None, None)
+    profile_token = _normalized_token(target_profile)
+    if profile_token == "udw":
+        for wan in wans or []:
+            wan.pop("speedtest", None)
     site_model = None
     if isinstance(site, dict):
         site_model = {"integration_id": site.get("id"), "internal_reference": site.get("internal_reference"), "name": site.get("name")}
@@ -1273,13 +1337,14 @@ class UniFiAPICollector:
             payloads[name] = payload
             return payload
 
-        def call_many(name, paths, *, required=False):
+        def call_many(name, paths, *, required=False, identities=None):
             successes = []
             errors = []
-            for path in paths[:MAX_API_WANS]:
+            for index, path in enumerate(paths[:MAX_API_WANS]):
                 try:
                     payload, status = request_path(path)
-                    successes.append(payload)
+                    identity = identities[index] if identities is not None and index < len(identities) else None
+                    successes.append(_annotate_wan_payload(payload, identity) if identity is not None else payload)
                 except APIError as exc:
                     error = _safe_error(exc.code)
                     if exc.status is not None:
@@ -1366,7 +1431,7 @@ class UniFiAPICollector:
                         call("wan_slas", _v2_site_path(internal_reference, "wan-slas"), required=False)
                         groups = _network_groups(payloads.get("wan_enriched"))
                         if groups:
-                            call_many("wan_isp_status", [_v2_site_path(internal_reference, f"wan/{quote(group, safe='')}/isp-status") for group in groups])
+                            call_many("wan_isp_status", [_v2_site_path(internal_reference, f"wan/{quote(group, safe='')}/isp-status") for group in groups], identities=groups)
 
         summary = None
         if "info" in payloads:
@@ -1382,7 +1447,7 @@ class UniFiAPICollector:
                 failures.append(("info", error, True))
         telemetry = None
         try:
-            telemetry = _telemetry(payloads, site=selected_site, target=target, previous_samples=self._port_samples, sample_time=self._clock())
+            telemetry = _telemetry(payloads, site=selected_site, target=target, previous_samples=self._port_samples, sample_time=self._clock(), target_profile=self.target_profile)
         except (APIError, AttributeError, KeyError, TypeError, ValueError) as exc:
             error = _safe_error(exc.code if isinstance(exc, APIError) else "api_parse_failure")
             failure_details["normalization"] = error

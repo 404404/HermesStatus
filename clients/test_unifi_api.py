@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_api import API_COLLECTION_MAX_SECONDS, API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _request, _port_record, _ports, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
+from unifi_api import API_COLLECTION_MAX_SECONDS, API_ENDPOINTS, APIError, UniFiAPICollector, _annotate_wan_payload, _context, _read_key, _request, _port_record, _ports, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
 
 
 class UniFiAPITests(unittest.TestCase):
@@ -192,7 +192,7 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(telemetry["wans"][0]["isp"], "Example ISP")
         self.assertEqual(telemetry["wans"][0]["role"], "active")
         self.assertEqual(telemetry["wans"][0]["asn"], "64500")
-        self.assertEqual(telemetry["wans"][0]["speedtest"]["download_mbps"], 900.0)
+        self.assertNotIn("speedtest", telemetry["wans"][0])
         self.assertNotIn("packet_loss_percent", telemetry["wans"][0])
         self.assertEqual(telemetry["identity"]["model"], "UDW")
         self.assertEqual(telemetry["devices"]["total"], 3)
@@ -211,7 +211,7 @@ class UniFiAPITests(unittest.TestCase):
         # Latest-statistics rates are intentionally not projected into the
         # strict Device v2 uplink model (which only accepts link metadata).
         self.assertTrue(telemetry["uplinks"])
-        self.assertTrue(all(set(item) <= {"name", "link_state", "speed_mbps", "duplex", "wan_id"}
+        self.assertTrue(all(set(item) <= {"device_id", "name", "model", "device_type", "management_ip", "online", "link_state", "speed_mbps", "duplex", "wan_id"}
                             for item in telemetry["uplinks"]))
         target_uplink = next(item for item in telemetry["uplinks"] if item.get("name") == "UDW")
         self.assertEqual(target_uplink["speed_mbps"], 2500)
@@ -335,6 +335,15 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(result[1]["speedtest"]["upload_mbps"], 40.0)
         self.assertEqual(_statistics_wans({"data": [{"model": "UDW", "name": "UDW", "state": "ONLINE"}]}), [])
 
+    def test_supplemental_speedtest_keeps_request_network_group_identity(self):
+        payload = {"data": [{"speedtest_historical": [{"timestamp": "2026-01-01T00:00:00Z", "downloadMbps": 300}]}]}
+        merged = _merge_wans(
+            {"data": [{"id": "wan1", "networkGroup": "WAN"}, {"id": "wan2", "networkGroup": "WAN2"}]},
+            [_annotate_wan_payload(payload, "WAN2")],
+        )
+        self.assertNotIn("speedtest", merged[0])
+        self.assertEqual(merged[1]["speedtest"]["download_mbps"], 300.0)
+
     def test_wan_merge_preserves_identity_and_historical_speedtest(self):
         result = _merge_wans(
             {"data": [{"id": "wan1", "name": "Primary", "online": True}]},
@@ -387,6 +396,20 @@ class UniFiAPITests(unittest.TestCase):
         self.assertIsNone(result["error"])
         self.assertIn("/proxy/network/integration/v1/sites/site-b/devices", calls)
         self.assertFalse(any("/proxy/network/v2/api/site/" in path for path in calls))
+
+    def test_port_tables_are_bound_to_exact_device_ids_when_arrays_are_shuffled(self):
+        from unifi_api import _ports
+        devices = [
+            {"id": "ap-1", "model": "U6 Mesh", "name": "AP", "state": "ONLINE"},
+            {"id": "switch-1", "model": "USW", "name": "Switch", "state": "OFFLINE"},
+            {"id": "udw-1", "model": "UDW", "name": "UDW", "state": "ONLINE"},
+        ]
+        legacy = {"data": [
+            {"device_id": "switch-1", "port_table": [{"port_idx": 8, "up": False}]},
+            {"device_id": "udw-1", "port_table": [{"port_idx": 1, "up": True}]},
+        ]}
+        records, _ = _ports(legacy, devices[2], {}, 1.0, devices=devices)
+        self.assertEqual([(item["device_id"], item["port_idx"]) for item in records], [("switch-1", 8), ("udw-1", 1)])
 
     def test_target_resolution_does_not_depend_on_device_order(self):
         calls = []
