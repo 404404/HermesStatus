@@ -36,7 +36,8 @@ class NormalizerTests(unittest.TestCase):
         result = normalize(load_profile(self.profiles, "ucg-max"), fixture("ucg-max-raw.json"))
         self.assertEqual(result["fans"][0]["rpm"], 0)
         self.assertEqual(result["fans"][0]["state"], "observed_zero_rpm")
-        self.assertEqual(result["fans"][0]["supported"], "unknown")
+        self.assertEqual(result["fans"][0]["supported"], "supported")
+        self.assertEqual(result["fans"][0]["present"], "present")
         self.assertEqual(result["storage"]["nvme"]["present"], "unknown")
         self.assertFalse(result["storage"]["nvme"]["observed"])
         self.assertEqual(result["storage"]["nvme"]["supported"], "supported")
@@ -75,6 +76,39 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(result["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
         self.assertTrue(result["storage"]["sata_ssd"]["observed"])
         self.assertEqual(result["storage"]["tf"]["present"], "not_present")
+
+    def test_udw_filesystem_usage_is_separate_from_static_capacity(self):
+        raw = fixture("udw-raw.json")
+        raw["filesystem"] = {
+            "status": "available", "mountpoint": "/ssd1", "device": "/dev/sda5",
+            "filesystem_total_bytes": 109000000000, "used_bytes": 106000000000,
+            "available_bytes": 3000000000, "usage_percent": 97.25,
+        }
+        result = normalize(load_profile(self.profiles, "udw"), raw)
+        sata = result["storage"]["sata_ssd"]
+        self.assertEqual(sata["capacity_bytes"], 128000000000)
+        self.assertEqual(sata["filesystem_total_bytes"], 109000000000)
+        self.assertEqual(sata["used_bytes"], 106000000000)
+        self.assertEqual(sata["available_bytes"], 3000000000)
+        self.assertEqual(sata["usage_percent"], 97.25)
+        self.assertTrue(sata["observed"])
+
+    def test_udw_missing_filesystem_observation_is_optional(self):
+        raw = fixture("udw-raw.json")
+        raw["filesystem"] = {"status": "unavailable", "mountpoint": "/ssd1"}
+        result = normalize(load_profile(self.profiles, "udw"), raw)
+        self.assertNotIn("filesystem_total_bytes", result["storage"]["sata_ssd"])
+        self.assertEqual(result["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
+
+    def test_ucg_max_missing_fan_rpm_is_not_observed(self):
+        raw = fixture("ucg-max-raw.json")
+        raw["diagnostics"]["fans"] = {}
+        result = normalize(load_profile(self.profiles, "ucg-max"), raw)
+        fan = result["fans"][0]
+        self.assertEqual(fan["supported"], "supported")
+        self.assertEqual(fan["present"], "present")
+        self.assertFalse(fan["observed"])
+        self.assertEqual(fan["state"], "not_observed")
 
 
     def test_public_shape_exposes_fixed_profile_power_and_poe_metadata(self):

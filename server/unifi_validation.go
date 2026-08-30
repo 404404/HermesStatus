@@ -607,9 +607,20 @@ func validateUniFiStorageCapability(field string, value UniFiStorageCapability) 
 	if value.CapacityBytes != nil && (*value.CapacityBytes < 0 || *value.CapacityBytes > MaxSafeInteger) {
 		return validationError(validationCodeInvalidValue, field+".capacity_bytes", "is invalid")
 	}
+	if err := validateCounter(field+".filesystem_total_bytes", value.FilesystemTotalBytes, MaxSafeInteger); err != nil {
+		return err
+	}
 	for name, number := range map[string]*int64{"used_bytes": value.UsedBytes, "available_bytes": value.AvailableBytes} {
 		if err := validateCounter(field+"."+name, number, MaxSafeInteger); err != nil {
 			return err
+		}
+	}
+	if value.FilesystemTotalBytes != nil {
+		if value.UsedBytes != nil && *value.UsedBytes > *value.FilesystemTotalBytes {
+			return validationError(validationCodeInvalidValue, field+".used_bytes", "exceeds filesystem_total_bytes")
+		}
+		if value.AvailableBytes != nil && *value.AvailableBytes > *value.FilesystemTotalBytes {
+			return validationError(validationCodeInvalidValue, field+".available_bytes", "exceeds filesystem_total_bytes")
 		}
 	}
 	if value.UsagePercent != nil && (*value.UsagePercent < 0 || *value.UsagePercent > 100 || math.IsNaN(*value.UsagePercent) || math.IsInf(*value.UsagePercent, 0)) {

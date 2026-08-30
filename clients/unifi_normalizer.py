@@ -271,7 +271,7 @@ def _power(profile, hardware_cache=None, model=None):
     return result
 
 
-def _storage(profile, hardware_cache=None, model=None):
+def _storage(profile, hardware_cache=None, model=None, filesystem=None):
     result = {}
     capabilities = model.get("storage") if isinstance(model, dict) else profile["storage"]
     for name, capability in capabilities.items():
@@ -317,6 +317,14 @@ def _storage(profile, hardware_cache=None, model=None):
             if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
                 item[output] = value
         if item.get("present") == "present" and item.get("capacity_bytes") is not None:
+            item["observed"] = True
+    if isinstance(filesystem, dict) and filesystem.get("status") == "available":
+        item = result.get("sata_ssd")
+        if item is not None and item.get("supported") == "supported" and filesystem.get("mountpoint") == "/ssd1":
+            for output in ("filesystem_total_bytes", "used_bytes", "available_bytes", "usage_percent"):
+                value = filesystem.get(output)
+                if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
+                    item[output] = value
             item["observed"] = True
     return result
 
@@ -404,7 +412,7 @@ def normalize(profile, raw, previous=None, model=None):
         },
         "fans": fans,
         "power_supplies": _power(profile, hardware_cache, model),
-        "storage": _storage(profile, hardware_cache, model),
+        "storage": _storage(profile, hardware_cache, model, raw.get("filesystem")),
         "diagnostics": {"collection_status": diagnostic_status, "ignored_observations": ignored, "hardware_cache_status": diagnostics_raw.get("hardware_cache_status", "unavailable")},
         "updated_at": now,
         "stale": False,

@@ -133,7 +133,7 @@ class UniFiAPITests(unittest.TestCase):
                         "loadAverage15Min": 1.3, "uptimeSec": 1234,
                         "lastHeartbeatAt": "2026-01-01T00:00:00Z",
                         "uplink": {"rxRateBps": 100, "txRateBps": 200},
-                        "wans": [{"id": "wan1", "status": {"state": "ONLINE", "isp": "Example ISP", "speedMbps": 2500},
+                        "wans": [{"id": "wan1", "status": {"state": "ONLINE", "isp": "Example ISP", "linkSpeedMbps": 2500},
                                   "metrics": {"latencyMs": 2.5, "packetLossPercent": 0.0, "jitterMs": 0.1}}]}, 200
             if "/devices/" in path:
                 return {"id": "udw-1", "model": "UDW", "name": "UDW", "firmwareVersion": "5.0", "state": "ONLINE",
@@ -192,8 +192,9 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(telemetry["wans"][0]["isp"], "Example ISP")
         self.assertEqual(telemetry["wans"][0]["role"], "active")
         self.assertEqual(telemetry["wans"][0]["asn"], "64500")
-        self.assertNotIn("speedtest", telemetry["wans"][0])
-        self.assertNotIn("packet_loss_percent", telemetry["wans"][0])
+        self.assertEqual(telemetry["wans"][0]["speedtest"]["download_mbps"], 900.0)
+        self.assertEqual(telemetry["wans"][0]["latency_ms"], 2.5)
+        self.assertEqual(telemetry["wans"][0]["packet_loss_percent"], 0.0)
         self.assertEqual(telemetry["identity"]["model"], "UDW")
         self.assertEqual(telemetry["devices"]["total"], 3)
         self.assertEqual(telemetry["clients"], {"total": 2, "wired": 1, "wireless": 1, "observed": True})
@@ -231,12 +232,12 @@ class UniFiAPITests(unittest.TestCase):
         sites = _site_records({"data": [{"id": "uuid-123", "name": "Main"}]})
         self.assertEqual(sites, [{"id": "uuid-123", "name": "Main"}])
 
-    def test_unconfirmed_realtime_sla_fields_are_not_projected(self):
+    def test_explicit_wan_runtime_fields_are_projected(self):
         merged = _merge_wans({"data": [{"id": "wan1", "latencyMs": 4, "packetLossPercent": 0, "jitterMs": 1, "uptimeSeconds": 5}]})
         self.assertEqual(merged[0]["role"], "unknown")
-        self.assertNotIn("latency_ms", merged[0])
-        self.assertNotIn("packet_loss_percent", merged[0])
-        self.assertNotIn("jitter_ms", merged[0])
+        self.assertEqual(merged[0]["latency_ms"], 4.0)
+        self.assertEqual(merged[0]["packet_loss_percent"], 0.0)
+        self.assertEqual(merged[0]["jitter_ms"], 1.0)
         self.assertNotIn("uptime_seconds", merged[0])
 
     def test_legacy_target_accepts_exact_external_id_alias(self):
@@ -269,7 +270,26 @@ class UniFiAPITests(unittest.TestCase):
 
     def test_malformed_speedtest_timestamp_is_omitted(self):
         merged = _merge_wans({"data": [{"id": "wan1", "speedtestHistory": [{"timestamp": "not-a-date", "downloadMbps": 10}]}]})
-        self.assertNotIn("timestamp", merged[0].get("speedtest", {}))
+        self.assertNotIn("speedtest", merged[0])
+
+    def test_unqualified_speedtest_is_rejected_without_positional_association(self):
+        merged = _merge_wans({"data": [
+            {"speedtestHistory": [{"timestamp": "2026-01-01T00:00:00Z", "downloadMbps": 900}]},
+            {"speedtestHistory": [{"timestamp": "2026-01-01T00:00:01Z", "downloadMbps": 100}]},
+        ]})
+        self.assertIsNone(merged)
+
+    def test_generic_speed_field_never_becomes_wan_link_speed(self):
+        merged = _merge_wans({"data": [{"id": "wan1", "role": "active", "speedMbps": 1000}]})
+        self.assertNotIn("link_speed_mbps", merged[0])
+
+    def test_speedtest_never_becomes_wan_link_speed(self):
+        merged = _merge_wans({"data": [{
+            "id": "wan1", "role": "active", "link_speed_mbps": 1000,
+            "speedtestHistory": [{"timestamp": "2026-01-01T00:00:00Z", "downloadMbps": 900}],
+        }]})
+        self.assertEqual(merged[0]["link_speed_mbps"], 1000.0)
+        self.assertEqual(merged[0]["speedtest"]["download_mbps"], 900.0)
 
     def test_speed_change_and_invalid_interval_discard_rates(self):
         previous = {}

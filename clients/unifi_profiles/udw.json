@@ -34,6 +34,10 @@
     "hardware_cache": {
       "source": "unifi.udw.ustd_hw_polling",
       "health_affecting": false
+    },
+    "filesystem": {
+      "source": "unifi.udw.ssd_filesystem",
+      "health_affecting": false
     }
   },
   "fans": {

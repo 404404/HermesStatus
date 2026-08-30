@@ -5,6 +5,7 @@ KNOWN_SOURCES = frozenset({
     "linux.proc.uptime", "linux.proc.loadavg", "unifi.cpu.cpuload",
     "linux.sys.thermal", "linux.sys.hwmon", "linux.sensors_json",
     "unifi.udw.ustd_hw_polling",
+    "unifi.udw.ssd_filesystem",
 })
 CORE_SOURCES = frozenset({
     "unifi.cpu.temperature.ubnt_systool", "linux.proc.stat", "linux.proc.meminfo",
@@ -38,6 +39,16 @@ printf '%s\n' '__HS_HW_CACHE__'
 if [ -f /var/run/ustd/hw_polling.cache ] && [ -r /var/run/ustd/hw_polling.cache ]; then
   head -c 12000 /var/run/ustd/hw_polling.cache
   printf "\n"
+fi
+printf '%s\n' '__HS_END__'
+'''
+
+REMOTE_UDW_FILESYSTEM_SCRIPT = r'''set -eu
+printf '%s\n' '__HS_UDW_SSD_FILESYSTEM__'
+if df -B1 -P /ssd1 2>/dev/null; then
+  :
+else
+  printf '%s\n' '__HS_DF_UNAVAILABLE__'
 fi
 printf '%s\n' '__HS_END__'
 '''

@@ -360,8 +360,9 @@ type UniFiStorageCapability struct {
 	Supported      UniFiCapabilityState `json:"supported"`
 	Present        UniFiPresenceState   `json:"present"`
 	Observed       bool                 `json:"observed"`
-	CapacityBytes  *int64               `json:"capacity_bytes,omitempty"`
-	UsedBytes      *int64               `json:"used_bytes,omitempty"`
+	CapacityBytes        *int64   `json:"capacity_bytes,omitempty"`
+	FilesystemTotalBytes *int64   `json:"filesystem_total_bytes,omitempty"`
+	UsedBytes            *int64   `json:"used_bytes,omitempty"`
 	AvailableBytes *int64               `json:"available_bytes,omitempty"`
 	UsagePercent   *float64             `json:"usage_percent,omitempty"`
 }

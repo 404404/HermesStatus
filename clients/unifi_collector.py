@@ -93,6 +93,8 @@ class UniFiDomainCollector:
                 raw["diagnostics"] = {"collection_status": "unavailable"}
         else:
             raw["diagnostics"] = {"collection_status": "unavailable"}
+        if self.config.profile_id == "udw" and raw.get("transport", {}).get("ok") is True:
+            raw["filesystem"] = self.raw_collector.filesystem()
         raw["api"] = self.api_collector.collect() if self.api_collector is not None else api_disabled()
         try:
             normalized = normalize(self.profile, raw, self.previous, self.model)

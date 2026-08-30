@@ -167,7 +167,7 @@ async function run(){
     ...udwUniFi, profile: 'ucg-max',
     system: {...udwUniFi.system, cpu_usage_percent: null, cpu_usage_reason: 'insufficient_delta', cpu_temperature_c: null,
       memory: {...udwUniFi.system.memory, available_source: 'fallback_memfree_buffers_cached'}},
-    fans: [{id: 'fan1', supported: 'unknown', present: 'unknown', observed: true, rpm: 0, state: 'observed_zero_rpm', error: null}],
+    fans: [{id: 'fan1', supported: 'supported', present: 'present', observed: true, rpm: 0, state: 'observed_zero_rpm', error: null}],
     power: {supported: false, psu_slots: 0, max_power_w: null},
     power_supplies: [], poe: {supported: false, total_max_power_w: null, port_max_power_w: {}}, storage: {
       nvme: {supported: 'supported', present: 'unknown', observed: false, capacity_bytes: null},
@@ -194,7 +194,8 @@ async function run(){
   assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /可用内存回退估算/);
   assert.match(app.unifiFanRows(udwUniFi), /1,698 RPM/);
   assert.match(app.unifiFanRows(ucgMaxUniFi), /0 RPM/);
-  assert.match(app.unifiFanRows(ucgMaxUniFi), /未知/);
+  assert.match(app.unifiFanRows(ucgMaxUniFi), /支持/);
+  assert.match(app.unifiFanRows(ucgMaxUniFi), /已安装/);
   assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /观测/);
   assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /失败/);
   assert.match(app.unifiFanRows({...ucgMaxUniFi, fans: [{id: 'fan1', supported: 'supported', present: 'unknown', observed: false, rpm: null, state: 'not_observed'}]}), /—/);
@@ -212,12 +213,18 @@ async function run(){
   assert.doesNotMatch(ucgStorageRows, /SATA SSD|TF/);
   const storageWithUsage = {...udwUniFi, storage: {
     ...udwUniFi.storage,
-    sata_ssd: {...udwUniFi.storage.sata_ssd, total_bytes: 128000000000, used_bytes: 64000000000, usage_percent: 50}
+    sata_ssd: {...udwUniFi.storage.sata_ssd, filesystem_total_bytes: 110000000000, used_bytes: 64000000000, usage_percent: 50}
   }};
   const storageMarkup = app.unifiStorageMarkup(storageWithUsage);
   assert.match(storageMarkup, /unifi-storage-table/);
-  assert.match(storageMarkup, /64\.0 GB \/ 128 GB/);
+  assert.match(storageMarkup, /64\.0 GB \/ 110 GB/);
   assert.match(storageMarkup, /50%/);
+  const storageWithoutFilesystemTotal = app.unifiStorageMarkup({...udwUniFi, storage: {
+    ...udwUniFi.storage,
+    sata_ssd: {...udwUniFi.storage.sata_ssd, used_bytes: 64000000000, usage_percent: 50}
+  }});
+  assert.match(storageWithoutFilesystemTotal, /未采集/);
+  assert.doesNotMatch(storageWithoutFilesystemTotal, /64\.0 GB \/ 128 GB/);
   const notInstalledStorage = app.unifiStorageMarkup(udwUniFi);
   const tfRow = notInstalledStorage.match(/<tr>[^]*?<\/tr>/g).find(row => row.includes('>TF<'));
   assert.match(tfRow, /未安装/);
@@ -229,7 +236,9 @@ async function run(){
   assert.doesNotMatch(unsupportedStorageMarkup, /NVMe|不支持/);
   assert.match(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /不支持[\s\S]*未安装/);
   assert.match(app.unifiPowerRows(udwUniFi), /未提供/);
-  assert.match(app.unifiPowerRows(ucgMaxUniFi), /该机型无相关参数可供展示/);
+  assert.equal(app.unifiPowerRows(ucgMaxUniFi), '');
+  assert.equal(app.unifiPowerSectionVisible(ucgMaxUniFi), false);
+  assert.equal(app.unifiPowerSectionVisible(udwUniFi), true);
   const apiFixture = {enabled: true, status: 'available', telemetry: {
     identity: {model: 'UniFi Dream Wall', display_name: 'UDW', firmware: '5.1.31', status: 'ONLINE'},
     controller: {application_version: '10.5.67', state: 'ONLINE'},
@@ -260,7 +269,7 @@ async function run(){
     {...apiFixture.telemetry.uplinks[0], management_ip: '192.168.1.10'},
     {...apiFixture.telemetry.uplinks[1], management_ip: '192.168.1.2'}
   ]}}});
-  const wanMarkup = app.unifiWanMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, wans: [{id: 'wan1', name: 'WAN', online: true, role: 'active', isp: 'Example ISP', asn: '64500', link_speed_mbps: 2500, speedtest: {observed: true, timestamp: '2026-01-01T00:00:00Z', latency_ms: 2.5, download_mbps: 900, upload_mbps: 100}}]}}});
+  const wanMarkup = app.unifiWanMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, wans: [{id: 'wan1', name: 'WAN', online: true, role: 'active', isp: 'Example ISP', asn: '64500', link_speed_mbps: 2500, latency_ms: 12.3, speedtest: {observed: true, timestamp: '2026-01-01T00:00:00Z', latency_ms: 2.5, download_mbps: 900, upload_mbps: 100}}]}}});
   assert.match(portTelemetryMarkup, /unifi-ports-table/);
   assert.match(portTelemetryMarkup, /Port 7/);
   assert.match(portTelemetryMarkup, /2\.5 GbE/);
@@ -280,6 +289,8 @@ async function run(){
   assert.match(portTelemetryMarkup, /未连接 \/ 1 GbE/);
   assert.match(portTelemetryMarkup, /发送 \/ 接收 \(错误\/丢弃\)/);
   assert.match(wanMarkup, /Example ISP/);
+  assert.match(wanMarkup, /<th>延迟<\/th>/);
+  assert.match(wanMarkup, /12\.3 ms/);
   assert.match(wanMarkup, /最近测速 2\.5 ms \/ ↓ 900\.0 Mbps \/ ↑ 100\.0 Mbps/);
   assert.match(wanMarkup, /AS64500/);
   assert.doesNotMatch(wanMarkup, /丢包|抖动|实时/);

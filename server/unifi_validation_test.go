@@ -29,7 +29,7 @@ func validUniFiFixture(profile string) UniFiStats {
 			Memory:      &UniFiMemoryStats{TotalBytes: unifiInt64(4096), AvailableBytes: unifiInt64(1024), FreeBytes: unifiInt64(512), BuffersBytes: unifiInt64(128), CachedBytes: unifiInt64(384), SwapTotalBytes: unifiInt64(0), SwapFreeBytes: unifiInt64(0), UsedBytes: unifiInt64(3072), UsedPercent: unifiFloat(75), AvailableSource: "mem_available"},
 			LoadAverage: &UniFiLoadAverage{OneMinute: unifiFloat(0.1), FiveMinutes: unifiFloat(0.2), FifteenMinutes: unifiFloat(0.3)},
 		},
-		Fans:          []UniFiFanStats{{ID: "fan1", Supported: UniFiCapabilitySupported, Present: UniFiPresenceUnknown, Observed: true, RPM: unifiInt(0), State: UniFiObservationObservedZeroRPM}},
+		Fans:          []UniFiFanStats{{ID: "fan1", Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent, Observed: true, RPM: unifiInt(0), State: UniFiObservationObservedZeroRPM}},
 		Power:         &UniFiPowerProfile{Supported: powerSupported, PSUSlots: powerSlots, MaxPowerW: maxPower},
 		PoE:           &UniFiPoEProfile{Supported: powerSupported, PortMaxPowerW: map[string]float64{}},
 		PowerSupplies: make([]UniFiPowerStats, 0),
@@ -55,7 +55,7 @@ func TestUniFiValidationDisabledAndProfiles(t *testing.T) {
 			t.Fatalf("%s valid fixture rejected: %v", profile, err)
 		}
 		expectedPower := profile == "udw"
-		if decoded.Profile == nil || *decoded.Profile != profile || decoded.Fans[0].RPM == nil || *decoded.Fans[0].RPM != 0 || decoded.Fans[0].Present != UniFiPresenceUnknown || decoded.Power == nil || decoded.Power.Supported != expectedPower || decoded.PoE == nil || decoded.PoE.Supported != expectedPower {
+		if decoded.Profile == nil || *decoded.Profile != profile || decoded.Fans[0].RPM == nil || *decoded.Fans[0].RPM != 0 || decoded.Fans[0].Present != UniFiPresencePresent || decoded.Power == nil || decoded.Power.Supported != expectedPower || decoded.PoE == nil || decoded.PoE.Supported != expectedPower {
 			t.Fatalf("%s profile projection changed: %#v", profile, decoded)
 		}
 	}
@@ -199,9 +199,13 @@ func TestUniFiAPIPortTelemetryRoundTripAndNoRawTable(t *testing.T) {
 func TestUniFiStorageMediaCapabilitiesRoundTrip(t *testing.T) {
 	stats := validUniFiFixture("udw")
 	capacity := int64(128000000000)
+	filesystemTotal := int64(109000000000)
+	used := int64(106000000000)
+	available := int64(3000000000)
 	stats.Storage.SATA = &UniFiStorageCapability{
 		Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent,
-		Observed: false, CapacityBytes: &capacity,
+		Observed: true, CapacityBytes: &capacity, FilesystemTotalBytes: &filesystemTotal,
+		UsedBytes: &used, AvailableBytes: &available, UsagePercent: unifiFloat(97.25),
 	}
 	stats.Storage.TF = &UniFiStorageCapability{
 		Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent,
@@ -215,7 +219,7 @@ func TestUniFiStorageMediaCapabilitiesRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("storage capability payload rejected: %v", err)
 	}
-	if decoded.Storage.SATA == nil || decoded.Storage.SATA.CapacityBytes == nil || *decoded.Storage.SATA.CapacityBytes != capacity {
+	if decoded.Storage.SATA == nil || decoded.Storage.SATA.CapacityBytes == nil || *decoded.Storage.SATA.CapacityBytes != capacity || decoded.Storage.SATA.FilesystemTotalBytes == nil || *decoded.Storage.SATA.FilesystemTotalBytes != filesystemTotal || decoded.Storage.SATA.UsedBytes == nil || *decoded.Storage.SATA.UsedBytes != used {
 		t.Fatalf("SATA capability was not preserved: %#v", decoded.Storage.SATA)
 	}
 	if decoded.Storage.TF == nil || decoded.Storage.TF.Present != UniFiPresencePresent {
@@ -226,6 +230,11 @@ func TestUniFiStorageMediaCapabilitiesRoundTrip(t *testing.T) {
 	bad.Storage.SATA = &UniFiStorageCapability{Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent, CapacityBytes: &negative}
 	if err := ValidateUniFiStats(&bad); err == nil {
 		t.Fatal("negative storage capacity accepted")
+	}
+	tooMuch := int64(110000000000)
+	bad.Storage.SATA = &UniFiStorageCapability{Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent, FilesystemTotalBytes: &filesystemTotal, UsedBytes: &tooMuch}
+	if err := ValidateUniFiStats(&bad); err == nil {
+		t.Fatal("filesystem usage above total accepted")
 	}
 }
 

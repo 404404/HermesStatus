@@ -525,9 +525,9 @@ def _speedtest_record(item):
             source = child
             break
     timestamp = _timestamp_value(_first(source, "timestamp", "tested_at", "testedAt", "created_at", "createdAt", "time"))
-    result = {}
-    if timestamp:
-        result["timestamp"] = timestamp
+    if not timestamp:
+        return None
+    result = {"timestamp": timestamp}
     for output, keys, minimum in (
         ("latency_ms", ("latency_ms", "latencyMs", "latency", "round_trip_ms", "roundTripMs"), 0),
         ("download_mbps", ("download_mbps", "downloadMbps", "download", "down_mbps"), 0),
@@ -536,9 +536,10 @@ def _speedtest_record(item):
         value = _decimal(_first(source, *keys), minimum=minimum)
         if value is not None:
             result[output] = value
-    if result:
-        result["observed"] = True
-    return result or None
+    if not any(key in result for key in ("latency_ms", "download_mbps", "upload_mbps")):
+        return None
+    result["observed"] = True
+    return result
 
 
 def _latest_speedtest(item):
@@ -659,9 +660,17 @@ def _wan_record(item):
         value = _boolean(_first(source, *keys))
         if value is not None:
             result[output] = value
+    for output, keys, maximum in (
+        ("latency_ms", ("latency_ms", "latencyMs", "latency", "round_trip_ms", "roundTripMs"), None),
+        ("packet_loss_percent", ("packet_loss_percent", "packetLossPercent", "loss_percent", "lossPercent"), 100),
+        ("jitter_ms", ("jitter_ms", "jitterMs", "jitter"), None),
+    ):
+        value = _number(_first(source, *keys), minimum=0)
+        if value is not None and (maximum is None or value <= maximum):
+            result[output] = value
     # Link speed is retained only when an explicit numeric field is present;
     # no conversion from an unqualified bandwidth string is attempted.
-    speed = _number(_first(source, "link_speed_mbps", "linkSpeedMbps", "speed_mbps", "speedMbps"), minimum=0)
+    speed = _number(_first(source, "link_speed_mbps", "linkSpeedMbps"), minimum=0)
     if speed is not None:
         result["link_speed_mbps"] = speed
     speedtest = _latest_speedtest(item)
@@ -749,6 +758,11 @@ def _is_gateway_wan_record(item, record=None):
     if not isinstance(item, dict):
         return False
     flattened = record if isinstance(record, dict) else _wan_record(item) or {}
+    has_speedtest = any(key in item for key in ("speedtest", "speed_test", "latest_speedtest", "latestSpeedtest", "speedtest_history", "speedtestHistory", "speedtest_historical"))
+    identity_keys = ("id", "_id", "wan_id", "wanId", "interface", "interface_name", "interfaceName", "network_group", "networkGroup", "networkgroup", "wan_networkgroup", "wanNetworkgroup", "name")
+    has_explicit_identity = any(_text(source.get(key)) for source in (item, flattened) for key in identity_keys if isinstance(source, dict))
+    if has_speedtest and not has_explicit_identity:
+        return False
     values = []
     for source in (item, flattened):
         for key in ("id", "wan_id", "wanId", "name", "interface", "interface_name", "interfaceName",
@@ -1254,10 +1268,6 @@ def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sampl
     extra_wans.extend((_statistics_wans(payloads.get("device_stats")), _statistics_wans(payloads.get("legacy_stat_health")), _statistics_wans(payloads.get("legacy_stat_sysinfo")), _statistics_wans(payloads.get("legacy_stat_device"))))
     wans, uplinks = _wans_and_uplinks(devices, target_detail, extra_wans)
     ports, port_summary = _ports(payloads.get("legacy_stat_device"), target, previous_samples if previous_samples is not None else {}, sample_time if sample_time is not None else time.monotonic(), target_detail=target_detail, devices=devices) if target is not None and payloads.get("legacy_stat_device") is not None else (None, None)
-    profile_token = _normalized_token(target_profile)
-    if profile_token == "udw":
-        for wan in wans or []:
-            wan.pop("speedtest", None)
     site_model = None
     if isinstance(site, dict):
         site_model = {"integration_id": site.get("id"), "internal_reference": site.get("internal_reference"), "name": site.get("name")}

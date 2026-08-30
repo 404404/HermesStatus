@@ -411,6 +411,9 @@
             },
             "capacity_bytes": {
               "$ref": "#/$defs/nullableCounter"
+            },
+            "filesystem_total_bytes": {
+              "$ref": "#/$defs/nullableCounter"
             }
           },
           "additionalProperties": false
@@ -434,6 +437,9 @@
             },
             "capacity_bytes": {
               "$ref": "#/$defs/nullableCounter"
+            },
+            "filesystem_total_bytes": {
+              "$ref": "#/$defs/nullableCounter"
             }
           },
           "additionalProperties": false
@@ -456,6 +462,9 @@
               "type": "boolean"
             },
             "capacity_bytes": {
+              "$ref": "#/$defs/nullableCounter"
+            },
+            "filesystem_total_bytes": {
               "$ref": "#/$defs/nullableCounter"
             }
           },
