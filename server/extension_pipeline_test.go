@@ -451,7 +451,6 @@ func connectNodeForUpdate(app *App, connectionID uint64) {
 	app.nodeMu.Unlock()
 }
 
-
 func TestUniFiValidationIssuePreservesSafePathAndReason(t *testing.T) {
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(structuredUpdatePayload(t, "update-normal.json", nil), &fields); err != nil {

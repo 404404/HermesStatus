@@ -343,7 +343,6 @@ func TestUniFiPersistenceRestoreAndStatsProjection(t *testing.T) {
 	}
 }
 
-
 func syntheticUniFiAPIPortStats(ports []UniFiAPIPort) UniFiStats {
 	stats := validUniFiFixture("ucg-max")
 	now := "2026-08-27T01:02:03Z"
