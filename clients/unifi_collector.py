@@ -4,8 +4,8 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 
-from unifi_normalizer import normalize
-from unifi_model_catalog import MODEL_DIRECTORY, load_catalog, resolve_model
+from unifi_normalizer import _profile_poe, _profile_power, _storage, normalize
+from unifi_model_catalog import MODEL_DIRECTORY, load_catalog, project_static_capabilities, resolve_model
 from unifi_profile_loader import ProfileError, load_profile
 from unifi_raw_collector import RawCollector
 from unifi_api import UniFiAPICollector, api_disabled
@@ -33,22 +33,12 @@ def not_configured_unifi():
 
 def not_collected_unifi(profile_id):
     result = not_configured_unifi()
-    model = resolve_model(MODEL_CATALOG, MODEL_SKU_BY_PROFILE.get(profile_id), kind="api_model")
+    model = resolve_model(MODEL_CATALOG, MODEL_SKU_BY_PROFILE.get(profile_id), kind="api_model", explicit_sku=True)
+    model = project_static_capabilities(model)
     if model is not None:
-        result["power"] = {
-            "supported": model["power"]["psu_slots"] > 0,
-            "psu_slots": model["power"]["psu_slots"],
-            "max_power_w": model["power"]["max_power_w"],
-        }
-        result["storage"] = {
-            name: {
-                "supported": "supported" if capability["supported"] is True else "unsupported" if capability["supported"] is False else "unknown",
-                "present": "not_present" if capability["present"] == "not_populated" else capability["present"],
-                "observed": False,
-                "capacity_bytes": capability["capacity_bytes"],
-            }
-            for name, capability in model["storage"].items()
-        }
+        result["power"] = _profile_power({"power": {}}, model)
+        result["poe"] = _profile_poe({}, model)
+        result["storage"] = _storage({"storage": {}}, model=model)
     result.update({
         "configured": True, "profile": profile_id,
         "transport": {"status": "not_collected", "last_attempt": None, "last_success": None},
@@ -73,7 +63,8 @@ class UniFiDomainCollector:
         except ProfileError as exc:
             raise ValueError("unknown_profile") from exc
         model_sku = MODEL_SKU_BY_PROFILE.get(config.profile_id)
-        self.model = resolve_model(MODEL_CATALOG, model_sku, kind="api_model")
+        model = resolve_model(MODEL_CATALOG, model_sku, kind="api_model", explicit_sku=True)
+        self.model = project_static_capabilities(model)
         if self.model is None:
             raise ValueError("unknown_model_catalog")
         hwmon_expected_name = self.profile.get("diagnostics", {}).get("hwmon", {}).get("expected_name")

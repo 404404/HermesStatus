@@ -366,21 +366,57 @@
       },
       "additionalProperties": false
     },
+    "powerFieldEvidence": {
+      "type": "object",
+      "required": ["status", "evidence_ids"],
+      "properties": {
+        "status": {"enum": ["verified", "candidate", "unknown", "not_applicable"]},
+        "evidence_ids": {"type": "array", "maxItems": 16, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+        "source_note": {"type": "string", "minLength": 1, "maxLength": 128}
+      },
+      "additionalProperties": false
+    },
+    "powerSourceProfile": {
+      "type": "object",
+      "required": ["id", "status", "selection_mode", "input_method", "input_poe_class", "input_capacity_w", "poe_budget_w", "field_evidence"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 128},
+        "status": {"enum": ["verified", "candidate", "unsupported"]},
+        "selection_mode": {"enum": ["fixed", "auto_detected", "controller_manual"]},
+        "input_method": {"enum": ["ac_mains", "ac_adapter", "dc_adapter", "usb_c", "poe"]},
+        "input_poe_class": {"type": ["string", "null"], "enum": ["poe", "poe+", "poe++", "poe+++", null]},
+        "input_capacity_w": {"type": ["number", "null"], "minimum": 0},
+        "poe_budget_w": {"type": ["number", "null"], "minimum": 0},
+        "field_evidence": {"type": "object", "required": ["selection_mode", "input_method", "input_poe_class", "input_capacity_w", "poe_budget_w"], "properties": {
+          "selection_mode": {"$ref": "#/$defs/powerFieldEvidence"},
+          "input_method": {"$ref": "#/$defs/powerFieldEvidence"},
+          "input_poe_class": {"$ref": "#/$defs/powerFieldEvidence"},
+          "input_capacity_w": {"$ref": "#/$defs/powerFieldEvidence"},
+          "poe_budget_w": {"$ref": "#/$defs/powerFieldEvidence"}
+        }, "additionalProperties": false}
+      },
+      "additionalProperties": false
+    },
     "powerProfile": {
       "type": "object",
-      "required": ["supported", "psu_slots", "max_power_w"],
+      "required": ["supported", "psu_slots", "psu_unit_capacity_w", "controller_reference_capacity_w", "max_device_consumption_w", "absolute_max_poe_budget_w", "power_profiles"],
       "properties": {
         "supported": {"type": "boolean"},
         "psu_slots": {"type": "integer", "minimum": 0, "maximum": 4},
-        "max_power_w": {"type": ["number", "null"], "minimum": 0}
+        "psu_unit_capacity_w": {"type": ["number", "null"], "minimum": 0},
+        "controller_reference_capacity_w": {"type": ["number", "null"], "minimum": 0},
+        "max_device_consumption_w": {"type": ["number", "null"], "minimum": 0},
+        "absolute_max_poe_budget_w": {"type": ["number", "null"], "minimum": 0},
+        "power_profiles": {"type": "array", "maxItems": 16, "items": {"$ref": "#/$defs/powerSourceProfile"}}
       },
       "additionalProperties": false
     },
     "poeProfile": {
       "type": "object",
-      "required": ["supported", "total_max_power_w", "port_max_power_w"],
+      "required": ["supported", "absolute_max_poe_budget_w", "port_max_power_w"],
       "properties": {
         "supported": {"type": "boolean"},
+        "absolute_max_poe_budget_w": {"type": ["number", "null"], "minimum": 0},
         "total_max_power_w": {"type": ["number", "null"], "minimum": 0},
         "port_max_power_w": {"type": "object", "maxProperties": 64, "additionalProperties": {"type": "number", "minimum": 0}}
       },
@@ -925,7 +961,7 @@
         "roles": {"type": "array", "maxItems": 2, "items": {"type": "string", "enum": ["lan", "wan"]}},
         "poe_in": {"type": ["boolean", "null"]},
         "poe_out": {"type": ["boolean", "null"]},
-        "poe_standard": {"type": ["string", "null"], "enum": ["poe", "poe+", "poe++", null]},
+        "poe_standard": {"type": ["string", "null"], "enum": ["poe", "poe+", "poe++", "poe+++", null]},
         "model_id": {"type": ["string", "null"], "maxLength": 128},
         "model_profile_status": {"type": ["string", "null"], "enum": ["known", "unknown", null]},
         "enabled": {"type": ["boolean", "null"]},

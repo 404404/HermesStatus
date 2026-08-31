@@ -526,15 +526,37 @@ func extensionOpenAPISchemas() map[string]any {
 		"temperature_c": map[string]any{"type": []string{"number", "null"}, "minimum": MinTemperatureCelsius, "maximum": MaxTemperatureCelsius},
 		"error":         nullableRef("ExtensionError"),
 	})
-	uniFiPowerProfile := requiredObject([]string{"supported", "psu_slots", "max_power_w"}, map[string]any{
-		"supported":   map[string]any{"type": "boolean"},
-		"psu_slots":   map[string]any{"type": "integer", "minimum": 0, "maximum": MaxUniFiPowerSupplies},
-		"max_power_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+	uniFiPowerFieldEvidence := requiredObject([]string{"status", "evidence_ids"}, map[string]any{
+		"status":       map[string]any{"type": "string", "enum": []string{"verified", "candidate", "unknown", "not_applicable"}},
+		"evidence_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength}, "maxItems": 16},
+		"source_note":  nullableString(MaxUniFiTextLength, "Catalog evidence note"),
 	})
-	uniFiPoEProfile := requiredObject([]string{"supported", "total_max_power_w", "port_max_power_w"}, map[string]any{
-		"supported":         map[string]any{"type": "boolean"},
-		"total_max_power_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
-		"port_max_power_w":  map[string]any{"type": "object", "maxProperties": MaxUniFiPortsPerDevice, "additionalProperties": map[string]any{"type": "number", "minimum": 0}},
+	uniFiPowerSourceProfile := requiredObject([]string{"id", "status", "selection_mode", "input_method", "input_poe_class", "input_capacity_w", "poe_budget_w", "field_evidence"}, map[string]any{
+		"id":               map[string]any{"type": "string", "maxLength": MaxUniFiTextLength},
+		"status":           map[string]any{"type": "string", "enum": []string{"verified", "candidate", "unsupported"}},
+		"selection_mode":   map[string]any{"type": "string", "enum": []string{"fixed", "auto_detected", "controller_manual"}},
+		"input_method":     map[string]any{"type": "string", "enum": []string{"ac_mains", "ac_adapter", "dc_adapter", "usb_c", "poe"}},
+		"input_poe_class":  map[string]any{"type": []string{"string", "null"}, "enum": []any{"poe", "poe+", "poe++", "poe+++", nil}},
+		"input_capacity_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"poe_budget_w":     map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"field_evidence": map[string]any{"type": "object", "required": []string{"selection_mode", "input_method", "input_poe_class", "input_capacity_w", "poe_budget_w"}, "additionalProperties": false, "properties": map[string]any{
+			"selection_mode": uniFiPowerFieldEvidence, "input_method": uniFiPowerFieldEvidence, "input_poe_class": uniFiPowerFieldEvidence, "input_capacity_w": uniFiPowerFieldEvidence, "poe_budget_w": uniFiPowerFieldEvidence,
+		}},
+	})
+	uniFiPowerProfile := requiredObject([]string{"supported", "psu_slots", "psu_unit_capacity_w", "controller_reference_capacity_w", "max_device_consumption_w", "absolute_max_poe_budget_w", "power_profiles"}, map[string]any{
+		"supported":                       map[string]any{"type": "boolean"},
+		"psu_slots":                       map[string]any{"type": "integer", "minimum": 0, "maximum": MaxUniFiPowerSupplies},
+		"psu_unit_capacity_w":             map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"controller_reference_capacity_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"max_device_consumption_w":        map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"absolute_max_poe_budget_w":       map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"power_profiles":                  map[string]any{"type": "array", "maxItems": MaxUniFiPowerProfiles, "items": uniFiPowerSourceProfile},
+	})
+	uniFiPoEProfile := requiredObject([]string{"supported", "absolute_max_poe_budget_w", "port_max_power_w"}, map[string]any{
+		"supported":                 map[string]any{"type": "boolean"},
+		"absolute_max_poe_budget_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"total_max_power_w":         map[string]any{"type": []string{"number", "null"}, "minimum": 0},
+		"port_max_power_w":          map[string]any{"type": "object", "maxProperties": MaxUniFiPortsPerDevice, "additionalProperties": map[string]any{"type": "number", "minimum": 0}},
 	})
 	uniFiMemory := requiredObject([]string{"total_bytes", "available_bytes", "free_bytes", "buffers_bytes", "cached_bytes", "swap_total_bytes", "swap_free_bytes", "used_bytes", "used_percent", "available_source"}, map[string]any{
 		"total_bytes": nullableInteger(MaxSafeInteger, "Total memory bytes"), "available_bytes": nullableInteger(MaxSafeInteger, "Available memory bytes"), "free_bytes": nullableInteger(MaxSafeInteger, "Free memory bytes"),
@@ -604,7 +626,7 @@ func extensionOpenAPISchemas() map[string]any {
 	}, "additionalProperties": false}
 	uniFiAPIPort := requiredObject([]string{"device_id", "port_idx"}, map[string]any{
 		"device_id": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength}, "port_idx": map[string]any{"type": "integer", "minimum": 1, "maximum": 65535},
-		"name": nullableString(MaxUniFiTextLength, "Port name"), "media": nullableString(MaxUniFiTextLength, "Port media"), "connector": map[string]any{"type": []string{"string", "null"}, "enum": []any{"rj45", "sfp", "sfp_plus", "sfp28", "other", nil}}, "roles": map[string]any{"type": "array", "maxItems": 2, "items": map[string]any{"type": "string", "enum": []string{"lan", "wan"}}}, "poe_in": map[string]any{"type": []string{"boolean", "null"}}, "poe_out": map[string]any{"type": []string{"boolean", "null"}}, "poe_standard": map[string]any{"type": []string{"string", "null"}, "enum": []any{"poe", "poe+", "poe++", nil}}, "model_id": nullableString(MaxUniFiTextLength, "Canonical hardware model"), "model_profile_status": map[string]any{"type": []string{"string", "null"}, "enum": []any{"known", "unknown", nil}},
+		"name": nullableString(MaxUniFiTextLength, "Port name"), "media": nullableString(MaxUniFiTextLength, "Port media"), "connector": map[string]any{"type": []string{"string", "null"}, "enum": []any{"rj45", "sfp", "sfp_plus", "sfp28", "other", nil}}, "roles": map[string]any{"type": "array", "maxItems": 2, "items": map[string]any{"type": "string", "enum": []string{"lan", "wan"}}}, "poe_in": map[string]any{"type": []string{"boolean", "null"}}, "poe_out": map[string]any{"type": []string{"boolean", "null"}}, "poe_standard": map[string]any{"type": []string{"string", "null"}, "enum": []any{"poe", "poe+", "poe++", "poe+++", nil}}, "model_id": nullableString(MaxUniFiTextLength, "Canonical hardware model"), "model_profile_status": map[string]any{"type": []string{"string", "null"}, "enum": []any{"known", "unknown", nil}},
 		"enabled": map[string]any{"type": []string{"boolean", "null"}}, "up": map[string]any{"type": []string{"boolean", "null"}}, "uplink": map[string]any{"type": []string{"boolean", "null"}}, "duplex": map[string]any{"type": []string{"boolean", "null"}}, "autoneg": map[string]any{"type": []string{"boolean", "null"}},
 		"speed_mbps": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "max_speed_mbps": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
 		"rx_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "rx_packets": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_packets": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},

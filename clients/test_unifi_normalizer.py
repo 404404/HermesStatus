@@ -138,6 +138,20 @@ class NormalizerTests(unittest.TestCase):
         profile["storage"]["sata_ssd"]["supported"] = False
         profile["storage"]["sata_ssd"]["present"] = "not_populated"
         result = normalize(profile, fixture("udw-raw.json"), model=self.models["UDW"])
-        self.assertEqual(result["power"], {"supported": True, "psu_slots": 2, "max_power_w": 550})
+        self.assertTrue(result["power"]["supported"])
+        self.assertEqual(result["power"]["psu_slots"], 2)
+        self.assertEqual(result["power"]["psu_unit_capacity_w"], 550)
+        self.assertEqual(result["power"]["controller_reference_capacity_w"], 550)
+        self.assertEqual(result["power"]["max_device_consumption_w"], 532)
+        self.assertEqual(result["power"]["absolute_max_poe_budget_w"], 420)
         self.assertEqual(result["storage"]["sata_ssd"]["supported"], "supported")
         self.assertEqual(result["storage"]["sata_ssd"]["present"], "present")
+
+    def test_complete_catalog_storage_enumeration_marks_absent_media_unsupported(self):
+        result = normalize(load_profile(self.profiles, "ucg-max"), fixture("ucg-max-raw.json"), model=self.models["UCG-Max"])
+        self.assertEqual(result["storage"]["nvme"]["supported"], "supported")
+        self.assertEqual(result["storage"]["nvme"]["present"], "not_present")
+        self.assertEqual(result["storage"]["sata_ssd"]["supported"], "unsupported")
+        self.assertEqual(result["storage"]["sata_ssd"]["present"], "not_present")
+        self.assertEqual(result["storage"]["tf"]["supported"], "unsupported")
+        self.assertEqual(result["storage"]["tf"]["present"], "not_present")

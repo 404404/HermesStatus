@@ -16,10 +16,13 @@ func validUniFiFixture(profile string) UniFiStats {
 	now := "2026-08-27T01:02:03Z"
 	powerSupported := profile == "udw"
 	powerSlots := 0
-	var maxPower *float64
+	var psuUnitCapacity, controllerReference, maxDeviceConsumption, absoluteMaxPoE *float64
 	if powerSupported {
 		powerSlots = 2
-		maxPower = unifiFloat(550)
+		psuUnitCapacity = unifiFloat(550)
+		controllerReference = unifiFloat(550)
+		maxDeviceConsumption = unifiFloat(532)
+		absoluteMaxPoE = unifiFloat(420)
 	}
 	return UniFiStats{
 		Configured: true, Profile: unifiString(profile),
@@ -30,8 +33,8 @@ func validUniFiFixture(profile string) UniFiStats {
 			LoadAverage: &UniFiLoadAverage{OneMinute: unifiFloat(0.1), FiveMinutes: unifiFloat(0.2), FifteenMinutes: unifiFloat(0.3)},
 		},
 		Fans:          []UniFiFanStats{{ID: "fan1", Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent, Observed: true, RPM: unifiInt(0), State: UniFiObservationObservedZeroRPM}},
-		Power:         &UniFiPowerProfile{Supported: powerSupported, PSUSlots: powerSlots, MaxPowerW: maxPower},
-		PoE:           &UniFiPoEProfile{Supported: powerSupported, PortMaxPowerW: map[string]float64{}},
+		Power:         &UniFiPowerProfile{Supported: powerSupported, PSUSlots: powerSlots, PSUUnitCapacityW: psuUnitCapacity, ControllerReferenceCapacityW: controllerReference, MaxDeviceConsumptionW: maxDeviceConsumption, AbsoluteMaxPoEBudgetW: absoluteMaxPoE, PowerProfiles: []UniFiPowerSourceProfile{}},
+		PoE:           &UniFiPoEProfile{Supported: powerSupported, AbsoluteMaxPoEBudgetW: absoluteMaxPoE, PortMaxPowerW: map[string]float64{}},
 		PowerSupplies: make([]UniFiPowerStats, 0),
 		Storage:       UniFiStorageStats{NVMe: UniFiStorageCapability{Supported: UniFiCapabilityUnknown, Present: UniFiPresenceUnknown, Observed: false}},
 		Diagnostics:   UniFiDiagnostics{CollectionStatus: "not_collected", Ignored: make([]UniFiIgnoredObservation, 0)},

@@ -46,9 +46,14 @@ class UniFiContractTests(unittest.TestCase):
         self.assertTrue(pending["configured"])
         self.assertEqual(pending["transport"]["status"], "not_collected")
         self.assertTrue(pending["stale"])
-        self.assertEqual(pending["power"], {"supported": True, "psu_slots": 2, "max_power_w": 550})
+        self.assertTrue(pending["power"]["supported"])
+        self.assertEqual(pending["power"]["psu_slots"], 2)
+        self.assertEqual(pending["power"]["psu_unit_capacity_w"], 550)
+        self.assertEqual(pending["power"]["controller_reference_capacity_w"], 550)
+        self.assertEqual(pending["power"]["max_device_consumption_w"], 532)
+        self.assertEqual(pending["power"]["absolute_max_poe_budget_w"], 420)
         self.assertEqual(pending["storage"]["sata_ssd"]["supported"], "supported")
-        self.assertEqual(pending["storage"]["tf"]["present"], "not_present")
+        self.assertEqual(pending["storage"]["tf"]["present"], "present")
 
     def test_cpu_delta_invalid_cases_are_null_not_zero(self):
         first = normalize(self.ucg, fixture("ucg-max-raw.json"))

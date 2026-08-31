@@ -1,4 +1,9 @@
+import copy
+import hashlib
+import json
 import random
+import shutil
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -7,7 +12,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from unifi_api import MAX_UNIFI_PORTS_PER_DEVICE, MAX_UNIFI_SITE_PORT_OBSERVATIONS, _ports
-from unifi_model_catalog import load_catalog, resolve_model
+from unifi_model_catalog import ModelCatalogError, load_catalog, project_static_capabilities, resolve_model
 
 
 class UniFiPortContractTests(unittest.TestCase):
@@ -67,23 +72,109 @@ class UniFiPortContractTests(unittest.TestCase):
 
 
 class UniFiModelCatalogTests(unittest.TestCase):
-    def test_catalog_has_exact_verified_models_and_no_fuzzy_resolution(self):
+    def test_frozen_bundle_has_20_models_and_no_fuzzy_resolution(self):
         catalog = load_catalog()
-        for sku in ("UDW", "UCG-Max", "U6-Mesh", "USW-Flex-Mini", "USW-Pro-HD-24"):
+        self.assertEqual(len(catalog), 20)
+        for sku in ("UDW", "UCG-Max", "USW-Pro-HD-24", "USW-Pro-HD-24-PoE",
+                    "USW-Pro-Max-16", "USW-Pro-Max-16-PoE",
+                    "USW-Pro-Max-24", "USW-Pro-Max-24-PoE",
+                    "USW-Flex-2.5G-8", "USW-Flex-2.5G-8-PoE"):
             self.assertIn(sku, catalog)
-        self.assertEqual(resolve_model(catalog, "UCG Max")["canonical_sku"], "UCG-Max")
-        self.assertEqual(resolve_model(catalog, "U6 Mesh")["canonical_sku"], "U6-Mesh")
-        self.assertIsNone(resolve_model(catalog, "U6 Mesh Wireless"))
-        self.assertEqual(len(catalog["USW-Flex-Mini"]["ports"]), 5)
-        self.assertEqual(len(catalog["U6-Mesh"]["ports"]), 1)
-        self.assertEqual(len(catalog["USW-Pro-HD-24"]["ports"]), 28)
-        self.assertEqual(catalog["UDW"]["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
-        self.assertTrue(catalog["UDW"]["storage"]["tf"]["supported"])
-        self.assertEqual(catalog["UDW"]["storage"]["tf"]["present"], "not_populated")
-        self.assertFalse(catalog["UDW"]["storage"]["nvme"]["supported"])
-        self.assertEqual(catalog["UDW"]["power"], {"psu_slots": 2, "max_power_w": 550})
-        self.assertEqual(catalog["UDW"]["ports"][0]["poe_max_power_w"], 15.4)
-        self.assertEqual(catalog["UDW"]["ports"][8]["poe_standard"], "poe++")
+        self.assertIsNone(resolve_model(catalog, "UCG Max"))
+        self.assertIsNone(resolve_model(catalog, "UCG-Max"))
+        self.assertIsNone(resolve_model(catalog, "Cloud Gateway Max"))
+        self.assertIsNone(resolve_model(catalog, "UCG-Max", kind="not-an-identifier"))
+        self.assertEqual(resolve_model(catalog, "UCG-Max", explicit_sku=True)["canonical_sku"], "UCG-Max")
+
+    def test_static_projection_preserves_bundle_shape_without_runtime_aliases(self):
+        catalog = load_catalog()
+        projection = project_static_capabilities(catalog["UDW"])
+        self.assertEqual(projection["canonical_sku"], "UDW")
+        self.assertEqual(projection["processor"]["model"], "Annapurna AL324")
+        self.assertEqual(projection["power"]["psu_unit_capacity_w"], 550)
+        self.assertEqual(projection["power"]["controller_reference_capacity_w"], 550)
+        self.assertEqual(projection["power"]["max_device_consumption_w"], 532)
+        self.assertEqual(projection["power"]["absolute_max_poe_budget_w"], 420)
+        self.assertEqual(len(projection["ports"]["items"]), 20)
+        self.assertEqual(projection["storage"]["items"][0]["type"], "emmc")
+        self.assertNotIn("runtime_identifiers", projection)
+        projection["ports"]["items"][0]["label"] = "changed"
+        self.assertNotEqual(catalog["UDW"]["ports"]["items"][0]["label"], "changed")
+
+    def test_power_projection_keeps_profiles_and_unknown_budgets(self):
+        catalog = load_catalog()
+        flex = project_static_capabilities(catalog["USW-Flex-2.5G-8-PoE"])
+        profiles = {item["id"]: item for item in flex["power"]["power_profiles"]}
+        self.assertEqual(profiles["dc-60w"]["status"], "verified")
+        self.assertEqual(profiles["dc-60w"]["selection_mode"], "controller_manual")
+        self.assertEqual(profiles["dc-60w"]["input_method"], "dc_adapter")
+        self.assertEqual(profiles["dc-60w"]["input_capacity_w"], 60)
+        self.assertIsNone(profiles["dc-60w"]["poe_budget_w"])
+        self.assertGreaterEqual(flex["power"]["absolute_max_poe_budget_w"], max(
+            item["poe_budget_w"] for item in profiles.values() if item["poe_budget_w"] is not None
+        ))
+        non_poe = project_static_capabilities(catalog["USW-Pro-Max-16"])
+        self.assertEqual(non_poe["power"]["absolute_max_poe_budget_w"], 0)
+        self.assertFalse(any(port["poe_out"] is True for port in non_poe["ports"]["items"]))
+
+    def test_candidate_alias_is_not_a_production_resolution(self):
+        catalog = load_catalog()
+        candidate = copy.deepcopy(catalog["UCG-Max"])
+        candidate["runtime_identifiers"]["api_model"] = [{
+            "value": "candidate-api-model", "status": "candidate",
+            "provenance": "qualified_controller", "evidence_id": "fixture-candidate"
+        }]
+        synthetic = dict(catalog)
+        synthetic[candidate["canonical_sku"]] = candidate
+        self.assertIsNone(resolve_model(synthetic, "candidate-api-model"))
+        verified = copy.deepcopy(candidate)
+        verified["runtime_identifiers"]["api_model"][0]["status"] = "verified"
+        synthetic[verified["canonical_sku"]] = verified
+        self.assertEqual(resolve_model(synthetic, "candidate-api-model")["canonical_sku"], "UCG-Max")
+        self.assertIsNone(resolve_model(synthetic, "candidate-api-model", kind="sysid"))
+
+    def test_loader_rejects_duplicate_verified_alias_and_unexpected_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            shutil.copyfile(ROOT / "unifi_catalog" / "catalog.json", source / "catalog.json")
+            bundle = json.loads((source / "catalog.json").read_text(encoding="utf-8"))
+            alias = {
+                "value": "same-qualified-api",
+                "status": "verified",
+                "provenance": "qualified_controller",
+                "evidence_id": "runtime-test",
+            }
+            for model in bundle["models"][:2]:
+                model["runtime_identifiers"]["api_model"] = [copy.deepcopy(alias)]
+            raw = json.dumps(bundle, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            (source / "catalog.json").write_bytes(raw)
+            (source / "catalog.sha256").write_text(hashlib.sha256(raw).hexdigest() + "  catalog.json\n", encoding="ascii")
+            with self.assertRaisesRegex(ModelCatalogError, "duplicate verified runtime alias ownership"):
+                load_catalog(source)
+
+            bundle = json.loads((ROOT / "unifi_catalog" / "catalog.json").read_text(encoding="utf-8"))
+            bundle["models"][0]["unexpected"] = True
+            raw = json.dumps(bundle, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            (source / "catalog.json").write_bytes(raw)
+            (source / "catalog.sha256").write_text(hashlib.sha256(raw).hexdigest() + "  catalog.json\n", encoding="ascii")
+            with self.assertRaisesRegex(ModelCatalogError, "invalid model"):
+                load_catalog(source)
+
+    def test_schema_version_and_checksum_are_compatibility_gates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            shutil.copyfile(ROOT / "unifi_catalog" / "catalog.json", source / "catalog.json")
+            shutil.copyfile(ROOT / "unifi_catalog" / "catalog.sha256", source / "catalog.sha256")
+            bundle = json.loads((source / "catalog.json").read_text(encoding="utf-8"))
+            bundle["schema_version"] = 2
+            raw = json.dumps(bundle, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            (source / "catalog.json").write_bytes(raw)
+            (source / "catalog.sha256").write_text(hashlib.sha256(raw).hexdigest() + "  catalog.json\n", encoding="ascii")
+            with self.assertRaisesRegex(ModelCatalogError, "unsupported catalog schema_version"):
+                load_catalog(source)
+            (source / "catalog.sha256").write_text("0" * 64 + "  catalog.json\n", encoding="ascii")
+            with self.assertRaisesRegex(ModelCatalogError, "checksum mismatch"):
+                load_catalog(source)
 
 
 if __name__ == "__main__":

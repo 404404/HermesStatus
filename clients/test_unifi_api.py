@@ -199,11 +199,14 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(telemetry["devices"]["total"], 3)
         self.assertEqual(telemetry["clients"], {"total": 2, "wired": 1, "wireless": 1, "observed": True})
         self.assertEqual(telemetry["networks"], {"total": 2, "vlan": 1})
-        self.assertEqual(len(telemetry["ports"]), 20)
+        # The frozen V1 bundle has no verified API aliases yet. The API
+        # model string therefore remains a runtime observation and cannot
+        # unlock static catalog ports.
+        self.assertEqual(len(telemetry["ports"]), 1)
         self.assertEqual(telemetry["ports"][0]["port_idx"], 1)
-        self.assertEqual(telemetry["ports"][0]["max_speed_mbps"], 1000)
-        self.assertEqual(telemetry["ports"][0]["model_id"], "UDW")
-        self.assertEqual(telemetry["ports"][0]["connector"], "rj45")
+        self.assertNotIn("max_speed_mbps", telemetry["ports"][0])
+        self.assertNotIn("model_id", telemetry["ports"][0])
+        self.assertNotIn("connector", telemetry["ports"][0])
         self.assertEqual(telemetry["ports"][0]["rx_bytes"], 1000)
         self.assertNotIn("rx_bps", telemetry["ports"][0])
         self.assertEqual(telemetry["port_summary"]["up"], 1)
@@ -447,7 +450,56 @@ class UniFiAPITests(unittest.TestCase):
             {"device_id": "udw-1", "port_table": [{"port_idx": 1, "up": True}]},
         ]}
         records, _ = _ports(legacy, devices[2], {}, 1.0, devices=devices)
-        self.assertEqual([(item["device_id"], item["port_idx"]) for item in records], [("switch-1", 8)] + [("udw-1", index) for index in range(1, 21)])
+        self.assertEqual([(item["device_id"], item["port_idx"]) for item in records], [("switch-1", 8), ("udw-1", 1)])
+        self.assertEqual(records[0]["device_id"], "switch-1")
+        self.assertEqual(records[1]["device_id"], "udw-1")
+
+    def test_verified_catalog_ports_join_by_device_id_and_physical_index(self):
+        import copy
+        from unifi_api import MODEL_CATALOG, _ports
+        from unifi_model_catalog import load_catalog
+        model = copy.deepcopy(load_catalog()["UDW"])
+        model["runtime_identifiers"]["api_model"] = [{
+            "value": "qualified-udw-api", "status": "verified",
+            "provenance": "qualified_controller", "evidence_id": "synthetic-qualified"
+        }]
+        catalog = dict(MODEL_CATALOG)
+        catalog["UDW"] = model
+        devices = [
+            {"id": "device-b", "model": "qualified-udw-api", "name": "B", "state": "ONLINE"},
+            {"id": "device-a", "model": "qualified-udw-api", "name": "A", "state": "ONLINE"},
+        ]
+        legacy = {"data": [
+            {"device_id": "device-b", "port_table": [{"port_idx": 20, "up": True}]},
+            {"device_id": "device-a", "port_table": [{"port_idx": 1, "up": True}]},
+        ]}
+        with patch("unifi_api.MODEL_CATALOG", catalog):
+            records, _ = _ports(legacy, devices[0], {}, 1.0, devices=devices)
+        self.assertEqual(
+            [(item["device_id"], item["port_idx"]) for item in records],
+            [(device_id, index) for device_id in ("device-a", "device-b") for index in range(1, 21)],
+        )
+        a_port = next(item for item in records if item["device_id"] == "device-a" and item["port_idx"] == 1)
+        b_port = next(item for item in records if item["device_id"] == "device-b" and item["port_idx"] == 20)
+        self.assertEqual(a_port["name"], "RJ45-1")
+        self.assertEqual(b_port["name"], "SFP+-2")
+        self.assertEqual(a_port["model_id"], "UDW")
+        self.assertEqual(b_port["model_id"], "UDW")
+        self.assertEqual(a_port["device_id"], "device-a")
+        self.assertEqual(b_port["device_id"], "device-b")
+
+        duplicate = {"data": [{
+            "device_id": "device-a",
+            "port_table": [
+                {"port_idx": 1, "up": True, "speed": 1000},
+                {"port_idx": 1, "up": False, "speed": 100},
+            ],
+        }]}
+        with patch("unifi_api.MODEL_CATALOG", catalog):
+            duplicate_records, _ = _ports(duplicate, devices[0], {}, 1.0, devices=devices)
+        matching = [item for item in duplicate_records if item["device_id"] == "device-a" and item["port_idx"] == 1]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]["speed_mbps"], 100)
 
     def test_target_resolution_does_not_depend_on_device_order(self):
         calls = []
