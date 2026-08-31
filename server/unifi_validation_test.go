@@ -14,6 +14,13 @@ func unifiFloat(value float64) *float64 { return &value }
 
 func validUniFiFixture(profile string) UniFiStats {
 	now := "2026-08-27T01:02:03Z"
+	powerSupported := profile == "udw"
+	powerSlots := 0
+	var maxPower *float64
+	if powerSupported {
+		powerSlots = 2
+		maxPower = unifiFloat(550)
+	}
 	return UniFiStats{
 		Configured: true, Profile: unifiString(profile),
 		Transport: UniFiTransportStats{Status: UniFiTransportAvailable, LastAttempt: &now, LastSuccess: &now},
@@ -22,7 +29,9 @@ func validUniFiFixture(profile string) UniFiStats {
 			Memory:      &UniFiMemoryStats{TotalBytes: unifiInt64(4096), AvailableBytes: unifiInt64(1024), FreeBytes: unifiInt64(512), BuffersBytes: unifiInt64(128), CachedBytes: unifiInt64(384), SwapTotalBytes: unifiInt64(0), SwapFreeBytes: unifiInt64(0), UsedBytes: unifiInt64(3072), UsedPercent: unifiFloat(75), AvailableSource: "mem_available"},
 			LoadAverage: &UniFiLoadAverage{OneMinute: unifiFloat(0.1), FiveMinutes: unifiFloat(0.2), FifteenMinutes: unifiFloat(0.3)},
 		},
-		Fans:          []UniFiFanStats{{ID: "fan1", Supported: UniFiCapabilitySupported, Present: UniFiPresenceUnknown, Observed: true, RPM: unifiInt(0), State: UniFiObservationObservedZeroRPM}},
+		Fans:          []UniFiFanStats{{ID: "fan1", Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent, Observed: true, RPM: unifiInt(0), State: UniFiObservationObservedZeroRPM}},
+		Power:         &UniFiPowerProfile{Supported: powerSupported, PSUSlots: powerSlots, MaxPowerW: maxPower},
+		PoE:           &UniFiPoEProfile{Supported: powerSupported, PortMaxPowerW: map[string]float64{}},
 		PowerSupplies: make([]UniFiPowerStats, 0),
 		Storage:       UniFiStorageStats{NVMe: UniFiStorageCapability{Supported: UniFiCapabilityUnknown, Present: UniFiPresenceUnknown, Observed: false}},
 		Diagnostics:   UniFiDiagnostics{CollectionStatus: "not_collected", Ignored: make([]UniFiIgnoredObservation, 0)},
@@ -45,7 +54,8 @@ func TestUniFiValidationDisabledAndProfiles(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s valid fixture rejected: %v", profile, err)
 		}
-		if decoded.Profile == nil || *decoded.Profile != profile || decoded.Fans[0].RPM == nil || *decoded.Fans[0].RPM != 0 || decoded.Fans[0].Present != UniFiPresenceUnknown {
+		expectedPower := profile == "udw"
+		if decoded.Profile == nil || *decoded.Profile != profile || decoded.Fans[0].RPM == nil || *decoded.Fans[0].RPM != 0 || decoded.Fans[0].Present != UniFiPresencePresent || decoded.Power == nil || decoded.Power.Supported != expectedPower || decoded.PoE == nil || decoded.PoE.Supported != expectedPower {
 			t.Fatalf("%s profile projection changed: %#v", profile, decoded)
 		}
 	}
@@ -114,7 +124,7 @@ func TestUniFiAPITelemetryProjectionAndPartialFailure(t *testing.T) {
 			Identity:     &UniFiAPIIdentity{Model: unifiString("UDW"), DisplayName: unifiString("Gateway"), Firmware: unifiString("5.0.1"), Status: unifiString("online"), UptimeSeconds: unifiFloat(1234)},
 			Controller:   &UniFiAPIController{ApplicationVersion: unifiString("9.1.2"), Build: unifiString("build-1"), UpdateAvailable: func() *bool { value := false; return &value }(), State: unifiString("healthy")},
 			WANs:         []UniFiAPIWAN{{ID: unifiString("wan1"), NetworkGroup: unifiString("wan"), Role: unifiString("active"), ASN: unifiString("64500"), Name: unifiString("WAN1"), Interface: unifiString("eth0"), ISP: unifiString("Example ISP"), LinkState: unifiString("up"), Online: func() *bool { value := true; return &value }(), Speedtest: &UniFiAPISpeedtest{Observed: true, Timestamp: unifiString(now), LatencyMs: unifiFloat(2.5), DownloadMbps: unifiFloat(900), UploadMbps: unifiFloat(100)}, RxBPS: unifiInt64(0), TxBPS: unifiInt64(123)}},
-			Uplinks:      []UniFiAPIUplink{{Name: unifiString("eth0"), LinkState: unifiString("up"), SpeedMbps: unifiFloat(1000)}},
+			Uplinks:      []UniFiAPIUplink{{Name: unifiString("eth0"), LinkState: unifiString("up"), SpeedMbps: unifiFloat(1000), DeviceID: unifiString("udw-1"), ManagementIP: unifiString("192.168.1.1"), Model: unifiString("UDW"), DeviceType: unifiString("gateway"), Online: func() *bool { value := true; return &value }()}},
 			Temperatures: []UniFiAPITemperature{{ID: "cpu", Label: "CPU", Celsius: 64.5, Source: "unifi-api"}},
 			Clients:      &UniFiAPIClientSummary{Total: 2, Wired: unifiInt(1), Wireless: unifiInt(1), Observed: true},
 			Devices:      &UniFiAPIDeviceSummary{Total: 2, Online: 2, Offline: 0, ByType: map[string]int{"gateway": 1, "switch": 1}},
@@ -132,7 +142,7 @@ func TestUniFiAPITelemetryProjectionAndPartialFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("API telemetry round trip rejected: %v", err)
 	}
-	if decoded.API == nil || decoded.API.Telemetry == nil || decoded.API.Telemetry.Site == nil || decoded.API.Telemetry.WANs[0].Speedtest == nil || *decoded.API.Telemetry.WANs[0].Speedtest.DownloadMbps != 900 {
+	if decoded.API == nil || decoded.API.Telemetry == nil || decoded.API.Telemetry.Site == nil || decoded.API.Telemetry.WANs[0].Speedtest == nil || *decoded.API.Telemetry.WANs[0].Speedtest.DownloadMbps != 900 || decoded.API.Telemetry.Uplinks[0].DeviceID == nil || *decoded.API.Telemetry.Uplinks[0].DeviceID != "udw-1" {
 		t.Fatalf("API telemetry was not preserved: %#v", decoded.API)
 	}
 
@@ -189,9 +199,13 @@ func TestUniFiAPIPortTelemetryRoundTripAndNoRawTable(t *testing.T) {
 func TestUniFiStorageMediaCapabilitiesRoundTrip(t *testing.T) {
 	stats := validUniFiFixture("udw")
 	capacity := int64(128000000000)
+	filesystemTotal := int64(109000000000)
+	used := int64(106000000000)
+	available := int64(3000000000)
 	stats.Storage.SATA = &UniFiStorageCapability{
 		Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent,
-		Observed: false, CapacityBytes: &capacity,
+		Observed: true, CapacityBytes: &capacity, FilesystemTotalBytes: &filesystemTotal,
+		UsedBytes: &used, AvailableBytes: &available, UsagePercent: unifiFloat(97.25),
 	}
 	stats.Storage.TF = &UniFiStorageCapability{
 		Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent,
@@ -205,7 +219,7 @@ func TestUniFiStorageMediaCapabilitiesRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("storage capability payload rejected: %v", err)
 	}
-	if decoded.Storage.SATA == nil || decoded.Storage.SATA.CapacityBytes == nil || *decoded.Storage.SATA.CapacityBytes != capacity {
+	if decoded.Storage.SATA == nil || decoded.Storage.SATA.CapacityBytes == nil || *decoded.Storage.SATA.CapacityBytes != capacity || decoded.Storage.SATA.FilesystemTotalBytes == nil || *decoded.Storage.SATA.FilesystemTotalBytes != filesystemTotal || decoded.Storage.SATA.UsedBytes == nil || *decoded.Storage.SATA.UsedBytes != used {
 		t.Fatalf("SATA capability was not preserved: %#v", decoded.Storage.SATA)
 	}
 	if decoded.Storage.TF == nil || decoded.Storage.TF.Present != UniFiPresencePresent {
@@ -216,6 +230,11 @@ func TestUniFiStorageMediaCapabilitiesRoundTrip(t *testing.T) {
 	bad.Storage.SATA = &UniFiStorageCapability{Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent, CapacityBytes: &negative}
 	if err := ValidateUniFiStats(&bad); err == nil {
 		t.Fatal("negative storage capacity accepted")
+	}
+	tooMuch := int64(110000000000)
+	bad.Storage.SATA = &UniFiStorageCapability{Supported: UniFiCapabilitySupported, Present: UniFiPresencePresent, FilesystemTotalBytes: &filesystemTotal, UsedBytes: &tooMuch}
+	if err := ValidateUniFiStats(&bad); err == nil {
+		t.Fatal("filesystem usage above total accepted")
 	}
 }
 
@@ -330,5 +349,70 @@ func TestUniFiPersistenceRestoreAndStatsProjection(t *testing.T) {
 	server := app.SnapshotStats()["servers"].([]any)[0].(map[string]any)
 	if _, ok := server["unifi"].(*UniFiStats); !ok {
 		t.Fatalf("stats omitted UniFi projection: %#v", server)
+	}
+}
+
+func syntheticUniFiAPIPortStats(ports []UniFiAPIPort) UniFiStats {
+	stats := validUniFiFixture("ucg-max")
+	now := "2026-08-27T01:02:03Z"
+	stats.API = &UniFiAPIStats{
+		Enabled: true, Status: "available", LastAttempt: &now, LastSuccess: &now,
+		Telemetry: &UniFiAPITelemetry{Ports: ports, WANs: []UniFiAPIWAN{}, Uplinks: []UniFiAPIUplink{}, Temperatures: []UniFiAPITemperature{}},
+	}
+	return stats
+}
+
+func syntheticUniFiPorts(count int) []UniFiAPIPort {
+	ports := make([]UniFiAPIPort, count)
+	for index := range ports {
+		ports[index] = UniFiAPIPort{DeviceID: "device-" + string(rune('a'+index/64)), PortIndex: index%64 + 1}
+	}
+	return ports
+}
+
+func TestUniFiSitePortObservationLimitAndUniqueJoinKey(t *testing.T) {
+	for _, count := range []int{64, 65, 97, MaxUniFiSitePortObservations} {
+		stats := syntheticUniFiAPIPortStats(syntheticUniFiPorts(count))
+		if err := ValidateUniFiStats(&stats); err != nil {
+			t.Fatalf("port count %d rejected: %v", count, err)
+		}
+	}
+
+	over := syntheticUniFiAPIPortStats(syntheticUniFiPorts(MaxUniFiSitePortObservations + 1))
+	assertValidationError(t, ValidateUniFiStats(&over), validationCodeInvalidValue)
+
+	duplicate := syntheticUniFiAPIPortStats([]UniFiAPIPort{
+		{DeviceID: "device-a", PortIndex: 1},
+		{DeviceID: "device-a", PortIndex: 1},
+	})
+	duplicateErr := ValidateUniFiStats(&duplicate)
+	assertValidationError(t, duplicateErr, validationCodeInvalidValue)
+	duplicateValidation, ok := duplicateErr.(*ExtensionValidationError)
+	if !ok || duplicateValidation.Field != "unifi.api.telemetry.ports" || duplicateValidation.Message != "contains duplicate device_id and port_idx" {
+		t.Fatalf("duplicate port key diagnostics changed: %#v", duplicateErr)
+	}
+
+	invalidIndex := syntheticUniFiAPIPortStats([]UniFiAPIPort{{DeviceID: "device-a", PortIndex: 0}})
+	invalidIndexErr := ValidateUniFiStats(&invalidIndex)
+	assertValidationError(t, invalidIndexErr, validationCodeInvalidValue)
+	invalidIndexValidation, ok := invalidIndexErr.(*ExtensionValidationError)
+	if !ok || invalidIndexValidation.Field != "unifi.api.telemetry.ports[0].port_idx" {
+		t.Fatalf("invalid port index field changed: %#v", invalidIndexErr)
+	}
+
+	malformedID := syntheticUniFiAPIPortStats([]UniFiAPIPort{{DeviceID: "", PortIndex: 1}})
+	malformedIDErr := ValidateUniFiStats(&malformedID)
+	assertValidationError(t, malformedIDErr, validationCodeInvalidValue)
+	malformedIDValidation, ok := malformedIDErr.(*ExtensionValidationError)
+	if !ok || malformedIDValidation.Field != "unifi.api.telemetry.ports[0].device_id" {
+		t.Fatalf("malformed device id field changed: %#v", malformedIDErr)
+	}
+
+	raw, err := json.Marshal(syntheticUniFiAPIPortStats(syntheticUniFiPorts(97)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeUniFiStatsJSON(raw); err != nil {
+		t.Fatalf("97-port strict JSON fixture rejected: %v", err)
 	}
 }

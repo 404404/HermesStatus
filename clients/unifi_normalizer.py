@@ -201,7 +201,7 @@ def _fans(profile, raw_fans, hardware_cache=None):
             rpm = None
         output.append({
             "id": fan_id,
-            "supported": "supported" if capability["supported"] else "unsupported",
+            "supported": "supported" if capability["supported"] is True else "unsupported" if capability["supported"] is False else "unknown",
             "present": present,
             "observed": rpm is not None,
             "rpm": rpm,
@@ -211,8 +211,28 @@ def _fans(profile, raw_fans, hardware_cache=None):
     return output, ignored
 
 
-def _power(profile, hardware_cache=None):
-    slots = profile["power"]["psu_slots"]
+def _profile_power(profile, model=None):
+    config = model.get("power") if isinstance(model, dict) else profile["power"]
+    slots = config["psu_slots"]
+    return {
+        "supported": slots > 0,
+        "psu_slots": slots,
+        "max_power_w": config.get("max_power_w"),
+    }
+
+
+def _profile_poe(profile):
+    config = profile.get("poe") if isinstance(profile.get("poe"), dict) else {}
+    limits = config.get("port_max_power_w")
+    return {
+        "supported": config.get("supported") is True,
+        "total_max_power_w": config.get("total_max_power_w"),
+        "port_max_power_w": dict(limits) if isinstance(limits, dict) else {},
+    }
+
+
+def _power(profile, hardware_cache=None, model=None):
+    slots = _profile_power(profile, model)["psu_slots"]
     presence = profile["power"]["presence"]
     # `dynamic` is a model capability, not a runtime presence observation.
     # Preserve that uncertainty as `unknown` until a qualified sensor mapping
@@ -251,14 +271,15 @@ def _power(profile, hardware_cache=None):
     return result
 
 
-def _storage(profile, hardware_cache=None):
+def _storage(profile, hardware_cache=None, model=None, filesystem=None):
     result = {}
-    for name, capability in profile["storage"].items():
+    capabilities = model.get("storage") if isinstance(model, dict) else profile["storage"]
+    for name, capability in capabilities.items():
         supported = capability["supported"]
         result[name] = {
             "supported": "supported" if supported is True else "unsupported" if supported is False else "unknown",
             "present": "not_present" if capability["present"] == "not_populated" else capability["present"],
-            "observed": capability["observed"] is True,
+            "observed": capability.get("observed") is True,
             "capacity_bytes": capability["capacity_bytes"],
         }
     records = _cache_records(hardware_cache, ("storage", "storages", "disks", "block_devices")) if hardware_cache else []
@@ -284,6 +305,11 @@ def _storage(profile, hardware_cache=None):
         if name is None or name not in result:
             continue
         item = result[name]
+        # A runtime disk record cannot override an authoritative unsupported
+        # capability. In particular, a generic block-device probe must not
+        # turn UCG Max's unsupported SATA/TF entries into rendered storage.
+        if item.get("supported") == "unsupported":
+            continue
         if record.get("present") in {True, False}:
             item["present"] = "present" if record["present"] else "not_present"
         for output, keys in (("capacity_bytes", ("capacity_bytes", "total_bytes", "size_bytes")), ("used_bytes", ("used_bytes", "used")), ("available_bytes", ("available_bytes", "free_bytes", "available")), ("usage_percent", ("usage_percent", "used_percent", "usage_pct"))):
@@ -291,6 +317,14 @@ def _storage(profile, hardware_cache=None):
             if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
                 item[output] = value
         if item.get("present") == "present" and item.get("capacity_bytes") is not None:
+            item["observed"] = True
+    if isinstance(filesystem, dict) and filesystem.get("status") == "available":
+        item = result.get("sata_ssd")
+        if item is not None and item.get("supported") == "supported" and filesystem.get("mountpoint") == "/ssd1":
+            for output in ("filesystem_total_bytes", "used_bytes", "available_bytes", "usage_percent"):
+                value = filesystem.get(output)
+                if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
+                    item[output] = value
             item["observed"] = True
     return result
 
@@ -304,7 +338,7 @@ def _api_observation(raw, previous=None):
     return {"enabled": False, "status": "disabled", "last_attempt": None, "last_success": None, "endpoints": [], "summary": None, "error": None}
 
 
-def normalize(profile, raw, previous=None):
+def normalize(profile, raw, previous=None, model=None):
     now = _timestamp(raw)
     transport = raw.get("transport", {})
     if not transport.get("ok"):
@@ -313,10 +347,12 @@ def normalize(profile, raw, previous=None):
             "transport": {"status": "unavailable", "last_attempt": now,
                           "last_success": previous.get("updated_at") if previous else None},
             "api": _api_observation(raw, previous),
+            "power": _profile_power(profile, model),
+            "poe": _profile_poe(profile),
             "system": previous.get("system") if previous else None,
             "fans": previous.get("fans", []) if previous else [],
-            "power_supplies": previous.get("power_supplies", _power(profile)) if previous else _power(profile),
-            "storage": previous.get("storage", _storage(profile)) if previous else _storage(profile),
+            "power_supplies": previous.get("power_supplies", _power(profile, model=model)) if previous else _power(profile, model=model),
+            "storage": previous.get("storage", _storage(profile, model=model)) if previous else _storage(profile, model=model),
             "diagnostics": previous.get("diagnostics", {"collection_status": "unavailable", "ignored_observations": []}) if previous else {"collection_status": "unavailable", "ignored_observations": []},
             "updated_at": previous.get("updated_at") if previous else None,
             "stale": True,
@@ -344,7 +380,11 @@ def normalize(profile, raw, previous=None):
         raise ValueError("invalid generic observation")
     diagnostics_raw = raw.get("diagnostics", {}) if isinstance(raw.get("diagnostics", {}), dict) else {}
     hardware_cache = diagnostics_raw.get("hardware_cache") if isinstance(diagnostics_raw.get("hardware_cache"), (dict, list)) else None
-    fans, ignored = _fans(profile, diagnostics_raw.get("fans", {}), hardware_cache)
+    target_id = raw.get("target_id")
+    profile_id = raw.get("profile_id")
+    target_matches_profile = target_id in (None, profile["profile_id"]) and profile_id in (None, profile["profile_id"])
+    fan_observations = diagnostics_raw.get("fans", {}) if target_matches_profile else {}
+    fans, ignored = _fans(profile, fan_observations, hardware_cache if target_matches_profile else None)
     diagnostic_status = "available" if raw.get("diagnostics") else "not_collected"
     if raw.get("diagnostics", {}).get("collection_status") == "unavailable":
         diagnostic_status = "unavailable"
@@ -352,6 +392,8 @@ def normalize(profile, raw, previous=None):
         "profile": profile["profile_id"],
         "transport": {"status": "available", "last_attempt": now, "last_success": now},
         "api": _api_observation(raw, previous),
+        "power": _profile_power(profile, model),
+        "poe": _profile_poe(profile),
         "system": {
             "cpu_model": profile.get("cpu_model"),
             "cpu_usage_percent": cpu_pct,
@@ -369,8 +411,8 @@ def normalize(profile, raw, previous=None):
             "load_average": {"one_minute": load[0], "five_minutes": load[1], "fifteen_minutes": load[2]},
         },
         "fans": fans,
-        "power_supplies": _power(profile, hardware_cache),
-        "storage": _storage(profile, hardware_cache),
+        "power_supplies": _power(profile, hardware_cache, model),
+        "storage": _storage(profile, hardware_cache, model, raw.get("filesystem")),
         "diagnostics": {"collection_status": diagnostic_status, "ignored_observations": ignored, "hardware_cache_status": diagnostics_raw.get("hardware_cache_status", "unavailable")},
         "updated_at": now,
         "stale": False,

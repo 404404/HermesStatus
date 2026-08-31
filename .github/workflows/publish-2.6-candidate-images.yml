@@ -1,18 +1,21 @@
-name: CI
+name: Publish 2.6 Candidate Images
 
 on:
-  pull_request:
-    branches: ["2.0"]
-  push:
-    branches: ["2.0"]
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: publish-2-6-candidates-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
+  packages: write
+
+env:
+  IMAGE_REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+  IMAGE_SOURCE: https://github.com/404404/HermesStatus
+  PRODUCT_VERSION: "2.6"
 
 jobs:
   contracts:
@@ -38,13 +41,7 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       - run: go mod download
-      - name: Check gofmt
-        run: |
-          files="$(gofmt -l .)"
-          for file in $files; do
-            gofmt -d "$file"
-          done
-          test -z "$files"
+      - run: test -z "$(gofmt -l .)"
       - run: go test ./...
       - run: go test -race ./...
       - run: go vet ./...
@@ -83,6 +80,15 @@ jobs:
       - run: ADMIN_TOKEN=ci-placeholder docker compose -f docker-compose-server.yml config --quiet
       - run: SERVER=192.0.2.10 SERVERSTATUS_USER=ci-node PASSWORD=ci-placeholder CLIENT_PRIVILEGED=false HERMES_ROOT_HOST=/tmp/hermes CLIENT_STATUS_DIR_HOST=/tmp/client-status docker compose -f docker-compose-client.yml config --quiet
 
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: python3 scripts/check_release_boundaries.py
+
   images:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -93,128 +99,116 @@ jobs:
         id: provenance
         shell: bash
         run: |
-          echo "candidate_tag=2.5-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-          echo "product_version=2.5" >> "$GITHUB_OUTPUT"
-          echo "vcs_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "candidate_tag=${PRODUCT_VERSION}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "product_version=${PRODUCT_VERSION}" >> "$GITHUB_OUTPUT"
           echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
-          echo "source=https://github.com/404404/HermesStatus" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.server
           push: false
           load: true
-          tags: hermesstatus-server:${{ steps.provenance.outputs.candidate_tag }}
+          tags: hermesstatus-server:publish-check
           build-args: |
             VERSION=${{ steps.provenance.outputs.product_version }}
-            VCS_REF=${{ steps.provenance.outputs.vcs_ref }}
+            VCS_REF=${{ github.sha }}
             BUILD_DATE=${{ steps.provenance.outputs.build_date }}
-            SOURCE_URL=${{ steps.provenance.outputs.source }}
-          cache-from: type=gha,scope=server
-          cache-to: type=gha,mode=max,scope=server
-      - run: docker image inspect hermesstatus-server:${{ steps.provenance.outputs.candidate_tag }} --format '{{json .Config.Entrypoint}}' | grep serverstatus
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.client
           push: false
           load: true
-          tags: hermesstatus-client:${{ steps.provenance.outputs.candidate_tag }}
+          tags: hermesstatus-client:publish-check
           build-args: |
             VERSION=${{ steps.provenance.outputs.product_version }}
-            VCS_REF=${{ steps.provenance.outputs.vcs_ref }}
+            VCS_REF=${{ github.sha }}
             BUILD_DATE=${{ steps.provenance.outputs.build_date }}
-            SOURCE_URL=${{ steps.provenance.outputs.source }}
-          cache-from: type=gha,scope=client
-          cache-to: type=gha,mode=max,scope=client
-      - run: docker image inspect hermesstatus-client:${{ steps.provenance.outputs.candidate_tag }} --format '{{json .Config.Entrypoint}}' | grep entrypoint.sh
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}
       - name: Validate image provenance
         run: |
           python3 scripts/validate_image_provenance.py \
-            --server-image hermesstatus-server:${{ steps.provenance.outputs.candidate_tag }} \
-            --client-image hermesstatus-client:${{ steps.provenance.outputs.candidate_tag }} \
+            --server-image hermesstatus-server:publish-check \
+            --client-image hermesstatus-client:publish-check \
             --candidate-tag "${{ steps.provenance.outputs.candidate_tag }}" \
             --version "${{ steps.provenance.outputs.product_version }}" \
-            --revision "${{ steps.provenance.outputs.vcs_ref }}" \
+            --revision "${{ github.sha }}" \
             --created "${{ steps.provenance.outputs.build_date }}" \
-            --source "${{ steps.provenance.outputs.source }}"
+            --source "${{ env.IMAGE_SOURCE }}"
 
-  security:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - run: python3 scripts/check_release_boundaries.py
-
-  publish_2_6_candidate:
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'codex/2.6-') }}
-    permissions:
-      contents: read
-      packages: write
+  publish:
     needs: [contracts, go, python, frontend, compose, security, images]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Prepare immutable candidate
+      - name: Prepare image provenance
         id: provenance
         shell: bash
-        env:
-          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          candidate_tag=$(printf '2.6-%.12s' "$SOURCE_SHA")
-          for image in ghcr.io/${{ github.repository_owner }}/hermesstatus-server:$candidate_tag ghcr.io/${{ github.repository_owner }}/hermesstatus-client:$candidate_tag; do
-            if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
-              echo "refusing to overwrite existing immutable candidate: $image"
-              exit 1
-            fi
-          done
-          echo "candidate_tag=$candidate_tag" >> "$GITHUB_OUTPUT"
-          echo "vcs_ref=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "candidate_tag=${PRODUCT_VERSION}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "product_version=${PRODUCT_VERSION}" >> "$GITHUB_OUTPUT"
           echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: server_meta
+        with:
+          images: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/hermesstatus-server
+          tags: |
+            type=raw,value=${{ steps.provenance.outputs.candidate_tag }}
+      - uses: docker/metadata-action@v5
+        id: client_meta
+        with:
+          images: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/hermesstatus-client
+          tags: |
+            type=raw,value=${{ steps.provenance.outputs.candidate_tag }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.server
           push: true
           platforms: linux/amd64
-          tags: ghcr.io/${{ github.repository_owner }}/hermesstatus-server:${{ steps.provenance.outputs.candidate_tag }}
+          tags: ${{ steps.server_meta.outputs.tags }}
           labels: |
+            ${{ steps.server_meta.outputs.labels }}
             org.opencontainers.image.title=HermesStatus Server
-            org.opencontainers.image.version=2.6
-            org.opencontainers.image.revision=${{ steps.provenance.outputs.vcs_ref }}
+            org.opencontainers.image.description=HermesStatus device status server
+            org.opencontainers.image.version=${{ steps.provenance.outputs.product_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.provenance.outputs.build_date }}
-            org.opencontainers.image.source=https://github.com/404404/HermesStatus
+            org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
+            org.opencontainers.image.licenses=MIT
             io.hermesstatus.component=server
           build-args: |
-            VERSION=2.6
-            VCS_REF=${{ steps.provenance.outputs.vcs_ref }}
+            VERSION=${{ steps.provenance.outputs.product_version }}
+            VCS_REF=${{ github.sha }}
             BUILD_DATE=${{ steps.provenance.outputs.build_date }}
-            SOURCE_URL=https://github.com/404404/HermesStatus
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.client
           push: true
           platforms: linux/amd64
-          tags: ghcr.io/${{ github.repository_owner }}/hermesstatus-client:${{ steps.provenance.outputs.candidate_tag }}
+          tags: ${{ steps.client_meta.outputs.tags }}
           labels: |
+            ${{ steps.client_meta.outputs.labels }}
             org.opencontainers.image.title=HermesStatus Client
-            org.opencontainers.image.version=2.6
-            org.opencontainers.image.revision=${{ steps.provenance.outputs.vcs_ref }}
+            org.opencontainers.image.description=HermesStatus host and Hermes profile collector
+            org.opencontainers.image.version=${{ steps.provenance.outputs.product_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.provenance.outputs.build_date }}
-            org.opencontainers.image.source=https://github.com/404404/HermesStatus
+            org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
+            org.opencontainers.image.licenses=MIT
             io.hermesstatus.component=client
           build-args: |
-            VERSION=2.6
-            VCS_REF=${{ steps.provenance.outputs.vcs_ref }}
+            VERSION=${{ steps.provenance.outputs.product_version }}
+            VCS_REF=${{ github.sha }}
             BUILD_DATE=${{ steps.provenance.outputs.build_date }}
-            SOURCE_URL=https://github.com/404404/HermesStatus
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}

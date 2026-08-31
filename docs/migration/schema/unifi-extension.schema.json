@@ -60,6 +60,12 @@
         "$ref": "#/$defs/power"
       }
     },
+    "power": {
+      "$ref": "#/$defs/powerProfile"
+    },
+    "poe": {
+      "$ref": "#/$defs/poeProfile"
+    },
     "storage": {
       "$ref": "#/$defs/storage"
     },
@@ -351,9 +357,32 @@
         "state": {
           "$ref": "#/$defs/observation"
         },
+        "power_w": {"type": ["number", "null"], "minimum": 0},
+        "fan_rpm": {"type": ["integer", "null"], "minimum": 0, "maximum": 100000},
+        "temperature_c": {"type": ["number", "null"], "minimum": -100, "maximum": 250},
         "error": {
           "$ref": "agent-update-extension.schema.json#/$defs/error"
         }
+      },
+      "additionalProperties": false
+    },
+    "powerProfile": {
+      "type": "object",
+      "required": ["supported", "psu_slots", "max_power_w"],
+      "properties": {
+        "supported": {"type": "boolean"},
+        "psu_slots": {"type": "integer", "minimum": 0, "maximum": 4},
+        "max_power_w": {"type": ["number", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "poeProfile": {
+      "type": "object",
+      "required": ["supported", "total_max_power_w", "port_max_power_w"],
+      "properties": {
+        "supported": {"type": "boolean"},
+        "total_max_power_w": {"type": ["number", "null"], "minimum": 0},
+        "port_max_power_w": {"type": "object", "maxProperties": 64, "additionalProperties": {"type": "number", "minimum": 0}}
       },
       "additionalProperties": false
     },
@@ -382,6 +411,9 @@
             },
             "capacity_bytes": {
               "$ref": "#/$defs/nullableCounter"
+            },
+            "filesystem_total_bytes": {
+              "$ref": "#/$defs/nullableCounter"
             }
           },
           "additionalProperties": false
@@ -405,6 +437,9 @@
             },
             "capacity_bytes": {
               "$ref": "#/$defs/nullableCounter"
+            },
+            "filesystem_total_bytes": {
+              "$ref": "#/$defs/nullableCounter"
             }
           },
           "additionalProperties": false
@@ -427,6 +462,9 @@
               "type": "boolean"
             },
             "capacity_bytes": {
+              "$ref": "#/$defs/nullableCounter"
+            },
+            "filesystem_total_bytes": {
               "$ref": "#/$defs/nullableCounter"
             }
           },
@@ -553,6 +591,7 @@
         "name": {
           "enum": [
             "info", "sites", "devices", "clients", "networks", "lags",
+            "device_detail", "device_stats", "clients", "networks", "lags",
             "legacy_stat_device", "legacy_stat_health", "legacy_stat_sysinfo",
             "topology", "port_anomalies", "wan_official", "wan_enriched",
             "wan_isp_status", "wan_load_balance", "wan_load_balance_config",
@@ -724,6 +763,8 @@
           ],
           "maxLength": 128
         },
+        "gateway": {"type": ["string", "null"], "maxLength": 128},
+        "sla_status": {"type": ["string", "null"], "maxLength": 128},
         "isp": {
           "type": [
             "string",
@@ -765,6 +806,8 @@
         "latency_ms": {
           "$ref": "#/$defs/nullableNumber"
         },
+        "jitter_ms": {"$ref": "#/$defs/nullableNumber"},
+        "link_speed_mbps": {"$ref": "#/$defs/nullableNumber"},
         "packet_loss_percent": {
           "type": [
             "number",
@@ -842,7 +885,125 @@
             "null"
           ],
           "maxLength": 128
-        }
+        },
+        "device_id": {"type": ["string", "null"], "maxLength": 128},
+        "management_ip": {"type": ["string", "null"], "maxLength": 128},
+        "model": {"type": ["string", "null"], "maxLength": 128},
+        "model_id": {"type": ["string", "null"], "maxLength": 128},
+        "model_profile_status": {"type": ["string", "null"], "enum": ["known", "unknown", null]},
+        "device_type": {"type": ["string", "null"], "maxLength": 128},
+        "online": {"type": ["boolean", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "apiPoE": {
+      "type": "object",
+      "properties": {
+        "supported": {"type": ["boolean", "null"]},
+        "enabled": {"type": ["boolean", "null"]},
+        "active": {"type": ["boolean", "null"]},
+        "state": {"type": ["string", "null"], "maxLength": 128},
+        "mode": {"type": ["string", "null"], "maxLength": 128},
+        "class": {"type": ["string", "null"], "maxLength": 128},
+        "power_w": {"$ref": "#/$defs/nullableNumber"},
+        "max_power_w": {"$ref": "#/$defs/nullableNumber"},
+        "voltage_v": {"$ref": "#/$defs/nullableNumber"},
+        "current_ma": {"$ref": "#/$defs/nullableNumber"},
+        "good": {"type": ["boolean", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "apiPort": {
+      "type": "object",
+      "required": ["device_id", "port_idx"],
+      "properties": {
+        "device_id": {"type": "string", "maxLength": 128},
+        "port_idx": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "name": {"type": ["string", "null"], "maxLength": 128},
+        "media": {"type": ["string", "null"], "maxLength": 128},
+        "connector": {"type": ["string", "null"], "enum": ["rj45", "sfp", "sfp_plus", "sfp28", "other", null]},
+        "roles": {"type": "array", "maxItems": 2, "items": {"type": "string", "enum": ["lan", "wan"]}},
+        "poe_in": {"type": ["boolean", "null"]},
+        "poe_out": {"type": ["boolean", "null"]},
+        "poe_standard": {"type": ["string", "null"], "enum": ["poe", "poe+", "poe++", null]},
+        "model_id": {"type": ["string", "null"], "maxLength": 128},
+        "model_profile_status": {"type": ["string", "null"], "enum": ["known", "unknown", null]},
+        "enabled": {"type": ["boolean", "null"]},
+        "up": {"type": ["boolean", "null"]},
+        "speed_mbps": {"$ref": "#/$defs/nullableNumber"},
+        "max_speed_mbps": {"$ref": "#/$defs/nullableNumber"},
+        "duplex": {"type": ["boolean", "null"]},
+        "autoneg": {"type": ["boolean", "null"]},
+        "uplink": {"type": ["boolean", "null"]},
+        "rx_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "tx_bytes": {"$ref": "#/$defs/nullableCounter"},
+        "rx_packets": {"$ref": "#/$defs/nullableCounter"},
+        "tx_packets": {"$ref": "#/$defs/nullableCounter"},
+        "rx_errors": {"$ref": "#/$defs/nullableCounter"},
+        "tx_errors": {"$ref": "#/$defs/nullableCounter"},
+        "rx_dropped": {"$ref": "#/$defs/nullableCounter"},
+        "tx_dropped": {"$ref": "#/$defs/nullableCounter"},
+        "rx_multicast": {"$ref": "#/$defs/nullableCounter"},
+        "tx_multicast": {"$ref": "#/$defs/nullableCounter"},
+        "rx_broadcast": {"$ref": "#/$defs/nullableCounter"},
+        "tx_broadcast": {"$ref": "#/$defs/nullableCounter"},
+        "rx_bps": {"$ref": "#/$defs/nullableCounter"},
+        "tx_bps": {"$ref": "#/$defs/nullableCounter"},
+        "rx_utilization_pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "tx_utilization_pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "poe": {"anyOf": [{"$ref": "#/$defs/apiPoE"}, {"type": "null"}]},
+        "peer_count": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "apiPortSummary": {
+      "type": "object",
+      "required": ["total", "up", "down", "poe_active"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "up": {"type": "integer", "minimum": 0},
+        "down": {"type": "integer", "minimum": 0},
+        "poe_active": {"type": "integer", "minimum": 0},
+        "poe_total_power_w": {"$ref": "#/$defs/nullableNumber"},
+        "poe_total_source": {"type": "string", "enum": ["", "device_reported", "port_sum", "unavailable"]},
+        "poe_max_power_w": {"$ref": "#/$defs/nullableNumber"}
+      },
+      "additionalProperties": false
+    },
+    "apiLAG": {
+      "type": "object",
+      "required": ["lag_id", "lag_member"],
+      "properties": {
+        "lag_id": {"type": "string", "maxLength": 128},
+        "lag_member": {"type": "string", "maxLength": 128}
+      },
+      "additionalProperties": false
+    },
+    "apiTopologyLink": {
+      "type": "object",
+      "properties": {
+        "source_device_id": {"type": ["string", "null"], "maxLength": 128},
+        "target_device_id": {"type": ["string", "null"], "maxLength": 128},
+        "state": {"type": ["string", "null"], "maxLength": 128}
+      },
+      "additionalProperties": false
+    },
+    "apiTopology": {
+      "type": "object",
+      "required": ["link_count", "links"],
+      "properties": {
+        "link_count": {"type": "integer", "minimum": 0},
+        "links": {"type": "array", "maxItems": 32, "items": {"$ref": "#/$defs/apiTopologyLink"}}
+      },
+      "additionalProperties": false
+    },
+    "apiAnomalies": {
+      "type": "object",
+      "required": ["anomaly_count", "affected_port_count", "recent_types"],
+      "properties": {
+        "anomaly_count": {"type": "integer", "minimum": 0},
+        "affected_port_count": {"type": "integer", "minimum": 0},
+        "recent_types": {"type": "array", "maxItems": 4, "items": {"type": "string", "maxLength": 128}}
       },
       "additionalProperties": false
     },
@@ -968,7 +1129,12 @@
         "temperatures",
         "clients",
         "devices",
-        "networks"
+        "networks",
+        "ports",
+        "port_summary",
+        "lags",
+        "topology",
+        "anomalies"
       ],
       "properties": {
         "site": {"anyOf": [{"$ref": "#/$defs/apiSite"}, {"type": "null"}]},
@@ -1042,7 +1208,20 @@
               "type": "null"
             }
           ]
-        }
+        },
+        "ports": {
+          "type": ["array", "null"],
+          "maxItems": 256,
+          "items": {"$ref": "#/$defs/apiPort"}
+        },
+        "port_summary": {"anyOf": [{"$ref": "#/$defs/apiPortSummary"}, {"type": "null"}]},
+        "lags": {
+          "type": ["array", "null"],
+          "maxItems": 16,
+          "items": {"$ref": "#/$defs/apiLAG"}
+        },
+        "topology": {"anyOf": [{"$ref": "#/$defs/apiTopology"}, {"type": "null"}]},
+        "anomalies": {"anyOf": [{"$ref": "#/$defs/apiAnomalies"}, {"type": "null"}]}
       },
       "additionalProperties": false
     }

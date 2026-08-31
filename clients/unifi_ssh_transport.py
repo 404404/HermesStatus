@@ -8,7 +8,7 @@ import stat
 import subprocess
 import time
 from pathlib import Path
-from unifi_source_registry import REMOTE_CORE_SCRIPT, REMOTE_DIAGNOSTICS_SCRIPT
+from unifi_source_registry import REMOTE_CORE_SCRIPT, REMOTE_DIAGNOSTICS_SCRIPT, REMOTE_UDW_FILESYSTEM_SCRIPT
 
 class TransportError(RuntimeError):
     pass
@@ -140,3 +140,6 @@ def collect_core(config):
 
 def collect_diagnostics(config):
     return _run_fixed(REMOTE_DIAGNOSTICS_SCRIPT, config)
+
+def collect_udw_filesystem(config):
+    return _run_fixed(REMOTE_UDW_FILESYSTEM_SCRIPT, config)

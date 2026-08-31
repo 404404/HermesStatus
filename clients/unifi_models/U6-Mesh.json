@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "canonical_sku": "U6-Mesh",
+  "display_name": "U6 Mesh",
+  "device_type": "ap",
+  "runtime_aliases": {"api_model": [{"value": "U6 Mesh", "provenance": "qualified_controller", "runtime_verified": true, "evidence": "sanitized RS820 controller snapshot"}], "sysid": [], "ssh_model": []},
+  "ports": [{"index": 1, "label": "Port 1", "connector": "rj45", "max_speed_mbps": 1000, "roles": ["lan"], "poe_in": true, "poe_out": false, "poe_standard": "poe+", "poe_max_power_w": null, "combo_group": null}],
+  "storage": {"nvme": {"supported": false, "present": "not_populated", "capacity_bytes": null}, "sata_ssd": {"supported": false, "present": "not_populated", "capacity_bytes": null}, "tf": {"supported": false, "present": "not_populated", "capacity_bytes": null}},
+  "power": {"psu_slots": 0, "max_power_w": 13}
+}

@@ -9,8 +9,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from unifi_ssh_transport import ASKPASS_PATH, TransportError, _askpass, _run_fixed, _validate_file
-from unifi_raw_collector import parse_diagnostics
-from unifi_source_registry import REMOTE_DIAGNOSTICS_SCRIPT
+from unifi_raw_collector import parse_diagnostics, parse_udw_filesystem
+from unifi_source_registry import REMOTE_DIAGNOSTICS_SCRIPT, REMOTE_UDW_FILESYSTEM_SCRIPT
 
 
 class UniFiSSHTransportTests(unittest.TestCase):
@@ -103,6 +103,40 @@ class UniFiSSHTransportTests(unittest.TestCase):
                     _run_fixed("printf fixed", self._config(handle.name))
             self.assertEqual(str(captured.exception), "ssh_auth_failure")
 
+    def test_udw_filesystem_parser_accepts_only_bounded_ssd_row(self):
+        text = "\n".join([
+            "__HS_UDW_SSD_FILESYSTEM__",
+            "Filesystem 1B-blocks Used Available Use% Mounted on",
+            "/dev/sda5 109000000000 106000000000 3000000000 97% /ssd1",
+            "__HS_END__",
+        ])
+        result = parse_udw_filesystem(text)
+        self.assertEqual(result["device"], "/dev/sda5")
+        self.assertEqual(result["filesystem_total_bytes"], 109000000000)
+        self.assertEqual(result["used_bytes"], 106000000000)
+        self.assertEqual(result["available_bytes"], 3000000000)
+        self.assertEqual(result["usage_percent"], 97.0)
+
+    def test_udw_filesystem_parser_keeps_missing_mount_optional(self):
+        result = parse_udw_filesystem("__HS_UDW_SSD_FILESYSTEM__\n__HS_DF_UNAVAILABLE__\n__HS_END__")
+        self.assertEqual(result, {"status": "unavailable", "mountpoint": "/ssd1"})
+
+    def test_udw_filesystem_parser_rejects_malformed_or_other_mount(self):
+        bad = [
+            "__HS_UDW_SSD_FILESYSTEM__\nnot df\n__HS_END__",
+            "__HS_UDW_SSD_FILESYSTEM__\nFilesystem 1B-blocks Used Available Use% Mounted on\n/dev/sda5 109 110 1 101% /ssd1\n__HS_END__",
+            "__HS_UDW_SSD_FILESYSTEM__\nFilesystem 1B-blocks Used Available Use% Mounted on\n/dev/sda5 109 10 99 10% /\n__HS_END__",
+        ]
+        for text in bad:
+            with self.assertRaises(ValueError):
+                parse_udw_filesystem(text)
+
+    def test_udw_filesystem_source_is_fixed_and_read_only(self):
+        self.assertIn("df -B1 -P /ssd1", REMOTE_UDW_FILESYSTEM_SCRIPT)
+        self.assertNotIn("config.", REMOTE_UDW_FILESYSTEM_SCRIPT)
+        self.assertNotIn("rm ", REMOTE_UDW_FILESYSTEM_SCRIPT)
+        self.assertNotIn("mount ", REMOTE_UDW_FILESYSTEM_SCRIPT)
+
     def test_diagnostics_parses_bounded_hardware_cache(self):
         text = "\n".join([
             "__HS_THERMAL__", "zone=0 type=cpu temp=64000", "__HS_HWMON__", "{\"lm63\":{}}",
@@ -111,6 +145,31 @@ class UniFiSSHTransportTests(unittest.TestCase):
         result = parse_diagnostics(text)
         self.assertEqual(result["hardware_cache_status"], "available")
         self.assertEqual(result["hardware_cache"]["fans"]["fan1"], 3820)
+
+    def test_diagnostics_extracts_hwmon_rpm_and_preserves_zero(self):
+        text = "\n".join([
+            "__HS_THERMAL__", "__HS_HWMON__",
+            '{"lm63-i2c-2-4c":{"fan1":{"fan1_input":0.000,"fan1_min":0.000},"fan2":{"fan2_input":1732.000},"pwm1":{"pwm1":75}}}',
+            "__HS_HW_CACHE__", "__HS_END__",
+        ])
+        result = parse_diagnostics(text)
+        self.assertEqual(result["fans"], {"fan1": 0, "fan2": 1732})
+
+    def test_diagnostics_filters_fans_to_the_approved_hwmon_chip(self):
+        text = "\n".join([
+            "__HS_THERMAL__", "__HS_HWMON__",
+            '{"other-chip":{"fan1":{"fan1_input":1732}}}',
+            "__HS_HW_CACHE__", "__HS_END__",
+        ])
+        self.assertEqual(parse_diagnostics(text, "lm63")["fans"], {})
+
+    def test_diagnostics_ignores_malformed_or_non_rpm_fan_values(self):
+        text = "\n".join([
+            "__HS_THERMAL__", "__HS_HWMON__",
+            '{"lm63":{"fan1":{"fan1_input":"1732"},"fan2":{"fan2_input":-1.0},"fan3":{"fan3_input":1732.5},"pwm1":{"pwm1":50}}}',
+            "__HS_HW_CACHE__", "__HS_END__",
+        ])
+        self.assertEqual(parse_diagnostics(text)["fans"], {})
 
     def test_diagnostics_script_separates_cache_from_end_marker(self):
         self.assertIn("head -c 12000 /var/run/ustd/hw_polling.cache\n  printf \"\\n\"", REMOTE_DIAGNOSTICS_SCRIPT)

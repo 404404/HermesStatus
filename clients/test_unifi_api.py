@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_api import API_COLLECTION_MAX_SECONDS, API_ENDPOINTS, APIError, UniFiAPICollector, _context, _read_key, _request, _port_record, _ports, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
+from unifi_api import API_COLLECTION_MAX_SECONDS, API_ENDPOINTS, APIError, UniFiAPICollector, _annotate_wan_payload, _context, _read_key, _request, _port_record, _ports, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
 
 
 class UniFiAPITests(unittest.TestCase):
@@ -133,7 +133,7 @@ class UniFiAPITests(unittest.TestCase):
                         "loadAverage15Min": 1.3, "uptimeSec": 1234,
                         "lastHeartbeatAt": "2026-01-01T00:00:00Z",
                         "uplink": {"rxRateBps": 100, "txRateBps": 200},
-                        "wans": [{"id": "wan1", "status": {"state": "ONLINE", "isp": "Example ISP", "speedMbps": 2500},
+                        "wans": [{"id": "wan1", "status": {"state": "ONLINE", "isp": "Example ISP", "linkSpeedMbps": 2500},
                                   "metrics": {"latencyMs": 2.5, "packetLossPercent": 0.0, "jitterMs": 0.1}}]}, 200
             if "/devices/" in path:
                 return {"id": "udw-1", "model": "UDW", "name": "UDW", "firmwareVersion": "5.0", "state": "ONLINE",
@@ -193,14 +193,17 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(telemetry["wans"][0]["role"], "active")
         self.assertEqual(telemetry["wans"][0]["asn"], "64500")
         self.assertEqual(telemetry["wans"][0]["speedtest"]["download_mbps"], 900.0)
-        self.assertNotIn("packet_loss_percent", telemetry["wans"][0])
+        self.assertEqual(telemetry["wans"][0]["latency_ms"], 2.5)
+        self.assertEqual(telemetry["wans"][0]["packet_loss_percent"], 0.0)
         self.assertEqual(telemetry["identity"]["model"], "UDW")
         self.assertEqual(telemetry["devices"]["total"], 3)
         self.assertEqual(telemetry["clients"], {"total": 2, "wired": 1, "wireless": 1, "observed": True})
         self.assertEqual(telemetry["networks"], {"total": 2, "vlan": 1})
-        self.assertEqual(len(telemetry["ports"]), 1)
+        self.assertEqual(len(telemetry["ports"]), 20)
         self.assertEqual(telemetry["ports"][0]["port_idx"], 1)
-        self.assertEqual(telemetry["ports"][0]["max_speed_mbps"], 2500)
+        self.assertEqual(telemetry["ports"][0]["max_speed_mbps"], 1000)
+        self.assertEqual(telemetry["ports"][0]["model_id"], "UDW")
+        self.assertEqual(telemetry["ports"][0]["connector"], "rj45")
         self.assertEqual(telemetry["ports"][0]["rx_bytes"], 1000)
         self.assertNotIn("rx_bps", telemetry["ports"][0])
         self.assertEqual(telemetry["port_summary"]["up"], 1)
@@ -211,10 +214,12 @@ class UniFiAPITests(unittest.TestCase):
         # Latest-statistics rates are intentionally not projected into the
         # strict Device v2 uplink model (which only accepts link metadata).
         self.assertTrue(telemetry["uplinks"])
-        self.assertTrue(all(set(item) <= {"name", "link_state", "speed_mbps", "duplex", "wan_id"}
+        self.assertTrue(all(set(item) <= {"device_id", "name", "model", "model_id", "model_profile_status", "device_type", "management_ip", "online", "link_state", "speed_mbps", "duplex", "wan_id"}
                             for item in telemetry["uplinks"]))
         target_uplink = next(item for item in telemetry["uplinks"] if item.get("name") == "UDW")
-        self.assertEqual(target_uplink["speed_mbps"], 2500)
+        # Port negotiation is not a WAN link-speed source.
+        self.assertNotIn("speed_mbps", target_uplink)
+        self.assertEqual(telemetry["wans"][0]["link_speed_mbps"], 2500)
 
     def test_site_model_keeps_integration_and_internal_namespaces(self):
         sites = _site_records({"data": [{"id": "uuid-123", "internalReference": "default", "name": "Main"}]})
@@ -227,12 +232,12 @@ class UniFiAPITests(unittest.TestCase):
         sites = _site_records({"data": [{"id": "uuid-123", "name": "Main"}]})
         self.assertEqual(sites, [{"id": "uuid-123", "name": "Main"}])
 
-    def test_unconfirmed_realtime_sla_fields_are_not_projected(self):
+    def test_explicit_wan_runtime_fields_are_projected(self):
         merged = _merge_wans({"data": [{"id": "wan1", "latencyMs": 4, "packetLossPercent": 0, "jitterMs": 1, "uptimeSeconds": 5}]})
         self.assertEqual(merged[0]["role"], "unknown")
-        self.assertNotIn("latency_ms", merged[0])
-        self.assertNotIn("packet_loss_percent", merged[0])
-        self.assertNotIn("jitter_ms", merged[0])
+        self.assertEqual(merged[0]["latency_ms"], 4.0)
+        self.assertEqual(merged[0]["packet_loss_percent"], 0.0)
+        self.assertEqual(merged[0]["jitter_ms"], 1.0)
         self.assertNotIn("uptime_seconds", merged[0])
 
     def test_legacy_target_accepts_exact_external_id_alias(self):
@@ -265,7 +270,26 @@ class UniFiAPITests(unittest.TestCase):
 
     def test_malformed_speedtest_timestamp_is_omitted(self):
         merged = _merge_wans({"data": [{"id": "wan1", "speedtestHistory": [{"timestamp": "not-a-date", "downloadMbps": 10}]}]})
-        self.assertNotIn("timestamp", merged[0].get("speedtest", {}))
+        self.assertNotIn("speedtest", merged[0])
+
+    def test_unqualified_speedtest_is_rejected_without_positional_association(self):
+        merged = _merge_wans({"data": [
+            {"speedtestHistory": [{"timestamp": "2026-01-01T00:00:00Z", "downloadMbps": 900}]},
+            {"speedtestHistory": [{"timestamp": "2026-01-01T00:00:01Z", "downloadMbps": 100}]},
+        ]})
+        self.assertIsNone(merged)
+
+    def test_generic_speed_field_never_becomes_wan_link_speed(self):
+        merged = _merge_wans({"data": [{"id": "wan1", "role": "active", "speedMbps": 1000}]})
+        self.assertNotIn("link_speed_mbps", merged[0])
+
+    def test_speedtest_never_becomes_wan_link_speed(self):
+        merged = _merge_wans({"data": [{
+            "id": "wan1", "role": "active", "link_speed_mbps": 1000,
+            "speedtestHistory": [{"timestamp": "2026-01-01T00:00:00Z", "downloadMbps": 900}],
+        }]})
+        self.assertEqual(merged[0]["link_speed_mbps"], 1000.0)
+        self.assertEqual(merged[0]["speedtest"]["download_mbps"], 900.0)
 
     def test_speed_change_and_invalid_interval_discard_rates(self):
         previous = {}
@@ -282,9 +306,23 @@ class UniFiAPITests(unittest.TestCase):
         self.assertTrue(item["duplex"] and item["autoneg"] and item["enabled"] and item["up"])
         self.assertFalse(item["uplink"])
         self.assertEqual(item["poe"]["power_w"], 6.8)
-        self.assertEqual(item["max_speed_mbps"], 2500)
+        # An unknown model cannot claim a static hardware maximum from its
+        # runtime port record.
+        self.assertNotIn("max_speed_mbps", item)
         self.assertEqual(item["poe"]["max_power_w"], 30)
         self.assertTrue(item["poe"]["active"])
+
+    def test_udw_wan_speed_uses_explicit_wan_record_not_target_ports(self):
+        from unifi_api import _wans_and_uplinks
+        devices = [{"id": "udw-1", "model": "UDW", "name": "UDW", "state": "ONLINE"}]
+        target_detail = {"id": "udw-1", "interfaces": {"ports": [{"idx": 1, "speedMbps": 2500, "maxSpeedMbps": 10000}]}}
+        wans, _ = _wans_and_uplinks(
+            devices,
+            target_detail,
+            [{"data": [{"id": "wan-main", "name": "WAN", "interface": "eth3", "role": "active", "link_speed_mbps": 1000}]}],
+        )
+        self.assertEqual(wans[0]["link_speed_mbps"], 1000)
+        self.assertNotIn("speedtest", wans[0])
 
     def test_device_reported_poe_total_wins_over_port_sum(self):
         legacy = {"data": [{"device_id": "device", "port_table": [
@@ -334,6 +372,15 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(result[1]["role"], "backup")
         self.assertEqual(result[1]["speedtest"]["upload_mbps"], 40.0)
         self.assertEqual(_statistics_wans({"data": [{"model": "UDW", "name": "UDW", "state": "ONLINE"}]}), [])
+
+    def test_supplemental_speedtest_keeps_request_network_group_identity(self):
+        payload = {"data": [{"speedtest_historical": [{"timestamp": "2026-01-01T00:00:00Z", "downloadMbps": 300}]}]}
+        merged = _merge_wans(
+            {"data": [{"id": "wan1", "networkGroup": "WAN"}, {"id": "wan2", "networkGroup": "WAN2"}]},
+            [_annotate_wan_payload(payload, "WAN2")],
+        )
+        self.assertNotIn("speedtest", merged[0])
+        self.assertEqual(merged[1]["speedtest"]["download_mbps"], 300.0)
 
     def test_wan_merge_preserves_identity_and_historical_speedtest(self):
         result = _merge_wans(
@@ -387,6 +434,20 @@ class UniFiAPITests(unittest.TestCase):
         self.assertIsNone(result["error"])
         self.assertIn("/proxy/network/integration/v1/sites/site-b/devices", calls)
         self.assertFalse(any("/proxy/network/v2/api/site/" in path for path in calls))
+
+    def test_port_tables_are_bound_to_exact_device_ids_when_arrays_are_shuffled(self):
+        from unifi_api import _ports
+        devices = [
+            {"id": "ap-1", "model": "U6 Mesh", "name": "AP", "state": "ONLINE"},
+            {"id": "switch-1", "model": "USW", "name": "Switch", "state": "OFFLINE"},
+            {"id": "udw-1", "model": "UDW", "name": "UDW", "state": "ONLINE"},
+        ]
+        legacy = {"data": [
+            {"device_id": "switch-1", "port_table": [{"port_idx": 8, "up": False}]},
+            {"device_id": "udw-1", "port_table": [{"port_idx": 1, "up": True}]},
+        ]}
+        records, _ = _ports(legacy, devices[2], {}, 1.0, devices=devices)
+        self.assertEqual([(item["device_id"], item["port_idx"]) for item in records], [("switch-1", 8)] + [("udw-1", index) for index in range(1, 21)])
 
     def test_target_resolution_does_not_depend_on_device_order(self):
         calls = []

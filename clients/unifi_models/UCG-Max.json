@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "canonical_sku": "UCG-Max",
+  "display_name": "Cloud Gateway Max",
+  "device_type": "gateway",
+  "runtime_aliases": {"api_model": [{"value": "UCG Max", "provenance": "qualified_controller", "runtime_verified": true, "evidence": "sanitized RS820 controller snapshot"}], "sysid": [], "ssh_model": []},
+  "ports": [
+    {"index": 1, "label": "Port 1", "connector": "rj45", "max_speed_mbps": 2500, "roles": ["lan", "wan"], "poe_in": false, "poe_out": false, "poe_standard": null, "poe_max_power_w": null, "combo_group": null},
+    {"index": 2, "label": "Port 2", "connector": "rj45", "max_speed_mbps": 2500, "roles": ["lan", "wan"], "poe_in": false, "poe_out": false, "poe_standard": null, "poe_max_power_w": null, "combo_group": null},
+    {"index": 3, "label": "Port 3", "connector": "rj45", "max_speed_mbps": 2500, "roles": ["lan", "wan"], "poe_in": false, "poe_out": false, "poe_standard": null, "poe_max_power_w": null, "combo_group": null},
+    {"index": 4, "label": "Port 4", "connector": "rj45", "max_speed_mbps": 2500, "roles": ["lan", "wan"], "poe_in": false, "poe_out": false, "poe_standard": null, "poe_max_power_w": null, "combo_group": null},
+    {"index": 5, "label": "Port 5", "connector": "rj45", "max_speed_mbps": 2500, "roles": ["lan", "wan"], "poe_in": false, "poe_out": false, "poe_standard": null, "poe_max_power_w": null, "combo_group": null}
+  ],
+  "storage": {"nvme": {"supported": true, "present": "unknown", "capacity_bytes": null}, "sata_ssd": {"supported": false, "present": "not_populated", "capacity_bytes": null}, "tf": {"supported": false, "present": "not_populated", "capacity_bytes": null}},
+  "power": {"psu_slots": 0, "max_power_w": 16.1}
+}

@@ -46,6 +46,9 @@ class UniFiContractTests(unittest.TestCase):
         self.assertTrue(pending["configured"])
         self.assertEqual(pending["transport"]["status"], "not_collected")
         self.assertTrue(pending["stale"])
+        self.assertEqual(pending["power"], {"supported": True, "psu_slots": 2, "max_power_w": 550})
+        self.assertEqual(pending["storage"]["sata_ssd"]["supported"], "supported")
+        self.assertEqual(pending["storage"]["tf"]["present"], "not_present")
 
     def test_cpu_delta_invalid_cases_are_null_not_zero(self):
         first = normalize(self.ucg, fixture("ucg-max-raw.json"))
@@ -98,12 +101,13 @@ class UniFiContractTests(unittest.TestCase):
 
     def test_capability_state_is_not_inferred_from_zero_or_tooling(self):
         ucg = normalize(self.ucg, fixture("ucg-max-raw.json"))
-        self.assertEqual(ucg["fans"][0]["present"], "unknown")
+        self.assertEqual(ucg["fans"][0]["present"], "present")
+        self.assertEqual(ucg["fans"][0]["supported"], "supported")
         self.assertTrue(ucg["fans"][0]["observed"])
         self.assertEqual(ucg["fans"][0]["rpm"], 0)
-        self.assertEqual(ucg["storage"]["nvme"], {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None})
-        self.assertEqual(ucg["storage"]["sata_ssd"], {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None})
-        self.assertEqual(ucg["storage"]["tf"], {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None})
+        self.assertEqual(ucg["storage"]["nvme"], {"supported": "supported", "present": "unknown", "observed": False, "capacity_bytes": None})
+        self.assertEqual(ucg["storage"]["sata_ssd"], {"supported": "unsupported", "present": "not_present", "observed": False, "capacity_bytes": None})
+        self.assertEqual(ucg["storage"]["tf"], {"supported": "unsupported", "present": "not_present", "observed": False, "capacity_bytes": None})
         udw = normalize(self.udw, fixture("udw-raw.json"))
         self.assertEqual([fan["id"] for fan in udw["fans"]], ["fan1", "fan2"])
         self.assertEqual([item["id"] for item in udw["diagnostics"]["ignored_observations"]], ["fan3", "fan4"])

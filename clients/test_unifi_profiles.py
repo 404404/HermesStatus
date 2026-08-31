@@ -26,7 +26,18 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(udw["storage"]["nvme"]["supported"], False)
         self.assertEqual(udw["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
         self.assertEqual(udw["storage"]["tf"]["present"], "not_populated")
+        self.assertEqual(udw["diagnostics"]["filesystem"]["source"], "unifi.udw.ssd_filesystem")
         self.assertEqual(udw["cpu_model"], "Annapurna AL324")
+
+    def test_ucg_max_profile_declares_cpu_and_nvme_capability(self):
+        ucg = load_profile(self.profiles, "ucg-max")
+        self.assertEqual(ucg["cpu_model"], "Qualcomm IPQ5322")
+        self.assertEqual(ucg["diagnostics"]["hwmon"]["source"], "linux.sensors_json")
+        self.assertEqual(ucg["diagnostics"]["hwmon"]["expected_name"], "lm63")
+        self.assertTrue(ucg["fans"]["channels"][0]["supported"])
+        self.assertEqual(ucg["fans"]["channels"][0]["present"], "present")
+        self.assertTrue(ucg["storage"]["nvme"]["supported"])
+        self.assertFalse(ucg["storage"]["sata_ssd"]["supported"])
 
     def test_fixed_poe_and_power_limits_are_profile_data(self):
         udw = load_profile(self.profiles, "udw")

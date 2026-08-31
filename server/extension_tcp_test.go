@@ -78,7 +78,7 @@ func TestTCPStructuredUpdateAndDomainFailureIsolation(t *testing.T) {
 	})
 
 	logText := logs.String()
-	if !strings.Contains(logText, `username="s01" domain=hardware code=unknown_field payload_length=`) {
+	if !strings.Contains(logText, `username="s01" domain=hardware code=unknown_field field=extension reason="payload contains an unknown field" payload_length=`) {
 		t.Fatalf("safe domain failure was not logged: %s", logText)
 	}
 	for _, forbidden := range []string{"private-log-value", "unexpected_extension_field", "password="} {

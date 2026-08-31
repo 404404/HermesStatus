@@ -125,8 +125,8 @@ func (s *AgentServer) handleConnection(conn net.Conn) {
 			}
 			for _, issue := range issues {
 				s.app.logger.Printf(
-					"extension update username=%q domain=%s code=%s payload_length=%d device_id=%q",
-					parts[0], issue.Domain, issue.Code, issue.PayloadLength, deviceID,
+					"extension update username=%q domain=%s code=%s field=%s reason=%q payload_length=%d device_id=%q",
+					parts[0], issue.Domain, issue.Code, issue.Field, issue.Reason, issue.PayloadLength, deviceID,
 				)
 			}
 			if s.app.agentPong(deviceID, connectionID) {

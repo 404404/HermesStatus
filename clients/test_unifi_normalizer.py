@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 from unifi_profile_loader import load_profile
+from unifi_model_catalog import MODEL_DIRECTORY, load_catalog
 from unifi_normalizer import normalize
 
 def fixture(name):
@@ -14,6 +15,7 @@ def fixture(name):
 class NormalizerTests(unittest.TestCase):
     def setUp(self):
         self.profiles = ROOT / "unifi_profiles"
+        self.models = load_catalog(MODEL_DIRECTORY)
 
     def test_udw_normalization_and_fans(self):
         result = normalize(load_profile(self.profiles, "udw"), fixture("udw-raw.json"))
@@ -26,17 +28,23 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(result["storage"]["sata_ssd"]["supported"], "supported")
         self.assertEqual(result["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
         self.assertEqual(result["storage"]["tf"]["present"], "not_present")
+        self.assertEqual(result["power"]["max_power_w"], 550)
+        self.assertTrue(result["poe"]["supported"])
         self.assertEqual(result["system"]["cpu_usage_percent"], None)
 
     def test_ucg_max_zero_rpm_is_not_failure_and_nvme_unknown(self):
         result = normalize(load_profile(self.profiles, "ucg-max"), fixture("ucg-max-raw.json"))
         self.assertEqual(result["fans"][0]["rpm"], 0)
         self.assertEqual(result["fans"][0]["state"], "observed_zero_rpm")
+        self.assertEqual(result["fans"][0]["supported"], "supported")
+        self.assertEqual(result["fans"][0]["present"], "present")
         self.assertEqual(result["storage"]["nvme"]["present"], "unknown")
         self.assertFalse(result["storage"]["nvme"]["observed"])
-        self.assertEqual(result["storage"]["nvme"]["supported"], "unknown")
-        self.assertEqual(result["storage"]["sata_ssd"]["supported"], "unknown")
-        self.assertEqual(result["storage"]["tf"]["present"], "unknown")
+        self.assertEqual(result["storage"]["nvme"]["supported"], "supported")
+        self.assertEqual(result["storage"]["sata_ssd"]["supported"], "unsupported")
+        self.assertEqual(result["storage"]["tf"]["present"], "not_present")
+        self.assertEqual(result["system"]["cpu_model"], "Qualcomm IPQ5322")
+        self.assertFalse(result["power"]["supported"])
 
     def test_memory_uptime_load_and_cpu_delta(self):
         profile = load_profile(self.profiles, "ucg-max")
@@ -69,12 +77,52 @@ class NormalizerTests(unittest.TestCase):
         self.assertTrue(result["storage"]["sata_ssd"]["observed"])
         self.assertEqual(result["storage"]["tf"]["present"], "not_present")
 
+    def test_udw_filesystem_usage_is_separate_from_static_capacity(self):
+        raw = fixture("udw-raw.json")
+        raw["filesystem"] = {
+            "status": "available", "mountpoint": "/ssd1", "device": "/dev/sda5",
+            "filesystem_total_bytes": 109000000000, "used_bytes": 106000000000,
+            "available_bytes": 3000000000, "usage_percent": 97.25,
+        }
+        result = normalize(load_profile(self.profiles, "udw"), raw)
+        sata = result["storage"]["sata_ssd"]
+        self.assertEqual(sata["capacity_bytes"], 128000000000)
+        self.assertEqual(sata["filesystem_total_bytes"], 109000000000)
+        self.assertEqual(sata["used_bytes"], 106000000000)
+        self.assertEqual(sata["available_bytes"], 3000000000)
+        self.assertEqual(sata["usage_percent"], 97.25)
+        self.assertTrue(sata["observed"])
 
-    def test_public_shape_keeps_fixed_power_limits_in_profile_only(self):
+    def test_udw_missing_filesystem_observation_is_optional(self):
+        raw = fixture("udw-raw.json")
+        raw["filesystem"] = {"status": "unavailable", "mountpoint": "/ssd1"}
+        result = normalize(load_profile(self.profiles, "udw"), raw)
+        self.assertNotIn("filesystem_total_bytes", result["storage"]["sata_ssd"])
+        self.assertEqual(result["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
+
+    def test_ucg_max_missing_fan_rpm_is_not_observed(self):
+        raw = fixture("ucg-max-raw.json")
+        raw["diagnostics"]["fans"] = {}
+        result = normalize(load_profile(self.profiles, "ucg-max"), raw)
+        fan = result["fans"][0]
+        self.assertEqual(fan["supported"], "supported")
+        self.assertEqual(fan["present"], "present")
+        self.assertFalse(fan["observed"])
+        self.assertEqual(fan["state"], "not_observed")
+
+
+    def test_public_shape_exposes_fixed_profile_power_and_poe_metadata(self):
         result = normalize(load_profile(self.profiles, "udw"), fixture("udw-raw.json"))
-        self.assertNotIn("power", result)
-        self.assertNotIn("poe", result)
+        self.assertEqual(result["power"], {"supported": True, "psu_slots": 2, "max_power_w": 550})
+        self.assertEqual(result["poe"]["total_max_power_w"], 420)
         self.assertNotIn("max_power_w", result["power_supplies"][0])
+
+    def test_fan_observation_is_ignored_when_target_identity_does_not_match_profile(self):
+        raw = fixture("ucg-max-raw.json")
+        raw["target_id"] = "udw"
+        result = normalize(load_profile(self.profiles, "ucg-max"), raw)
+        self.assertIsNone(result["fans"][0]["rpm"])
+        self.assertFalse(result["fans"][0]["observed"])
 
     def test_optional_diagnostics_do_not_break_core(self):
         raw = fixture("ucg-max-raw.json")
@@ -82,3 +130,14 @@ class NormalizerTests(unittest.TestCase):
         result = normalize(load_profile(self.profiles, "ucg-max"), raw)
         self.assertEqual(result["system"]["cpu_temperature_c"], 67.1)
         self.assertFalse(result["stale"])
+
+    def test_storage_and_power_capabilities_come_from_model_catalog(self):
+        profile = load_profile(self.profiles, "udw")
+        profile["power"]["psu_slots"] = 0
+        profile["power"]["max_power_w"] = None
+        profile["storage"]["sata_ssd"]["supported"] = False
+        profile["storage"]["sata_ssd"]["present"] = "not_populated"
+        result = normalize(profile, fixture("udw-raw.json"), model=self.models["UDW"])
+        self.assertEqual(result["power"], {"supported": True, "psu_slots": 2, "max_power_w": 550})
+        self.assertEqual(result["storage"]["sata_ssd"]["supported"], "supported")
+        self.assertEqual(result["storage"]["sata_ssd"]["present"], "present")
