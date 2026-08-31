@@ -647,9 +647,23 @@
         "official-ucg-max-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "UCG Max",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-ucg-max-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
-        "ssh_model": []
+        "ssh_model": [
+          {
+            "value": "Qualcomm Technologies, Inc. IPQ5332/AP-MI03.1",
+            "status": "verified",
+            "provenance": "qualified_ssh",
+            "evidence_id": "runtime-ucg-max-ssh-identity-20260831"
+          }
+        ]
       },
       "ports": {
         "complete": true,
@@ -817,9 +831,30 @@
         "official-udw-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
-        "sysid": [],
-        "ssh_model": []
+        "api_model": [
+          {
+            "value": "UniFi Dream Wall",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-udw-controller-identity-20260831"
+          }
+        ],
+        "sysid": [
+          {
+            "value": "0xea2a",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-udw-controller-identity-20260831"
+          }
+        ],
+        "ssh_model": [
+          {
+            "value": "Annapurna Labs Alpine V2 UBNT",
+            "status": "verified",
+            "provenance": "qualified_ssh",
+            "evidence_id": "runtime-udw-ssh-identity-20260831"
+          }
+        ]
       },
       "ports": {
         "complete": true,
@@ -2753,7 +2788,14 @@
         "official-usw-flex-mini-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "USW Flex Mini",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-usw-flex-mini-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },

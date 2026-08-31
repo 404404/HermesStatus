@@ -12,7 +12,10 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from unifi_api import MAX_UNIFI_PORTS_PER_DEVICE, MAX_UNIFI_SITE_PORT_OBSERVATIONS, _ports
-from unifi_model_catalog import ModelCatalogError, load_catalog, project_static_capabilities, resolve_model
+from unifi_model_catalog import (
+    CATALOG_BUNDLE_PATH, CATALOG_BUNDLE_SHA256, CATALOG_SOURCE_REVISION,
+    ModelCatalogError, load_catalog, project_static_capabilities, resolve_model,
+)
 
 
 class UniFiPortContractTests(unittest.TestCase):
@@ -72,7 +75,7 @@ class UniFiPortContractTests(unittest.TestCase):
 
 
 class UniFiModelCatalogTests(unittest.TestCase):
-    def test_frozen_bundle_has_20_models_and_no_fuzzy_resolution(self):
+    def test_qualified_bundle_has_20_models_and_no_fuzzy_resolution(self):
         catalog = load_catalog()
         self.assertEqual(len(catalog), 20)
         for sku in ("UDW", "UCG-Max", "USW-Pro-HD-24", "USW-Pro-HD-24-PoE",
@@ -80,11 +83,28 @@ class UniFiModelCatalogTests(unittest.TestCase):
                     "USW-Pro-Max-24", "USW-Pro-Max-24-PoE",
                     "USW-Flex-2.5G-8", "USW-Flex-2.5G-8-PoE"):
             self.assertIn(sku, catalog)
-        self.assertIsNone(resolve_model(catalog, "UCG Max"))
-        self.assertIsNone(resolve_model(catalog, "UCG-Max"))
+        aliases = (
+            ("api_model", "UniFi Dream Wall", "UDW"),
+            ("ssh_model", "Annapurna Labs Alpine V2 UBNT", "UDW"),
+            ("sysid", "0xea2a", "UDW"),
+            ("api_model", "UCG Max", "UCG-Max"),
+            ("ssh_model", "Qualcomm Technologies, Inc. IPQ5332/AP-MI03.1", "UCG-Max"),
+            ("api_model", "USW Flex Mini", "USW-Flex-Mini"),
+        )
+        for kind, value, expected_sku in aliases:
+            with self.subTest(kind=kind, value=value):
+                self.assertEqual(resolve_model(catalog, value, kind=kind)["canonical_sku"], expected_sku)
+        self.assertIsNone(resolve_model(catalog, "unknown-runtime-model"))
         self.assertIsNone(resolve_model(catalog, "Cloud Gateway Max"))
+        self.assertIsNone(resolve_model(catalog, "UCG-Max"))
         self.assertIsNone(resolve_model(catalog, "UCG-Max", kind="not-an-identifier"))
         self.assertEqual(resolve_model(catalog, "UCG-Max", explicit_sku=True)["canonical_sku"], "UCG-Max")
+
+    def test_catalog_revision_and_checksum_are_pinned(self):
+        self.assertEqual(CATALOG_SOURCE_REVISION, "a838d664378a328750abed0fb9f622b1f11c5733")
+        self.assertEqual(CATALOG_BUNDLE_SHA256, "1daa97051a6a406d6e4e6b6004fb492a7287d59c4815f33a5c49ef1b54d495e1")
+        manifest = CATALOG_BUNDLE_PATH.with_name("catalog.sha256").read_text(encoding="ascii").strip()
+        self.assertEqual(manifest, CATALOG_BUNDLE_SHA256 + "  catalog.json")
 
     def test_static_projection_preserves_bundle_shape_without_runtime_aliases(self):
         catalog = load_catalog()
@@ -100,6 +120,13 @@ class UniFiModelCatalogTests(unittest.TestCase):
         self.assertNotIn("runtime_identifiers", projection)
         projection["ports"]["items"][0]["label"] = "changed"
         self.assertNotEqual(catalog["UDW"]["ports"]["items"][0]["label"], "changed")
+
+    def test_ssh_alias_does_not_override_static_processor_model(self):
+        catalog = load_catalog()
+        model = resolve_model(catalog, "Qualcomm Technologies, Inc. IPQ5332/AP-MI03.1", kind="ssh_model")
+        self.assertEqual(model["canonical_sku"], "UCG-Max")
+        self.assertEqual(model["processor"]["model"], "Qualcomm IPQ5322")
+        self.assertEqual(project_static_capabilities(model)["processor"]["model"], "Qualcomm IPQ5322")
 
     def test_power_projection_keeps_profiles_and_unknown_budgets(self):
         catalog = load_catalog()

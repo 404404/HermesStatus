@@ -9,7 +9,8 @@ from pathlib import Path
 
 CATALOG_SCHEMA_VERSION = 1
 SUPPORTED_CATALOG_SCHEMA_VERSIONS = frozenset({CATALOG_SCHEMA_VERSION})
-CATALOG_SOURCE_REVISION = "2e00a7e2da83d63254371e202cb326454234bf83"
+CATALOG_SOURCE_REVISION = "a838d664378a328750abed0fb9f622b1f11c5733"
+CATALOG_BUNDLE_SHA256 = "1daa97051a6a406d6e4e6b6004fb492a7287d59c4815f33a5c49ef1b54d495e1"
 CATALOG_BUNDLE_PATH = Path(__file__).with_name("unifi_catalog") / "catalog.json"
 # Compatibility name only; this is a bundle path, not a model-table directory.
 MODEL_DIRECTORY = CATALOG_BUNDLE_PATH
@@ -291,6 +292,8 @@ def load_catalog(path=CATALOG_BUNDLE_PATH):
     match = SHA256_LINE.fullmatch(manifest)
     if match is None:
         raise ModelCatalogError("invalid catalog.sha256")
+    if bundle_path == CATALOG_BUNDLE_PATH and match.group("digest") != CATALOG_BUNDLE_SHA256:
+        raise ModelCatalogError("catalog bundle does not match the pinned artifact")
     actual = hashlib.sha256(raw).hexdigest()
     if actual != match.group("digest"):
         raise ModelCatalogError("catalog bundle checksum mismatch")

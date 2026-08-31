@@ -199,9 +199,9 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(telemetry["devices"]["total"], 3)
         self.assertEqual(telemetry["clients"], {"total": 2, "wired": 1, "wireless": 1, "observed": True})
         self.assertEqual(telemetry["networks"], {"total": 2, "vlan": 1})
-        # The frozen V1 bundle has no verified API aliases yet. The API
-        # model string therefore remains a runtime observation and cannot
-        # unlock static catalog ports.
+        # The API's legacy UDW token is not a verified Catalog alias. The
+        # runtime observation remains preserved and cannot unlock static
+        # catalog ports.
         self.assertEqual(len(telemetry["ports"]), 1)
         self.assertEqual(telemetry["ports"][0]["port_idx"], 1)
         self.assertNotIn("max_speed_mbps", telemetry["ports"][0])
