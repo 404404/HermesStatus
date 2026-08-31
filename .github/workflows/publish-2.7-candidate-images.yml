@@ -216,6 +216,19 @@ jobs:
             --catalog-revision "${{ needs.catalog.outputs.revision }}" \
             --catalog-schema-version "${{ needs.catalog.outputs.schema_version }}" \
             --catalog-sha256 "${{ needs.catalog.outputs.sha256 }}"
+      - name: Client Device v2 metadata startup smoke
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint python3 \
+            -e HERMESSTATUS_SERVER_URL=https://127.0.0.1:8443 \
+            -e HERMESSTATUS_DEVICE_ID=ci-device \
+            -e HERMESSTATUS_DEVICE_TOKEN_FILE=/tmp/ci-device-token \
+            -e HERMESSTATUS_TLS_VERIFY=false \
+            -e HERMESSTATUS_CONNECT_TIMEOUT_SECONDS=1 \
+            -e HERMESSTATUS_READ_TIMEOUT_SECONDS=1 \
+            -e HERMESSTATUS_COLLECTION_INTERVAL_SECONDS=60 \
+            hermesstatus-client:2.7-check \
+            -c 'import os; from device_client_config import ClientMode, load_client_selection; selection = load_client_selection([], environ=os.environ); assert selection.mode is ClientMode.DEVICE_V2; assert selection.device_v2.device_id == "ci-device"'
 
   publish:
     needs: [catalog, contracts, go, python, frontend, compose, security, images]
@@ -223,6 +236,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
+      - name: Prepare publish provenance
+        id: provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v5
         with:
           ref: ${{ env.SOURCE_SHA }}
@@ -295,14 +314,14 @@ jobs:
             org.opencontainers.image.description=HermesStatus device status server
             org.opencontainers.image.version=2.7
             org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
-            org.opencontainers.image.created=${{ github.run_started_at }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.build_date }}
             org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
             org.opencontainers.image.licenses=MIT
             io.hermesstatus.component=server
           build-args: |
             VERSION=2.7
             VCS_REF=${{ env.SOURCE_SHA }}
-            BUILD_DATE=${{ github.run_started_at }}
+            BUILD_DATE=${{ steps.provenance.outputs.build_date }}
             SOURCE_URL=${{ env.IMAGE_SOURCE }}
 
       - name: Publish Client candidate
@@ -319,7 +338,7 @@ jobs:
             org.opencontainers.image.description=HermesStatus host and Hermes profile collector
             org.opencontainers.image.version=2.7
             org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
-            org.opencontainers.image.created=${{ github.run_started_at }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.build_date }}
             org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
             org.opencontainers.image.licenses=MIT
             io.hermesstatus.component=client
@@ -329,7 +348,7 @@ jobs:
           build-args: |
             VERSION=2.7
             VCS_REF=${{ env.SOURCE_SHA }}
-            BUILD_DATE=${{ github.run_started_at }}
+            BUILD_DATE=${{ steps.provenance.outputs.build_date }}
             SOURCE_URL=${{ env.IMAGE_SOURCE }}
             CATALOG_REVISION=${{ needs.catalog.outputs.revision }}
             CATALOG_SCHEMA_VERSION=${{ needs.catalog.outputs.schema_version }}
@@ -348,3 +367,26 @@ jobs:
           echo "CANDIDATE_CATALOG_REVISION=${{ needs.catalog.outputs.revision }}"
           echo "CANDIDATE_CATALOG_SCHEMA_VERSION=${{ needs.catalog.outputs.schema_version }}"
           echo "CANDIDATE_CATALOG_SHA256=${{ needs.catalog.outputs.sha256 }}"
+      - name: Validate published image provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate_tag="${{ steps.candidate_state.outputs.candidate_tag }}"
+          server_image="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/hermesstatus-server:${candidate_tag}"
+          client_image="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/hermesstatus-client:${candidate_tag}"
+          docker pull "$server_image" >/dev/null
+          docker pull "$client_image" >/dev/null
+          server_created=$(docker image inspect "$server_image" --format '{{index .Config.Labels "org.opencontainers.image.created"}}')
+          client_created=$(docker image inspect "$client_image" --format '{{index .Config.Labels "org.opencontainers.image.created"}}')
+          test "$server_created" = "$client_created"
+          python3 scripts/validate_image_provenance.py \
+            --server-image "$server_image" \
+            --client-image "$client_image" \
+            --candidate-tag "$candidate_tag" \
+            --version "2.7" \
+            --revision "${{ env.SOURCE_SHA }}" \
+            --created "$server_created" \
+            --source "${{ env.IMAGE_SOURCE }}" \
+            --catalog-revision "${{ needs.catalog.outputs.revision }}" \
+            --catalog-schema-version "${{ needs.catalog.outputs.schema_version }}" \
+            --catalog-sha256 "${{ needs.catalog.outputs.sha256 }}"

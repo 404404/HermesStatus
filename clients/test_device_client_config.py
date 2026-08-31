@@ -64,6 +64,38 @@ class DeviceClientConfigTests(unittest.TestCase):
         self.assertIs(v2.mode, ClientMode.DEVICE_V2)
         self.assertEqual(v2.device_v2.device_id, "device-alpha")
 
+    def test_catalog_build_metadata_alone_does_not_select_device_v2(self):
+        metadata = {
+            "HERMESSTATUS_CLIENT_VERSION": "2.7",
+            "HERMESSTATUS_CLIENT_REVISION": "e" * 40,
+            "HERMESSTATUS_CLIENT_BUILD_TIME": "2026-08-31T00:00:00Z",
+            "HERMESSTATUS_CLIENT_PROTOCOL": "device_v2",
+            "HERMESSTATUS_UNIFI_CATALOG_REVISION": "a" * 40,
+            "HERMESSTATUS_UNIFI_CATALOG_SCHEMA_VERSION": "1",
+            "HERMESSTATUS_UNIFI_CATALOG_SHA256": "b" * 64,
+        }
+        selection = load_client_selection([], environ=metadata)
+        self.assertIs(selection.mode, ClientMode.LEGACY)
+        self.assertIsNone(selection.device_v2)
+
+    def test_valid_device_v2_configuration_is_unchanged_by_catalog_metadata(self):
+        baseline = load_client_selection([], environ=self.complete_env)
+        with_metadata = load_client_selection(
+            [],
+            environ={
+                **self.complete_env,
+                "HERMESSTATUS_CLIENT_VERSION": "2.7",
+                "HERMESSTATUS_CLIENT_REVISION": "e" * 40,
+                "HERMESSTATUS_CLIENT_BUILD_TIME": "2026-08-31T00:00:00Z",
+                "HERMESSTATUS_CLIENT_PROTOCOL": "device_v2",
+                "HERMESSTATUS_UNIFI_CATALOG_REVISION": "a" * 40,
+                "HERMESSTATUS_UNIFI_CATALOG_SCHEMA_VERSION": "1",
+                "HERMESSTATUS_UNIFI_CATALOG_SHA256": "b" * 64,
+            },
+        )
+        self.assertIs(with_metadata.mode, ClientMode.DEVICE_V2)
+        self.assertEqual(with_metadata.device_v2, baseline.device_v2)
+
     def test_cli_over_environment_over_file_over_defaults(self):
         config_path = self.root / "client.json"
         config_path.write_text(
@@ -203,6 +235,24 @@ class DeviceClientConfigTests(unittest.TestCase):
             file_values={"smart_devices": []},
         )
         self.assertEqual(explicit_empty.smart_devices, ())
+
+    def test_unknown_catalog_and_arbitrary_metadata_names_still_fail_closed(self):
+        for key in (
+            "HERMESSTATUS_UNIFI_CATALOG_UNKNOWN_FIELD",
+            "HERMESSTATUS_UNKNOWN_CONFIGURATION",
+        ):
+            with self.subTest(key=key), self.assertRaises(ClientContractError):
+                load_client_selection([], environ={key: "value"})
+
+    def test_build_metadata_is_not_valid_device_v2_cli_configuration(self):
+        for key, value in (
+            ("HERMESSTATUS_CLIENT_VERSION", "2.7"),
+            ("HERMESSTATUS_UNIFI_CATALOG_REVISION", "a" * 40),
+            ("HERMESSTATUS_UNIFI_CATALOG_SCHEMA_VERSION", "1"),
+            ("HERMESSTATUS_UNIFI_CATALOG_SHA256", "b" * 64),
+        ):
+            with self.subTest(key=key), self.assertRaises(ClientContractError):
+                load_client_selection([f"{key}={value}"], environ={})
 
     def test_partial_unknown_malformed_and_mixed_v2_fail_closed(self):
         invalid_environments = [
