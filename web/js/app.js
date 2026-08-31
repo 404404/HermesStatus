@@ -1345,7 +1345,7 @@ function unifiPowerRows(unifi){
   if(!supplies.length) return '<tr><td colspan="6" class="table-empty">暂无可显示的电源观测。</td></tr>';
   return supplies.map(supply => {
     const watts = finiteNumber(supply.power_watts ?? supply.power_w ?? supply.watts);
-    const maximum = finiteNumber(supply.max_power_w ?? supply.power_max_w ?? supply.max_watts ?? powerProfile.max_power_w);
+    const maximum = finiteNumber(supply.max_power_w ?? supply.power_max_w ?? supply.max_watts ?? powerProfile.max_device_consumption_w ?? powerProfile.max_power_w);
     const fanRpm = finiteNumber(supply.fan_rpm ?? supply.cooling_fan_rpm);
     const unsupported = supply.supported === 'unsupported' || supply.supported === false;
     const powerText = unsupported ? '-' : watts === null && maximum === null ? '-' : `${watts === null ? '-' : unifiPowerText(watts)}${maximum === null ? '' : ` / ${unifiPowerText(maximum)}`}`;
@@ -1662,7 +1662,7 @@ function unifiPortTelemetryMarkup(unifi){
     const currentValue = summary.current ?? (fallback ? globalSummary.poe_total_power_w : null);
     if(!fallback && summary.current === null && summary.maximum === null) return '';
     const maximumValue = fallback
-      ? (finiteNumber(globalSummary.poe_max_power_w) ?? finiteNumber(profilePoe.total_max_power_w) ?? finiteNumber(summary.maximum))
+      ? (finiteNumber(globalSummary.poe_max_power_w) ?? finiteNumber(profilePoe.absolute_max_poe_budget_w) ?? finiteNumber(profilePoe.total_max_power_w) ?? finiteNumber(summary.maximum))
       : finiteNumber(summary.maximum);
     const current = unifiPowerText(currentValue);
     const maximum = unifiPowerText(maximumValue);

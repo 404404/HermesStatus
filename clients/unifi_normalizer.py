@@ -1,4 +1,5 @@
 """Profile-driven, bounded UniFi normalization for Device v2 telemetry."""
+import copy
 import math
 from datetime import datetime, timezone
 
@@ -213,15 +214,42 @@ def _fans(profile, raw_fans, hardware_cache=None):
 
 def _profile_power(profile, model=None):
     config = model.get("power") if isinstance(model, dict) else profile["power"]
-    slots = config["psu_slots"]
+    slots = config.get("psu_slots")
+    slots = slots if isinstance(slots, int) and not isinstance(slots, bool) else 0
+    if not isinstance(model, dict):
+        return {
+            "supported": slots > 0,
+            "psu_slots": slots,
+            "max_power_w": config.get("max_power_w"),
+        }
     return {
         "supported": slots > 0,
         "psu_slots": slots,
-        "max_power_w": config.get("max_power_w"),
+        "psu_unit_capacity_w": config.get("psu_unit_capacity_w"),
+        "controller_reference_capacity_w": config.get("controller_reference_capacity_w"),
+        "max_device_consumption_w": config.get("max_device_consumption_w"),
+        "absolute_max_poe_budget_w": config.get("absolute_max_poe_budget_w"),
+        "power_profiles": copy.deepcopy(config.get("power_profiles", [])),
     }
 
 
-def _profile_poe(profile):
+def _profile_poe(profile, model=None):
+    if isinstance(model, dict):
+        ports = model.get("ports", {}).get("items", [])
+        power = model.get("power", {})
+        limits = {
+            str(port["index"]): port["poe_max_power_w"]
+            for port in ports
+            if port.get("poe_out") is True and port.get("poe_max_power_w") is not None
+        }
+        absolute = power.get("absolute_max_poe_budget_w")
+        supported = any(port.get("poe_out") is True for port in ports)
+        return {
+            "supported": supported,
+            "absolute_max_poe_budget_w": absolute,
+            "total_max_power_w": absolute,
+            "port_max_power_w": limits,
+        }
     config = profile.get("poe") if isinstance(profile.get("poe"), dict) else {}
     limits = config.get("port_max_power_w")
     return {
@@ -272,16 +300,38 @@ def _power(profile, hardware_cache=None, model=None):
 
 
 def _storage(profile, hardware_cache=None, model=None, filesystem=None):
-    result = {}
-    capabilities = model.get("storage") if isinstance(model, dict) else profile["storage"]
-    for name, capability in capabilities.items():
-        supported = capability["supported"]
-        result[name] = {
-            "supported": "supported" if supported is True else "unsupported" if supported is False else "unknown",
-            "present": "not_present" if capability["present"] == "not_populated" else capability["present"],
-            "observed": capability.get("observed") is True,
-            "capacity_bytes": capability["capacity_bytes"],
-        }
+    result = {
+        "nvme": {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None},
+        "sata_ssd": {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None},
+        "tf": {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None},
+    }
+    if isinstance(model, dict):
+        storage = model.get("storage", {})
+        items = storage.get("items", [])
+        if storage.get("complete") is True:
+            for capability in result.values():
+                capability["supported"] = "unsupported"
+                capability["present"] = "not_present"
+        aliases = {"nvme": "nvme", "ssd": "sata_ssd", "sata_ssd": "sata_ssd", "microsd": "tf", "tf": "tf"}
+        for capability in items:
+            name = aliases.get(capability.get("type"))
+            if name is None:
+                continue
+            result[name] = {
+                "supported": "supported",
+                "present": "not_present" if capability["default_presence"] == "not_populated" else capability["default_presence"],
+                "observed": False,
+                "capacity_bytes": capability["capacity_bytes"],
+            }
+    else:
+        for name, capability in profile["storage"].items():
+            supported = capability["supported"]
+            result[name] = {
+                "supported": "supported" if supported is True else "unsupported" if supported is False else "unknown",
+                "present": "not_present" if capability["present"] == "not_populated" else capability["present"],
+                "observed": capability.get("observed") is True,
+                "capacity_bytes": capability["capacity_bytes"],
+            }
     records = _cache_records(hardware_cache, ("storage", "storages", "disks", "block_devices")) if hardware_cache else []
     if hardware_cache:
         flash_meta = {item.get("id"): item for item in _cache_records(hardware_cache, ("flash",))}
@@ -348,7 +398,7 @@ def normalize(profile, raw, previous=None, model=None):
                           "last_success": previous.get("updated_at") if previous else None},
             "api": _api_observation(raw, previous),
             "power": _profile_power(profile, model),
-            "poe": _profile_poe(profile),
+            "poe": _profile_poe(profile, model),
             "system": previous.get("system") if previous else None,
             "fans": previous.get("fans", []) if previous else [],
             "power_supplies": previous.get("power_supplies", _power(profile, model=model)) if previous else _power(profile, model=model),
@@ -393,9 +443,9 @@ def normalize(profile, raw, previous=None, model=None):
         "transport": {"status": "available", "last_attempt": now, "last_success": now},
         "api": _api_observation(raw, previous),
         "power": _profile_power(profile, model),
-        "poe": _profile_poe(profile),
+        "poe": _profile_poe(profile, model),
         "system": {
-            "cpu_model": profile.get("cpu_model"),
+            "cpu_model": (model.get("processor", {}).get("model") if isinstance(model, dict) and isinstance(model.get("processor"), dict) else profile.get("cpu_model")),
             "cpu_usage_percent": cpu_pct,
             "cpu_usage_reason": cpu_reason,
             "cpu_temperature_c": temperature,

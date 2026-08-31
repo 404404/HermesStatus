@@ -25,6 +25,109 @@ func DecodeUniFiStatsJSON(data []byte) (*UniFiStats, error) {
 	return &stats, nil
 }
 
+var uniFiPowerProfileFields = [...]string{"selection_mode", "input_method", "input_poe_class", "input_capacity_w", "poe_budget_w"}
+
+func uniFiPowerFieldPresent(profile UniFiPowerSourceProfile, field string) bool {
+	switch field {
+	case "selection_mode":
+		return profile.SelectionMode != ""
+	case "input_method":
+		return profile.InputMethod != ""
+	case "input_poe_class":
+		return profile.InputPoEClass != nil
+	case "input_capacity_w":
+		return profile.InputCapacityW != nil
+	case "poe_budget_w":
+		return profile.PoEBudgetW != nil
+	default:
+		return false
+	}
+}
+
+func validateUniFiPowerSourceProfile(profile UniFiPowerSourceProfile, prefix string, absolute *float64, seen map[string]struct{}) error {
+	if profile.ID == "" || len(profile.ID) > MaxUniFiTextLength {
+		return validationError(validationCodeInvalidValue, prefix+".id", "is invalid")
+	}
+	if _, exists := seen[profile.ID]; exists {
+		return validationError(validationCodeInvalidValue, prefix+".id", "is duplicated")
+	}
+	seen[profile.ID] = struct{}{}
+	if profile.Status != "verified" && profile.Status != "candidate" && profile.Status != "unsupported" {
+		return validationError(validationCodeInvalidValue, prefix+".status", "is invalid")
+	}
+	if profile.SelectionMode != "fixed" && profile.SelectionMode != "auto_detected" && profile.SelectionMode != "controller_manual" {
+		return validationError(validationCodeInvalidValue, prefix+".selection_mode", "is invalid")
+	}
+	if profile.InputMethod != "ac_mains" && profile.InputMethod != "ac_adapter" && profile.InputMethod != "dc_adapter" && profile.InputMethod != "usb_c" && profile.InputMethod != "poe" {
+		return validationError(validationCodeInvalidValue, prefix+".input_method", "is invalid")
+	}
+	if profile.SelectionMode == "auto_detected" && profile.InputMethod != "poe" {
+		return validationError(validationCodeInvalidValue, prefix, "auto_detected profile requires PoE input")
+	}
+	if profile.SelectionMode == "controller_manual" && profile.InputMethod != "dc_adapter" {
+		return validationError(validationCodeInvalidValue, prefix, "controller_manual profile requires DC adapter input")
+	}
+	if profile.SelectionMode == "fixed" && profile.InputMethod == "poe" {
+		return validationError(validationCodeInvalidValue, prefix, "fixed profile cannot use PoE input")
+	}
+	if profile.InputMethod == "poe" && profile.SelectionMode != "auto_detected" {
+		return validationError(validationCodeInvalidValue, prefix, "PoE input must be auto_detected")
+	}
+	if profile.InputMethod != "poe" && profile.InputPoEClass != nil {
+		return validationError(validationCodeInvalidValue, prefix+".input_poe_class", "non-PoE input cannot declare a PoE class")
+	}
+	if profile.InputPoEClass != nil && *profile.InputPoEClass != "poe" && *profile.InputPoEClass != "poe+" && *profile.InputPoEClass != "poe++" && *profile.InputPoEClass != "poe+++" {
+		return validationError(validationCodeInvalidValue, prefix+".input_poe_class", "is invalid")
+	}
+	for field, value := range map[string]*float64{"input_capacity_w": profile.InputCapacityW, "poe_budget_w": profile.PoEBudgetW} {
+		if err := validateOptionalFloat(prefix+"."+field, value, float64(MaxSafeInteger)); err != nil {
+			return err
+		}
+	}
+	if absolute != nil && profile.PoEBudgetW != nil && *profile.PoEBudgetW > *absolute {
+		return validationError(validationCodeInvalidValue, prefix+".poe_budget_w", "exceeds absolute_max_poe_budget_w")
+	}
+	if len(profile.FieldEvidence) != len(uniFiPowerProfileFields) {
+		return validationError(validationCodeInvalidValue, prefix+".field_evidence", "must contain exactly the known power fields")
+	}
+	for _, field := range uniFiPowerProfileFields {
+		evidence, ok := profile.FieldEvidence[field]
+		if !ok {
+			return validationError(validationCodeInvalidValue, prefix+".field_evidence", "is missing a power field")
+		}
+		if evidence.Status != "verified" && evidence.Status != "candidate" && evidence.Status != "unknown" && evidence.Status != "not_applicable" {
+			return validationError(validationCodeInvalidValue, prefix+".field_evidence."+field+".status", "is invalid")
+		}
+		if len(evidence.EvidenceIDs) > 16 {
+			return validationError(validationCodeInvalidValue, prefix+".field_evidence."+field+".evidence_ids", "is too large")
+		}
+		seenEvidence := make(map[string]struct{}, len(evidence.EvidenceIDs))
+		for _, evidenceID := range evidence.EvidenceIDs {
+			if evidenceID == "" || len(evidenceID) > MaxUniFiTextLength {
+				return validationError(validationCodeInvalidValue, prefix+".field_evidence."+field+".evidence_ids", "contains an invalid value")
+			}
+			if _, exists := seenEvidence[evidenceID]; exists {
+				return validationError(validationCodeInvalidValue, prefix+".field_evidence."+field+".evidence_ids", "contains a duplicate value")
+			}
+			seenEvidence[evidenceID] = struct{}{}
+		}
+		if evidence.SourceNote != nil && (*evidence.SourceNote == "" || len(*evidence.SourceNote) > MaxUniFiTextLength) {
+			return validationError(validationCodeInvalidValue, prefix+".field_evidence."+field+".source_note", "is invalid")
+		}
+		if len(evidence.EvidenceIDs) == 0 && evidence.SourceNote == nil {
+			return validationError(validationCodeInvalidValue, prefix+".field_evidence."+field, "requires evidence_ids or source_note")
+		}
+		present := uniFiPowerFieldPresent(profile, field)
+		if (evidence.Status == "unknown" || evidence.Status == "not_applicable") && present {
+			return validationError(validationCodeInvalidValue, prefix+".field_evidence."+field, "unknown fields must be null")
+		}
+		if (evidence.Status == "verified" || evidence.Status == "candidate") && !present {
+			return validationError(validationCodeInvalidValue, prefix+".field_evidence."+field, "qualified fields must be present")
+		}
+	}
+	return nil
+}
+
 func ValidateUniFiStats(stats *UniFiStats) error {
 	if stats == nil || !validUniFiTransportStatus(stats.Transport.Status) {
 		return validationError(validationCodeInvalidValue, "unifi", "contains an unsupported transport status")
@@ -50,13 +153,35 @@ func ValidateUniFiStats(stats *UniFiStats) error {
 		if stats.Power.PSUSlots < 0 || stats.Power.PSUSlots > MaxUniFiPowerSupplies {
 			return validationError(validationCodeInvalidValue, "unifi.power.psu_slots", "is invalid")
 		}
-		if err := validateOptionalFloat("unifi.power.max_power_w", stats.Power.MaxPowerW, float64(MaxSafeInteger)); err != nil {
-			return err
+		for field, value := range map[string]*float64{
+			"psu_unit_capacity_w":             stats.Power.PSUUnitCapacityW,
+			"controller_reference_capacity_w": stats.Power.ControllerReferenceCapacityW,
+			"max_device_consumption_w":        stats.Power.MaxDeviceConsumptionW,
+			"absolute_max_poe_budget_w":       stats.Power.AbsoluteMaxPoEBudgetW,
+		} {
+			if err := validateOptionalFloat("unifi.power."+field, value, float64(MaxSafeInteger)); err != nil {
+				return err
+			}
+		}
+		if len(stats.Power.PowerProfiles) > MaxUniFiPowerProfiles {
+			return validationError(validationCodeInvalidValue, "unifi.power.power_profiles", "is too large")
+		}
+		seenProfiles := make(map[string]struct{}, len(stats.Power.PowerProfiles))
+		for index, profile := range stats.Power.PowerProfiles {
+			if err := validateUniFiPowerSourceProfile(profile, "unifi.power.power_profiles."+strconv.Itoa(index), stats.Power.AbsoluteMaxPoEBudgetW, seenProfiles); err != nil {
+				return err
+			}
 		}
 	}
 	if stats.PoE != nil {
+		if err := validateOptionalFloat("unifi.poe.absolute_max_poe_budget_w", stats.PoE.AbsoluteMaxPoEBudgetW, float64(MaxSafeInteger)); err != nil {
+			return err
+		}
 		if err := validateOptionalFloat("unifi.poe.total_max_power_w", stats.PoE.TotalMaxPowerW, float64(MaxSafeInteger)); err != nil {
 			return err
+		}
+		if !stats.PoE.Supported && stats.PoE.AbsoluteMaxPoEBudgetW != nil && *stats.PoE.AbsoluteMaxPoEBudgetW > 0 {
+			return validationError(validationCodeInvalidValue, "unifi.poe.absolute_max_poe_budget_w", "unsupported PoE output cannot have a positive budget")
 		}
 		if len(stats.PoE.PortMaxPowerW) > MaxUniFiPortsPerDevice {
 			return validationError(validationCodeInvalidValue, "unifi.poe.port_max_power_w", "is too large")
@@ -65,7 +190,13 @@ func ValidateUniFiStats(stats *UniFiStats) error {
 			if port == "" || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > float64(MaxSafeInteger) {
 				return validationError(validationCodeInvalidValue, "unifi.poe.port_max_power_w", "contains an invalid value")
 			}
+			if !stats.PoE.Supported && value > 0 {
+				return validationError(validationCodeInvalidValue, "unifi.poe.port_max_power_w", "unsupported PoE output cannot have a positive limit")
+			}
 		}
+	}
+	if stats.Power != nil && stats.PoE != nil && stats.Power.AbsoluteMaxPoEBudgetW != nil && stats.PoE.AbsoluteMaxPoEBudgetW != nil && *stats.Power.AbsoluteMaxPoEBudgetW != *stats.PoE.AbsoluteMaxPoEBudgetW {
+		return validationError(validationCodeInvalidValue, "unifi.poe.absolute_max_poe_budget_w", "does not match the model power capability")
 	}
 	if !stats.Configured {
 		if stats.Profile != nil || stats.System != nil || stats.Stale || stats.Error != nil || stats.Transport.Status != UniFiTransportDisabled || (stats.API != nil && (stats.API.Enabled || stats.API.Status != "disabled")) {
@@ -352,7 +483,7 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 		if item.Connector != nil && *item.Connector != "rj45" && *item.Connector != "sfp" && *item.Connector != "sfp_plus" && *item.Connector != "sfp28" && *item.Connector != "other" {
 			return validationError(validationCodeInvalidValue, prefix+".connector", "is invalid")
 		}
-		if item.PoEStandard != nil && *item.PoEStandard != "poe" && *item.PoEStandard != "poe+" && *item.PoEStandard != "poe++" {
+		if item.PoEStandard != nil && *item.PoEStandard != "poe" && *item.PoEStandard != "poe+" && *item.PoEStandard != "poe++" && *item.PoEStandard != "poe+++" {
 			return validationError(validationCodeInvalidValue, prefix+".poe_standard", "is invalid")
 		}
 		if item.ModelProfileStatus != nil && *item.ModelProfileStatus != "known" && *item.ModelProfileStatus != "unknown" {
@@ -863,8 +994,20 @@ func SanitizeUniFiStats(input UniFiStats) UniFiStats {
 		if power.PSUSlots < 0 || power.PSUSlots > MaxUniFiPowerSupplies {
 			power.PSUSlots = 0
 		}
-		if power.MaxPowerW != nil && (*power.MaxPowerW < 0 || math.IsNaN(*power.MaxPowerW) || math.IsInf(*power.MaxPowerW, 0)) {
-			power.MaxPowerW = nil
+		sanitizeOptionalUniFiFloat(&power.PSUUnitCapacityW)
+		sanitizeOptionalUniFiFloat(&power.ControllerReferenceCapacityW)
+		sanitizeOptionalUniFiFloat(&power.MaxDeviceConsumptionW)
+		sanitizeOptionalUniFiFloat(&power.AbsoluteMaxPoEBudgetW)
+		power.PowerProfiles = append([]UniFiPowerSourceProfile(nil), input.Power.PowerProfiles...)
+		if input.Power.PowerProfiles != nil && power.PowerProfiles == nil {
+			power.PowerProfiles = make([]UniFiPowerSourceProfile, 0)
+		}
+		for index := range power.PowerProfiles {
+			profile := &power.PowerProfiles[index]
+			profile.FieldEvidence = cloneUniFiPowerFieldEvidence(profile.FieldEvidence)
+			if profile.FieldEvidence == nil {
+				profile.FieldEvidence = map[string]UniFiPowerFieldEvidence{}
+			}
 		}
 		result.Power = &power
 	}
@@ -917,6 +1060,28 @@ func SanitizeUniFiStats(input UniFiStats) UniFiStats {
 	sort.SliceStable(result.Fans, func(i, j int) bool { return result.Fans[i].ID < result.Fans[j].ID })
 	sort.SliceStable(result.PowerSupplies, func(i, j int) bool { return result.PowerSupplies[i].ID < result.PowerSupplies[j].ID })
 	sort.SliceStable(result.Diagnostics.Ignored, func(i, j int) bool { return result.Diagnostics.Ignored[i].ID < result.Diagnostics.Ignored[j].ID })
+	return result
+}
+
+func sanitizeOptionalUniFiFloat(value **float64) {
+	if value == nil || *value == nil {
+		return
+	}
+	candidate := *value
+	if *candidate < 0 || math.IsNaN(*candidate) || math.IsInf(*candidate, 0) {
+		*value = nil
+	}
+}
+
+func cloneUniFiPowerFieldEvidence(input map[string]UniFiPowerFieldEvidence) map[string]UniFiPowerFieldEvidence {
+	if input == nil {
+		return nil
+	}
+	result := make(map[string]UniFiPowerFieldEvidence, len(input))
+	for key, value := range input {
+		value.EvidenceIDs = append([]string(nil), value.EvidenceIDs...)
+		result[key] = value
+	}
 	return result
 }
 

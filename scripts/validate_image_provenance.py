@@ -19,8 +19,8 @@ REQUIRED_LABELS = (
     "org.opencontainers.image.licenses",
 )
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
-PRODUCT_VERSION_PATTERN = re.compile(r"^2\.5$")
-CANDIDATE_TAG_PATTERN = re.compile(r"^(?P<version>2\.5)-(?P<revision>[0-9a-f]{12})$")
+PRODUCT_VERSION_PATTERN = re.compile(r"^(?:2\.5|2\.6)$")
+CANDIDATE_TAG_PATTERN = re.compile(r"^(?P<version>2\.5|2\.6)-(?P<revision>[0-9a-f]{12})$")
 COMPONENT_LABEL = "io.hermesstatus.component"
 SECRET_PATTERN = re.compile(
     r"(?i)(authorization\s*:|bearer\s+|api[_-]?key|password|private[_-]?key|token[_-]?secret)"
@@ -56,10 +56,10 @@ def validate_created(value: str) -> None:
 
 def validate_candidate_tag(candidate_tag: str, product_version: str, revision: str) -> None:
     if not PRODUCT_VERSION_PATTERN.fullmatch(product_version):
-        raise ValidationError("product version must be the formal 2.5 release line")
+        raise ValidationError("product version must be the formal 2.5 or 2.6 release line")
     match = CANDIDATE_TAG_PATTERN.fullmatch(candidate_tag)
     if match is None:
-        raise ValidationError("candidate tag must be 2.5- followed by a 12-character lowercase Git SHA")
+        raise ValidationError("candidate tag must be 2.5- or 2.6- followed by a 12-character lowercase Git SHA")
     if match.group("version") != product_version or match.group("revision") != revision[:12]:
         raise ValidationError("candidate tag does not match the formal version and full revision")
 

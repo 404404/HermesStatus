@@ -78,6 +78,7 @@ const (
 	MaxUniFiTextLength          = 128
 	MaxUniFiFans                = 8
 	MaxUniFiPowerSupplies       = 4
+	MaxUniFiPowerProfiles       = 16
 	MaxUniFiIgnoredObservations = 8
 	MaxUniFiAPIEndpoints        = 24
 	MaxUniFiAPIWans             = 16

@@ -1094,6 +1094,10 @@ def _device_poe_totals(target_detail):
     return current, maximum
 
 
+def _stable_port_record_key(item):
+    return json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
 def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=None, devices=None):
     target_id = _identifier(target.get("id")) if isinstance(target, dict) else None
     if not target_id:
@@ -1120,7 +1124,7 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
         matched_device_ids.add(device_id)
         detail_capabilities = _detail_port_capabilities(target_detail) if device_id == target_id else {}
         model = device_models.get(device_id)
-        static_ports = {port["index"]: port for port in model["ports"]} if model else {}
+        static_ports = {port["index"]: port for port in model["ports"]["items"]} if model else {}
         raw_ports = legacy.get("port_table") if isinstance(legacy.get("port_table"), list) else []
         for port in raw_ports[:MAX_UNIFI_PORTS_PER_DEVICE]:
             index = _counter(port, "port_idx", "idx", "portIndex")
@@ -1135,20 +1139,23 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
                 model_id=model["canonical_sku"] if model else None,
             )
             if item is not None:
-                runtime_by_key.setdefault((device_id, item["port_idx"]), []).append(item)
+                key = (device_id, item["port_idx"])
+                current = runtime_by_key.get(key)
+                if current is None or _stable_port_record_key(item) < _stable_port_record_key(current):
+                    runtime_by_key[key] = item
     if not matched:
         return None, None
 
     port_records = []
     for device_id in sorted(matched_device_ids):
         model = device_models.get(device_id)
-        static_ports = {port["index"]: port for port in model["ports"]} if model else {}
+        static_ports = {port["index"]: port for port in model["ports"]["items"]} if model else {}
         emitted = set()
         for static in sorted(static_ports.values(), key=lambda port: port["index"]):
             key = (device_id, static["index"])
-            entries = runtime_by_key.pop(key, [])
-            if entries:
-                port_records.extend(entries)
+            entry = runtime_by_key.pop(key, None)
+            if entry is not None:
+                port_records.append(entry)
             else:
                 item = _port_record(
                     {},
@@ -1163,7 +1170,7 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
             emitted.add(key)
         for key in sorted(runtime_by_key):
             if key[0] == device_id and key not in emitted:
-                port_records.extend(runtime_by_key.pop(key))
+                port_records.append(runtime_by_key.pop(key))
     port_records.sort(key=lambda item: (item["device_id"], item["port_idx"]))
     port_records = port_records[:MAX_UNIFI_SITE_PORT_OBSERVATIONS]
 

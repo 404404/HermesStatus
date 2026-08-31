@@ -132,6 +132,9 @@ class ImageProvenanceTests(unittest.TestCase):
         with self.assertRaises(MODULE.ValidationError):
             MODULE.validate_candidate_tag("2.5-bbbbbbbbbbbb", PRODUCT_VERSION, REVISION)
 
+    def test_2_6_candidate_tag_is_supported(self) -> None:
+        MODULE.validate_candidate_tag("2.6-" + REVISION[:12], "2.6", REVISION)
+
     def test_oci_version_rejects_candidate_tag(self):
         payload = valid_inspect()
         payload["Config"]["Labels"]["org.opencontainers.image.version"] = CANDIDATE_TAG

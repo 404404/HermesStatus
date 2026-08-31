@@ -339,15 +339,37 @@ type UniFiPowerStats struct {
 }
 
 type UniFiPowerProfile struct {
-	Supported bool     `json:"supported"`
-	PSUSlots  int      `json:"psu_slots"`
-	MaxPowerW *float64 `json:"max_power_w"`
+	Supported                    bool                      `json:"supported"`
+	PSUSlots                     int                       `json:"psu_slots"`
+	PSUUnitCapacityW             *float64                  `json:"psu_unit_capacity_w"`
+	ControllerReferenceCapacityW *float64                  `json:"controller_reference_capacity_w"`
+	MaxDeviceConsumptionW        *float64                  `json:"max_device_consumption_w"`
+	AbsoluteMaxPoEBudgetW        *float64                  `json:"absolute_max_poe_budget_w"`
+	PowerProfiles                []UniFiPowerSourceProfile `json:"power_profiles"`
+}
+
+type UniFiPowerFieldEvidence struct {
+	Status      string   `json:"status"`
+	EvidenceIDs []string `json:"evidence_ids"`
+	SourceNote  *string  `json:"source_note,omitempty"`
+}
+
+type UniFiPowerSourceProfile struct {
+	ID             string                             `json:"id"`
+	Status         string                             `json:"status"`
+	SelectionMode  string                             `json:"selection_mode"`
+	InputMethod    string                             `json:"input_method"`
+	InputPoEClass  *string                            `json:"input_poe_class"`
+	InputCapacityW *float64                           `json:"input_capacity_w"`
+	PoEBudgetW     *float64                           `json:"poe_budget_w"`
+	FieldEvidence  map[string]UniFiPowerFieldEvidence `json:"field_evidence"`
 }
 
 type UniFiPoEProfile struct {
-	Supported      bool               `json:"supported"`
-	TotalMaxPowerW *float64           `json:"total_max_power_w"`
-	PortMaxPowerW  map[string]float64 `json:"port_max_power_w"`
+	Supported             bool               `json:"supported"`
+	AbsoluteMaxPoEBudgetW *float64           `json:"absolute_max_poe_budget_w"`
+	TotalMaxPowerW        *float64           `json:"total_max_power_w,omitempty"`
+	PortMaxPowerW         map[string]float64 `json:"port_max_power_w"`
 }
 
 type UniFiStorageStats struct {
