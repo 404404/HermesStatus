@@ -223,7 +223,6 @@ jobs:
             -e HERMESSTATUS_SERVER_URL=https://127.0.0.1:8443 \
             -e HERMESSTATUS_DEVICE_ID=ci-device \
             -e HERMESSTATUS_DEVICE_TOKEN_FILE=/tmp/ci-device-token \
-            -e HERMESSTATUS_TLS_VERIFY=false \
             -e HERMESSTATUS_CONNECT_TIMEOUT_SECONDS=1 \
             -e HERMESSTATUS_READ_TIMEOUT_SECONDS=1 \
             -e HERMESSTATUS_COLLECTION_INTERVAL_SECONDS=60 \
