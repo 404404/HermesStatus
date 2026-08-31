@@ -74,8 +74,8 @@ class CatalogAcquisitionTests(unittest.TestCase):
         provenance = json.loads(
             (ROOT / "clients/unifi_catalog/catalog-provenance.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(lock["revision"], "a838d664378a328750abed0fb9f622b1f11c5733")
-        self.assertEqual(lock["catalog_sha256"], "1daa97051a6a406d6e4e6b6004fb492a7287d59c4815f33a5c49ef1b54d495e1")
+        self.assertEqual(lock["revision"], "2a8991933b5f4a323c27c30d9370ec3836d749b4")
+        self.assertEqual(lock["catalog_sha256"], "52b4313e9c619f13af7ba64a19fb69d2259092586eed0af4f8e698f32e577791")
         self.assertEqual(provenance, {
             "catalog_sha256": lock["catalog_sha256"],
             "catalog_schema_version": lock["schema_version"],
@@ -90,12 +90,12 @@ class CatalogAcquisitionTests(unittest.TestCase):
             output = pathlib.Path(directory)
             (output / "catalog.json").write_bytes(bundle)
             (output / "catalog.sha256").write_text(
-                "1daa97051a6a406d6e4e6b6004fb492a7287d59c4815f33a5c49ef1b54d495e1  catalog.json\n",
+                "52b4313e9c619f13af7ba64a19fb69d2259092586eed0af4f8e698f32e577791  catalog.json\n",
                 encoding="ascii",
             )
             (output / "manifest.json").write_text(
                 json.dumps({
-                    "bundle_sha256": "1daa97051a6a406d6e4e6b6004fb492a7287d59c4815f33a5c49ef1b54d495e1",
+                    "bundle_sha256": "52b4313e9c619f13af7ba64a19fb69d2259092586eed0af4f8e698f32e577791",
                     "catalog_schema_version": 1,
                     "model_count": len(json.loads(bundle)["models"]),
                 }, sort_keys=True),

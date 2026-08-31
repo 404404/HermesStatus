@@ -101,8 +101,8 @@ class UniFiModelCatalogTests(unittest.TestCase):
         self.assertEqual(resolve_model(catalog, "UCG-Max", explicit_sku=True)["canonical_sku"], "UCG-Max")
 
     def test_catalog_revision_and_checksum_are_pinned(self):
-        self.assertEqual(CATALOG_SOURCE_REVISION, "a838d664378a328750abed0fb9f622b1f11c5733")
-        self.assertEqual(CATALOG_BUNDLE_SHA256, "1daa97051a6a406d6e4e6b6004fb492a7287d59c4815f33a5c49ef1b54d495e1")
+        self.assertEqual(CATALOG_SOURCE_REVISION, "2a8991933b5f4a323c27c30d9370ec3836d749b4")
+        self.assertEqual(CATALOG_BUNDLE_SHA256, "52b4313e9c619f13af7ba64a19fb69d2259092586eed0af4f8e698f32e577791")
         manifest = CATALOG_BUNDLE_PATH.with_name("catalog.sha256").read_text(encoding="ascii").strip()
         self.assertEqual(manifest, CATALOG_BUNDLE_SHA256 + "  catalog.json")
 

@@ -869,8 +869,8 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe++",
-            "poe_max_power_w": 60,
+            "poe_standard": "poe",
+            "poe_max_power_w": 15.4,
             "combo_group": null
           },
           {
@@ -883,8 +883,8 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe++",
-            "poe_max_power_w": 60,
+            "poe_standard": "poe",
+            "poe_max_power_w": 15.4,
             "combo_group": null
           },
           {
@@ -897,8 +897,8 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe++",
-            "poe_max_power_w": 60,
+            "poe_standard": "poe",
+            "poe_max_power_w": 15.4,
             "combo_group": null
           },
           {
@@ -911,8 +911,8 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe++",
-            "poe_max_power_w": 60,
+            "poe_standard": "poe",
+            "poe_max_power_w": 15.4,
             "combo_group": null
           },
           {
@@ -981,8 +981,8 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe",
-            "poe_max_power_w": 15.4,
+            "poe_standard": "poe++",
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
@@ -995,8 +995,8 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe",
-            "poe_max_power_w": 15.4,
+            "poe_standard": "poe++",
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
@@ -1009,8 +1009,8 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe",
-            "poe_max_power_w": 15.4,
+            "poe_standard": "poe++",
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
@@ -1023,8 +1023,8 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe",
-            "poe_max_power_w": 15.4,
+            "poe_standard": "poe++",
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
@@ -1235,7 +1235,14 @@
         "official-us-xg-6poe-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "US XG 6 PoE",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-us-xg-6poe-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -1615,7 +1622,14 @@
         "official-usw-flex-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "USW Flex",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-usw-flex-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -2375,7 +2389,14 @@
         "official-usw-flex-2-5g-8-poe-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "USW Flex 2.5G 8 PoE",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-usw-flex-2-5g-8-poe-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -2984,7 +3005,14 @@
         "official-usw-pro-hd-24-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "USW Pro HD 24",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-usw-pro-hd-24-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -4377,7 +4405,14 @@
         "official-usw-pro-max-16-poe-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "USW Pro Max 16 PoE",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-usw-pro-max-16-poe-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
