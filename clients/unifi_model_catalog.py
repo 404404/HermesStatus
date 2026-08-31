@@ -12,6 +12,7 @@ SUPPORTED_CATALOG_SCHEMA_VERSIONS = frozenset({CATALOG_SCHEMA_VERSION})
 CATALOG_SOURCE_REVISION = "a838d664378a328750abed0fb9f622b1f11c5733"
 CATALOG_BUNDLE_SHA256 = "1daa97051a6a406d6e4e6b6004fb492a7287d59c4815f33a5c49ef1b54d495e1"
 CATALOG_BUNDLE_PATH = Path(__file__).with_name("unifi_catalog") / "catalog.json"
+CATALOG_PROVENANCE_PATH = CATALOG_BUNDLE_PATH.with_name("catalog-provenance.json")
 # Compatibility name only; this is a bundle path, not a model-table directory.
 MODEL_DIRECTORY = CATALOG_BUNDLE_PATH
 
@@ -281,6 +282,21 @@ def _paths(path):
     return candidate, candidate.with_name("catalog.sha256")
 
 
+def _validate_default_provenance() -> None:
+    expected = {
+        "catalog_sha256": CATALOG_BUNDLE_SHA256,
+        "catalog_schema_version": CATALOG_SCHEMA_VERSION,
+        "repository": "404404/UniFi_Catalog",
+        "revision": CATALOG_SOURCE_REVISION,
+    }
+    try:
+        provenance = json.loads(CATALOG_PROVENANCE_PATH.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ModelCatalogError("catalog provenance unavailable") from exc
+    if provenance != expected:
+        raise ModelCatalogError("catalog provenance does not match the pinned artifact")
+
+
 def load_catalog(path=CATALOG_BUNDLE_PATH):
     """Load a checksum-verified, schema-compatible Catalog V1 bundle."""
     bundle_path, digest_path = _paths(path)
@@ -294,6 +310,8 @@ def load_catalog(path=CATALOG_BUNDLE_PATH):
         raise ModelCatalogError("invalid catalog.sha256")
     if bundle_path == CATALOG_BUNDLE_PATH and match.group("digest") != CATALOG_BUNDLE_SHA256:
         raise ModelCatalogError("catalog bundle does not match the pinned artifact")
+    if bundle_path == CATALOG_BUNDLE_PATH:
+        _validate_default_provenance()
     actual = hashlib.sha256(raw).hexdigest()
     if actual != match.group("digest"):
         raise ModelCatalogError("catalog bundle checksum mismatch")

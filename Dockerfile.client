@@ -3,12 +3,18 @@ ARG VERSION=2.5
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_URL=https://github.com/404404/HermesStatus
+ARG CATALOG_REVISION=a838d664378a328750abed0fb9f622b1f11c5733
+ARG CATALOG_SCHEMA_VERSION=1
+ARG CATALOG_SHA256=1daa97051a6a406d6e4e6b6004fb492a7287d59c4815f33a5c49ef1b54d495e1
 FROM ${ALPINE_IMAGE}
 
 ARG VERSION=2.5
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 ARG SOURCE_URL=https://github.com/404404/HermesStatus
+ARG CATALOG_REVISION=a838d664378a328750abed0fb9f622b1f11c5733
+ARG CATALOG_SCHEMA_VERSION=1
+ARG CATALOG_SHA256=1daa97051a6a406d6e4e6b6004fb492a7287d59c4815f33a5c49ef1b54d495e1
 
 LABEL org.opencontainers.image.title="HermesStatus Client" \
     org.opencontainers.image.description="HermesStatus host and Hermes profile collector" \
@@ -17,8 +23,10 @@ LABEL org.opencontainers.image.title="HermesStatus Client" \
     org.opencontainers.image.created="${BUILD_DATE}" \
     org.opencontainers.image.source="${SOURCE_URL}" \
     org.opencontainers.image.licenses="MIT" \
-    io.hermesstatus.component="client"
-
+    io.hermesstatus.component="client" \
+    io.hermesstatus.unifi.catalog.revision="${CATALOG_REVISION}" \
+    io.hermesstatus.unifi.catalog.schema_version="${CATALOG_SCHEMA_VERSION}" \
+    io.hermesstatus.unifi.catalog.sha256="${CATALOG_SHA256}"
 WORKDIR /app
 
 # smartmontools reads the configured host device; util-linux provides lscpu.
@@ -47,6 +55,7 @@ COPY clients/unifi_askpass.py /app/unifi_askpass.py
 COPY clients/unifi_normalizer.py /app/unifi_normalizer.py
 COPY clients/unifi_profiles /app/unifi_profiles
 COPY clients/unifi_catalog /app/unifi_catalog
+COPY unifi-catalog.lock.json /app/unifi-catalog.lock.json
 COPY scripts/export-hermes-status.py /app/export-hermes-status.py
 COPY scripts/hermes_config_summary.py /app/hermes_config_summary.py
 COPY hermes-exporter.json /app/hermes-exporter.json
@@ -88,7 +97,10 @@ ENV INTERVAL=1 \
     EASYTIER_ADMINISTRATIVE_ROLE= \
     HERMESSTATUS_CLIENT_VERSION=${VERSION} \
     HERMESSTATUS_CLIENT_REVISION=${VCS_REF} \
-    HERMESSTATUS_CLIENT_BUILD_TIME=${BUILD_DATE}
+    HERMESSTATUS_CLIENT_BUILD_TIME=${BUILD_DATE} \
+    HERMESSTATUS_UNIFI_CATALOG_REVISION=${CATALOG_REVISION} \
+    HERMESSTATUS_UNIFI_CATALOG_SCHEMA_VERSION=${CATALOG_SCHEMA_VERSION} \
+    HERMESSTATUS_UNIFI_CATALOG_SHA256=${CATALOG_SHA256}
 
 RUN chmod +x /app/entrypoint.sh /app/unifi_askpass.py
 

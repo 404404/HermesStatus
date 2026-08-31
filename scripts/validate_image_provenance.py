@@ -19,8 +19,9 @@ REQUIRED_LABELS = (
     "org.opencontainers.image.licenses",
 )
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
-PRODUCT_VERSION_PATTERN = re.compile(r"^(?:2\.5|2\.6)$")
-CANDIDATE_TAG_PATTERN = re.compile(r"^(?P<version>2\.5|2\.6)-(?P<revision>[0-9a-f]{12})$")
+CATALOG_SHA_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+PRODUCT_VERSION_PATTERN = re.compile(r"^(?:2\.5|2\.6|2\.7)$")
+CANDIDATE_TAG_PATTERN = re.compile(r"^(?P<version>2\.5|2\.6|2\.7)-(?P<revision>[0-9a-f]{12})$")
 COMPONENT_LABEL = "io.hermesstatus.component"
 SECRET_PATTERN = re.compile(
     r"(?i)(authorization\s*:|bearer\s+|api[_-]?key|password|private[_-]?key|token[_-]?secret)"
@@ -56,10 +57,10 @@ def validate_created(value: str) -> None:
 
 def validate_candidate_tag(candidate_tag: str, product_version: str, revision: str) -> None:
     if not PRODUCT_VERSION_PATTERN.fullmatch(product_version):
-        raise ValidationError("product version must be the formal 2.5 or 2.6 release line")
+        raise ValidationError("product version must be a formal 2.5, 2.6, or 2.7 release line")
     match = CANDIDATE_TAG_PATTERN.fullmatch(candidate_tag)
     if match is None:
-        raise ValidationError("candidate tag must be 2.5- or 2.6- followed by a 12-character lowercase Git SHA")
+        raise ValidationError("candidate tag must use a formal release line followed by a 12-character lowercase Git SHA")
     if match.group("version") != product_version or match.group("revision") != revision[:12]:
         raise ValidationError("candidate tag does not match the formal version and full revision")
 
@@ -84,6 +85,32 @@ def validate_client_runtime(config: dict, *, version: str, revision: str, create
     for key, value in expected.items():
         if values.get(key) != value:
             raise ValidationError("client runtime %s does not match the build input" % key)
+
+def validate_catalog_provenance(config: dict, *, revision: str, schema_version: int, sha256: str) -> None:
+    labels = config.get("Labels") or {}
+    expected_labels = {
+        "io.hermesstatus.unifi.catalog.revision": revision,
+        "io.hermesstatus.unifi.catalog.schema_version": str(schema_version),
+        "io.hermesstatus.unifi.catalog.sha256": sha256,
+    }
+    for key, value in expected_labels.items():
+        if labels.get(key) != value:
+            raise ValidationError("client Catalog label %s does not match the build input" % key)
+    values = environment_values(config)
+    expected_environment = {
+        "HERMESSTATUS_UNIFI_CATALOG_REVISION": revision,
+        "HERMESSTATUS_UNIFI_CATALOG_SCHEMA_VERSION": str(schema_version),
+        "HERMESSTATUS_UNIFI_CATALOG_SHA256": sha256,
+    }
+    for key, value in expected_environment.items():
+        if values.get(key) != value:
+            raise ValidationError("client Catalog runtime %s does not match the build input" % key)
+    if not SHA_PATTERN.fullmatch(revision) or not CATALOG_SHA_PATTERN.fullmatch(sha256):
+        raise ValidationError("client Catalog provenance has an invalid digest")
+    if schema_version != 1:
+        raise ValidationError("unsupported client Catalog schema version")
+
+
 
 
 def validate_component(config: dict, expected_component: str) -> None:
@@ -184,6 +211,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--revision", required=True)
     parser.add_argument("--created", required=True)
     parser.add_argument("--source", required=True)
+    parser.add_argument("--catalog-revision")
+    parser.add_argument("--catalog-schema-version", type=int)
+    parser.add_argument("--catalog-sha256")
     return parser.parse_args()
 
 
@@ -219,6 +249,20 @@ def main() -> int:
             revision=args.revision,
             created=args.created,
         )
+        catalog_arguments = (
+            args.catalog_revision,
+            args.catalog_schema_version,
+            args.catalog_sha256,
+        )
+        if any(value is not None for value in catalog_arguments):
+            if not all(value is not None for value in catalog_arguments):
+                raise ValidationError("Catalog provenance arguments must be supplied together")
+            validate_catalog_provenance(
+                client_inspect.get("Config") or {},
+                revision=args.catalog_revision,
+                schema_version=args.catalog_schema_version,
+                sha256=args.catalog_sha256,
+            )
         validate_server_runtime(
             args.server_image,
             version=args.version,

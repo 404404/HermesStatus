@@ -1,0 +1,350 @@
+name: Publish 2.7 Candidate Images
+
+on:
+  push:
+    branches:
+      - "codex/2.7-*"
+  pull_request:
+    branches: ["2.0"]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-2-7-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+  IMAGE_SOURCE: https://github.com/404404/HermesStatus
+  PRODUCT_VERSION: "2.7"
+  SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      revision: ${{ steps.lock.outputs.revision }}
+      schema_version: ${{ steps.lock.outputs.schema_version }}
+      sha256: ${{ steps.lock.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Read Catalog lock
+        id: lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import json; p=json.load(open("unifi-catalog.lock.json", encoding="utf-8")); print("revision=" + p["revision"]); print("schema_version=" + str(p["schema_version"])); print("sha256=" + p["catalog_sha256"])' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        with:
+          repository: 404404/UniFi_Catalog
+          ref: ${{ steps.lock.outputs.revision }}
+          path: external/UniFi_Catalog
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Install Catalog validation dependency
+        run: python3 -m pip install --disable-pip-version-check --no-input -r external/UniFi_Catalog/requirements-dev.txt
+      - name: Validate and stage locked Catalog
+        run: |
+          python3 scripts/acquire_unifi_catalog.py \
+            --source-dir external/UniFi_Catalog \
+            --output-dir clients/unifi_catalog
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hermesstatus-2-7-catalog
+          path: clients/unifi_catalog
+          if-no-files-found: error
+
+  contracts:
+    needs: catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python3 scripts/validate_migration_contracts.py
+
+  go:
+    needs: catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: go mod download
+      - run: test -z "$(gofmt -l .)"
+      - run: go test ./...
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go build ./...
+
+  python:
+    needs: catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: hermesstatus-2-7-catalog
+          path: clients/unifi_catalog
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python3 -m unittest discover -s clients -p 'test_*.py'
+      - run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - run: python3 -m py_compile clients/client-linux.py clients/client-psutil.py clients/host_collector.py scripts/*.py
+      - run: sh -n clients/entrypoint.sh && bash -n status.sh
+
+  frontend:
+    needs: catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: find web -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+      - run: node --test web/js/app.test.js
+      - run: python3 scripts/check_release_boundaries.py
+
+  compose:
+    needs: catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - run: ADMIN_TOKEN=ci-placeholder docker compose -f docker-compose-server.yml config --quiet
+      - run: SERVER=192.0.2.10 SERVERSTATUS_USER=ci-node PASSWORD=ci-placeholder CLIENT_PRIVILEGED=false HERMES_ROOT_HOST=/tmp/hermes CLIENT_STATUS_DIR_HOST=/tmp/client-status docker compose -f docker-compose-client.yml config --quiet
+
+  security:
+    needs: catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+      - run: python3 scripts/check_release_boundaries.py
+
+  images:
+    needs: [catalog, contracts, go, python, frontend, compose, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: hermesstatus-2-7-catalog
+          path: clients/unifi_catalog
+      - uses: docker/setup-buildx-action@v3
+      - name: Prepare image provenance
+        id: provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "candidate_tag=2.7-${SOURCE_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.server
+          push: false
+          load: true
+          tags: hermesstatus-server:2.7-check
+          build-args: |
+            VERSION=2.7
+            VCS_REF=${{ env.SOURCE_SHA }}
+            BUILD_DATE=${{ steps.provenance.outputs.build_date }}
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.client
+          push: false
+          load: true
+          tags: hermesstatus-client:2.7-check
+          build-args: |
+            VERSION=2.7
+            VCS_REF=${{ env.SOURCE_SHA }}
+            BUILD_DATE=${{ steps.provenance.outputs.build_date }}
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}
+            CATALOG_REVISION=${{ needs.catalog.outputs.revision }}
+            CATALOG_SCHEMA_VERSION=${{ needs.catalog.outputs.schema_version }}
+            CATALOG_SHA256=${{ needs.catalog.outputs.sha256 }}
+      - name: Validate image provenance
+        run: |
+          python3 scripts/validate_image_provenance.py \
+            --server-image hermesstatus-server:2.7-check \
+            --client-image hermesstatus-client:2.7-check \
+            --candidate-tag "${{ steps.provenance.outputs.candidate_tag }}" \
+            --version "2.7" \
+            --revision "${{ env.SOURCE_SHA }}" \
+            --created "${{ steps.provenance.outputs.build_date }}" \
+            --source "${{ env.IMAGE_SOURCE }}" \
+            --catalog-revision "${{ needs.catalog.outputs.revision }}" \
+            --catalog-schema-version "${{ needs.catalog.outputs.schema_version }}" \
+            --catalog-sha256 "${{ needs.catalog.outputs.sha256 }}"
+
+  publish:
+    needs: [catalog, contracts, go, python, frontend, compose, security, images]
+    if: ${{ needs.images.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: hermesstatus-2-7-catalog
+          path: clients/unifi_catalog
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Inspect immutable candidate state
+        id: candidate_state
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate_tag="2.7-${SOURCE_SHA::12}"
+          server_image="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/hermesstatus-server:${candidate_tag}"
+          client_image="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/hermesstatus-client:${candidate_tag}"
+          server_present=false
+          client_present=false
+          server_labels='{}'
+          client_labels='{}'
+          client_env='[]'
+          if docker buildx imagetools inspect "$server_image" >/dev/null 2>&1; then
+            server_present=true
+            docker pull "$server_image" >/dev/null
+            server_labels=$(docker image inspect "$server_image" --format '{{json .Config.Labels}}')
+          fi
+          if docker buildx imagetools inspect "$client_image" >/dev/null 2>&1; then
+            client_present=true
+            docker pull "$client_image" >/dev/null
+            client_labels=$(docker image inspect "$client_image" --format '{{json .Config.Labels}}')
+            client_env=$(docker image inspect "$client_image" --format '{{json .Config.Env}}')
+          fi
+          result=$(python3 scripts/candidate_publication.py \
+            $(if [ "$server_present" = true ]; then echo --server-present; fi) \
+            $(if [ "$client_present" = true ]; then echo --client-present; fi) \
+            --server-labels "$server_labels" \
+            --client-labels "$client_labels" \
+            --client-env "$client_env" \
+            --candidate-tag "$candidate_tag" \
+            --version "2.7" \
+            --revision "${{ env.SOURCE_SHA }}" \
+            --catalog-revision "${{ needs.catalog.outputs.revision }}" \
+            --catalog-schema-version "${{ needs.catalog.outputs.schema_version }}" \
+            --catalog-sha256 "${{ needs.catalog.outputs.sha256 }}" || true)
+          state="${result#CANDIDATE_PUBLICATION=}"
+          case "$state" in
+            PUBLISH|ALREADY_PUBLISHED) ;;
+            *) echo "$result"; exit 1 ;;
+          esac
+          echo "publication_state=$state" >> "$GITHUB_OUTPUT"
+          echo "candidate_tag=$candidate_tag" >> "$GITHUB_OUTPUT"
+          echo "CANDIDATE_PUBLICATION=$state"
+
+      - name: Publish Server candidate
+        if: ${{ steps.candidate_state.outputs.publication_state == 'PUBLISH' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.server
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/hermesstatus-server:${{ steps.candidate_state.outputs.candidate_tag }}
+          labels: |
+            org.opencontainers.image.title=HermesStatus Server
+            org.opencontainers.image.description=HermesStatus device status server
+            org.opencontainers.image.version=2.7
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.created=${{ github.run_started_at }}
+            org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
+            org.opencontainers.image.licenses=MIT
+            io.hermesstatus.component=server
+          build-args: |
+            VERSION=2.7
+            VCS_REF=${{ env.SOURCE_SHA }}
+            BUILD_DATE=${{ github.run_started_at }}
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}
+
+      - name: Publish Client candidate
+        if: ${{ steps.candidate_state.outputs.publication_state == 'PUBLISH' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.client
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/hermesstatus-client:${{ steps.candidate_state.outputs.candidate_tag }}
+          labels: |
+            org.opencontainers.image.title=HermesStatus Client
+            org.opencontainers.image.description=HermesStatus host and Hermes profile collector
+            org.opencontainers.image.version=2.7
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.created=${{ github.run_started_at }}
+            org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
+            org.opencontainers.image.licenses=MIT
+            io.hermesstatus.component=client
+            io.hermesstatus.unifi.catalog.revision=${{ needs.catalog.outputs.revision }}
+            io.hermesstatus.unifi.catalog.schema_version=${{ needs.catalog.outputs.schema_version }}
+            io.hermesstatus.unifi.catalog.sha256=${{ needs.catalog.outputs.sha256 }}
+          build-args: |
+            VERSION=2.7
+            VCS_REF=${{ env.SOURCE_SHA }}
+            BUILD_DATE=${{ github.run_started_at }}
+            SOURCE_URL=${{ env.IMAGE_SOURCE }}
+            CATALOG_REVISION=${{ needs.catalog.outputs.revision }}
+            CATALOG_SCHEMA_VERSION=${{ needs.catalog.outputs.schema_version }}
+            CATALOG_SHA256=${{ needs.catalog.outputs.sha256 }}
+
+      - name: Verify candidate digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate_tag="${{ steps.candidate_state.outputs.candidate_tag }}"
+          server_image="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/hermesstatus-server:${candidate_tag}"
+          client_image="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/hermesstatus-client:${candidate_tag}"
+          docker buildx imagetools inspect "$server_image"
+          docker buildx imagetools inspect "$client_image"
+          echo "CANDIDATE_SOURCE_SHA=${{ env.SOURCE_SHA }}"
+          echo "CANDIDATE_CATALOG_REVISION=${{ needs.catalog.outputs.revision }}"
+          echo "CANDIDATE_CATALOG_SCHEMA_VERSION=${{ needs.catalog.outputs.schema_version }}"
+          echo "CANDIDATE_CATALOG_SHA256=${{ needs.catalog.outputs.sha256 }}"
