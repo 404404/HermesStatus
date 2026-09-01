@@ -5,9 +5,9 @@ HermesStatus Client. It is a build artifact, not a manually maintained model
 database.
 
 - Source repository: 404404/UniFi_Catalog
-- Frozen source revision: 2a8991933b5f4a323c27c30d9370ec3836d749b4
+- Frozen source revision: 714a3c8ce1a7d6d5165aad66912ea2db5ed55563
 - Bundle: catalog.json
-- Bundle SHA-256: 52b4313e9c619f13af7ba64a19fb69d2259092586eed0af4f8e698f32e577791
+- Bundle SHA-256: a92a44e5ef2f4afa20620782f4ecfb539bd72a18f86d5480d4110846f9f4d13b
 - Integrity manifest: catalog.sha256
 - Build provenance: catalog-provenance.json
 

@@ -24,7 +24,7 @@ The Generic Collector V1 is shared by both profiles: `ubnt-systool cputemp`, agg
 
 ## Catalog consumer boundary
 
-Static hardware capability is loaded from the vendored deterministic bundle in `clients/unifi_catalog/`, frozen from `404404/UniFi_Catalog` revision `2a8991933b5f4a323c27c30d9370ec3836d749b4` with bundle SHA-256 `52b4313e9c619f13af7ba64a19fb69d2259092586eed0af4f8e698f32e577791` and checked by its SHA-256 manifest. The bundle is the authoritative source for physical ports, storage, power, PoE and qualified processor facts; HermesStatus does not maintain a parallel model table.
+Static hardware capability is loaded from the vendored deterministic bundle in `clients/unifi_catalog/`, frozen from `404404/UniFi_Catalog` revision `714a3c8ce1a7d6d5165aad66912ea2db5ed55563` with bundle SHA-256 `a92a44e5ef2f4afa20620782f4ecfb539bd72a18f86d5480d4110846f9f4d13b` and checked by its SHA-256 manifest. The bundle is the authoritative source for physical ports, storage, power, PoE and qualified processor facts; HermesStatus does not maintain a parallel model table.
 
 A canonical SKU is selected only by an explicit administrator profile. Controller `api_model`, `sysid`, and SSH model strings are runtime identifiers; only Catalog aliases marked `verified` may resolve a model. Candidate aliases and unknown strings remain runtime observations and do not unlock static capability. The API output keeps runtime observations under `api`, while static capability is projected separately.
 

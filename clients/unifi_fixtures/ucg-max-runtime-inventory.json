@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "source": "sanitized UCG Max controller inventory observation",
+  "devices": [
+    {
+      "runtime_api_model": "AC Mesh",
+      "state": "online",
+      "interfaces_ports_count": 0,
+      "expected_canonical_sku": "UAP-AC-M",
+      "catalog_physical_port_count": 1
+    },
+    {
+      "runtime_api_model": "U6 Enterprise IW",
+      "state": "offline",
+      "interfaces_ports_count": 5,
+      "expected_canonical_sku": "U6-Enterprise-IW",
+      "catalog_physical_port_count": 5
+    },
+    {
+      "runtime_api_model": "U6 Enterprise IW",
+      "state": "offline",
+      "interfaces_ports_count": 5,
+      "expected_canonical_sku": "U6-Enterprise-IW",
+      "catalog_physical_port_count": 5
+    },
+    {
+      "runtime_api_model": "U6 IW",
+      "state": "online",
+      "interfaces_ports_count": 5,
+      "expected_canonical_sku": "U6-IW",
+      "catalog_physical_port_count": 5
+    },
+    {
+      "runtime_api_model": "U6 Mesh",
+      "state": "online",
+      "interfaces_ports_count": 0,
+      "expected_canonical_sku": "U6-Mesh",
+      "catalog_physical_port_count": 1
+    },
+    {
+      "runtime_api_model": "UCG Max",
+      "state": "online",
+      "interfaces_ports_count": 5,
+      "expected_canonical_sku": "UCG-Max",
+      "catalog_physical_port_count": 5
+    },
+    {
+      "runtime_api_model": "US XG 6 PoE",
+      "state": "online",
+      "interfaces_ports_count": 6,
+      "expected_canonical_sku": "US-XG-6POE",
+      "catalog_physical_port_count": 6
+    },
+    {
+      "runtime_api_model": "USW Flex",
+      "state": "online",
+      "interfaces_ports_count": 5,
+      "expected_canonical_sku": "USW-Flex",
+      "catalog_physical_port_count": 5
+    },
+    {
+      "runtime_api_model": "USW Flex 2.5G 8 PoE",
+      "state": "online",
+      "interfaces_ports_count": 10,
+      "expected_canonical_sku": "USW-Flex-2.5G-8-PoE",
+      "catalog_physical_port_count": 10
+    },
+    {
+      "runtime_api_model": "USW Pro HD 24",
+      "state": "online",
+      "interfaces_ports_count": 28,
+      "expected_canonical_sku": "USW-Pro-HD-24",
+      "catalog_physical_port_count": 28
+    },
+    {
+      "runtime_api_model": "USW Pro Max 16 PoE",
+      "state": "offline",
+      "interfaces_ports_count": 18,
+      "expected_canonical_sku": "USW-Pro-Max-16-PoE",
+      "catalog_physical_port_count": 18
+    }
+  ]
+}
