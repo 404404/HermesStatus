@@ -501,6 +501,26 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(len(matching), 1)
         self.assertEqual(matching[0]["speed_mbps"], 100)
 
+    def test_unknown_runtime_model_keeps_runtime_port_without_static_capabilities(self):
+        from unifi_api import _ports
+        devices = [
+            {"id": "unknown-1", "model": "Unmaintained Switch", "name": "Unknown", "state": "ONLINE"},
+            {"id": "udw-1", "model": "UniFi Dream Wall", "name": "UDW", "state": "ONLINE"},
+        ]
+        legacy = {"data": [
+            {"device_id": "unknown-1", "port_table": [{"port_idx": 1, "up": True, "speed": 1000, "port_poe": True}]},
+            {"device_id": "udw-1", "port_table": [{"port_idx": 1, "up": True, "speed": 1000}]},
+        ]}
+        records, _ = _ports(legacy, devices[1], {}, 1.0, devices=devices)
+        unknown = next(item for item in records if item["device_id"] == "unknown-1" and item["port_idx"] == 1)
+        known = next(item for item in records if item["device_id"] == "udw-1" and item["port_idx"] == 1)
+        self.assertNotIn("model_id", unknown)
+        self.assertNotIn("max_speed_mbps", unknown)
+        self.assertNotIn("connector", unknown)
+        self.assertIn("poe", unknown)
+        self.assertEqual(known["model_id"], "UDW")
+        self.assertIn("max_speed_mbps", known)
+
     def test_target_resolution_does_not_depend_on_device_order(self):
         calls = []
         devices = [

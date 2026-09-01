@@ -78,9 +78,11 @@ collection cycle and normalizes only symbolic sources: `ubnt-systool cputemp`,
 aggregate `/proc/stat`, selected `/proc/meminfo`, `/proc/uptime`, and
 `/proc/loadavg`. The Server receives a bounded telemetry projection only.
 
-Profile selection is administrator-controlled and fail-closed. UDW and UCG Max
-share the generic collector while their fan, PSU, thermal and NVMe differences
-live in profile data. `supported`, `present`, and `observed` remain separate:
+Profile selection is administrator-controlled and fail-closed. The profile
+contains only bounded collection sources and formulas; it cannot establish
+hardware identity or static capability. UDW and UCG Max share the generic
+collector while hardware differences are projected from a verified runtime
+identity in the frozen Catalog. `supported`, `present`, and `observed` remain separate:
 0 RPM, an unobserved block device, or an optional diagnostic source never
 creates an inferred physical failure. UniFi transport failure marks only the
 UniFi target stale; it never changes Device v2 identity or makes the collector

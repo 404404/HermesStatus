@@ -185,43 +185,54 @@ def _cache_records(cache, names):
     return []
 
 
-def _fans(profile, raw_fans, hardware_cache=None):
+def _fan_item(fan_id, rpm, supported, present):
+    if isinstance(rpm, bool) or not isinstance(rpm, int) or rpm < 0:
+        rpm = None
+    return {
+        "id": fan_id,
+        "supported": supported,
+        "present": present,
+        "observed": rpm is not None,
+        "rpm": rpm,
+        "state": _state_for_rpm(rpm) if rpm is not None else "not_observed",
+        "error": None,
+    }
+
+
+def _fans(raw_fans, hardware_cache=None, model=None):
     observed = raw_fans if isinstance(raw_fans, dict) else {}
     if not observed and hardware_cache is not None:
         observed = _cache_fans(hardware_cache)
     output, ignored = [], []
-    for capability in profile["fans"]["channels"]:
-        fan_id = capability["id"]
-        present = capability["present"]
-        if present == "not_populated":
-            if fan_id in observed:
-                ignored.append({"id": fan_id, "reason": "profile_not_populated"})
+    catalog_fans = model.get("fans") if isinstance(model, dict) else None
+    status = catalog_fans.get("status") if isinstance(catalog_fans, dict) else None
+    count = catalog_fans.get("count") if isinstance(catalog_fans, dict) else None
+    if status == "absent":
+        for fan_id in observed:
+            ignored.append({"id": str(fan_id), "reason": "catalog_absent"})
+        return output, ignored
+    if status == "present" and isinstance(count, int) and not isinstance(count, bool) and count > 0:
+        fan_ids = [f"fan{index}" for index in range(1, min(count, 16) + 1)]
+        for fan_id in fan_ids:
+            output.append(_fan_item(fan_id, observed.get(fan_id), "supported", "present"))
+        return output, ignored
+    # An unknown Catalog fan capability, or an unrecognized model, may still
+    # report a bounded runtime tachometer. Preserve it without a hardware
+    # claim sourced from the collection profile.
+    for fan_id, rpm in list(observed.items())[:16]:
+        if not isinstance(fan_id, str) or not fan_id or not fan_id.lower().startswith("fan"):
+            ignored.append({"id": str(fan_id), "reason": "invalid_fan_id"})
             continue
-        rpm = observed.get(fan_id)
-        if isinstance(rpm, bool) or not isinstance(rpm, int) or rpm < 0:
-            rpm = None
-        output.append({
-            "id": fan_id,
-            "supported": "supported" if capability["supported"] is True else "unsupported" if capability["supported"] is False else "unknown",
-            "present": present,
-            "observed": rpm is not None,
-            "rpm": rpm,
-            "state": _state_for_rpm(rpm) if rpm is not None else "not_observed",
-            "error": None,
-        })
+        output.append(_fan_item(fan_id, rpm, "unknown", "unknown"))
     return output, ignored
 
 
-def _profile_power(profile, model=None):
-    config = model.get("power") if isinstance(model, dict) else profile["power"]
+def _model_power(model):
+    if not isinstance(model, dict) or not isinstance(model.get("power"), dict):
+        return None
+    config = model["power"]
     slots = config.get("psu_slots")
     slots = slots if isinstance(slots, int) and not isinstance(slots, bool) else 0
-    if not isinstance(model, dict):
-        return {
-            "supported": slots > 0,
-            "psu_slots": slots,
-            "max_power_w": config.get("max_power_w"),
-        }
     return {
         "supported": slots > 0,
         "psu_slots": slots,
@@ -233,44 +244,55 @@ def _profile_power(profile, model=None):
     }
 
 
-def _profile_poe(profile, model=None):
-    if isinstance(model, dict):
-        ports = model.get("ports", {}).get("items", [])
-        power = model.get("power", {})
-        limits = {
-            str(port["index"]): port["poe_max_power_w"]
-            for port in ports
-            if port.get("poe_out") is True and port.get("poe_max_power_w") is not None
-        }
-        absolute = power.get("absolute_max_poe_budget_w")
-        supported = any(port.get("poe_out") is True for port in ports)
-        return {
-            "supported": supported,
-            "absolute_max_poe_budget_w": absolute,
-            "total_max_power_w": absolute,
-            "port_max_power_w": limits,
-        }
-    config = profile.get("poe") if isinstance(profile.get("poe"), dict) else {}
-    limits = config.get("port_max_power_w")
+def _model_poe(model):
+    if not isinstance(model, dict):
+        return None
+    ports = model.get("ports", {}).get("items", [])
+    power = model.get("power", {})
+    limits = {
+        str(port["index"]): port["poe_max_power_w"]
+        for port in ports
+        if port.get("poe_out") is True and port.get("poe_max_power_w") is not None
+    }
+    absolute = power.get("absolute_max_poe_budget_w")
+    supported = any(port.get("poe_out") is True for port in ports)
     return {
-        "supported": config.get("supported") is True,
-        "total_max_power_w": config.get("total_max_power_w"),
-        "port_max_power_w": dict(limits) if isinstance(limits, dict) else {},
+        "supported": supported,
+        "absolute_max_poe_budget_w": absolute,
+        "total_max_power_w": absolute,
+        "port_max_power_w": limits,
     }
 
 
-def _power(profile, hardware_cache=None, model=None):
-    slots = _profile_power(profile, model)["psu_slots"]
-    presence = profile["power"]["presence"]
+def _power(hardware_cache=None, model=None):
+    capability = _model_power(model)
+    slots = capability["psu_slots"] if isinstance(capability, dict) else 0
     # `dynamic` is a model capability, not a runtime presence observation.
     # Preserve that uncertainty as `unknown` until a qualified sensor mapping
     # proves an individual PSU slot is present or absent.
-    present = "unknown" if presence == "dynamic" else presence
+    present = "unknown"
     result = [{
         "id": f"psu{index}", "supported": "supported", "present": present,
         "observed": False, "state": "not_observed", "error": None,
     } for index in range(1, slots + 1)]
     records = _cache_records(hardware_cache, ("power_supplies", "psus", "power_supply", "psu")) if hardware_cache else []
+    if not isinstance(model, dict):
+        result = []
+        for position, record in enumerate(records[:8], 1):
+            item = {"id": f"psu{position}", "supported": "unknown", "present": "unknown", "observed": False, "state": "not_observed", "error": None}
+            if record.get("present") in {True, False}:
+                item["present"] = "present" if record["present"] else "not_present"
+            watts = record.get("power_w", record.get("power"))
+            fan_rpm = record.get("fan_rpm", record.get("rpm"))
+            if isinstance(watts, (int, float)) and not isinstance(watts, bool) and watts >= 0:
+                item["power_w"] = watts
+            if isinstance(fan_rpm, (int, float)) and not isinstance(fan_rpm, bool) and fan_rpm >= 0:
+                item["fan_rpm"] = int(fan_rpm)
+            if item["present"] == "present" and ("power_w" in item or "fan_rpm" in item):
+                item["observed"] = True
+                item["state"] = "observed"
+            result.append(item)
+        return result
     for record in records:
         # DSM cache uses zero-based keys and stable psu1/psu2 labels.
         ident = str(record.get("label", record.get("id", record.get("slot", ""))))
@@ -299,7 +321,7 @@ def _power(profile, hardware_cache=None, model=None):
     return result
 
 
-def _storage(profile, hardware_cache=None, model=None, filesystem=None):
+def _storage(hardware_cache=None, model=None, filesystem=None):
     result = {
         "nvme": {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None},
         "sata_ssd": {"supported": "unknown", "present": "unknown", "observed": False, "capacity_bytes": None},
@@ -321,15 +343,6 @@ def _storage(profile, hardware_cache=None, model=None, filesystem=None):
                 "supported": "supported",
                 "present": "not_present" if capability["default_presence"] == "not_populated" else capability["default_presence"],
                 "observed": False,
-                "capacity_bytes": capability["capacity_bytes"],
-            }
-    else:
-        for name, capability in profile["storage"].items():
-            supported = capability["supported"]
-            result[name] = {
-                "supported": "supported" if supported is True else "unsupported" if supported is False else "unknown",
-                "present": "not_present" if capability["present"] == "not_populated" else capability["present"],
-                "observed": capability.get("observed") is True,
                 "capacity_bytes": capability["capacity_bytes"],
             }
     records = _cache_records(hardware_cache, ("storage", "storages", "disks", "block_devices")) if hardware_cache else []
@@ -365,6 +378,10 @@ def _storage(profile, hardware_cache=None, model=None, filesystem=None):
         for output, keys in (("capacity_bytes", ("capacity_bytes", "total_bytes", "size_bytes")), ("used_bytes", ("used_bytes", "used")), ("available_bytes", ("available_bytes", "free_bytes", "available")), ("usage_percent", ("usage_percent", "used_percent", "usage_pct"))):
             value = next((record.get(key) for key in keys if record.get(key) is not None), None)
             if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+                if output == "capacity_bytes" and item.get("capacity_bytes") is not None:
+                    # A Catalog capacity is authoritative hardware metadata;
+                    # a runtime disk probe may only fill an unknown value.
+                    continue
                 item[output] = value
         if item.get("present") == "present" and item.get("capacity_bytes") is not None:
             item["observed"] = True
@@ -397,12 +414,12 @@ def normalize(profile, raw, previous=None, model=None):
             "transport": {"status": "unavailable", "last_attempt": now,
                           "last_success": previous.get("updated_at") if previous else None},
             "api": _api_observation(raw, previous),
-            "power": _profile_power(profile, model),
-            "poe": _profile_poe(profile, model),
+            "power": _model_power(model),
+            "poe": _model_poe(model),
             "system": previous.get("system") if previous else None,
             "fans": previous.get("fans", []) if previous else [],
-            "power_supplies": previous.get("power_supplies", _power(profile, model=model)) if previous else _power(profile, model=model),
-            "storage": previous.get("storage", _storage(profile, model=model)) if previous else _storage(profile, model=model),
+            "power_supplies": previous.get("power_supplies", _power(model=model)) if previous else _power(model=model),
+            "storage": previous.get("storage", _storage(model=model)) if previous else _storage(model=model),
             "diagnostics": previous.get("diagnostics", {"collection_status": "unavailable", "ignored_observations": []}) if previous else {"collection_status": "unavailable", "ignored_observations": []},
             "updated_at": previous.get("updated_at") if previous else None,
             "stale": True,
@@ -434,7 +451,7 @@ def normalize(profile, raw, previous=None, model=None):
     profile_id = raw.get("profile_id")
     target_matches_profile = target_id in (None, profile["profile_id"]) and profile_id in (None, profile["profile_id"])
     fan_observations = diagnostics_raw.get("fans", {}) if target_matches_profile else {}
-    fans, ignored = _fans(profile, fan_observations, hardware_cache if target_matches_profile else None)
+    fans, ignored = _fans(fan_observations, hardware_cache if target_matches_profile else None, model)
     diagnostic_status = "available" if raw.get("diagnostics") else "not_collected"
     if raw.get("diagnostics", {}).get("collection_status") == "unavailable":
         diagnostic_status = "unavailable"
@@ -442,10 +459,10 @@ def normalize(profile, raw, previous=None, model=None):
         "profile": profile["profile_id"],
         "transport": {"status": "available", "last_attempt": now, "last_success": now},
         "api": _api_observation(raw, previous),
-        "power": _profile_power(profile, model),
-        "poe": _profile_poe(profile, model),
+        "power": _model_power(model),
+        "poe": _model_poe(model),
         "system": {
-            "cpu_model": (model.get("processor", {}).get("model") if isinstance(model, dict) and isinstance(model.get("processor"), dict) else profile.get("cpu_model")),
+            "cpu_model": (model.get("processor", {}).get("model") if isinstance(model, dict) and isinstance(model.get("processor"), dict) else None),
             "cpu_usage_percent": cpu_pct,
             "cpu_usage_reason": cpu_reason,
             "cpu_temperature_c": temperature,
@@ -461,8 +478,8 @@ def normalize(profile, raw, previous=None, model=None):
             "load_average": {"one_minute": load[0], "five_minutes": load[1], "fifteen_minutes": load[2]},
         },
         "fans": fans,
-        "power_supplies": _power(profile, hardware_cache, model),
-        "storage": _storage(profile, hardware_cache, model, raw.get("filesystem")),
+        "power_supplies": _power(hardware_cache, model),
+        "storage": _storage(hardware_cache, model, raw.get("filesystem")),
         "diagnostics": {"collection_status": diagnostic_status, "ignored_observations": ignored, "hardware_cache_status": diagnostics_raw.get("hardware_cache_status", "unavailable")},
         "updated_at": now,
         "stale": False,

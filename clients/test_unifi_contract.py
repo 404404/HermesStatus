@@ -6,7 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_collector import UniFiDomainCollector, not_collected_unifi, not_configured_unifi
+from unifi_collector import UniFiDomainCollector, _runtime_model_from_api, not_collected_unifi, not_configured_unifi
+from unifi_model_catalog import MODEL_DIRECTORY, load_catalog
 from unifi_normalizer import _parse_cpu, normalize
 from unifi_profile_loader import load_profile
 
@@ -34,6 +35,7 @@ class UniFiContractTests(unittest.TestCase):
     def setUp(self):
         self.ucg = load_profile(ROOT / "unifi_profiles", "ucg-max")
         self.udw = load_profile(ROOT / "unifi_profiles", "udw")
+        self.models = load_catalog(MODEL_DIRECTORY)
 
     def test_disabled_domain_is_explicit_and_empty(self):
         result = not_configured_unifi()
@@ -46,14 +48,19 @@ class UniFiContractTests(unittest.TestCase):
         self.assertTrue(pending["configured"])
         self.assertEqual(pending["transport"]["status"], "not_collected")
         self.assertTrue(pending["stale"])
-        self.assertTrue(pending["power"]["supported"])
-        self.assertEqual(pending["power"]["psu_slots"], 2)
-        self.assertEqual(pending["power"]["psu_unit_capacity_w"], 550)
-        self.assertEqual(pending["power"]["controller_reference_capacity_w"], 550)
-        self.assertEqual(pending["power"]["max_device_consumption_w"], 532)
-        self.assertEqual(pending["power"]["absolute_max_poe_budget_w"], 420)
-        self.assertEqual(pending["storage"]["sata_ssd"]["supported"], "supported")
-        self.assertEqual(pending["storage"]["tf"]["present"], "present")
+        self.assertNotIn("power", pending)
+        self.assertNotIn("poe", pending)
+        self.assertTrue(all(item["supported"] == "unknown" for item in pending["storage"].values()))
+
+    def test_profile_names_never_resolve_static_model_identity(self):
+        unknown_api = {"telemetry": {"identity": {"model": "not-a-catalog-model"}}}
+        for profile_id in ("udw", "ucg-max"):
+            with self.subTest(profile_id=profile_id):
+                self.assertIsNone(_runtime_model_from_api(unknown_api))
+                pending = not_collected_unifi(profile_id)
+                self.assertNotIn("power", pending)
+                self.assertNotIn("poe", pending)
+        self.assertEqual(_runtime_model_from_api({"telemetry": {"identity": {"model": "UCG Max"}}})["canonical_sku"], "UCG-Max")
 
     def test_cpu_delta_invalid_cases_are_null_not_zero(self):
         first = normalize(self.ucg, fixture("ucg-max-raw.json"))
@@ -105,17 +112,17 @@ class UniFiContractTests(unittest.TestCase):
             normalize(self.ucg, impossible)
 
     def test_capability_state_is_not_inferred_from_zero_or_tooling(self):
-        ucg = normalize(self.ucg, fixture("ucg-max-raw.json"))
-        self.assertEqual(ucg["fans"][0]["present"], "present")
-        self.assertEqual(ucg["fans"][0]["supported"], "supported")
+        ucg = normalize(self.ucg, fixture("ucg-max-raw.json"), model=self.models["UCG-Max"])
+        self.assertEqual(ucg["fans"][0]["present"], "unknown")
+        self.assertEqual(ucg["fans"][0]["supported"], "unknown")
         self.assertTrue(ucg["fans"][0]["observed"])
         self.assertEqual(ucg["fans"][0]["rpm"], 0)
-        self.assertEqual(ucg["storage"]["nvme"], {"supported": "supported", "present": "unknown", "observed": False, "capacity_bytes": None})
+        self.assertEqual(ucg["storage"]["nvme"], {"supported": "supported", "present": "not_present", "observed": False, "capacity_bytes": None})
         self.assertEqual(ucg["storage"]["sata_ssd"], {"supported": "unsupported", "present": "not_present", "observed": False, "capacity_bytes": None})
         self.assertEqual(ucg["storage"]["tf"], {"supported": "unsupported", "present": "not_present", "observed": False, "capacity_bytes": None})
-        udw = normalize(self.udw, fixture("udw-raw.json"))
-        self.assertEqual([fan["id"] for fan in udw["fans"]], ["fan1", "fan2"])
-        self.assertEqual([item["id"] for item in udw["diagnostics"]["ignored_observations"]], ["fan3", "fan4"])
+        udw = normalize(self.udw, fixture("udw-raw.json"), model=self.models["UDW"])
+        self.assertEqual([fan["id"] for fan in udw["fans"]], ["fan1", "fan2", "fan3", "fan4"])
+        self.assertEqual(udw["diagnostics"]["ignored_observations"], [])
         self.assertEqual([psu["present"] for psu in udw["power_supplies"]], ["unknown", "unknown"])
 
     def test_failure_preserves_previous_values_and_marks_only_unifi_stale(self):

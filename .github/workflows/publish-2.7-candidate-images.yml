@@ -155,6 +155,7 @@ jobs:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
       - run: python3 scripts/check_release_boundaries.py
+      - run: python3 scripts/check_unifi_static_authority.py
 
   images:
     needs: [catalog, contracts, go, python, frontend, compose, security]

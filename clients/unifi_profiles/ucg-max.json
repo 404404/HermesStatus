@@ -33,49 +33,8 @@
       "expected_name": "lm63"
     }
   },
-  "fans": {
-    "channels": [
-      {
-        "id": "fan1",
-        "supported": true,
-        "present": "present"
-      }
-    ]
-  },
-  "power": {
-    "psu_slots": 0,
-    "presence": "unknown",
-    "sensor_mapping": "unknown",
-    "max_power_w": null
-  },
-  "storage": {
-    "nvme": {
-      "supported": true,
-      "present": "unknown",
-      "observed": false,
-      "capacity_bytes": null
-    },
-    "sata_ssd": {
-      "supported": false,
-      "present": "not_populated",
-      "observed": false,
-      "capacity_bytes": null
-    },
-    "tf": {
-      "supported": false,
-      "present": "not_populated",
-      "observed": false,
-      "capacity_bytes": null
-    }
-  },
   "health_policy": {
     "optional_diagnostics_affect_health": false,
     "zero_rpm_is_failure_when_present": false
-  },
-  "poe": {
-    "supported": false,
-    "total_max_power_w": null,
-    "port_max_power_w": {}
-  },
-  "cpu_model": "Qualcomm IPQ5322"
+  }
 }

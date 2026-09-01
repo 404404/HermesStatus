@@ -1334,7 +1334,7 @@ function unifiPowerProfile(unifi){
 
 function unifiPowerSectionVisible(unifi){
   const powerProfile = unifiPowerProfile(unifi);
-  return unifi?.profile === 'udw' && powerProfile.supported === true
+  return powerProfile.supported === true
     && Number.isInteger(powerProfile.psu_slots) && powerProfile.psu_slots > 0;
 }
 
