@@ -9,8 +9,8 @@ from pathlib import Path
 
 CATALOG_SCHEMA_VERSION = 1
 SUPPORTED_CATALOG_SCHEMA_VERSIONS = frozenset({CATALOG_SCHEMA_VERSION})
-CATALOG_SOURCE_REVISION = "714a3c8ce1a7d6d5165aad66912ea2db5ed55563"
-CATALOG_BUNDLE_SHA256 = "a92a44e5ef2f4afa20620782f4ecfb539bd72a18f86d5480d4110846f9f4d13b"
+CATALOG_SOURCE_REVISION = "3646c39700c0a063154c1fd787a9e760111c91d3"
+CATALOG_BUNDLE_SHA256 = "5caae57981756ca7b0d84a90988ba6b9bfee38cc047cc2e6b7492acffe4f660a"
 CATALOG_BUNDLE_PATH = Path(__file__).with_name("unifi_catalog") / "catalog.json"
 CATALOG_PROVENANCE_PATH = CATALOG_BUNDLE_PATH.with_name("catalog-provenance.json")
 # Compatibility name only; this is a bundle path, not a model-table directory.
@@ -25,6 +25,7 @@ POWER_FIELD_STATUSES = {"verified", "candidate", "unknown", "not_applicable"}
 INPUT_METHODS = {"ac_mains", "ac_adapter", "dc_adapter", "usb_c", "poe"}
 SELECTION_MODES = {"fixed", "auto_detected", "controller_manual"}
 CONNECTORS = {"rj45", "sfp", "sfp_plus", "sfp28", "other"}
+PORT_ROLES = {"lan", "wan", "downstream", "uplink", "data_in", "poe_passthrough"}
 STORAGE_TYPES = {"emmc", "ssd", "sata_ssd", "nvme", "microsd", "tf", "other"}
 STORAGE_KINDS = {"fixed_device", "user_slot", "removable_media"}
 PRESENCE_STATES = {"present", "not_populated", "unknown"}
@@ -119,7 +120,7 @@ def _ports(model):
         _number(port["max_speed_mbps"], f"{field}.max_speed_mbps", integer=True)
         if port["max_speed_mbps"] not in {None, 10, 100, 1000, 2500, 5000, 10000, 25000, 100000}:
             raise ModelCatalogError(f"invalid {field}.max_speed_mbps")
-        if not isinstance(port["roles"], list) or not port["roles"] or len(set(port["roles"])) != len(port["roles"]) or any(role not in {"lan", "wan"} for role in port["roles"]):
+        if not isinstance(port["roles"], list) or not port["roles"] or len(port["roles"]) > 4 or len(set(port["roles"])) != len(port["roles"]) or any(role not in PORT_ROLES for role in port["roles"]):
             raise ModelCatalogError(f"invalid {field}.roles")
         if port["poe_in"] not in {True, False, None} or port["poe_out"] not in {True, False, None}:
             raise ModelCatalogError(f"invalid {field}.poe flags")

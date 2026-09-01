@@ -199,6 +199,28 @@ func TestUniFiAPIPortTelemetryRoundTripAndNoRawTable(t *testing.T) {
 	}
 }
 
+func TestUniFiCatalogPortRolesRoundTrip(t *testing.T) {
+	stats := syntheticUniFiAPIPortStats([]UniFiAPIPort{{
+		DeviceID: "u6-iw-1", PortIndex: 1, Name: unifiString("Port 1"), Connector: unifiString("rj45"),
+		Roles: []string{"lan", "downstream", "poe_passthrough"}, PoEIn: func() *bool { value := false; return &value }(),
+		PoEOut: func() *bool { value := true; return &value }(),
+	}})
+	if err := ValidateUniFiStats(&stats); err != nil {
+		t.Fatalf("Catalog port roles rejected: %v", err)
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeUniFiStatsJSON(raw)
+	if err != nil {
+		t.Fatalf("Catalog port roles round trip rejected: %v", err)
+	}
+	if got := decoded.API.Telemetry.Ports[0].Roles; len(got) != 3 || got[1] != "downstream" || got[2] != "poe_passthrough" {
+		t.Fatalf("Catalog port roles were not preserved: %#v", got)
+	}
+}
+
 func TestUniFiStorageMediaCapabilitiesRoundTrip(t *testing.T) {
 	stats := validUniFiFixture("udw")
 	capacity := int64(128000000000)

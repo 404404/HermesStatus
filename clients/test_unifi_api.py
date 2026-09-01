@@ -450,9 +450,10 @@ class UniFiAPITests(unittest.TestCase):
             {"device_id": "udw-1", "port_table": [{"port_idx": 1, "up": True}]},
         ]}
         records, _ = _ports(legacy, devices[2], {}, 1.0, devices=devices)
-        self.assertEqual([(item["device_id"], item["port_idx"]) for item in records], [("switch-1", 8), ("udw-1", 1)])
-        self.assertEqual(records[0]["device_id"], "switch-1")
-        self.assertEqual(records[1]["device_id"], "udw-1")
+        self.assertEqual([(item["device_id"], item["port_idx"]) for item in records], [("ap-1", 1), ("switch-1", 8), ("udw-1", 1)])
+        self.assertEqual(records[0]["device_id"], "ap-1")
+        self.assertEqual(records[1]["device_id"], "switch-1")
+        self.assertEqual(records[2]["device_id"], "udw-1")
 
     def test_verified_catalog_ports_join_by_device_id_and_physical_index(self):
         import copy
@@ -481,8 +482,8 @@ class UniFiAPITests(unittest.TestCase):
         )
         a_port = next(item for item in records if item["device_id"] == "device-a" and item["port_idx"] == 1)
         b_port = next(item for item in records if item["device_id"] == "device-b" and item["port_idx"] == 20)
-        self.assertEqual(a_port["name"], "RJ45-1")
-        self.assertEqual(b_port["name"], "SFP+-2")
+        self.assertEqual(a_port["name"], "Port 1")
+        self.assertEqual(b_port["name"], "Port 20")
         self.assertEqual(a_port["model_id"], "UDW")
         self.assertEqual(b_port["model_id"], "UDW")
         self.assertEqual(a_port["device_id"], "device-a")
@@ -520,6 +521,17 @@ class UniFiAPITests(unittest.TestCase):
         self.assertIn("poe", unknown)
         self.assertEqual(known["model_id"], "UDW")
         self.assertIn("max_speed_mbps", known)
+
+    def test_catalog_ports_are_emitted_when_runtime_record_is_absent(self):
+        from unifi_api import _ports
+        devices = [{"id": "mesh-1", "model": "U6 Mesh", "name": "Mesh", "state": "ONLINE"}]
+        records, _ = _ports({"data": []}, devices[0], {}, 1.0, devices=devices)
+        self.assertEqual(records, [{
+            "device_id": "mesh-1", "port_idx": 1, "name": "Port 1", "connector": "rj45",
+            "media": "rj45", "roles": ["lan"], "poe_in": True, "poe_out": False,
+            "model_id": "U6-Mesh", "max_speed_mbps": 1000.0,
+            "poe_standard": "poe", "poe": {"supported": False, "class": "poe"},
+        }])
 
     def test_target_resolution_does_not_depend_on_device_order(self):
         calls = []

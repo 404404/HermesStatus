@@ -957,7 +957,7 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_power_w=
         index = _counter(port, "port_idx", "idx", "portIndex")
     if index is None or index < 1 or index > 65535:
         return None
-    result = {"device_id": device_id, "port_idx": index}
+    result = {"device_id": device_id, "port_idx": index, "name": static_port["label"] if static_port is not None else f"Port {index}"}
     if static_port is not None:
         result["name"] = static_port["label"]
         result["connector"] = static_port["connector"]
@@ -978,7 +978,7 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_power_w=
         ("up", ("up", "link_up", "is_up")),
         ("uplink", ("is_uplink", "uplink")),
     ):
-        if static_port is not None and output in {"name", "media"}:
+        if output == "name" or (static_port is not None and output == "media"):
             continue
         value = _first(port, *keys)
         if output in {"duplex", "autoneg", "enabled", "up", "uplink"}:
@@ -1143,8 +1143,13 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
                 current = runtime_by_key.get(key)
                 if current is None or _stable_port_record_key(item) < _stable_port_record_key(current):
                     runtime_by_key[key] = item
-    if not matched:
+    # The Catalog is the left side of this join. A controller may omit a
+    # device's runtime port observations entirely, while its resolved static
+    # physical topology remains safe and useful to display.
+    catalog_device_ids = {device_id for device_id, model in device_models.items() if model is not None}
+    if not matched and not catalog_device_ids:
         return None, None
+    matched_device_ids.update(catalog_device_ids)
 
     port_records = []
     for device_id in sorted(matched_device_ids):

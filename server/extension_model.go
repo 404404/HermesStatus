@@ -84,6 +84,7 @@ const (
 	MaxUniFiAPIWans             = 16
 	MaxUniFiAPIUplinks          = 32
 	MaxUniFiAPITemperatures     = 16
+	MaxUniFiPortRoles           = 4
 	// Per-device limits cover one physical port table or static PoE map.
 	MaxUniFiPortsPerDevice = 64
 	// Site-wide API telemetry is the bounded union of all device observations.

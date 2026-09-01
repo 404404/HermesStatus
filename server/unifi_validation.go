@@ -489,12 +489,12 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 		if item.ModelProfileStatus != nil && *item.ModelProfileStatus != "known" && *item.ModelProfileStatus != "unknown" {
 			return validationError(validationCodeInvalidValue, prefix+".model_profile_status", "is invalid")
 		}
-		if len(item.Roles) > 2 {
+		if len(item.Roles) > MaxUniFiPortRoles {
 			return validationError(validationCodeInvalidValue, prefix+".roles", "is too large")
 		}
 		seenRoles := map[string]struct{}{}
 		for _, role := range item.Roles {
-			if role != "lan" && role != "wan" {
+			if role != "lan" && role != "wan" && role != "downstream" && role != "uplink" && role != "data_in" && role != "poe_passthrough" {
 				return validationError(validationCodeInvalidValue, prefix+".roles", "contains an invalid role")
 			}
 			if _, exists := seenRoles[role]; exists {

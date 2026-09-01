@@ -1475,24 +1475,31 @@ function unifiPowerText(value){
   return `${Number(number.toFixed(number >= 10 ? 1 : 2))} W`;
 }
 
-function unifiPortPoeText(port, profile = null){
+function unifiPortPoeText(port){
   if(typeof port?.poe_out === 'boolean' && port.poe_out === false) return '-';
-  const profilePoe = profile && Object.keys(profile).length ? profile : null;
   const poe = safeObject(port?.poe);
-  if(profilePoe?.supported === false) return '-';
-  if(!Object.keys(poe).length && profilePoe?.supported !== true) return '-';
-  if(poe.supported === false && profilePoe?.supported !== true) return '-';
+  if(!Object.keys(poe).length || poe.supported === false) return '-';
   const current = unifiPowerText(poe.power_w);
-  const configuredMaximum = profilePoe?.port_max_power_w?.[String(port?.port_idx)] ?? profilePoe?.port_max_power_w?.[port?.port_idx];
-  const maximum = unifiPowerText(poe.max_power_w ?? configuredMaximum);
+  const maximum = unifiPowerText(poe.max_power_w);
   if(current === '-' && maximum === '-') return '-';
   return `${current} / ${maximum}`;
 }
 
+function unifiPortConnectorText(value){
+  const connector = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return ({rj45: 'RJ45', sfp: 'SFP', sfp_plus: 'SFP+', 'sfp+': 'SFP+', sfp28: 'SFP28'})[connector] || '-';
+}
+
+function unifiPortMaxSpeedText(port){
+  return unifiLinkBandwidth(port?.max_speed_mbps);
+}
+
 function unifiPortLinkText(port, allowMaximum = true){
   const maximum = allowMaximum ? unifiLinkBandwidth(port?.max_speed_mbps) : '-';
-  if(port?.up !== true) return maximum === '-' ? '未连接' : `未连接 / ${maximum}`;
+  if(port?.up === false || port?.enabled === false) return maximum === '-' ? '未连接' : `未连接 / ${maximum}`;
+  if(port?.up !== true) return '-';
   const current = unifiLinkBandwidth(port.speed_mbps);
+  if(!allowMaximum) return current;
   if(current === '-' && maximum === '-') return '-';
   return `${current} / ${maximum}`;
 }
@@ -1672,17 +1679,16 @@ function unifiPortTelemetryMarkup(unifi){
   };
   const panels = groupEntries.map((group, index) => {
     const rows = group.ports.map(port => {
-    const portName = textOrDash(port.name) === '-' ? `Port ${formatInteger(port.port_idx)}` : textOrDash(port.name);
-    const groupPoeProfile = group.modelProfileStatus === 'known' ? profilePoe : null;
-    const poeCell = group.showPoe ? `<td>${escapeHtml(unifiPortPoeText(port, groupPoeProfile))}</td>` : '';
-    return `<tr><td class="strong-cell">${escapeHtml(portName)}</td><td>${escapeHtml(formatInteger(port.port_idx))}</td><td>${unifiPortStatusMarkup(port)}</td><td>${escapeHtml(unifiPortLinkText(port, group.modelProfileStatus === 'known'))}</td>${poeCell}<td>${escapeHtml(unifiPortTraffic(port.tx_bytes))}</td><td>${escapeHtml(unifiPortTraffic(port.rx_bytes))}</td><td>${escapeHtml(unifiPortErrorText(port))}</td></tr>`;
+    const catalogLabel = typeof port?.name === 'string' && /^Port [1-9][0-9]*$/.test(port.name.trim()) ? port.name.trim() : `Port ${formatInteger(port.port_idx)}`;
+    const poeCell = group.showPoe ? `<td>${escapeHtml(unifiPortPoeText(port))}</td>` : '';
+    return `<tr><td class="strong-cell">${escapeHtml(catalogLabel)}</td><td>${escapeHtml(unifiPortConnectorText(port.connector))}</td><td>${escapeHtml(unifiPortMaxSpeedText(port))}</td><td>${unifiPortStatusMarkup(port)}</td><td>${escapeHtml(unifiPortLinkText(port, false))}</td>${poeCell}<td>${escapeHtml(unifiPortTraffic(port.tx_bytes))}</td><td>${escapeHtml(unifiPortTraffic(port.rx_bytes))}</td><td>${escapeHtml(unifiPortErrorText(port))}</td></tr>`;
     }).join('');
-    const body = rows || `<tr><td colspan="${group.showPoe ? 8 : 7}" class="table-empty">当前未取得该设备端口数据。</td></tr>`;
+    const body = rows || `<tr><td colspan="${group.showPoe ? 9 : 8}" class="table-empty">当前未取得该设备端口数据。</td></tr>`;
     const summary = groupPoeSummary(group.ports);
     const fallback = group.showPoe && group.modelProfileStatus === 'known' && (groupEntries.length === 1 || index === 0);
     const modelNotice = group.modelProfileStatus === 'unknown' ? '<div class="unifi-model-unavailable">机型端口参数未维护</div>' : '';
     const poeHeader = group.showPoe ? '<th>PoE</th>' : '';
-    return `<section id="${group.key}-panel" class="unifi-device-panel" role="tabpanel" aria-labelledby="${group.key}-tab" data-unifi-device-panel="${group.key}"${index === 0 ? '' : ' hidden'}>${modelNotice}${poeSummaryMarkup(summary, group.showPoe, fallback)}<div class="table-wrap"><table class="data unifi-ports-table"><thead><tr><th>端口名称</th><th>端口编号</th><th>状态</th><th>链路</th>${poeHeader}<th>累计发送流量</th><th>累计接收流量</th><th>发送 / 接收 (错误/丢弃)</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
+    return `<section id="${group.key}-panel" class="unifi-device-panel" role="tabpanel" aria-labelledby="${group.key}-tab" data-unifi-device-panel="${group.key}"${index === 0 ? '' : ' hidden'}>${modelNotice}${poeSummaryMarkup(summary, group.showPoe, fallback)}<div class="table-wrap"><table class="data unifi-ports-table"><thead><tr><th>端口</th><th>端口类型</th><th>最大速率</th><th>状态</th><th>链路</th>${poeHeader}<th>累计发送流量</th><th>累计接收流量</th><th>发送 / 接收 (错误/丢弃)</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
   }).join('');
   return `<div class="unifi-device-tabs" role="tablist" aria-label="UniFi 设备"><div class="unifi-network-tabs">${tabs}</div>${panels}</div>`;
 }
@@ -2439,8 +2445,10 @@ const exported = {
   unifiPortTelemetryMarkup,
   unifiPortStatusMarkup,
   unifiPortErrorText,
+  unifiPortConnectorText,
   unifiWanMarkup,
   unifiPortLinkText,
+  unifiPortMaxSpeedText,
   unifiPortPoeText,
   unifiPortRate,
   unifiLinkBandwidth,

@@ -101,8 +101,8 @@ class UniFiModelCatalogTests(unittest.TestCase):
         self.assertEqual(resolve_model(catalog, "UCG-Max", explicit_sku=True)["canonical_sku"], "UCG-Max")
 
     def test_catalog_revision_and_checksum_are_pinned(self):
-        self.assertEqual(CATALOG_SOURCE_REVISION, "714a3c8ce1a7d6d5165aad66912ea2db5ed55563")
-        self.assertEqual(CATALOG_BUNDLE_SHA256, "a92a44e5ef2f4afa20620782f4ecfb539bd72a18f86d5480d4110846f9f4d13b")
+        self.assertEqual(CATALOG_SOURCE_REVISION, "3646c39700c0a063154c1fd787a9e760111c91d3")
+        self.assertEqual(CATALOG_BUNDLE_SHA256, "5caae57981756ca7b0d84a90988ba6b9bfee38cc047cc2e6b7492acffe4f660a")
         manifest = CATALOG_BUNDLE_PATH.with_name("catalog.sha256").read_text(encoding="ascii").strip()
         self.assertEqual(manifest, CATALOG_BUNDLE_SHA256 + "  catalog.json")
 
@@ -127,6 +127,33 @@ class UniFiModelCatalogTests(unittest.TestCase):
         self.assertEqual(model["canonical_sku"], "UCG-Max")
         self.assertEqual(model["processor"]["model"], "Qualcomm IPQ5322")
         self.assertEqual(project_static_capabilities(model)["processor"]["model"], "Qualcomm IPQ5322")
+
+    def test_catalog_ports_have_neutral_labels_and_typed_connectors(self):
+        catalog = load_catalog()
+        for sku in ("USW-Flex", "USW-Flex-2.5G-8-PoE", "U6-IW", "U6-Enterprise-IW", "U6-Mesh", "UAP-AC-M"):
+            ports = project_static_capabilities(catalog[sku])["ports"]["items"]
+            self.assertEqual([port["label"] for port in ports], [f"Port {index}" for index in range(1, len(ports) + 1)])
+            self.assertTrue(all(port["connector"] in {"rj45", "sfp", "sfp_plus", "sfp28", "other"} for port in ports))
+
+    def test_catalog_static_poe_budgets_are_not_runtime_observations(self):
+        catalog = load_catalog()
+        expected = {"US-XG-6POE": 170, "USW-Pro-Max-16-PoE": 180, "USW-Flex-2.5G-8-PoE": 196, "USW-Flex": 46}
+        for sku, budget in expected.items():
+            self.assertEqual(project_static_capabilities(catalog[sku])["power"]["absolute_max_poe_budget_w"], budget)
+
+    def test_functional_port_roles_do_not_replace_neutral_labels(self):
+        catalog = load_catalog()
+        flex = project_static_capabilities(catalog["USW-Flex"])["ports"]["items"]
+        self.assertEqual((flex[0]["label"], flex[0]["connector"]), ("Port 1", "rj45"))
+        self.assertTrue(flex[0]["poe_in"])
+        flex_25g = project_static_capabilities(catalog["USW-Flex-2.5G-8-PoE"])["ports"]["items"]
+        self.assertEqual((flex_25g[8]["label"], flex_25g[8]["connector"]), ("Port 9", "rj45"))
+        self.assertTrue(flex_25g[8]["poe_in"])
+        self.assertEqual((flex_25g[9]["label"], flex_25g[9]["connector"]), ("Port 10", "sfp_plus"))
+        u6_iw = project_static_capabilities(catalog["U6-IW"])["ports"]["items"]
+        self.assertIn("poe_passthrough", u6_iw[0]["roles"])
+        self.assertIn("data_in", u6_iw[4]["roles"])
+        self.assertEqual([port["label"] for port in u6_iw], [f"Port {index}" for index in range(1, 6)])
 
     def test_power_projection_keeps_profiles_and_unknown_budgets(self):
         catalog = load_catalog()
