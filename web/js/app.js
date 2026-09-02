@@ -1726,7 +1726,7 @@ function renderUniFi(view){
   if(emptyState){
     emptyState.hidden = !pageUnavailable;
     emptyState.textContent = configured
-      ? '已配置 UniFi 目标，但访问失败，请检查 SSH 密码和 API Key'
+      ? (unifi.error && unifiErrorText(unifi) !== '-' ? `UniFi 访问失败：${unifiErrorText(unifi)}` : '已配置 UniFi 目标，但访问失败，请检查 UniFi 采集配置')
       : '未配置 UniFi 目标';
   }
   for(const section of document.querySelectorAll('#unifiPage > section')) section.hidden = pageUnavailable;
@@ -2443,6 +2443,7 @@ const exported = {
 	luckyIsConfigured,
 	easytierIsConfigured,
   unifiIsConfigured,
+  unifiErrorText,
   unifiTransportSummary,
   unifiApiStatusText,
   unifiCollectionStatus,

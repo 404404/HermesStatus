@@ -73,7 +73,7 @@ const (
 	MaxDockerPayloadBytes       = 512 * 1024
 	MaxHermesPayloadBytes       = 1 << 20
 	MaxEasyTierPayloadBytes     = 64 * 1024
-	MaxUniFiPayloadBytes        = 64 * 1024
+	MaxUniFiPayloadBytes        = 256 * 1024
 	MaxEasyTierTextLength       = 128
 	MaxUniFiTextLength          = 128
 	MaxUniFiFans                = 8

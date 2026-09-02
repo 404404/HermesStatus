@@ -88,6 +88,8 @@ async function run(){
   assert.match(indexMarkup, /id="unifiEmptyState"/);
   assert.match(appSource, /invalid_value/);
   assert.match(appSource, /未配置 UniFi 目标/);
+  assert.equal(app.unifiErrorText({error: {code: 'payload_too_large'}}), 'UniFi 遥测数据过大');
+  assert.doesNotMatch(appSource, /已配置 UniFi 目标，但访问失败，请检查 SSH 密码和 API Key/);
   assert.match(cssSource, /\.unifi-network-tabs\{[^}]*flex-wrap:wrap/);
   assert.match(cssSource, /\.unifi-network-tab\{[^}]*white-space:nowrap/);
 

@@ -443,6 +443,79 @@ func syntheticUniFiPorts(count int) []UniFiAPIPort {
 	return ports
 }
 
+func TestUniFiPayloadLimitAccommodatesQualifiedMultiDeviceReport(t *testing.T) {
+	stats := validUniFiFixture("udw")
+	now := "2026-08-27T01:02:03Z"
+	status := 200
+	ports := syntheticUniFiPorts(97)
+	longText := strings.Repeat("qualified-port-observation-", 4)
+	for index := range ports {
+		port := &ports[index]
+		port.Name = unifiString(longText)
+		port.Media = unifiString("2.5GE")
+		port.Connector = unifiString("rj45")
+		port.Roles = []string{"lan", "downstream", "uplink"}
+		port.PoEIn = func() *bool { value := false; return &value }()
+		port.PoEOut = func() *bool { value := true; return &value }()
+		port.PoEStandard = unifiString("poe+")
+		port.ModelID = unifiString("USW-Pro-Max-16-PoE")
+		port.ModelProfileStatus = unifiString("known")
+		port.Enabled = func() *bool { value := true; return &value }()
+		port.Up = func() *bool { value := true; return &value }()
+		port.SpeedMbps = unifiFloat(2500)
+		port.MaxSpeedMbps = unifiFloat(2500)
+		port.Duplex = func() *bool { value := true; return &value }()
+		port.Autoneg = func() *bool { value := true; return &value }()
+		port.Uplink = func() *bool { value := false; return &value }()
+		port.RxBytes = unifiInt64(100)
+		port.TxBytes = unifiInt64(200)
+		port.RxPackets = unifiInt64(10)
+		port.TxPackets = unifiInt64(20)
+		port.RxErrors = unifiInt64(0)
+		port.TxErrors = unifiInt64(0)
+		port.RxDropped = unifiInt64(0)
+		port.TxDropped = unifiInt64(0)
+		port.RxMulticast = unifiInt64(1)
+		port.TxMulticast = unifiInt64(2)
+		port.RxBroadcast = unifiInt64(1)
+		port.TxBroadcast = unifiInt64(2)
+		port.RxBPS = unifiInt64(1000)
+		port.TxBPS = unifiInt64(2000)
+		port.RxUtilizationPct = unifiFloat(1.5)
+		port.TxUtilizationPct = unifiFloat(2.5)
+		port.PoE = &UniFiAPIPoE{
+			Supported: func() *bool { value := true; return &value }(),
+			Enabled:   func() *bool { value := true; return &value }(),
+			Active:    func() *bool { value := true; return &value }(),
+			State:     unifiString("active"), Mode: unifiString("poe+"), Class: unifiString("Class 4"),
+			PowerW: unifiFloat(7.5), MaxPowerW: unifiFloat(30), VoltageV: unifiFloat(48), CurrentMA: unifiFloat(156),
+			Good: func() *bool { value := true; return &value }(),
+		}
+		port.PeerCount = unifiInt(1)
+	}
+	stats.API = &UniFiAPIStats{
+		Enabled: true, Status: "available", LastAttempt: &now, LastSuccess: &now,
+		Endpoints: []UniFiAPIEndpoint{{Name: "info", Status: "ok", HTTPStatus: &status}},
+		Telemetry: &UniFiAPITelemetry{Ports: ports, WANs: []UniFiAPIWAN{}, Uplinks: []UniFiAPIUplink{}, Temperatures: []UniFiAPITemperature{}},
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) <= 64*1024 {
+		t.Fatalf("regression fixture must exceed the former 64 KiB cap: %d bytes", len(raw))
+	}
+	if len(raw) >= MaxUniFiPayloadBytes {
+		t.Fatalf("regression fixture must remain within the bounded limit: %d bytes", len(raw))
+	}
+	if _, err := DecodeUniFiStatsJSON(raw); err != nil {
+		t.Fatalf("qualified multi-device report rejected: %v", err)
+	}
+	over := append(append([]byte(nil), raw...), []byte(strings.Repeat(" ", MaxUniFiPayloadBytes-len(raw)+1))...)
+	_, tooLargeErr := DecodeUniFiStatsJSON(over)
+	assertValidationError(t, tooLargeErr, validationCodePayloadTooLarge)
+}
+
 func TestUniFiQSFP28ConnectorIsAccepted(t *testing.T) {
 	connector := "qsfp28"
 	stats := syntheticUniFiAPIPortStats([]UniFiAPIPort{{DeviceID: "device-a", PortIndex: 1, Connector: &connector}})
