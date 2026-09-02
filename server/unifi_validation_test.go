@@ -395,6 +395,25 @@ func syntheticUniFiPorts(count int) []UniFiAPIPort {
 	return ports
 }
 
+func TestUniFiQSFP28ConnectorIsAccepted(t *testing.T) {
+	connector := "qsfp28"
+	stats := syntheticUniFiAPIPortStats([]UniFiAPIPort{{DeviceID: "device-a", PortIndex: 1, Connector: &connector}})
+	if err := ValidateUniFiStats(&stats); err != nil {
+		t.Fatalf("qsfp28 connector rejected: %v", err)
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeUniFiStatsJSON(raw)
+	if err != nil {
+		t.Fatalf("qsfp28 connector decode rejected: %v", err)
+	}
+	if decoded.API == nil || decoded.API.Telemetry == nil || decoded.API.Telemetry.Ports[0].Connector == nil || *decoded.API.Telemetry.Ports[0].Connector != "qsfp28" {
+		t.Fatalf("qsfp28 connector was not preserved: %#v", decoded.API)
+	}
+}
+
 func TestUniFiSitePortObservationLimitAndUniqueJoinKey(t *testing.T) {
 	for _, count := range []int{64, 65, 97, MaxUniFiSitePortObservations} {
 		stats := syntheticUniFiAPIPortStats(syntheticUniFiPorts(count))

@@ -113,7 +113,7 @@ class UniFiContractTests(unittest.TestCase):
 
     def test_capability_state_is_not_inferred_from_zero_or_tooling(self):
         ucg = normalize(self.ucg, fixture("ucg-max-raw.json"), model=self.models["UCG-Max"])
-        self.assertEqual(ucg["fans"][0]["present"], "unknown")
+        self.assertEqual(ucg["fans"][0]["present"], "present")
         self.assertEqual(ucg["fans"][0]["supported"], "unknown")
         self.assertTrue(ucg["fans"][0]["observed"])
         self.assertEqual(ucg["fans"][0]["rpm"], 0)

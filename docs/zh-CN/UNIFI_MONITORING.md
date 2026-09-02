@@ -24,7 +24,7 @@ Device v2 → Server → /json/stats.json → UniFi 标签页
 
 ## Catalog consumer 边界
 
-静态硬件能力从 `clients/unifi_catalog/` 中随版本固定的 deterministic bundle 读取；该 bundle 来自 `404404/UniFi_Catalog` revision `3646c39700c0a063154c1fd787a9e760111c91d3`，bundle SHA-256 为 `5caae57981756ca7b0d84a90988ba6b9bfee38cc047cc2e6b7492acffe4f660a`，并由 SHA-256 manifest 校验。中性的物理端口标签、端口连接器、存储、电源、PoE 和已确认处理器事实均以 bundle 为权威来源，HermesStatus 不维护平行机型表。
+静态硬件能力从 `clients/unifi_catalog/` 中随版本固定的 deterministic bundle 读取；该 bundle 来自 `404404/UniFi_Catalog` revision `813b34eba1dbb7922777897260983ce0189ce39e`，bundle SHA-256 为 `aa2e5c8f594f1df4e123b32975c0e0dcf333466380013057846381b16288a3b6`，并由 SHA-256 manifest 校验。中性的物理端口标签、端口连接器、存储、电源、PoE 和已确认处理器事实均以 bundle 为权威来源，HermesStatus 不维护平行机型表。
 
 采集 profile 由管理员显式选择，但它不是硬件 identity，也不能解锁静态能力。controller 的 `api_model`、`sysid` 和 SSH model string 都是 runtime identifier；只有 Catalog 中标为 `verified` 的 alias 才能解析 canonical SKU。candidate alias 和未知字符串仍保留为 runtime observation，但不能解锁静态能力。只有 verified runtime resolution 成功后，才能单独投影静态能力；API 观测保留在 `api` 下。
 

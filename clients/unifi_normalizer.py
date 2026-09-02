@@ -188,6 +188,8 @@ def _cache_records(cache, names):
 def _fan_item(fan_id, rpm, supported, present):
     if isinstance(rpm, bool) or not isinstance(rpm, int) or rpm < 0:
         rpm = None
+    if rpm is not None:
+        present = "present"
     return {
         "id": fan_id,
         "supported": supported,
@@ -288,7 +290,8 @@ def _power(hardware_cache=None, model=None):
                 item["power_w"] = watts
             if isinstance(fan_rpm, (int, float)) and not isinstance(fan_rpm, bool) and fan_rpm >= 0:
                 item["fan_rpm"] = int(fan_rpm)
-            if item["present"] == "present" and ("power_w" in item or "fan_rpm" in item):
+            if "power_w" in item or "fan_rpm" in item:
+                item["present"] = "present"
                 item["observed"] = True
                 item["state"] = "observed"
             result.append(item)
@@ -315,7 +318,8 @@ def _power(hardware_cache=None, model=None):
             item["power_w"] = watts
         if isinstance(fan_rpm, (int, float)) and not isinstance(fan_rpm, bool) and fan_rpm >= 0:
             item["fan_rpm"] = int(fan_rpm)
-        if item["present"] == "present" and ("power_w" in item or "fan_rpm" in item):
+        if "power_w" in item or "fan_rpm" in item:
+            item["present"] = "present"
             item["observed"] = True
             item["state"] = "observed"
     return result
@@ -381,18 +385,29 @@ def _storage(hardware_cache=None, model=None, filesystem=None):
                 if output == "capacity_bytes" and item.get("capacity_bytes") is not None:
                     # A Catalog capacity is authoritative hardware metadata;
                     # a runtime disk probe may only fill an unknown value.
+                    if value > 0:
+                        item["present"] = "present"
+                        item["observed"] = True
                     continue
                 item[output] = value
+                if output == "capacity_bytes" and value > 0:
+                    item["present"] = "present"
+                    item["observed"] = True
         if item.get("present") == "present" and item.get("capacity_bytes") is not None:
             item["observed"] = True
     if isinstance(filesystem, dict) and filesystem.get("status") == "available":
         item = result.get("sata_ssd")
         if item is not None and item.get("supported") == "supported" and filesystem.get("mountpoint") == "/ssd1":
+            filesystem_total_observed = False
             for output in ("filesystem_total_bytes", "used_bytes", "available_bytes", "usage_percent"):
                 value = filesystem.get(output)
                 if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
                     item[output] = value
-            item["observed"] = True
+                    if output == "filesystem_total_bytes" and value > 0:
+                        filesystem_total_observed = True
+            if filesystem_total_observed:
+                item["present"] = "present"
+                item["observed"] = True
     return result
 
 

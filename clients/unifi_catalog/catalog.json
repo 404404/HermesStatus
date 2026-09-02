@@ -1128,13 +1128,11 @@
           {
             "index": 17,
             "label": "Port 17",
-            "connector": "rj45",
-            "roles": [
-              "lan"
-            ],
-            "max_speed_mbps": 1000,
-            "poe_in": false,
-            "poe_out": false,
+            "connector": "sfp_plus",
+            "roles": [],
+            "max_speed_mbps": 10000,
+            "poe_in": null,
+            "poe_out": null,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
@@ -1143,13 +1141,10 @@
             "index": 18,
             "label": "Port 18",
             "connector": "rj45",
-            "roles": [
-              "lan",
-              "wan"
-            ],
-            "max_speed_mbps": 2500,
-            "poe_in": false,
-            "poe_out": false,
+            "roles": [],
+            "max_speed_mbps": 1000,
+            "poe_in": null,
+            "poe_out": null,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
@@ -1157,14 +1152,11 @@
           {
             "index": 19,
             "label": "Port 19",
-            "connector": "sfp_plus",
-            "roles": [
-              "lan",
-              "wan"
-            ],
-            "max_speed_mbps": 10000,
-            "poe_in": false,
-            "poe_out": false,
+            "connector": "rj45",
+            "roles": [],
+            "max_speed_mbps": 2500,
+            "poe_in": null,
+            "poe_out": null,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
@@ -1173,13 +1165,10 @@
             "index": 20,
             "label": "Port 20",
             "connector": "sfp_plus",
-            "roles": [
-              "lan",
-              "wan"
-            ],
+            "roles": [],
             "max_speed_mbps": 10000,
-            "poe_in": false,
-            "poe_out": false,
+            "poe_in": null,
+            "poe_out": null,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
@@ -2258,9 +2247,9 @@
               "lan"
             ],
             "max_speed_mbps": 10000,
-            "poe_in": false,
+            "poe_in": true,
             "poe_out": false,
-            "poe_standard": null,
+            "poe_standard": "poe+",
             "poe_max_power_w": null,
             "combo_group": null
           },

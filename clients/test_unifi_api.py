@@ -528,7 +528,7 @@ class UniFiAPITests(unittest.TestCase):
         records, _ = _ports({"data": []}, devices[0], {}, 1.0, devices=devices)
         self.assertEqual(records, [{
             "device_id": "mesh-1", "port_idx": 1, "name": "Port 1", "connector": "rj45",
-            "media": "rj45", "roles": ["lan"], "poe_in": True, "poe_out": False,
+            "model_profile_status": "known", "media": "rj45", "roles": ["lan"], "poe_in": True, "poe_out": False,
             "model_id": "U6-Mesh", "max_speed_mbps": 1000.0,
             "poe_standard": "poe", "poe": {"supported": False, "class": "poe"},
         }])

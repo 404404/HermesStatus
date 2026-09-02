@@ -22,7 +22,7 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(result["system"]["cpu_temperature_c"], 64.0)
         self.assertEqual(result["system"]["cpu_model"], "Annapurna AL324")
         self.assertEqual([x["id"] for x in result["fans"]], ["fan1", "fan2", "fan3", "fan4"])
-        self.assertTrue(all(x["supported"] == "unknown" and x["present"] == "unknown" for x in result["fans"]))
+        self.assertTrue(all(x["supported"] == "unknown" and x["present"] == "present" and x["observed"] for x in result["fans"]))
         self.assertEqual(result["diagnostics"]["ignored_observations"], [])
         self.assertEqual(result["storage"]["nvme"]["supported"], "unsupported")
         self.assertEqual(result["storage"]["nvme"]["present"], "not_present")
@@ -39,7 +39,7 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(result["fans"][0]["rpm"], 0)
         self.assertEqual(result["fans"][0]["state"], "observed_zero_rpm")
         self.assertEqual(result["fans"][0]["supported"], "unknown")
-        self.assertEqual(result["fans"][0]["present"], "unknown")
+        self.assertEqual(result["fans"][0]["present"], "present")
         self.assertEqual(result["storage"]["nvme"]["present"], "not_present")
         self.assertFalse(result["storage"]["nvme"]["observed"])
         self.assertEqual(result["storage"]["nvme"]["supported"], "supported")
@@ -108,6 +108,21 @@ class NormalizerTests(unittest.TestCase):
         result = normalize(load_profile(self.profiles, "ucg-max"), raw, model=self.models["UCG-Max"])
         self.assertEqual(result["fans"], [])
 
+    def test_unknown_fan_without_rpm_does_not_infer_absence(self):
+        raw = fixture("ucg-max-raw.json")
+        raw["diagnostics"]["fans"] = {"fan1": None}
+        result = normalize(load_profile(self.profiles, "ucg-max"), raw, model=self.models["UCG-Max"])
+        self.assertEqual(result["fans"], [{"id": "fan1", "supported": "unknown", "present": "unknown", "observed": False, "rpm": None, "state": "not_observed", "error": None}])
+
+    def test_zero_psu_sensor_is_positive_presence_evidence(self):
+        raw = fixture("udw-raw.json")
+        raw["diagnostics"] = {"collection_status": "available", "hardware_cache_status": "available", "hardware_cache": {
+            "psu": {"0": {"label": "psu1", "present": False, "power": 0, "fan": {"0": 0}}}
+        }}
+        result = normalize(load_profile(self.profiles, "udw"), raw, model=self.models["UDW"])
+        self.assertEqual(result["power_supplies"][0]["present"], "present")
+        self.assertTrue(result["power_supplies"][0]["observed"])
+
 
     def test_public_shape_exposes_catalog_power_and_poe_metadata(self):
         result = normalize(load_profile(self.profiles, "udw"), fixture("udw-raw.json"), model=self.models["UDW"])
@@ -145,7 +160,7 @@ class NormalizerTests(unittest.TestCase):
     def test_unknown_runtime_model_preserves_observations_without_static_capabilities(self):
         raw = fixture("ucg-max-raw.json")
         raw["diagnostics"]["hardware_cache"] = {
-            "storage": {"1": {"category": "nvme", "present": True, "capacity_bytes": 123456789}}
+            "storage": {"1": {"category": "nvme", "capacity_bytes": 123456789}}
         }
         result = normalize(load_profile(self.profiles, "ucg-max"), raw)
         self.assertIsNone(result["power"])
@@ -153,9 +168,11 @@ class NormalizerTests(unittest.TestCase):
         self.assertIsNone(result["system"]["cpu_model"])
         self.assertEqual(result["fans"][0]["rpm"], 0)
         self.assertEqual(result["fans"][0]["supported"], "unknown")
-        self.assertEqual(result["fans"][0]["present"], "unknown")
+        self.assertEqual(result["fans"][0]["present"], "present")
         self.assertEqual(result["storage"]["nvme"]["supported"], "unknown")
         self.assertEqual(result["storage"]["nvme"]["capacity_bytes"], 123456789)
+        self.assertEqual(result["storage"]["nvme"]["present"], "present")
+        self.assertTrue(result["storage"]["nvme"]["observed"])
         self.assertTrue(all(item["supported"] == "unknown" for name, item in result["storage"].items() if name != "nvme"))
 
     def test_complete_catalog_storage_enumeration_marks_absent_media_unsupported(self):

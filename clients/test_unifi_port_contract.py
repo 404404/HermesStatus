@@ -101,8 +101,8 @@ class UniFiModelCatalogTests(unittest.TestCase):
         self.assertEqual(resolve_model(catalog, "UCG-Max", explicit_sku=True)["canonical_sku"], "UCG-Max")
 
     def test_catalog_revision_and_checksum_are_pinned(self):
-        self.assertEqual(CATALOG_SOURCE_REVISION, "3646c39700c0a063154c1fd787a9e760111c91d3")
-        self.assertEqual(CATALOG_BUNDLE_SHA256, "5caae57981756ca7b0d84a90988ba6b9bfee38cc047cc2e6b7492acffe4f660a")
+        self.assertEqual(CATALOG_SOURCE_REVISION, "813b34eba1dbb7922777897260983ce0189ce39e")
+        self.assertEqual(CATALOG_BUNDLE_SHA256, "aa2e5c8f594f1df4e123b32975c0e0dcf333466380013057846381b16288a3b6")
         manifest = CATALOG_BUNDLE_PATH.with_name("catalog.sha256").read_text(encoding="ascii").strip()
         self.assertEqual(manifest, CATALOG_BUNDLE_SHA256 + "  catalog.json")
 
@@ -133,7 +133,12 @@ class UniFiModelCatalogTests(unittest.TestCase):
         for sku in ("USW-Flex", "USW-Flex-2.5G-8-PoE", "U6-IW", "U6-Enterprise-IW", "U6-Mesh", "UAP-AC-M"):
             ports = project_static_capabilities(catalog[sku])["ports"]["items"]
             self.assertEqual([port["label"] for port in ports], [f"Port {index}" for index in range(1, len(ports) + 1)])
-            self.assertTrue(all(port["connector"] in {"rj45", "sfp", "sfp_plus", "sfp28", "other"} for port in ports))
+            self.assertTrue(all(port["connector"] in {"rj45", "sfp", "sfp_plus", "sfp28", "qsfp28", "other"} for port in ports))
+
+    def test_catalog_allows_explicitly_unknown_port_roles(self):
+        catalog = load_catalog()
+        udw = project_static_capabilities(catalog["UDW"])
+        self.assertEqual(udw["ports"]["items"][-1]["roles"], [])
 
     def test_catalog_static_poe_budgets_are_not_runtime_observations(self):
         catalog = load_catalog()
@@ -150,6 +155,9 @@ class UniFiModelCatalogTests(unittest.TestCase):
         self.assertEqual((flex_25g[8]["label"], flex_25g[8]["connector"]), ("Port 9", "rj45"))
         self.assertTrue(flex_25g[8]["poe_in"])
         self.assertEqual((flex_25g[9]["label"], flex_25g[9]["connector"]), ("Port 10", "sfp_plus"))
+        flex_25g_input = project_static_capabilities(catalog["USW-Flex-2.5G-8"])["ports"]["items"]
+        self.assertTrue(flex_25g_input[8]["poe_in"])
+        self.assertEqual(flex_25g_input[8]["poe_standard"], "poe+")
         u6_iw = project_static_capabilities(catalog["U6-IW"])["ports"]["items"]
         self.assertIn("poe_passthrough", u6_iw[0]["roles"])
         self.assertIn("data_in", u6_iw[4]["roles"])

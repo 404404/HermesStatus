@@ -1,6 +1,6 @@
 {
   "catalog_schema_version": 1,
-  "catalog_sha256": "5caae57981756ca7b0d84a90988ba6b9bfee38cc047cc2e6b7492acffe4f660a",
+  "catalog_sha256": "aa2e5c8f594f1df4e123b32975c0e0dcf333466380013057846381b16288a3b6",
   "repository": "404404/UniFi_Catalog",
-  "revision": "3646c39700c0a063154c1fd787a9e760111c91d3"
+  "revision": "813b34eba1dbb7922777897260983ce0189ce39e"
 }

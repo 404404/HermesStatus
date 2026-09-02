@@ -959,6 +959,7 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_power_w=
         return None
     result = {"device_id": device_id, "port_idx": index, "name": static_port["label"] if static_port is not None else f"Port {index}"}
     if static_port is not None:
+        result["model_profile_status"] = "known"
         result["name"] = static_port["label"]
         result["connector"] = static_port["connector"]
         result["media"] = static_port["connector"]

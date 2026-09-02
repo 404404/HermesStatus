@@ -480,7 +480,7 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 				return err
 			}
 		}
-		if item.Connector != nil && *item.Connector != "rj45" && *item.Connector != "sfp" && *item.Connector != "sfp_plus" && *item.Connector != "sfp28" && *item.Connector != "other" {
+		if item.Connector != nil && *item.Connector != "rj45" && *item.Connector != "sfp" && *item.Connector != "sfp_plus" && *item.Connector != "sfp28" && *item.Connector != "qsfp28" && *item.Connector != "other" {
 			return validationError(validationCodeInvalidValue, prefix+".connector", "is invalid")
 		}
 		if item.PoEStandard != nil && *item.PoEStandard != "poe" && *item.PoEStandard != "poe+" && *item.PoEStandard != "poe++" && *item.PoEStandard != "poe+++" {

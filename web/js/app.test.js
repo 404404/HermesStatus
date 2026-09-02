@@ -194,7 +194,7 @@ async function run(){
   assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /可用内存回退估算/);
   assert.match(app.unifiFanRows(udwUniFi), /1,698 RPM/);
   assert.match(app.unifiFanRows(ucgMaxUniFi), /0 RPM/);
-  assert.match(app.unifiFanRows(ucgMaxUniFi), /支持/);
+  assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /支持能力/);
   assert.match(app.unifiFanRows(ucgMaxUniFi), /已安装/);
   assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /观测/);
   assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /失败/);
@@ -217,6 +217,7 @@ async function run(){
   }};
   const storageMarkup = app.unifiStorageMarkup(storageWithUsage);
   assert.match(storageMarkup, /unifi-storage-table/);
+  assert.doesNotMatch(storageMarkup, /支持能力/);
   assert.match(storageMarkup, /64\.0 GB \/ 110 GB/);
   assert.match(storageMarkup, /50%/);
   const storageWithoutFilesystemTotal = app.unifiStorageMarkup({...udwUniFi, storage: {
@@ -234,7 +235,8 @@ async function run(){
   }});
   assert.match(unsupportedStorageMarkup, /暂无可显示的存储能力/);
   assert.doesNotMatch(unsupportedStorageMarkup, /NVMe|不支持/);
-  assert.match(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /不支持[\s\S]*未安装/);
+  assert.doesNotMatch(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /支持能力|不支持/);
+  assert.match(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /未安装/);
   assert.match(app.unifiPowerRows(udwUniFi), /未提供/);
   assert.equal(app.unifiPowerRows(ucgMaxUniFi), '');
   assert.equal(app.unifiPowerSectionVisible(ucgMaxUniFi), false);
@@ -274,12 +276,17 @@ async function run(){
   assert.match(portTelemetryMarkup, /Port 7/);
   assert.match(portTelemetryMarkup, /2\.5 GbE/);
   assert.match(portTelemetryMarkup, /<th>端口<\/th>/);
-  assert.match(portTelemetryMarkup, /<th>端口类型<\/th>/);
-  assert.match(portTelemetryMarkup, /<th>最大速率<\/th>/);
+  assert.ok(portTelemetryMarkup.indexOf('<th>端口</th>') < portTelemetryMarkup.indexOf('<th>编号</th>'));
+  assert.ok(portTelemetryMarkup.indexOf('<th>编号</th>') < portTelemetryMarkup.indexOf('<th>类型</th>'));
+  assert.ok(portTelemetryMarkup.indexOf('<th>类型</th>') < portTelemetryMarkup.indexOf('<th>状态</th>'));
+  assert.ok(portTelemetryMarkup.indexOf('<th>状态</th>') < portTelemetryMarkup.indexOf('<th>已连接 / 最大速率</th>'));
+  assert.match(portTelemetryMarkup, /<th>编号<\/th>/);
+  assert.match(portTelemetryMarkup, /<th>类型<\/th>/);
+  assert.match(portTelemetryMarkup, /<th>已连接 \/ 最大速率<\/th>/);
   assert.match(portTelemetryMarkup, /SFP\+/);
   assert.doesNotMatch(portTelemetryMarkup, /端口编号/);
-  assert.match(portTelemetryMarkup, />上行</);
-  assert.match(portTelemetryMarkup, /<td>2\.5 GbE<\/td>[\s\S]*<td>2\.5 GbE<\/td>/);
+  assert.doesNotMatch(portTelemetryMarkup, />上行</);
+  assert.match(portTelemetryMarkup, /2\.5 GbE \/ 2\.5 GbE/);
   assert.match(portTelemetryMarkup, /30 W/);
   assert.match(portTelemetryMarkup, /2\.00 KB/);
   assert.match(portTelemetryMarkup, /1\.00 KB/);
@@ -289,7 +296,8 @@ async function run(){
   assert.match(portTelemetryMarkup, /PoE 总功率 6\.64 W \/ 420 W/);
   assert.match(portTelemetryMarkup, /PoE 总功率使用率/);
   assert.match(portTelemetryMarkup, /unifi-poe-summary-value[\s\S]*usage-bar/);
-  assert.match(portTelemetryMarkup, /<td>1 GbE<\/td>[\s\S]*<td>未连接<\/td>/);
+  assert.match(portTelemetryMarkup, /<span class="badge warn">未连接<\/span>/);
+  assert.match(portTelemetryMarkup, /<td>- \/ 1 GbE<\/td>/);
   assert.match(portTelemetryMarkup, /发送 \/ 接收 \(错误\/丢弃\)/);
   assert.match(wanMarkup, /Example ISP/);
   assert.match(wanMarkup, /<th>延迟<\/th>/);
@@ -298,21 +306,24 @@ async function run(){
   assert.match(wanMarkup, /AS64500/);
   assert.doesNotMatch(wanMarkup, /丢包|抖动|实时/);
   assert.doesNotMatch(portTelemetryMarkup, /<th>RX<\/th>|<th>TX<\/th>|<th>连接<\/th>/);
-  assert.equal(app.unifiPortLinkText({up: false, speed_mbps: 1000, max_speed_mbps: 10000}), '未连接 / 10 GbE');
+  assert.equal(app.unifiPortLinkText({up: false, speed_mbps: 1000, max_speed_mbps: 10000}), '- / 10 GbE');
   assert.equal(app.unifiPortLinkText({up: true, speed_mbps: 1000}), '1 GbE / -');
   assert.equal(app.unifiPortLinkText({up: true, speed_mbps: 1000, max_speed_mbps: 10000}, false), '1 GbE');
   assert.equal(app.unifiPortLinkText({max_speed_mbps: 1000}, false), '-');
   assert.equal(app.unifiPortConnectorText('sfp_plus'), 'SFP+');
+  assert.equal(app.unifiPortConnectorText('qsfp28'), 'QSFP28');
   assert.equal(app.unifiPortConnectorText('unknown'), '-');
   assert.equal(app.unifiPortPoeText({poe: {supported: false, power_w: 0}}), '-');
+  assert.equal(app.unifiPortPoeText({poe_in: true, poe_out: false}), 'PoE IN');
+  assert.equal(app.unifiPortPoeText({roles: ['poe_passthrough'], poe_out: true, poe_passthrough_enabled: true}), '透传');
+  assert.equal(app.unifiPortPoeText({roles: ['poe_passthrough'], poe_out: true, poe_passthrough_enabled: false}), '-');
   assert.doesNotMatch(portTelemetryMarkup, /mac_table|mac_address|192\\.168/);
   assert.match(apiTelemetryMarkup, /UniFi 设备型号/);
   assert.match(apiTelemetryMarkup, /UniFi Dream Wall/);
   assert.match(apiTelemetryMarkup, /在线/);
   assert.match(apiTelemetryMarkup, /2\.5 GbE/);
-  assert.equal(app.unifiLinkBandwidth(100), 'FE');
-  assert.equal(app.unifiLinkBandwidth(1000), '1 GbE');
-  assert.equal(app.unifiLinkBandwidth(10000), '10 GbE');
+  const bandwidthCases = new Map([[10, '10 Mbps'], [100, '100 Mbps'], [1000, '1 GbE'], [2500, '2.5 GbE'], [5000, '5 GbE'], [10000, '10 GbE'], [25000, '25 GbE'], [100000, '100 GbE']]);
+  for(const [value, expected] of bandwidthCases) assert.equal(app.unifiLinkBandwidth(value), expected);
   assert.doesNotMatch(apiTelemetryMarkup, /WAN|双工|速率|设备身份|连接客户端/);
   assert.match(apiTelemetryMarkup, /unifi-api-table/);
   assert.match(systemCards, /<h2>设备名称\/型号<\/h2>/);
@@ -357,7 +368,7 @@ async function run(){
     ports: [{device_id: 'future-1', port_idx: 1, name: 'Port 1', up: true, speed_mbps: 1000}]
   }};
   const unknownMarkup = app.unifiPortTelemetryMarkup({...ucgMaxUniFi, api: unknownApiFixture});
-  assert.match(unknownMarkup, /<th>PoE<\/th>/);
+  assert.doesNotMatch(unknownMarkup, /<th>PoE<\/th>/);
   assert.doesNotMatch(unknownMarkup, /PoE 总功率/);
   assert.doesNotMatch(systemCards, /card-mini-meta"[^>]*>\(网络 \/ VLAN\)<\/div>/);
   const cardLabels = ['设备名称/型号', 'CPU', '内存', '负载', '连接客户端', 'CPU 温度', '运行时间', '控制器状态 (版本)', '网络应用状态 (版本)', '网络摘要'];

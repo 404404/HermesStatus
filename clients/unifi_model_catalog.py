@@ -9,8 +9,8 @@ from pathlib import Path
 
 CATALOG_SCHEMA_VERSION = 1
 SUPPORTED_CATALOG_SCHEMA_VERSIONS = frozenset({CATALOG_SCHEMA_VERSION})
-CATALOG_SOURCE_REVISION = "3646c39700c0a063154c1fd787a9e760111c91d3"
-CATALOG_BUNDLE_SHA256 = "5caae57981756ca7b0d84a90988ba6b9bfee38cc047cc2e6b7492acffe4f660a"
+CATALOG_SOURCE_REVISION = "813b34eba1dbb7922777897260983ce0189ce39e"
+CATALOG_BUNDLE_SHA256 = "aa2e5c8f594f1df4e123b32975c0e0dcf333466380013057846381b16288a3b6"
 CATALOG_BUNDLE_PATH = Path(__file__).with_name("unifi_catalog") / "catalog.json"
 CATALOG_PROVENANCE_PATH = CATALOG_BUNDLE_PATH.with_name("catalog-provenance.json")
 # Compatibility name only; this is a bundle path, not a model-table directory.
@@ -24,7 +24,7 @@ POWER_PROFILE_STATUSES = {"verified", "candidate", "unsupported"}
 POWER_FIELD_STATUSES = {"verified", "candidate", "unknown", "not_applicable"}
 INPUT_METHODS = {"ac_mains", "ac_adapter", "dc_adapter", "usb_c", "poe"}
 SELECTION_MODES = {"fixed", "auto_detected", "controller_manual"}
-CONNECTORS = {"rj45", "sfp", "sfp_plus", "sfp28", "other"}
+CONNECTORS = {"rj45", "sfp", "sfp_plus", "sfp28", "qsfp28", "other"}
 PORT_ROLES = {"lan", "wan", "downstream", "uplink", "data_in", "poe_passthrough"}
 STORAGE_TYPES = {"emmc", "ssd", "sata_ssd", "nvme", "microsd", "tf", "other"}
 STORAGE_KINDS = {"fixed_device", "user_slot", "removable_media"}
@@ -120,7 +120,7 @@ def _ports(model):
         _number(port["max_speed_mbps"], f"{field}.max_speed_mbps", integer=True)
         if port["max_speed_mbps"] not in {None, 10, 100, 1000, 2500, 5000, 10000, 25000, 100000}:
             raise ModelCatalogError(f"invalid {field}.max_speed_mbps")
-        if not isinstance(port["roles"], list) or not port["roles"] or len(port["roles"]) > 4 or len(set(port["roles"])) != len(port["roles"]) or any(role not in PORT_ROLES for role in port["roles"]):
+        if not isinstance(port["roles"], list) or len(port["roles"]) > 4 or len(set(port["roles"])) != len(port["roles"]) or any(role not in PORT_ROLES for role in port["roles"]):
             raise ModelCatalogError(f"invalid {field}.roles")
         if port["poe_in"] not in {True, False, None} or port["poe_out"] not in {True, False, None}:
             raise ModelCatalogError(f"invalid {field}.poe flags")
