@@ -653,21 +653,21 @@ func extensionOpenAPISchemas() map[string]any {
 	})
 	uniFiAPIDevicePoERuntime := map[string]any{"type": "object", "properties": map[string]any{
 		"current_power_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "description": "Observed device-level PoE draw"},
-		"current_source": map[string]any{"type": "string", "enum": []string{"", "device_reported", "port_sum", "unavailable"}},
+		"current_source":  map[string]any{"type": "string", "enum": []string{"", "device_reported", "port_sum", "unavailable"}},
 	}, "additionalProperties": false}
 	uniFiAPIDevice := requiredObject([]string{"device_id", "model_profile_status"}, map[string]any{
 		"device_id": map[string]any{"type": "string", "maxLength": MaxUniFiTextLength},
-		"name": nullableString(MaxUniFiTextLength, "Bounded device name"), "model": nullableString(MaxUniFiTextLength, "Runtime device model"),
+		"name":      nullableString(MaxUniFiTextLength, "Bounded device name"), "model": nullableString(MaxUniFiTextLength, "Runtime device model"),
 		"model_id": nullableString(MaxUniFiTextLength, "Catalog canonical model"), "model_profile_status": map[string]any{"type": "string", "enum": []string{"known", "unknown"}},
 		"device_type": nullableString(MaxUniFiTextLength, "Runtime device type"), "management_ip": nullableString(MaxUniFiTextLength, "Management IP"),
-		"online": map[string]any{"type": []string{"boolean", "null"}},
+		"online":       map[string]any{"type": []string{"boolean", "null"}},
 		"capabilities": map[string]any{"anyOf": []any{schemaRef("UniFiAPIDeviceCapabilities"), map[string]any{"type": "null"}}},
-		"poe": map[string]any{"anyOf": []any{schemaRef("UniFiAPIDevicePoERuntime"), map[string]any{"type": "null"}}},
+		"poe":          map[string]any{"anyOf": []any{schemaRef("UniFiAPIDevicePoERuntime"), map[string]any{"type": "null"}}},
 	})
 	uniFiAPIDevices := requiredObject([]string{"total", "online", "offline", "by_type"}, map[string]any{
 		"total": map[string]any{"type": "integer", "minimum": 0}, "online": map[string]any{"type": "integer", "minimum": 0}, "offline": map[string]any{"type": "integer", "minimum": 0},
 		"by_type": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "integer", "minimum": 0}, "maxProperties": 4},
-		"items": map[string]any{"type": "array", "maxItems": MaxUniFiAPIDevices, "items": schemaRef("UniFiAPIDevice")},
+		"items":   map[string]any{"type": "array", "maxItems": MaxUniFiAPIDevices, "items": schemaRef("UniFiAPIDevice")},
 	})
 	uniFiAPINetworks := requiredObject([]string{"total", "vlan"}, map[string]any{
 		"total": map[string]any{"type": "integer", "minimum": 0}, "vlan": map[string]any{"type": "integer", "minimum": 0},
@@ -821,10 +821,10 @@ func extensionOpenAPISchemas() map[string]any {
 		"UniFiAPITopology":              uniFiAPITopology,
 		"UniFiAPIAnomalies":             uniFiAPIAnomalies,
 		"UniFiAPIClientSummary":         uniFiAPIClients,
-		"UniFiAPIDevicePoECapability":  uniFiAPIDevicePoECapability,
-		"UniFiAPIDeviceCapabilities":   uniFiAPIDeviceCapabilities,
-		"UniFiAPIDevicePoERuntime":     uniFiAPIDevicePoERuntime,
-		"UniFiAPIDevice":               uniFiAPIDevice,
+		"UniFiAPIDevicePoECapability":   uniFiAPIDevicePoECapability,
+		"UniFiAPIDeviceCapabilities":    uniFiAPIDeviceCapabilities,
+		"UniFiAPIDevicePoERuntime":      uniFiAPIDevicePoERuntime,
+		"UniFiAPIDevice":                uniFiAPIDevice,
 		"UniFiAPIDeviceSummary":         uniFiAPIDevices,
 		"UniFiAPINetworkSummary":        uniFiAPINetworks,
 		"UniFiAPITelemetry":             uniFiAPITelemetry,

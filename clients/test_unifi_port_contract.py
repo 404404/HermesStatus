@@ -142,9 +142,24 @@ class UniFiModelCatalogTests(unittest.TestCase):
 
     def test_catalog_static_poe_budgets_are_not_runtime_observations(self):
         catalog = load_catalog()
-        expected = {"US-XG-6POE": 170, "USW-Pro-Max-16-PoE": 180, "USW-Flex-2.5G-8-PoE": 196, "USW-Flex": 46}
-        for sku, budget in expected.items():
-            self.assertEqual(project_static_capabilities(catalog[sku])["power"]["absolute_max_poe_budget_w"], budget)
+        expected = {
+            "UDW": (420, 421.6),
+            "US-XG-6POE": (170, 240),
+            "USW-Enterprise-8-PoE": (120, 240),
+            "USW-Flex": (46, 120),
+            "USW-Flex-2.5G-8-PoE": (196, 480),
+            "USW-Pro-HD-24-PoE": (600, 1440),
+            "USW-Pro-Max-16-PoE": (180, 600),
+            "USW-Pro-Max-24-PoE": (400, 1200),
+        }
+        for sku, (budget, port_sum) in expected.items():
+            projection = project_static_capabilities(catalog[sku])
+            self.assertEqual(projection["power"]["absolute_max_poe_budget_w"], budget)
+            self.assertEqual(
+                sum(port["poe_max_power_w"] for port in projection["ports"]["items"] if port["poe_out"] is True),
+                port_sum,
+            )
+            self.assertNotEqual(port_sum, budget)
 
     def test_functional_port_roles_do_not_replace_neutral_labels(self):
         catalog = load_catalog()

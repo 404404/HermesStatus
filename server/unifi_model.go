@@ -276,24 +276,24 @@ type UniFiAPIClientSummary struct {
 }
 
 type UniFiAPIDeviceSummary struct {
-	Total   int               `json:"total"`
-	Online  int               `json:"online"`
-	Offline int               `json:"offline"`
-	ByType  map[string]int    `json:"by_type"`
-	Items   []UniFiAPIDevice  `json:"items,omitempty"`
+	Total   int              `json:"total"`
+	Online  int              `json:"online"`
+	Offline int              `json:"offline"`
+	ByType  map[string]int   `json:"by_type"`
+	Items   []UniFiAPIDevice `json:"items,omitempty"`
 }
 
 type UniFiAPIDevice struct {
-	DeviceID           string                         `json:"device_id"`
-	Name               *string                        `json:"name,omitempty"`
-	Model              *string                        `json:"model,omitempty"`
-	ModelID            *string                        `json:"model_id,omitempty"`
-	ModelProfileStatus *string                        `json:"model_profile_status,omitempty"`
-	DeviceType         *string                        `json:"device_type,omitempty"`
-	ManagementIP       *string                        `json:"management_ip,omitempty"`
-	Online             *bool                          `json:"online,omitempty"`
-	Capabilities       *UniFiAPIDeviceCapabilities    `json:"capabilities,omitempty"`
-	PoE                *UniFiAPIDevicePoERuntime      `json:"poe,omitempty"`
+	DeviceID           string                      `json:"device_id"`
+	Name               *string                     `json:"name,omitempty"`
+	Model              *string                     `json:"model,omitempty"`
+	ModelID            *string                     `json:"model_id,omitempty"`
+	ModelProfileStatus *string                     `json:"model_profile_status,omitempty"`
+	DeviceType         *string                     `json:"device_type,omitempty"`
+	ManagementIP       *string                     `json:"management_ip,omitempty"`
+	Online             *bool                       `json:"online,omitempty"`
+	Capabilities       *UniFiAPIDeviceCapabilities `json:"capabilities,omitempty"`
+	PoE                *UniFiAPIDevicePoERuntime   `json:"poe,omitempty"`
 }
 
 type UniFiAPIDeviceCapabilities struct {
