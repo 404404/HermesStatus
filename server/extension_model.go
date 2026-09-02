@@ -83,6 +83,7 @@ const (
 	MaxUniFiAPIEndpoints        = 24
 	MaxUniFiAPIWans             = 16
 	MaxUniFiAPIUplinks          = 32
+	MaxUniFiAPIDevices          = 64
 	MaxUniFiAPITemperatures     = 16
 	MaxUniFiPortRoles           = 4
 	// Per-device limits cover one physical port table or static PoE map.

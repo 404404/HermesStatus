@@ -161,6 +161,54 @@ func TestUniFiAPITelemetryProjectionAndPartialFailure(t *testing.T) {
 	}
 }
 
+func TestUniFiPerDevicePoEContractRoundTripAndIsolation(t *testing.T) {
+	now := "2026-08-27T01:02:03Z"
+	status := 200
+	udwBudget := 420.0
+	udwCurrent := 9.0
+	xgBudget := 170.0
+	xgCurrent := 7.0
+	known := "known"
+	stats := validUniFiFixture("udw")
+	stats.API = &UniFiAPIStats{
+		Enabled: true, Status: "available", LastAttempt: &now, LastSuccess: &now,
+		Endpoints: []UniFiAPIEndpoint{{Name: "info", Status: "ok", HTTPStatus: &status}},
+		Telemetry: &UniFiAPITelemetry{Devices: &UniFiAPIDeviceSummary{
+			Total: 2, Online: 2, Offline: 0, ByType: map[string]int{"gateway": 1, "switch": 1},
+			Items: []UniFiAPIDevice{
+				{DeviceID: "udw-1", ModelProfileStatus: &known, Capabilities: &UniFiAPIDeviceCapabilities{PoE: &UniFiAPIDevicePoECapability{AbsoluteMaxPoEBudgetW: &udwBudget}}, PoE: &UniFiAPIDevicePoERuntime{CurrentPowerW: &udwCurrent, CurrentSource: "port_sum"}},
+				{DeviceID: "xg-1", ModelProfileStatus: &known, Capabilities: &UniFiAPIDeviceCapabilities{PoE: &UniFiAPIDevicePoECapability{AbsoluteMaxPoEBudgetW: &xgBudget}}, PoE: &UniFiAPIDevicePoERuntime{CurrentPowerW: &xgCurrent, CurrentSource: "port_sum"}},
+			},
+		}},
+	}
+	if err := ValidateUniFiStats(&stats); err != nil {
+		t.Fatalf("per-device PoE contract rejected: %v", err)
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeUniFiStatsJSON(raw)
+	if err != nil {
+		t.Fatalf("per-device PoE contract round trip rejected: %v", err)
+	}
+	if decoded.API == nil || decoded.API.Telemetry == nil || decoded.API.Telemetry.Devices == nil || len(decoded.API.Telemetry.Devices.Items) != 2 {
+		t.Fatalf("per-device inventory was not preserved: %#v", decoded.API)
+	}
+	if *decoded.API.Telemetry.Devices.Items[0].Capabilities.PoE.AbsoluteMaxPoEBudgetW != 420 || *decoded.API.Telemetry.Devices.Items[1].PoE.CurrentPowerW != 7 {
+		t.Fatalf("per-device budget/current changed: %#v", decoded.API.Telemetry.Devices.Items)
+	}
+	duplicate := stats
+	duplicate.API = &*stats.API
+	duplicate.API.Telemetry = &*stats.API.Telemetry
+	duplicate.API.Telemetry.Devices = &*stats.API.Telemetry.Devices
+	duplicate.API.Telemetry.Devices.Items = append([]UniFiAPIDevice(nil), stats.API.Telemetry.Devices.Items...)
+	duplicate.API.Telemetry.Devices.Items = append(duplicate.API.Telemetry.Devices.Items, duplicate.API.Telemetry.Devices.Items[0])
+	if err := ValidateUniFiStats(&duplicate); err == nil {
+		t.Fatal("duplicate device_id must be rejected")
+	}
+}
+
 func TestUniFiAPIPortTelemetryRoundTripAndNoRawTable(t *testing.T) {
 	stats := validUniFiFixture("udw")
 	now := "2026-08-27T01:02:03Z"

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_api import API_COLLECTION_MAX_SECONDS, API_ENDPOINTS, APIError, UniFiAPICollector, _annotate_wan_payload, _context, _read_key, _request, _port_record, _ports, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
+from unifi_api import API_COLLECTION_MAX_SECONDS, API_ENDPOINTS, APIError, UniFiAPICollector, _annotate_wan_payload, _context, _read_key, _request, _port_record, _ports, _device_summary, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
 
 
 class UniFiAPITests(unittest.TestCase):
@@ -326,6 +326,35 @@ class UniFiAPITests(unittest.TestCase):
         )
         self.assertEqual(wans[0]["link_speed_mbps"], 1000)
         self.assertNotIn("speedtest", wans[0])
+
+    def test_per_device_poe_current_and_catalog_budget_are_isolated(self):
+        summary = _device_summary([
+            {"id": "udw-1", "model": "UniFi Dream Wall", "name": "UDW", "type": "gateway", "state": "ONLINE"},
+            {"id": "xg-1", "model": "US XG 6 PoE", "name": "XG", "type": "switch", "state": "ONLINE"},
+        ], ports=[
+            {"device_id": "udw-1", "poe": {"power_w": 4.0}},
+            {"device_id": "udw-1", "poe": {"power_w": 5.0}},
+            {"device_id": "xg-1", "poe": {"power_w": 7.0}},
+            {"device_id": "not-in-inventory", "poe": {"power_w": 99.0}},
+        ])
+        by_id = {item["device_id"]: item for item in summary["items"]}
+        self.assertEqual(by_id["udw-1"]["capabilities"]["poe"]["absolute_max_poe_budget_w"], 420)
+        self.assertEqual(by_id["udw-1"]["poe"], {"current_source": "port_sum", "current_power_w": 9.0})
+        self.assertEqual(by_id["xg-1"]["capabilities"]["poe"]["absolute_max_poe_budget_w"], 170)
+        self.assertEqual(by_id["xg-1"]["poe"], {"current_source": "port_sum", "current_power_w": 7.0})
+        self.assertNotIn("not-in-inventory", by_id)
+
+    def test_per_device_explicit_poe_current_wins_only_for_matching_target(self):
+        summary = _device_summary([
+            {"id": "udw-1", "model": "UniFi Dream Wall", "type": "gateway", "state": "ONLINE"},
+            {"id": "xg-1", "model": "US XG 6 PoE", "type": "switch", "state": "ONLINE"},
+        ], target={"id": "udw-1", "model": "UniFi Dream Wall"}, target_detail={"id": "udw-1", "poe_total_power_w": 20.0}, ports=[
+            {"device_id": "udw-1", "poe": {"power_w": 4.0}},
+            {"device_id": "xg-1", "poe": {"power_w": 7.0}},
+        ])
+        by_id = {item["device_id"]: item for item in summary["items"]}
+        self.assertEqual(by_id["udw-1"]["poe"], {"current_source": "device_reported", "current_power_w": 20.0})
+        self.assertEqual(by_id["xg-1"]["poe"]["current_power_w"], 7.0)
 
     def test_device_reported_poe_total_wins_over_port_sum(self):
         legacy = {"data": [{"device_id": "device", "port_table": [

@@ -421,12 +421,28 @@ def _status_online(value):
     return None
 
 
-def _device_summary(devices):
-    if not devices:
+def _device_summary(devices, *, target=None, target_detail=None, ports=None):
+    """Project bounded per-device identity, Catalog capability, and PoE state.
+
+    Static budgets are resolved from the verified Catalog model selected by the
+    device's exact runtime identity. Runtime current is first taken from an
+    explicit device-level observation and otherwise summed only across ports
+    carrying that same device_id.
+    """
+    if not devices and not isinstance(target, dict):
         return None
+    source_devices = list((devices or [])[:MAX_API_ITEMS])
+    known_ids = {
+        _identifier(_first(item, "id", "device_id", "deviceId", "_id", "external_id"))
+        for item in source_devices if isinstance(item, dict)
+    }
+    target_id = _identifier(_first(target, "id", "device_id", "deviceId", "_id", "external_id")) if isinstance(target, dict) else None
+    if isinstance(target, dict) and target_id and target_id not in known_ids and len(source_devices) < MAX_API_ITEMS:
+        source_devices.append(target)
+
     online = offline = 0
     by_type = {"gateway": 0, "ap": 0, "switch": 0, "other": 0}
-    for item in devices[:MAX_API_ITEMS]:
+    for item in source_devices:
         state = _status_online(_first(item, "online", "is_online", "status", "state"))
         if state is True:
             online += 1
@@ -442,7 +458,49 @@ def _device_summary(devices):
         else:
             bucket = "other"
         by_type[bucket] += 1
-    return {"total": len(devices), "online": online, "offline": offline, "by_type": by_type}
+
+    port_totals = {}
+    for port in ports or []:
+        if not isinstance(port, dict):
+            continue
+        device_id = _identifier(port.get("device_id"))
+        poe = port.get("poe")
+        power = _decimal(poe.get("power_w"), minimum=0) if isinstance(poe, dict) and poe.get("supported") is not False else None
+        if device_id and power is not None:
+            port_totals[device_id] = port_totals.get(device_id, 0.0) + power
+
+    items = []
+    seen = set()
+    for item in source_devices:
+        descriptor = _device_descriptor(item, include_capabilities=True)
+        device_id = descriptor.get("device_id")
+        if not device_id or device_id in seen:
+            continue
+        seen.add(device_id)
+        current = None
+        current_source = "unavailable"
+        if device_id == target_id and isinstance(target_detail, dict):
+            current, _ = _device_poe_totals(target_detail)
+            if current is not None:
+                current_source = "device_reported"
+        if current is None:
+            current, _ = _device_poe_totals(item)
+            if current is not None:
+                current_source = "device_reported"
+        if current is None and device_id in port_totals:
+            current = port_totals[device_id]
+            current_source = "port_sum"
+        descriptor["poe"] = {"current_source": current_source}
+        if current is not None:
+            descriptor["poe"]["current_power_w"] = round(current, 2)
+        items.append(descriptor)
+        if len(items) >= MAX_API_ITEMS:
+            break
+
+    result = {"total": len(source_devices), "online": online, "offline": offline, "by_type": by_type}
+    if items:
+        result["items"] = items
+    return result
 
 
 def _client_summary(clients):
@@ -821,7 +879,7 @@ def _network_groups(payload):
             break
     return result
 
-def _device_descriptor(device):
+def _device_descriptor(device, *, include_capabilities=False):
     if not isinstance(device, dict):
         return {}
     result = {}
@@ -836,10 +894,14 @@ def _device_descriptor(device):
         result["name"] = model
     if model:
         result["model"] = model
-    model_profile = resolve_model(MODEL_CATALOG, model)
-    if model_profile is not None:
-        result["model_id"] = model_profile["canonical_sku"]
+    model_record = resolve_model(MODEL_CATALOG, model)
+    if model_record is not None:
+        result["model_id"] = model_record["canonical_sku"]
         result["model_profile_status"] = "known"
+        if include_capabilities:
+            power = model_record.get("power")
+            if isinstance(power, dict):
+                result["capabilities"] = {"poe": {"absolute_max_poe_budget_w": power.get("absolute_max_poe_budget_w")}}
     else:
         result["model_profile_status"] = "unknown"
     device_type = _text(_first(device, "type", "device_type", "deviceType", "category", "role"))
@@ -1293,7 +1355,7 @@ def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sampl
         "uplinks": uplinks,
         "temperatures": _temperature_records(devices) or None,
         "clients": _client_summary(clients),
-        "devices": _device_summary(devices),
+        "devices": _device_summary(devices, target=target, target_detail=target_detail, ports=ports),
         "networks": _network_summary(networks),
         "ports": ports,
         "port_summary": port_summary,

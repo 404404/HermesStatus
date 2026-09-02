@@ -1324,10 +1324,6 @@ function unifiFanRows(unifi){
   }).join('');
 }
 
-function unifiPoeProfile(unifi){
-  return safeObject(unifi?.poe);
-}
-
 function unifiPowerProfile(unifi){
   return safeObject(unifi?.power);
 }
@@ -1601,17 +1597,22 @@ function unifiPortTelemetryMarkup(unifi){
   const ports = Array.isArray(telemetry.ports) ? telemetry.ports.slice() : [];
   const identity = safeObject(telemetry.identity);
   const descriptors = new Map();
-  const uplinks = Array.isArray(telemetry.uplinks) ? telemetry.uplinks : [];
-  uplinks.forEach(item => {
+  const mergeDescriptor = item => {
     const id = typeof item?.device_id === 'string' ? item.device_id.trim() : '';
     if(!id) return;
     const current = descriptors.get(id) || {device_id: id};
     for(const field of ['name', 'model', 'model_id', 'model_profile_status', 'device_type', 'management_ip']){
       if((current[field] === undefined || current[field] === null || current[field] === '') && item?.[field] !== undefined && item?.[field] !== null) current[field] = String(item[field]);
     }
-    if(typeof item?.online === 'boolean') current.online = item.online;
+    if(typeof item?.online === 'boolean' && typeof current.online !== 'boolean') current.online = item.online;
+    if(item?.capabilities && !current.capabilities) current.capabilities = item.capabilities;
+    if(item?.poe && !current.poe) current.poe = item.poe;
     descriptors.set(id, current);
-  });
+  };
+  const deviceItems = Array.isArray(telemetry.devices?.items) ? telemetry.devices.items : [];
+  deviceItems.forEach(mergeDescriptor);
+  const uplinks = Array.isArray(telemetry.uplinks) ? telemetry.uplinks : [];
+  uplinks.forEach(mergeDescriptor);
   const groups = new Map();
   ports.forEach((port, index) => {
     const id = typeof port?.device_id === 'string' ? port.device_id.trim() : '';
@@ -1642,44 +1643,45 @@ function unifiPortTelemetryMarkup(unifi){
     });
     return [key, entries.map(entry => entry.port)];
   });
-  const profilePoe = unifiPoeProfile(unifi);
   const groupEntries = orderedGroups.map(([key, items], index) => {
-    const modelProfileStatus = descriptors.get(key)?.model_profile_status
+    const descriptor = descriptors.get(key);
+    const modelProfileStatus = descriptor?.model_profile_status
       || items.find(port => port?.model_profile_status)?.model_profile_status
       || 'unknown';
+    const staticPoePort = items.some(port => port?.poe_in === true || port?.poe_out === true
+      || (Array.isArray(port?.roles) && port.roles.includes('poe_passthrough')));
+    const runtimePoeObserved = items.some(port => {
+      const poe = safeObject(port?.poe);
+      return finiteNumber(poe.power_w) !== null || poe.active === true;
+    });
     return {
       key: 'unifi-device-' + index,
       sourceKey: key,
-      label: deviceLabel(key, descriptors.get(key)),
+      label: deviceLabel(key, descriptor),
       modelProfileStatus,
-      showPoe: modelProfileStatus === 'known'
-        && items.some(port => port?.poe_in === true || port?.poe_out === true
-          || (Array.isArray(port?.roles) && port.roles.includes('poe_passthrough'))),
+      descriptor,
+      showPoe: modelProfileStatus === 'known' ? staticPoePort : runtimePoeObserved,
       ports: items
     };
   });
   const tabs = groupEntries.map((group, index) => `<button id="${group.key}-tab" class="unifi-network-tab" type="button" role="tab" aria-selected="${index === 0 ? 'true' : 'false'}" aria-controls="${group.key}-panel" data-unifi-device-tab="${group.key}" tabindex="${index === 0 ? '0' : '-1'}">${escapeHtml(group.label)}</button>`).join('');
-  const globalSummary = safeObject(telemetry.port_summary);
-  const groupPoeSummary = ports => {
+  const groupPoeSummary = (ports, descriptor) => {
+    const devicePoe = safeObject(descriptor?.poe);
+    const explicitCurrent = devicePoe.current_source === 'unavailable' ? null : finiteNumber(devicePoe.current_power_w);
     const poe = ports.map(port => safeObject(port?.poe)).filter(item => item.supported !== false);
-    const current = poe.map(item => finiteNumber(item.power_w)).filter(value => value !== null);
-    const maximum = poe.map(item => finiteNumber(item.max_power_w)).filter(value => value !== null);
+    const portCurrent = poe.map(item => finiteNumber(item.power_w)).filter(value => value !== null);
+    const staticPoe = safeObject(safeObject(descriptor?.capabilities).poe);
     return {
-      current: current.length ? current.reduce((sum, value) => sum + value, 0) : null,
-      maximum: maximum.length ? maximum.reduce((sum, value) => sum + value, 0) : null
+      current: explicitCurrent !== null ? explicitCurrent : portCurrent.length ? portCurrent.reduce((sum, value) => sum + value, 0) : null,
+      maximum: finiteNumber(staticPoe.absolute_max_poe_budget_w)
     };
   };
-  const poeSummaryMarkup = (summary, showPoe, fallback = false) => {
-    if(!showPoe) return '';
-    const currentValue = summary.current ?? (fallback ? globalSummary.poe_total_power_w : null);
-    if(!fallback && summary.current === null && summary.maximum === null) return '';
-    const maximumValue = fallback
-      ? (finiteNumber(globalSummary.poe_max_power_w) ?? finiteNumber(profilePoe.absolute_max_poe_budget_w) ?? finiteNumber(profilePoe.total_max_power_w) ?? finiteNumber(summary.maximum))
-      : finiteNumber(summary.maximum);
-    const current = unifiPowerText(currentValue);
-    const maximum = unifiPowerText(maximumValue);
-    const poeText = current === '-' && maximum === '-' ? '-' : `${current}${maximum === '-' ? '' : ` / ${maximum}`}`;
-    const percent = finiteNumber(currentValue) !== null && finiteNumber(maximumValue) > 0 ? (finiteNumber(currentValue) / finiteNumber(maximumValue)) * 100 : null;
+  const poeSummaryMarkup = (summary, showPoe) => {
+    if(!showPoe || (summary.current === null && summary.maximum === null)) return '';
+    const current = unifiPowerText(summary.current);
+    const maximum = unifiPowerText(summary.maximum);
+    const poeText = current === '-' && maximum === '-' ? '-' : `${current} / ${maximum}`;
+    const percent = finiteNumber(summary.current) !== null && finiteNumber(summary.maximum) > 0 ? (finiteNumber(summary.current) / finiteNumber(summary.maximum)) * 100 : null;
     return `<div class="unifi-port-summary"><div class="unifi-poe-summary-value">PoE 总功率 ${escapeHtml(poeText)}</div>${percent === null ? '' : resourceBar(percent, 'PoE 总功率使用率')}</div>`;
   };
   const panels = groupEntries.map((group, index) => {
@@ -1690,11 +1692,10 @@ function unifiPortTelemetryMarkup(unifi){
     return `<tr><td class="strong-cell">${escapeHtml(catalogLabel)}</td><td>${escapeHtml(portNumber)}</td><td>${escapeHtml(unifiPortConnectorText(port.connector))}</td><td>${unifiPortStatusMarkup(port)}</td><td>${escapeHtml(unifiPortLinkText(port))}</td>${poeCell}<td>${escapeHtml(unifiPortTraffic(port.tx_bytes))}</td><td>${escapeHtml(unifiPortTraffic(port.rx_bytes))}</td><td>${escapeHtml(unifiPortErrorText(port))}</td></tr>`;
     }).join('');
     const body = rows || `<tr><td colspan="${group.showPoe ? 9 : 8}" class="table-empty">当前未取得该设备端口数据。</td></tr>`;
-    const summary = groupPoeSummary(group.ports);
-    const fallback = group.showPoe && group.modelProfileStatus === 'known' && (groupEntries.length === 1 || index === 0);
+    const summary = groupPoeSummary(group.ports, group.descriptor);
     const modelNotice = group.modelProfileStatus === 'unknown' ? '<div class="unifi-model-unavailable">机型端口参数未维护</div>' : '';
     const poeHeader = group.showPoe ? '<th>PoE</th>' : '';
-    return `<section id="${group.key}-panel" class="unifi-device-panel" role="tabpanel" aria-labelledby="${group.key}-tab" data-unifi-device-panel="${group.key}"${index === 0 ? '' : ' hidden'}>${modelNotice}${poeSummaryMarkup(summary, group.showPoe, fallback)}<div class="table-wrap"><table class="data unifi-ports-table"><thead><tr><th>端口</th><th>编号</th><th>类型</th><th>状态</th><th>已连接 / 最大速率</th>${poeHeader}<th>累计发送流量</th><th>累计接收流量</th><th>发送 / 接收 (错误/丢弃)</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
+    return `<section id="${group.key}-panel" class="unifi-device-panel" role="tabpanel" aria-labelledby="${group.key}-tab" data-unifi-device-panel="${group.key}"${index === 0 ? '' : ' hidden'}>${modelNotice}${poeSummaryMarkup(summary, group.showPoe)}<div class="table-wrap"><table class="data unifi-ports-table"><thead><tr><th>端口</th><th>编号</th><th>类型</th><th>状态</th><th>已连接 / 最大速率</th>${poeHeader}<th>累计发送流量</th><th>累计接收流量</th><th>发送 / 接收 (错误/丢弃)</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
   }).join('');
   return `<div class="unifi-device-tabs" role="tablist" aria-label="UniFi 设备"><div class="unifi-network-tabs">${tabs}</div>${panels}</div>`;
 }

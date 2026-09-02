@@ -250,6 +250,12 @@ async function run(){
     ],
     clients: {total: 19, wired: 14, wireless: 5, observed: true},
     networks: {total: 3, vlan: 3},
+    devices: {total: 2, online: 1, offline: 1, by_type: {gateway: 1, switch: 1}, items: [
+      {device_id: 'udw-1', name: 'UniFi Dream Wall', model: 'UniFi Dream Wall', model_id: 'UDW', model_profile_status: 'known', device_type: 'gateway', management_ip: '192.168.1.1', online: true,
+        capabilities: {poe: {absolute_max_poe_budget_w: 420}}, poe: {current_power_w: 6.64, current_source: 'device_reported'}},
+      {device_id: 'switch-1', name: 'USW Flex Mini', model: 'USW Flex Mini', model_id: 'USW-Flex-Mini', model_profile_status: 'known', device_type: 'switch', management_ip: '192.168.1.2', online: false,
+        capabilities: {poe: {absolute_max_poe_budget_w: 0}}, poe: {current_source: 'unavailable'}}
+    ]},
     ports: [
       {device_id: 'udw-1', port_idx: 10, name: 'Port 10', media: 'GE', poe_out: false, up: false, enabled: true, uplink: false, speed_mbps: 0, max_speed_mbps: 1000, rx_bytes: 0, tx_bytes: 0, poe: {supported: false}},
       {device_id: 'udw-1', port_idx: 2, name: 'Port 2', media: 'GE', poe_out: true, up: true, enabled: true, uplink: false, speed_mbps: 1000, max_speed_mbps: 2500, rx_bytes: 1000, tx_bytes: 2000, tx_errors: 2, tx_dropped: 3, rx_errors: 0, rx_dropped: 1, poe: {supported: true, active: true, power_w: 3.32, max_power_w: 30}, peer_count: 1},
@@ -267,10 +273,13 @@ async function run(){
     uplinks: [{name: 'UCG Max', device_id: 'ucg-1', model: 'UCG Max', model_profile_status: 'known', device_type: 'gateway', management_ip: '192.168.1.1', online: true, link_state: 'ONLINE'}],
     ports: [1, 2, 3].map(port_idx => ({device_id: 'ucg-1', port_idx, name: `Port ${port_idx}`, poe_out: false, up: true, speed_mbps: 2500, max_speed_mbps: 2500}))
   }};
-  const numericIpMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, uplinks: [
-    {...apiFixture.telemetry.uplinks[0], management_ip: '192.168.1.10'},
-    {...apiFixture.telemetry.uplinks[1], management_ip: '192.168.1.2'}
-  ]}}});
+  const numericIpMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry,
+    devices: {...apiFixture.telemetry.devices, items: apiFixture.telemetry.devices.items.map((item, index) => ({...item, management_ip: index === 0 ? '192.168.1.10' : '192.168.1.2'}))},
+    uplinks: [
+      {...apiFixture.telemetry.uplinks[0], management_ip: '192.168.1.10'},
+      {...apiFixture.telemetry.uplinks[1], management_ip: '192.168.1.2'}
+    ]
+  }}});
   const wanMarkup = app.unifiWanMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, wans: [{id: 'wan1', name: 'WAN', online: true, role: 'active', isp: 'Example ISP', asn: '64500', link_speed_mbps: 2500, latency_ms: 12.3, speedtest: {observed: true, timestamp: '2026-01-01T00:00:00Z', latency_ms: 2.5, download_mbps: 900, upload_mbps: 100}}]}}});
   assert.match(portTelemetryMarkup, /unifi-ports-table/);
   assert.match(portTelemetryMarkup, /Port 7/);
@@ -294,6 +303,7 @@ async function run(){
   assert.match(portTelemetryMarkup, /发送 \/ 接收 \(错误\/丢弃\)/);
   assert.match(portTelemetryMarkup, /2 \/ 3 \/ 0 \/ 1/);
   assert.match(portTelemetryMarkup, /PoE 总功率 6\.64 W \/ 420 W/);
+  assert.doesNotMatch(portTelemetryMarkup, /PoE 总功率 6\.64 W \/ 60 W/);
   assert.match(portTelemetryMarkup, /PoE 总功率使用率/);
   assert.match(portTelemetryMarkup, /unifi-poe-summary-value[\s\S]*usage-bar/);
   assert.match(portTelemetryMarkup, /<span class="badge warn">未连接<\/span>/);
@@ -370,6 +380,11 @@ async function run(){
   const unknownMarkup = app.unifiPortTelemetryMarkup({...ucgMaxUniFi, api: unknownApiFixture});
   assert.doesNotMatch(unknownMarkup, /<th>PoE<\/th>/);
   assert.doesNotMatch(unknownMarkup, /PoE 总功率/);
+  const unknownRuntimeMarkup = app.unifiPortTelemetryMarkup({...ucgMaxUniFi, api: {...unknownApiFixture, telemetry: {...unknownApiFixture.telemetry,
+    ports: [{device_id: 'future-1', port_idx: 1, name: 'Port 1', up: true, speed_mbps: 1000, poe: {active: true, power_w: 7.5}}]
+  }}});
+  assert.match(unknownRuntimeMarkup, /<th>PoE<\/th>/);
+  assert.match(unknownRuntimeMarkup, /PoE 总功率 7\.5 W \/ -/);
   assert.doesNotMatch(systemCards, /card-mini-meta"[^>]*>\(网络 \/ VLAN\)<\/div>/);
   const cardLabels = ['设备名称/型号', 'CPU', '内存', '负载', '连接客户端', 'CPU 温度', '运行时间', '控制器状态 (版本)', '网络应用状态 (版本)', '网络摘要'];
   let previous = -1;
