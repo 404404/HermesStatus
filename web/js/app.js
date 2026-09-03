@@ -175,7 +175,7 @@ function modelBreakdown(profile){
 }
 
 function normalizePageName(value){
-	return ['hardware', 'unifi', 'docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
+	return ['hardware', 'diagnostics', 'unifi', 'docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
 }
 
 function valueAt(objectValue, keys){
@@ -527,7 +527,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
   const host = devices.find(device => device.device_id === selectedDeviceId) ||
     (selectedDeviceId === null ? devices[0] : null) ||
     (!hasV2Devices ? selectSingleHost(documentObject.servers) : null);
-	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, unifi: {}, easytierExpectation: {}, profiles: [], containers: [] };
+	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, unifi: {}, collectionDiagnostics: [], easytierExpectation: {}, profiles: [], containers: [] };
 
   const hardware = safeObject(host.hardware);
   const docker = safeObject(host.docker);
@@ -549,6 +549,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
 		lucky,
 		easytier,
 		unifi,
+		collectionDiagnostics: Array.isArray(host.collection_diagnostics) ? host.collection_diagnostics : [],
 		easytierExpectation: safeObject(host.easytier_expectation),
     profiles: Array.isArray(hermes.profiles) ? hermes.profiles : [],
     containers: Array.isArray(docker.containers) ? docker.containers : [],
@@ -597,7 +598,7 @@ function statusText(value){
     running: '运行中', healthy: '正常', ok: '正常', active: '活动',
     stopped: '已停止', down: '离线', unauthorized: '未授权', timeout: '超时',
 		exited: '已退出', dead: '异常', degraded: '部分异常', partial: '部分采集', stale: '已陈旧',
-		not_configured: '未配置', error: '异常', valid: '有效', expiring: '即将到期',
+		not_configured: '未配置', not_reported: '未报告', not_installed: '未安装', error: '异常', valid: '有效', expiring: '即将到期',
 		expired: '已过期', not_yet_valid: '尚未生效', invalid: '无效',
 		supported: '支持', unsupported: '不支持', matched: '匹配', mismatch: '不匹配', not_observable: '未观察到',
     online: '在线', offline: '离线', up: '在线', connected: '在线', adopted: '在线', active: '在线', down: '离线', disconnected: '离线', never_seen: '从未上线', disabled: '已禁用',
@@ -750,7 +751,7 @@ function dashboardCondition(view, refreshError = null){
     return {kind: 'stale', title: '设备数据已陈旧', message: '该设备的数据已超过刷新时限。'};
   }
   if(deviceStatus === 'degraded'){
-    return {kind: 'error', title: '设备部分数据不可用', message: '该设备仍在线，但至少一个业务域异常。'};
+    return {kind: 'error', title: '设备部分数据不可用', message: '该设备仍在线，详细原因请查看“采集诊断”。'};
   }
   // Device v2 has an authoritative server-side lifecycle status. Its legacy
   // IPv4/IPv6 probe fields are informational and must not mark an online
@@ -776,6 +777,26 @@ function dashboardCondition(view, refreshError = null){
     return {kind: 'unknown', title: '状态未知', message: 'stats.json 未包含完整扩展状态。'};
   }
   return {kind: 'ready', title: '', message: ''};
+}
+
+function collectionDiagnosticsMarkup(value){
+  const diagnostics = Array.isArray(value)
+    ? value
+    : Array.isArray(value?.collectionDiagnostics)
+      ? value.collectionDiagnostics
+      : [];
+  if(!diagnostics.length) return '<div class="table-empty">\u6682\u65e0\u91c7\u96c6\u8bca\u65ad\u8bb0\u5f55\u3002</div>';
+  const rows = diagnostics.map(item => {
+    const diagnostic = safeObject(item);
+    const status = textOrDash(diagnostic.status);
+    return '<tr><td class="strong-cell">' + escapeHtml(textOrDash(diagnostic.domain)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.component)) + '</td><td>' + badge(status) + '</td><td class="mono">' + escapeHtml(textOrDash(diagnostic.code)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.field)) + '</td><td class="wide-cell">' + escapeHtml(textOrDash(diagnostic.reason)) + '</td><td class="mono">' + escapeHtml(textOrDash(diagnostic.source)) + '</td></tr>';
+  }).join('');
+  return '<div class="table-wrap"><table class="data collection-diagnostics-table"><thead><tr><th>\u91c7\u96c6\u57df</th><th>\u7ec4\u4ef6</th><th>\u72b6\u6001</th><th>\u4ee3\u7801</th><th>\u5b57\u6bb5</th><th>\u539f\u56e0</th><th>\u6765\u6e90</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function renderCollectionDiagnostics(view){
+  const element = byId('collectionDiagnostics');
+  if(element) element.innerHTML = collectionDiagnosticsMarkup(view.collectionDiagnostics);
 }
 
 function setPageState(condition){
@@ -1892,6 +1913,7 @@ function renderDashboard(view){
 	renderLucky(view);
 	renderEasyTier(view);
   renderUniFi(view);
+  renderCollectionDiagnostics(view);
   if(!byId('deviceDiagnosticsModal').hidden) renderDeviceDiagnostics(view);
   if(!byId('aboutModal').hidden) renderBuildProvenance(view);
   applyPageVisibility();
@@ -1928,7 +1950,7 @@ function selectDevice(deviceId, options = {}){
 function applyPageVisibility(){
   const activePage = normalizePageName(dashboardState.activePage);
   dashboardState.activePage = activePage;
-	for(const page of ['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier']){
+	for(const page of ['home', 'hardware', 'diagnostics', 'unifi', 'docker', 'lucky', 'easytier']){
     const active = page === activePage;
     const tab = byId(`${page}Tab`);
     const panel = byId(`${page}Page`);
@@ -2320,7 +2342,7 @@ function bindInteractions(){
     tab.addEventListener('keydown', event => {
       if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-			const pages = ['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier'];
+			const pages = ['home', 'hardware', 'diagnostics', 'unifi', 'docker', 'lucky', 'easytier'];
 			const current = pages.indexOf(dashboardState.activePage);
 			const nextPage = event.key === 'Home' ? pages[0] : event.key === 'End' ? pages[pages.length - 1] : event.key === 'ArrowLeft' ? pages[(current - 1 + pages.length) % pages.length] : pages[(current + 1) % pages.length];
       setActivePage(nextPage);
@@ -2458,6 +2480,7 @@ const exported = {
   dashboardCondition,
   deviceDisplayName,
 	deviceDiagnosticsMarkup,
+	collectionDiagnosticsMarkup,
 	deviceShortName,
 	luckyIsConfigured,
 	easytierIsConfigured,

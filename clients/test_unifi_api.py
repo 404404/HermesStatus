@@ -546,6 +546,33 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(runtime["port_idx"], 5)
         self.assertEqual(runtime["roles"], ["lan", "uplink", "data_in"])
 
+    def test_uplink_without_catalog_role_uses_exact_index(self):
+        from unifi_api import _static_port_for_runtime
+        static_ports = {5: {"index": 5, "roles": ["lan"]}}
+        self.assertEqual(
+            _static_port_for_runtime({"port_idx": 5, "is_uplink": True}, static_ports),
+            static_ports[5],
+        )
+
+    def test_single_port_ap_projects_only_explicit_wired_uplink(self):
+        devices = [
+            {"id": "mesh-1", "model": "U6 Mesh", "name": "Mesh", "state": "ONLINE",
+             "uplink": {"connection_type": "ethernet", "up": True, "speed_mbps": 1000}},
+            {"id": "ac-1", "model": "AC Mesh", "name": "AC", "state": "ONLINE",
+             "uplink": {"connection_type": "wireless", "up": True}},
+        ]
+        legacy = {"data": [
+            {"device_id": "mesh-1", "port_table": []},
+            {"device_id": "ac-1", "port_table": []},
+        ]}
+        records, _ = _ports(legacy, devices[0], {}, 1.0, devices=devices)
+        mesh = next(item for item in records if item["device_id"] == "mesh-1")
+        ac = next(item for item in records if item["device_id"] == "ac-1")
+        self.assertTrue(mesh["up"])
+        self.assertEqual(mesh["speed_mbps"], 1000)
+        self.assertNotIn("up", ac)
+        self.assertNotIn("speed_mbps", ac)
+
     def test_ambiguous_catalog_uplink_does_not_fallback_to_runtime_index(self):
         from unifi_api import _static_port_for_runtime
         static_ports = {
@@ -596,7 +623,7 @@ class UniFiAPITests(unittest.TestCase):
         records, _ = _ports({"data": []}, devices[0], {}, 1.0, devices=devices)
         self.assertEqual(records, [{
             "device_id": "mesh-1", "port_idx": 1, "name": "Port 1", "connector": "rj45",
-            "model_profile_status": "known", "media": "rj45", "roles": ["lan"], "poe_in": True, "poe_out": False,
+            "model_profile_status": "known", "media": "rj45", "roles": ["lan", "uplink", "data_in"], "poe_in": True, "poe_out": False,
             "model_id": "U6-Mesh", "max_speed_mbps": 1000.0,
             "poe_standard": "poe", "poe": {"supported": False, "class": "poe"},
         }])

@@ -9,8 +9,8 @@ from pathlib import Path
 
 CATALOG_SCHEMA_VERSION = 1
 SUPPORTED_CATALOG_SCHEMA_VERSIONS = frozenset({CATALOG_SCHEMA_VERSION})
-CATALOG_SOURCE_REVISION = "83a6c841d29775803d892ab797821c7f061ccbde"
-CATALOG_BUNDLE_SHA256 = "234df9f3174997aa8d11c0da98a7504725455b1df3668654d2f78e1030f13043"
+CATALOG_SOURCE_REVISION = "486dacbcb8d0f14e5ee171ce99c6a5ffabc0fb62"
+CATALOG_BUNDLE_SHA256 = "2251eddb656af89483a3497ca2fe46bf60339c3f96ae38b3390761d7f379a371"
 CATALOG_BUNDLE_PATH = Path(__file__).with_name("unifi_catalog") / "catalog.json"
 CATALOG_PROVENANCE_PATH = CATALOG_BUNDLE_PATH.with_name("catalog-provenance.json")
 # Compatibility name only; this is a bundle path, not a model-table directory.

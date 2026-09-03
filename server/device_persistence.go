@@ -102,6 +102,13 @@ func persistedDeviceFromNode(
 	now time.Time,
 ) (contracts.PersistedDevice, error) {
 	observations := make(map[string]json.RawMessage)
+	diagnostics := node.CollectionDiagnostics
+	if diagnostics == nil {
+		diagnostics = []CollectionDiagnostic{}
+	}
+	if err := validateCollectionDiagnostics(diagnostics); err != nil {
+		return contracts.PersistedDevice{}, errors.New("collection diagnostics are invalid")
+	}
 	if node.HasUpdate {
 		stats, err := rawJSON(node.Stats)
 		if err != nil {
@@ -110,15 +117,16 @@ func persistedDeviceFromNode(
 		observations["stats"] = stats
 	}
 	for key, value := range map[string]any{
-		"last_network_in":   node.LastNetworkIn,
-		"last_network_out":  node.LastNetworkOut,
-		"extension_version": node.Extension.ExtensionVersion,
-		"received_at":       node.Extension.ReceivedAt,
-		"identity_status":   node.IdentityStatus,
-		"reported_name":     node.ReportedName,
-		"reported_fqdn":     node.ReportedFQDN,
-		"reported_hostname": node.ReportedHostname,
-		"degraded":          node.Degraded,
+		"last_network_in":        node.LastNetworkIn,
+		"last_network_out":       node.LastNetworkOut,
+		"extension_version":      node.Extension.ExtensionVersion,
+		"received_at":            node.Extension.ReceivedAt,
+		"identity_status":        node.IdentityStatus,
+		"reported_name":          node.ReportedName,
+		"reported_fqdn":          node.ReportedFQDN,
+		"reported_hostname":      node.ReportedHostname,
+		"degraded":               node.Degraded,
+		"collection_diagnostics": diagnostics,
 	} {
 		raw, err := rawJSON(value)
 		if err != nil {
@@ -359,6 +367,13 @@ func restorePersistedDeviceFields(node *NodeState, persisted contracts.Persisted
 	_ = decodeOptionalObservation(
 		persisted.RuntimeObservations, "degraded", &node.Degraded,
 	)
+	if raw, exists := persisted.RuntimeObservations["collection_diagnostics"]; exists {
+		var diagnostics []CollectionDiagnostic
+		if err := decodeStrictRuntime(raw, &diagnostics); err != nil || validateCollectionDiagnostics(diagnostics) != nil {
+			return errors.New("persisted collection diagnostics are invalid")
+		}
+		node.CollectionDiagnostics = diagnostics
+	}
 	_ = decodeOptionalObservation(
 		persisted.RuntimeObservations, "extension_version", &node.Extension.ExtensionVersion,
 	)

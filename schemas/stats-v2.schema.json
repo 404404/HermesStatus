@@ -149,9 +149,24 @@
         "unifi": {"$ref": "../docs/migration/schema/unifi-extension.schema.json"},
         "client_build": {"$ref": "#/$defs/clientBuild"},
         "easytier_expectation": {"$ref": "#/$defs/easytierExpectation"},
+        "collection_diagnostics": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/collectionDiagnostic"}},
         "hardware_json": {"type": "string", "maxLength": 262144},
         "docker_json": {"type": "string", "maxLength": 262144},
         "hermes_json": {"type": "string", "maxLength": 262144}
+      },
+      "additionalProperties": false
+    },
+    "collectionDiagnostic": {
+      "type": "object",
+      "required": ["domain", "component", "status"],
+      "properties": {
+        "domain": {"type": "string", "minLength": 1, "maxLength": 160},
+        "component": {"type": "string", "minLength": 1, "maxLength": 160},
+        "status": {"enum": ["available", "degraded", "unavailable", "stale", "not_reported", "not_configured", "not_installed", "unsupported", "partial", "not_observed"]},
+        "code": {"type": ["string", "null"], "maxLength": 160},
+        "field": {"type": ["string", "null"], "maxLength": 160},
+        "reason": {"type": ["string", "null"], "maxLength": 160},
+        "source": {"type": ["string", "null"], "maxLength": 160}
       },
       "additionalProperties": false
     },

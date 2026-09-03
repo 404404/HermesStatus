@@ -148,6 +148,7 @@ func (a *App) ingestDeviceUpdateAt(
 	}
 	node.Stats = stats
 	node.Extension = extensionSnapshotAt(extension, now)
+	node.CollectionDiagnostics = buildCollectionDiagnostics(extension, issues)
 	node.HasUpdate = true
 	node.LastUpdate = now
 	node.LastSeen = now
@@ -523,6 +524,7 @@ func (a *App) updateAgent(
 	}
 	node.Stats = update
 	node.Extension = extensionSnapshotAt(extension, now)
+	node.CollectionDiagnostics = buildCollectionDiagnostics(extension, nil)
 	node.HasUpdate = true
 	node.LastUpdate = now
 	node.LastSeen = now

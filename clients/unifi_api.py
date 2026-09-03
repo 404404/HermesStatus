@@ -1179,9 +1179,94 @@ def _static_port_for_runtime(port, static_ports):
     ]
     if len(candidates) == 1:
         return candidates[0]
-    # An explicit uplink with no unique role-qualified Catalog target is
-    # ambiguous. Do not silently associate it by controller index.
+    if not candidates:
+        # Some maintained switches report a runtime uplink on a normal data
+        # port. With no role-qualified Catalog candidate, the only safe
+        # association is the exact physical index.
+        return static_ports.get(runtime_index)
+    # Multiple role-qualified targets are ambiguous. Do not guess.
     return None
+
+
+_WIRED_UPLINK_KIND_KEYS = (
+    "connection_type", "connectionType", "medium", "network_type",
+    "networkType", "link_type", "linkType", "uplink",
+)
+_WIRED_UPLINK_BOOL_KEYS = ("wired", "is_wired", "isWired")
+_WIRED_UPLINK_STATE_KEYS = (
+    "link_state", "linkState", "connection_state", "connectionState",
+    "link_status", "linkStatus", "connected", "is_connected",
+)
+_WIRED_UPLINK_SPEED_KEYS = (
+    "speed_mbps", "speedMbps", "link_speed_mbps", "linkSpeedMbps", "speed",
+)
+_WIRED_UPLINK_NESTED_KEYS = (
+    "uplink", "uplinks", "interfaces", "interface", "connection", "link",
+    "ethernet",
+)
+
+
+def _bounded_uplink_records(device, depth=0):
+    if not isinstance(device, dict) or depth > 2:
+        return
+    yield device
+    for key in _WIRED_UPLINK_NESTED_KEYS:
+        value = device.get(key)
+        if isinstance(value, dict):
+            yield from _bounded_uplink_records(value, depth + 1)
+        elif isinstance(value, list):
+            for item in value[:8]:
+                if isinstance(item, dict):
+                    yield from _bounded_uplink_records(item, depth + 1)
+
+
+def _explicit_wired_uplink_observation(device):
+    wireless_seen = False
+    for item in _bounded_uplink_records(device):
+        kind = _text(_first(item, *_WIRED_UPLINK_KIND_KEYS))
+        normalized = (kind or "").strip().lower().replace("-", "").replace("_", "").replace(" ", "")
+        if any(token in normalized for token in ("wireless", "wifi", "wlan", "mesh")):
+            wireless_seen = True
+            continue
+        wired = _boolean(_first(item, *_WIRED_UPLINK_BOOL_KEYS))
+        explicit_kind = any(token in normalized for token in ("wired", "ethernet", "rj45", "sfp", "gbe", "2.5ge", "10ge"))
+        if wired is not True and not explicit_kind:
+            continue
+        result = {}
+        up = _boolean(_first(item, "up", "link_up", "is_up"))
+        if up is None:
+            up = _boolean(_first(item, "connected", "is_connected"))
+        if up is None:
+            up = _status_online(_first(item, *_WIRED_UPLINK_STATE_KEYS))
+        if up is not None:
+            result["up"] = up
+        speed = _decimal(_first(item, *_WIRED_UPLINK_SPEED_KEYS), minimum=0)
+        if speed is not None:
+            result["speed"] = speed
+        result["is_uplink"] = True
+        return result
+    return None
+
+
+def _single_port_ap_runtime(device, model, static_ports, raw_ports):
+    if not isinstance(model, dict) or model.get("device_type") != "ap":
+        return None
+    if any(
+        _counter(port, "port_idx", "idx", "portIndex") is not None
+        for port in raw_ports if isinstance(port, dict)
+    ):
+        return None
+    candidates = [
+        port for port in static_ports.values()
+        if "uplink" in port.get("roles", []) and "data_in" in port.get("roles", [])
+    ]
+    if len(candidates) != 1:
+        return None
+    observation = _explicit_wired_uplink_observation(device)
+    if observation is None:
+        return None
+    observation["port_idx"] = candidates[0]["index"]
+    return observation
 
 
 def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=None, devices=None):
@@ -1231,6 +1316,19 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
                 current = runtime_by_key.get(key)
                 if current is None or _stable_port_record_key(item) < _stable_port_record_key(current):
                     runtime_by_key[key] = item
+        fallback_port = _single_port_ap_runtime(known_devices[device_id], model, static_ports, raw_ports)
+        if fallback_port is not None:
+            static_port = _static_port_for_runtime(fallback_port, static_ports)
+            item = _port_record(
+                fallback_port,
+                device_id=device_id,
+                previous_samples=previous_samples,
+                sample_time=sample_time,
+                static_port=static_port,
+                model_id=model["canonical_sku"] if model else None,
+            )
+            if item is not None:
+                runtime_by_key[(device_id, item["port_idx"])] = item
     # The Catalog is the left side of this join. A controller may omit a
     # device's runtime port observations entirely, while its resolved static
     # physical topology remains safe and useful to display.

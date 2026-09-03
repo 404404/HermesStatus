@@ -21,6 +21,7 @@
         <nav class="nav" aria-label="主导航" role="tablist">
             <button id="homeTab" type="button" class="active" role="tab" aria-selected="true" aria-controls="homePage" aria-current="page" data-page-target="home">主页</button>
             <button id="hardwareTab" type="button" role="tab" aria-selected="false" aria-controls="hardwarePage" tabindex="-1" data-page-target="hardware">硬件信息</button>
+            <button id="diagnosticsTab" type="button" role="tab" aria-selected="false" aria-controls="diagnosticsPage" tabindex="-1" data-page-target="diagnostics">采集诊断</button>
             <button id="unifiTab" type="button" role="tab" aria-selected="false" aria-controls="unifiPage" tabindex="-1" data-page-target="unifi">UniFi</button>
             <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
             <button id="luckyTab" type="button" role="tab" aria-selected="false" aria-controls="luckyPage" tabindex="-1" data-page-target="lucky">Lucky</button>
@@ -87,6 +88,13 @@
                             <tbody id="profilesBody"></tbody>
                         </table>
                     </div>
+                </section>
+            </div>
+
+            <div id="diagnosticsPage" class="page-panel" role="tabpanel" aria-labelledby="diagnosticsTab" data-page="diagnostics" hidden>
+                <section class="data-section" aria-labelledby="collectionDiagnosticsTitle">
+                    <div class="section-head"><h2 id="collectionDiagnosticsTitle">采集诊断</h2><span class="section-meta">覆盖所有采集域；仅显示脱敏状态与有界诊断信息</span></div>
+                    <div id="collectionDiagnostics" class="collection-diagnostics"></div>
                 </section>
             </div>
 

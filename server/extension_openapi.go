@@ -32,6 +32,18 @@ func extensionOpenAPISchemas() map[string]any {
 		}
 	}
 
+	collectionDiagnostic := requiredObject(
+		[]string{"domain", "component", "status"},
+		map[string]any{
+			"domain":    map[string]any{"type": "string", "maxLength": maxCollectionDiagnosticText},
+			"component": map[string]any{"type": "string", "maxLength": maxCollectionDiagnosticText},
+			"status":    map[string]any{"type": "string", "enum": []string{"available", "degraded", "unavailable", "stale", "not_reported", "not_configured", "not_installed", "unsupported", "partial", "not_observed"}},
+			"code":      nullableString(maxCollectionDiagnosticText, "Bounded diagnostic code"),
+			"field":     nullableString(maxCollectionDiagnosticText, "Bounded diagnostic field path"),
+			"reason":    nullableString(maxCollectionDiagnosticText, "Bounded diagnostic reason"),
+			"source":    nullableString(maxCollectionDiagnosticText, "Bounded diagnostic source"),
+		},
+	)
 	extensionError := requiredObject(
 		[]string{"code", "message", "source", "retryable", "http_status"},
 		map[string]any{
@@ -734,16 +746,17 @@ func extensionOpenAPISchemas() map[string]any {
 			"memory_total": integerOpenAPISchema(), "memory_used": integerOpenAPISchema(), "swap_total": integerOpenAPISchema(), "swap_used": integerOpenAPISchema(),
 			"hdd_total": integerOpenAPISchema(), "hdd_used": integerOpenAPISchema(), "last_network_in": integerOpenAPISchema(), "last_network_out": integerOpenAPISchema(),
 			"io_read": integerOpenAPISchema(), "io_write": integerOpenAPISchema(), "custom": stringOpenAPISchema(), "os": stringOpenAPISchema(),
-			"extension_version":    map[string]any{"type": "string", "const": ExtensionSchemaVersion, "maxLength": MaxExtensionVersionLength},
-			"received_at":          map[string]any{"type": "string", "format": "date-time", "maxLength": MaxTimestampLength},
-			"hardware":             schemaRef("HardwareStats"),
-			"docker":               schemaRef("DockerStats"),
-			"hermes":               schemaRef("HermesStats"),
-			"lucky":                schemaRef("LuckyStats"),
-			"easytier":             schemaRef("EasyTierStats"),
-			"unifi":                schemaRef("UniFiStats"),
-			"client_build":         nullableRef("ClientBuildInfo"),
-			"easytier_expectation": schemaRef("EasyTierExpectationProjection"),
+			"extension_version":      map[string]any{"type": "string", "const": ExtensionSchemaVersion, "maxLength": MaxExtensionVersionLength},
+			"received_at":            map[string]any{"type": "string", "format": "date-time", "maxLength": MaxTimestampLength},
+			"hardware":               schemaRef("HardwareStats"),
+			"docker":                 schemaRef("DockerStats"),
+			"hermes":                 schemaRef("HermesStats"),
+			"lucky":                  schemaRef("LuckyStats"),
+			"easytier":               schemaRef("EasyTierStats"),
+			"unifi":                  schemaRef("UniFiStats"),
+			"client_build":           nullableRef("ClientBuildInfo"),
+			"easytier_expectation":   schemaRef("EasyTierExpectationProjection"),
+			"collection_diagnostics": map[string]any{"type": "array", "maxItems": MaxCollectionDiagnostics, "items": schemaRef("CollectionDiagnostic"), "default": []any{}},
 		},
 	)
 	statsDocument := requiredObject(
@@ -759,6 +772,7 @@ func extensionOpenAPISchemas() map[string]any {
 
 	return map[string]any{
 		"ExtensionError":                extensionError,
+		"CollectionDiagnostic":          collectionDiagnostic,
 		"TemperatureReading":            temperature,
 		"DiskTemperature":               diskTemperature,
 		"PhysicalDiskStats":             physicalDisk,

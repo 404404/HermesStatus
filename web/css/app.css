@@ -221,6 +221,7 @@ body.light .unifi-page-empty{background:var(--panel)}
 .unifi-api-table td,.unifi-api-table th{white-space:nowrap}
 .unifi-diagnostics{padding:0 1.35rem 1.1rem}
 .unifi-diagnostics-table{min-width:620px!important}
+.collection-diagnostics-table{min-width:980px!important}
 .unifi-diagnostics-table td,.unifi-diagnostics-table th{white-space:nowrap}
 .unifi-ports{padding:0 1.35rem 1.1rem}
 .unifi-ports-table{min-width:1180px!important}

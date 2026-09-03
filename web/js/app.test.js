@@ -55,6 +55,7 @@ async function run(){
   assert.equal(app.normalizePageName('docker'), 'docker');
   assert.equal(app.normalizePageName('lucky'), 'lucky');
   assert.equal(app.normalizePageName('unifi'), 'unifi');
+  assert.equal(app.normalizePageName('diagnostics'), 'diagnostics');
   assert.equal(app.normalizePageName('unexpected'), 'home');
   assert.equal(app.pageFromHash(''), 'home');
   assert.equal(app.pageFromHash('#home'), 'home');
@@ -62,6 +63,7 @@ async function run(){
   assert.equal(app.pageFromHash('#docker'), 'docker');
   assert.equal(app.pageFromHash('#lucky'), 'lucky');
   assert.equal(app.pageFromHash('#unifi'), 'unifi');
+  assert.equal(app.pageFromHash('#diagnostics'), 'diagnostics');
   assert.equal(app.pageFromHash('#invalid'), 'home');
   assert.deepEqual(app.parseDashboardHash('#docker?device=device-alpha'), {
     page: 'docker', deviceId: 'device-alpha', needsRewrite: false
@@ -71,6 +73,7 @@ async function run(){
   assert.equal(app.parseDashboardHash('#home?device=device-a&unexpected=1').needsRewrite, true);
   assert.equal(app.parseDashboardHash('#home?device=%3Cscript%3E').deviceId, null);
   assert.equal(app.canonicalDashboardHash('docker', 'device-alpha'), '#docker?device=device-alpha');
+  assert.equal(app.canonicalDashboardHash('diagnostics', null), '#diagnostics');
   assert.equal(app.canonicalDashboardHash('unexpected', null), '#home');
   assert.equal(app.validDeviceId('device-alpha'), true);
   assert.equal(app.validDeviceId('DEVICE-ALPHA'), false);
@@ -85,11 +88,19 @@ async function run(){
   assert.match(appSource, /EasyTier远端节点数/);
   assert.match(appSource, /EasyTier流量统计/);
   assert.match(indexMarkup, /id="unifiPorts"/);
+  assert.match(indexMarkup, /id="diagnosticsTab"/);
+  assert.match(indexMarkup, /id="diagnosticsPage"/);
+  assert.match(indexMarkup, /id="collectionDiagnostics"/);
+  assert.match(appSource, /采集诊断/);
   assert.match(indexMarkup, /id="unifiEmptyState"/);
   assert.match(appSource, /invalid_value/);
   assert.match(appSource, /未配置 UniFi 目标/);
   assert.equal(app.unifiErrorText({error: {code: 'payload_too_large'}}), 'UniFi 遥测数据过大');
   assert.doesNotMatch(appSource, /已配置 UniFi 目标，但访问失败，请检查 SSH 密码和 API Key/);
+  const collectionDiagnostics = app.collectionDiagnosticsMarkup([{domain: "hardware", component: "storage.physical_disks", status: "degraded", code: "smart_value_invalid", field: "hardware.storage.physical_disks[].error", reason: "<script>", source: "smartctl"}]);
+  assert.match(collectionDiagnostics, /smart_value_invalid/);
+  assert.match(collectionDiagnostics, /hardware/);
+  assert.doesNotMatch(collectionDiagnostics, /<script>/);
   assert.match(cssSource, /\.unifi-network-tabs\{[^}]*flex-wrap:wrap/);
   assert.match(cssSource, /\.unifi-network-tab\{[^}]*white-space:nowrap/);
 
@@ -967,7 +978,7 @@ async function run(){
   assert.match(appSource, /refresh\('initial'\)/);
   assert.match(appSource, /setActivePage\(tab\.dataset\.pageTarget\)/);
   assert.match(appSource, /parseDashboardHash\(window\.location\.hash\)/);
-  assert.match(appSource, /\['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier'\]/);
+  assert.match(appSource, /\['hardware', 'diagnostics', 'unifi', 'docker', 'lucky', 'easytier'\]/);
   const homeHardwareSource = appSource.slice(appSource.indexOf('function renderHardware'), appSource.indexOf('function filesystemBackingDisks'));
   assert.deepEqual(
     [...homeHardwareSource.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1]),

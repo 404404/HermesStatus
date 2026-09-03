@@ -24,7 +24,7 @@ Device v2 → Server → /json/stats.json → UniFi 标签页
 
 ## Catalog consumer 边界
 
-静态硬件能力从 `clients/unifi_catalog/` 中随版本固定的 deterministic bundle 读取；该 bundle 来自 `404404/UniFi_Catalog` revision `813b34eba1dbb7922777897260983ce0189ce39e`，bundle SHA-256 为 `aa2e5c8f594f1df4e123b32975c0e0dcf333466380013057846381b16288a3b6`，并由 SHA-256 manifest 校验。中性的物理端口标签、端口连接器、存储、电源、PoE 和已确认处理器事实均以 bundle 为权威来源，HermesStatus 不维护平行机型表。
+静态硬件能力从 `clients/unifi_catalog/` 中随版本固定的 deterministic bundle 读取；该 bundle 来自 `404404/UniFi_Catalog` revision `486dacbcb8d0f14e5ee171ce99c6a5ffabc0fb62`，bundle SHA-256 为 `2251eddb656af89483a3497ca2fe46bf60339c3f96ae38b3390761d7f379a371`，并由 SHA-256 manifest 校验。中性的物理端口标签、端口连接器、存储、电源、PoE 和已确认处理器事实均以 bundle 为权威来源，HermesStatus 不维护平行机型表。
 
 采集 profile 由管理员显式选择，但它不是硬件 identity，也不能解锁静态能力。controller 的 `api_model`、`sysid` 和 SSH model string 都是 runtime identifier；只有 Catalog 中标为 `verified` 的 alias 才能解析 canonical SKU。candidate alias 和未知字符串仍保留为 runtime observation，但不能解锁静态能力。只有 verified runtime resolution 成功后，才能单独投影静态能力；API 观测保留在 `api` 下。
 
@@ -36,6 +36,8 @@ profile 仅能显式选择（`udw` 或 `ucg-max`），未知 profile 会被拒�
 
 - 风扇能力绝不从采集 profile 读取。当前冻结 Catalog 将 UDW 与 UCG Max 的 fan capability 保持为 `unknown`；有界的 `fanN` 转速观测会以 `supported=unknown`、`present=unknown` 保留，直到 Catalog 有权威的物理分类。RPM 为零仍是 `observed_zero_rpm`，绝不是故障。
 - UCG Max 有五个 thermal zone；已确认 `lm63` 的 `fan1_input` 是 hwmon RPM 观测。冻结 Catalog 是其存储、电源、PoE、端口和处理器能力的权威来源；Catalog fan classification 未知时，不能把该 runtime sensor 变成物理风扇结论。UDW/UCG 的静态能力同样不能由 profile 名称推断。
+
+- 有界的 UCG Max 风扇审计确认可重复的只读 runtime source：`linux.sensors_json` → `lm63` → `fan1_input`（RPM），包括有效的零值观测；配套温度/告警字段不能单独证明物理风扇存在。因此 Catalog 仍保持 `unknown`，保留 runtime observation 但不作物理风扇结论；不会读写 PWM 或控制 sysfs 路径。
 
 raw thermal zone、hwmon detail、cpuload diagnostics、PWM、未映射 PSU sensor 和不确定 NVMe diagnostics 不进入 V1 UI，也不自动影响健康。静态存储和电源能力从已验证 runtime model 对应的冻结 Catalog 投影读取；采集 profile 只负责 source 和 formula。未知 runtime model 保留有界 runtime observation，但不投影静态能力，也不会让整个 UniFi domain 失败。UDW 的 `/ssd1` 文件系统使用固定只读 `unifi.udw.ssd_filesystem` source；`capacity_bytes` 始终是物理容量，`filesystem_total_bytes` 是挂载文件系统总量，缺少挂载是可选观测。
 
