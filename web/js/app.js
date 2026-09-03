@@ -1432,6 +1432,23 @@ function unifiApiTelemetryMarkup(unifi){
   return `<div class="table-wrap"><table class="data unifi-api-table"><thead><tr><th>UniFi 设备型号</th><th>状态</th><th>链路</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
+function unifiApiDiagnosticsMarkup(unifi){
+  const api = safeObject(unifi?.api);
+  if(!api.enabled || api.status === 'disabled') return '<div class="unifi-api-unavailable">API 未启用。</div>';
+  const endpoints = Array.isArray(api.endpoints) ? api.endpoints : [];
+  if(!endpoints.length) return '<div class="unifi-api-unavailable">暂无 API 组件诊断。</div>';
+  const rows = endpoints.map(endpoint => {
+    const status = String(endpoint?.status || '').toLowerCase();
+    const statusLabel = status === 'ok' ? '正常' : status === 'unsupported' ? '不支持' : '异常';
+    const tone = status === 'ok' ? 'ok' : status === 'unsupported' ? 'neutral' : 'warn';
+    const required = typeof endpoint?.required === 'boolean' ? (endpoint.required ? '是' : '否') : '-';
+    const httpStatus = finiteNumber(endpoint?.http_status) === null ? '-' : formatInteger(endpoint.http_status);
+    const code = typeof endpoint?.error?.code === 'string' && endpoint.error.code ? endpoint.error.code : '-';
+    return '<tr><td class="strong-cell mono">' + escapeHtml(textOrDash(endpoint?.name)) + '</td><td>' + escapeHtml(required) + '</td><td><span class="badge ' + tone + '">' + statusLabel + '</span></td><td>' + escapeHtml(httpStatus) + '</td><td class="mono">' + escapeHtml(code) + '</td></tr>';
+  }).join('');
+  return '<div class="table-wrap"><table class="data unifi-diagnostics-table"><thead><tr><th>组件</th><th>必需</th><th>状态</th><th>HTTP</th><th>错误代码</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
 function unifiLinkBandwidth(value){
   const number = finiteNumber(value);
   if(number === null || number <= 0) return '-';
@@ -1744,6 +1761,8 @@ function renderUniFi(view){
   byId('unifiMeta').textContent = configured ? `Profile：${textOrDash(unifi.profile)} · ${summary.text}` : '未配置 UniFi 目标';
   const apiTelemetry = byId('unifiApiTelemetry');
   if(apiTelemetry) apiTelemetry.innerHTML = '';
+  const apiDiagnostics = byId('unifiDiagnostics');
+  if(apiDiagnostics) apiDiagnostics.innerHTML = configured ? unifiApiDiagnosticsMarkup(unifi) : '<div class="table-empty">未配置 UniFi 目标。</div>';
   byId('unifiPorts').innerHTML = configured ? unifiPortTelemetryMarkup(unifi) : '<div class="unifi-api-unavailable">未配置 UniFi 目标。</div>';
   byId('unifiWan').innerHTML = configured ? unifiWanMarkup(unifi) : '<div class="table-empty">未配置 UniFi 目标。</div>';
   byId('unifiStorage').innerHTML = configured ? unifiStorageMarkup(unifi) : '<div class="table-empty">未配置 UniFi 目标。</div>';
@@ -2450,6 +2469,7 @@ const exported = {
   unifiCollectionStatusText,
   unifiCollectionStatusMarkup,
   unifiApiTelemetryMarkup,
+  unifiApiDiagnosticsMarkup,
   unifiPortTelemetryMarkup,
   unifiPortStatusMarkup,
   unifiPortErrorText,

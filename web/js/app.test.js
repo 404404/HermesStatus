@@ -269,6 +269,13 @@ async function run(){
   }};
   const systemCards = app.unifiSystemCards({...udwUniFi, api: apiFixture});
   const apiTelemetryMarkup = app.unifiApiTelemetryMarkup({...udwUniFi, api: apiFixture});
+  const apiDiagnosticsMarkup = app.unifiApiDiagnosticsMarkup({...udwUniFi, api: {
+    ...apiFixture,
+    endpoints: [
+      {name: 'device_detail', required: true, status: 'ok', http_status: 200, error: null},
+      {name: 'topology', required: false, status: 'unsupported', http_status: 404, error: {code: 'api_endpoint_unsupported'}}
+    ]
+  }});
   const portTelemetryMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: apiFixture});
   const noPoeApiFixture = {...apiFixture, telemetry: {...apiFixture.telemetry,
     identity: {...apiFixture.telemetry.identity, model: 'UCG Max', display_name: 'UCG Max'},
@@ -338,6 +345,12 @@ async function run(){
   for(const [value, expected] of bandwidthCases) assert.equal(app.unifiLinkBandwidth(value), expected);
   assert.doesNotMatch(apiTelemetryMarkup, /WAN|双工|速率|设备身份|连接客户端/);
   assert.match(apiTelemetryMarkup, /unifi-api-table/);
+  assert.match(apiDiagnosticsMarkup, /device_detail/);
+  assert.match(apiDiagnosticsMarkup, /topology/);
+  assert.match(apiDiagnosticsMarkup, /不支持/);
+  assert.match(apiDiagnosticsMarkup, /api_endpoint_unsupported/);
+  assert.match(apiDiagnosticsMarkup, /HTTP/);
+  assert.match(indexMarkup, /id="unifiDiagnostics"/);
   assert.match(systemCards, /<h2>设备名称\/型号<\/h2>/);
   assert.match(systemCards, /UDW/);
   assert.match(systemCards, /UniFi Dream Wall/);

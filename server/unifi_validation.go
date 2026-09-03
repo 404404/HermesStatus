@@ -281,7 +281,7 @@ func validateUniFiAPI(value *UniFiAPIStats) error {
 	if value.Status == "disabled" || len(value.Endpoints) > MaxUniFiAPIEndpoints {
 		return validationError(validationCodeInvalidValue, "unifi.api", "enabled API state is invalid")
 	}
-	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "clients": true, "networks": true, "legacy_stat_device": true, "lags": true, "topology": true, "port_anomalies": true, "wan_official": true, "wan_enriched": true, "wan_isp_status": true, "wan_load_balance": true, "wan_load_balance_config": true, "wan_slas": true, "legacy_stat_health": true, "legacy_stat_sysinfo": true}
+	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "device_detail": true, "device_stats": true, "normalization": true, "clients": true, "networks": true, "legacy_stat_device": true, "lags": true, "topology": true, "port_anomalies": true, "wan_official": true, "wan_enriched": true, "wan_isp_status": true, "wan_load_balance": true, "wan_load_balance_config": true, "wan_slas": true, "legacy_stat_health": true, "legacy_stat_sysinfo": true}
 	seen := map[string]bool{}
 	okCount, failedCount := 0, 0
 	for _, endpoint := range value.Endpoints {
@@ -298,13 +298,19 @@ func validateUniFiAPI(value *UniFiAPIStats) error {
 				return validationError(validationCodeInvalidValue, "unifi.api.endpoints.error", "successful endpoint must not contain an error")
 			}
 		} else {
-			failedCount++
 			if endpoint.Error == nil {
 				return validationError(validationCodeInvalidValue, "unifi.api.endpoints.error", "failed endpoint requires an error")
 			}
 			if err := ValidateExtensionError("unifi.api.endpoints.error", endpoint.Error); err != nil {
 				return err
 			}
+			// An optional 404 is a capability observation, not a failed API
+			// collection. Required failures and optional non-404 failures remain
+			// part of the API status calculation.
+			if endpoint.Status == "unsupported" && !endpoint.Required {
+				continue
+			}
+			failedCount++
 		}
 	}
 	if value.Status == "available" && failedCount != 0 {
@@ -562,6 +568,18 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 		}
 		if item.PeerCount != nil && (*item.PeerCount < 0 || int64(*item.PeerCount) > MaxSafeInteger) {
 			return validationError(validationCodeInvalidValue, prefix+".peer_count", "is invalid")
+		}
+		if item.PoEPassthroughEnabled != nil {
+			hasPassthroughRole := false
+			for _, role := range item.Roles {
+				if role == "poe_passthrough" {
+					hasPassthroughRole = true
+					break
+				}
+			}
+			if !hasPassthroughRole {
+				return validationError(validationCodeInvalidValue, prefix+".poe_passthrough_enabled", "requires a poe_passthrough role")
+			}
 		}
 		if item.PoE != nil {
 			poe := item.PoE

@@ -161,6 +161,45 @@ func TestUniFiAPITelemetryProjectionAndPartialFailure(t *testing.T) {
 	}
 }
 
+func TestUniFiOptionalUnsupportedEndpointIsDiagnosticOnly(t *testing.T) {
+	stats := validUniFiFixture("udw")
+	now := "2026-08-27T01:02:03Z"
+	status := 200
+	unsupported := 404
+	stats.API = &UniFiAPIStats{
+		Enabled: true, Status: "available", LastAttempt: &now, LastSuccess: &now,
+		Endpoints: []UniFiAPIEndpoint{
+			{Name: "info", Required: true, Status: "ok", HTTPStatus: &status},
+			{Name: "topology", Required: false, Status: "unsupported", HTTPStatus: &unsupported, Error: &ExtensionError{Code: "api_endpoint_unsupported", Message: "UniFi API endpoint is unsupported", Source: "unifi-api", Retryable: true, HTTPStatus: &unsupported}},
+			{Name: "normalization", Required: true, Status: "ok", HTTPStatus: nil},
+		},
+	}
+	if err := ValidateUniFiStats(&stats); err != nil {
+		t.Fatalf("optional unsupported endpoint rejected: %v", err)
+	}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := DecodeUniFiStatsJSON(raw)
+	if err != nil {
+		t.Fatalf("optional unsupported endpoint round trip rejected: %v", err)
+	}
+	if decoded.API == nil || decoded.API.Status != "available" || len(decoded.API.Endpoints) != 3 {
+		t.Fatalf("optional unsupported endpoint changed API status: %#v", decoded.API)
+	}
+	var found *UniFiAPIEndpoint
+	for index := range decoded.API.Endpoints {
+		if decoded.API.Endpoints[index].Name == "topology" {
+			found = &decoded.API.Endpoints[index]
+			break
+		}
+	}
+	if found == nil || found.Required || found.Status != "unsupported" || found.HTTPStatus == nil || *found.HTTPStatus != 404 || found.Error == nil || found.Error.Code != "api_endpoint_unsupported" {
+		t.Fatalf("optional unsupported endpoint diagnostics changed: %#v", decoded.API.Endpoints)
+	}
+}
+
 func TestUniFiPerDevicePoEContractRoundTripAndIsolation(t *testing.T) {
 	now := "2026-08-27T01:02:03Z"
 	status := 200
@@ -216,13 +255,14 @@ func TestUniFiAPIPortTelemetryRoundTripAndNoRawTable(t *testing.T) {
 	poePower := 3.32
 	maxPoePower := 30.0
 	peerCount := 1
+	passthroughEnabled := true
 	stats.API = &UniFiAPIStats{
 		Enabled: true, Status: "available", LastAttempt: &now, LastSuccess: &now,
 		Endpoints: []UniFiAPIEndpoint{{Name: "info", Status: "ok", HTTPStatus: &status}},
 		Telemetry: &UniFiAPITelemetry{
 			Identity: &UniFiAPIIdentity{Model: unifiString("UDW")},
 			WANs:     []UniFiAPIWAN{}, Uplinks: []UniFiAPIUplink{}, Temperatures: []UniFiAPITemperature{},
-			Ports:       []UniFiAPIPort{{DeviceID: "udw-1", PortIndex: 7, Name: unifiString("LAN 7"), Media: unifiString("2.5GE"), Up: func() *bool { v := true; return &v }(), SpeedMbps: unifiFloat(2500), MaxSpeedMbps: unifiFloat(2500), RxBytes: unifiInt64(100), TxBytes: unifiInt64(200), RxBPS: unifiInt64(1000), TxBPS: unifiInt64(2000), PoE: &UniFiAPIPoE{Supported: func() *bool { v := true; return &v }(), PowerW: &poePower, MaxPowerW: &maxPoePower}, PeerCount: &peerCount}},
+			Ports:       []UniFiAPIPort{{DeviceID: "udw-1", PortIndex: 7, Name: unifiString("LAN 7"), Media: unifiString("2.5GE"), Roles: []string{"lan", "downstream", "poe_passthrough"}, Up: func() *bool { v := true; return &v }(), SpeedMbps: unifiFloat(2500), MaxSpeedMbps: unifiFloat(2500), RxBytes: unifiInt64(100), TxBytes: unifiInt64(200), RxBPS: unifiInt64(1000), TxBPS: unifiInt64(2000), PoE: &UniFiAPIPoE{Supported: func() *bool { v := true; return &v }(), PowerW: &poePower, MaxPowerW: &maxPoePower}, PoEPassthroughEnabled: &passthroughEnabled, PeerCount: &peerCount}},
 			PortSummary: &UniFiAPIPortSummary{Total: 1, Up: 1, Down: 0, PoEActive: 1, PoETotalPowerW: &poePower},
 			LAGs:        []UniFiAPILAG{}, Topology: nil, Anomalies: nil,
 		},
@@ -242,7 +282,7 @@ func TestUniFiAPIPortTelemetryRoundTripAndNoRawTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("port telemetry round trip rejected: %v", err)
 	}
-	if decoded.API == nil || decoded.API.Telemetry == nil || len(decoded.API.Telemetry.Ports) != 1 || decoded.API.Telemetry.Ports[0].MaxSpeedMbps == nil || decoded.API.Telemetry.Ports[0].PoE == nil || decoded.API.Telemetry.Ports[0].PoE.PowerW == nil || decoded.API.Telemetry.Ports[0].PoE.MaxPowerW == nil {
+	if decoded.API == nil || decoded.API.Telemetry == nil || len(decoded.API.Telemetry.Ports) != 1 || decoded.API.Telemetry.Ports[0].MaxSpeedMbps == nil || decoded.API.Telemetry.Ports[0].PoE == nil || decoded.API.Telemetry.Ports[0].PoE.PowerW == nil || decoded.API.Telemetry.Ports[0].PoE.MaxPowerW == nil || decoded.API.Telemetry.Ports[0].PoEPassthroughEnabled == nil || !*decoded.API.Telemetry.Ports[0].PoEPassthroughEnabled {
 		t.Fatalf("port telemetry was not preserved: %#v", decoded.API)
 	}
 }

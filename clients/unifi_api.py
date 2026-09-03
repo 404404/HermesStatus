@@ -35,7 +35,7 @@ WAN_ENDPOINTS = (
     ("legacy_stat_health", "legacy"),
     ("legacy_stat_sysinfo", "legacy"),
 )
-REQUIRED_ENDPOINTS = frozenset({"info", "sites", "devices", "device_detail"})
+REQUIRED_ENDPOINTS = frozenset({"info", "sites", "devices", "device_detail", "device_stats"})
 SITE_RESOURCE_LIMIT = 32
 API_ID_LIMIT = 128
 MAX_RESPONSE_BYTES = 1 << 20
@@ -1113,6 +1113,12 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_power_w=
     poe = _poe_record(poe_input, max_power_w=max_power_w if static_port is None else static_port["poe_max_power_w"])
     if poe is not None:
         result["poe"] = poe
+    if static_port is not None and "poe_passthrough" in static_port.get("roles", []):
+        passthrough_enabled = _boolean(_first(port, "poe_enable", "poe_enabled"))
+        passthrough_mode = _text(_first(port, "poe_mode", "poeMode"))
+        mode_token = "".join(character for character in str(passthrough_mode or "").casefold() if character.isalnum())
+        if passthrough_enabled is not None and mode_token in {"passthrough", "poepassthrough"}:
+            result["poe_passthrough_enabled"] = passthrough_enabled
     connection = port.get("last_connection")
     if isinstance(connection, dict) and connection.get("connected") is True:
         result["peer_count"] = 1
@@ -1161,6 +1167,23 @@ def _stable_port_record_key(item):
     return json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _static_port_for_runtime(port, static_ports):
+    """Associate an explicit runtime uplink with one Catalog physical port."""
+    runtime_index = _counter(port, "port_idx", "idx", "portIndex")
+    runtime_uplink = _boolean(_first(port, "is_uplink", "uplink")) is True
+    if not runtime_uplink:
+        return static_ports.get(runtime_index)
+    candidates = [
+        item for item in static_ports.values()
+        if "uplink" in item.get("roles", []) and "data_in" in item.get("roles", [])
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    # An explicit uplink with no unique role-qualified Catalog target is
+    # ambiguous. Do not silently associate it by controller index.
+    return None
+
+
 def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=None, devices=None):
     target_id = _identifier(target.get("id")) if isinstance(target, dict) else None
     if not target_id:
@@ -1191,14 +1214,16 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
         raw_ports = legacy.get("port_table") if isinstance(legacy.get("port_table"), list) else []
         for port in raw_ports[:MAX_UNIFI_PORTS_PER_DEVICE]:
             index = _counter(port, "port_idx", "idx", "portIndex")
-            detail = detail_capabilities.get(index, {})
+            static_port = _static_port_for_runtime(port, static_ports) if static_ports else None
+            physical_index = static_port["index"] if static_port is not None else index
+            detail = detail_capabilities.get(physical_index, {})
             item = _port_record(
                 port,
                 device_id=device_id,
                 previous_samples=previous_samples,
                 sample_time=sample_time,
                 max_power_w=detail.get("max_power_w"),
-                static_port=static_ports.get(index),
+                static_port=static_port,
                 model_id=model["canonical_sku"] if model else None,
             )
             if item is not None:
@@ -1459,6 +1484,7 @@ class UniFiAPICollector:
                 if report:
                     endpoint_results.append({
                         "name": name,
+                        "required": required,
                         "status": "unsupported" if exc.code == "api_endpoint_unsupported" else "error",
                         "http_status": exc.status,
                         "error": error,
@@ -1466,7 +1492,7 @@ class UniFiAPICollector:
                 failures.append((name, error, required))
                 return None
             if report:
-                endpoint_results.append({"name": name, "status": "ok", "http_status": status, "error": None})
+                endpoint_results.append({"name": name, "required": required, "status": "ok", "http_status": status, "error": None})
             payloads[name] = payload
             return payload
 
@@ -1486,19 +1512,30 @@ class UniFiAPICollector:
                     if exc.code == "api_timeout" and self._clock() >= deadline:
                         break
             if successes and not errors:
-                endpoint_results.append({"name": name, "status": "ok", "http_status": 200, "error": None})
+                endpoint_results.append({"name": name, "required": required, "status": "ok", "http_status": 200, "error": None})
                 payloads[name] = successes
                 return successes
             if successes and errors:
+                # A supplemental fan-out can legitimately hit a controller
+                # version where only some optional paths exist. Preserve the
+                # successful observations, while retaining an unsupported
+                # diagnostic for the missing capability.
+                if all(error.get("code") == "api_endpoint_unsupported" for error in errors):
+                    error = errors[0]
+                    endpoint_results.append({"name": name, "required": required, "status": "unsupported", "http_status": error.get("http_status"), "error": error})
+                    payloads[name] = successes
+                    failures.append((name, error, required))
+                    failure_details[name] = error
+                    return successes
                 error = _safe_error("api_partial_failure")
-                endpoint_results.append({"name": name, "status": "error", "http_status": None, "error": error})
+                endpoint_results.append({"name": name, "required": required, "status": "error", "http_status": None, "error": error})
                 payloads[name] = successes
                 failures.append((name, error, required))
                 failure_details[name] = error
                 return successes
             if errors:
                 error = errors[0]
-                endpoint_results.append({"name": name, "status": "unsupported" if error.get("http_status") == 404 else "error", "http_status": error.get("http_status"), "error": error})
+                endpoint_results.append({"name": name, "required": required, "status": "unsupported" if error.get("http_status") == 404 else "error", "http_status": error.get("http_status"), "error": error})
                 failures.append((name, error, required))
                 failure_details[name] = error
             return None
@@ -1537,15 +1574,13 @@ class UniFiAPICollector:
                     failures.append(("devices", error, True))
                 if target is not None:
                     device_id = _identifier(target.get("id"))
-                    detail = call("device_detail", _site_path(site_id, "devices", device_id), required=True, report=False)
-                    stats = call("device_stats", _site_path(site_id, "devices", device_id, "statistics/latest"), required=True, report=False)
+                    detail = call("device_detail", _site_path(site_id, "devices", device_id), required=True)
+                    stats = call("device_stats", _site_path(site_id, "devices", device_id, "statistics/latest"), required=True)
                     if detail is None or stats is None:
-                        error = failure_details.get("device_detail") or failure_details.get("device_stats") or _safe_error("api_target_resolution")
-                        for item in endpoint_results:
-                            if item["name"] == "devices":
-                                item.update({"status": "error", "http_status": error.get("http_status"), "error": error})
-                                break
-                        failures.append(("devices", error, True))
+                        # The individual required endpoint entries above carry
+                        # the actionable failure. Do not collapse them into a
+                        # duplicate devices error.
+                        pass
                     call("clients", _site_path(site_id, "clients"), required=False)
                     call("networks", _site_path(site_id, "networks"), required=False)
                     internal_reference = _identifier(selected_site.get("internal_reference"))
@@ -1584,11 +1619,14 @@ class UniFiAPICollector:
         except (APIError, AttributeError, KeyError, TypeError, ValueError) as exc:
             error = _safe_error(exc.code if isinstance(exc, APIError) else "api_parse_failure")
             failure_details["normalization"] = error
+            endpoint_results.append({"name": "normalization", "required": True, "status": "error", "http_status": None, "error": error})
             failures.append(("normalization", error, True))
-        successful_count = sum(1 for item in endpoint_results if item["status"] == "ok")
-        failed_count = sum(1 for item in endpoint_results if item["status"] != "ok")
+        else:
+            endpoint_results.append({"name": "normalization", "required": True, "status": "ok", "http_status": None, "error": None})
+        successful_count = sum(1 for item in endpoint_results if item["status"] == "ok" and item["name"] != "normalization")
         required_failures = [error for _, error, required in failures if required]
-        if required_failures and successful_count and failed_count:
+        optional_failures = [error for _, error, required in failures if not required and error.get("code") != "api_endpoint_unsupported"]
+        if required_failures and successful_count:
             error = _safe_error("api_partial_failure")
             status = "partial"
             last_success = attempted if successful_count else None
@@ -1596,7 +1634,7 @@ class UniFiAPICollector:
             error = required_failures[0]
             status = "unavailable"
             last_success = None
-        elif failed_count:
+        elif optional_failures:
             error = _safe_error("api_partial_failure")
             status = "partial"
             last_success = attempted

@@ -570,8 +570,9 @@ func extensionOpenAPISchemas() map[string]any {
 		"cpu_model": nullableString(MaxCPUModelLength, "Qualified UniFi CPU model from profile"), "cpu_usage_percent": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100}, "cpu_usage_reason": map[string]any{"type": []string{"string", "null"}, "enum": []any{"insufficient_delta", "counter_reset", "zero_delta", "invalid_sample", nil}},
 		"cpu_temperature_c": map[string]any{"type": []string{"number", "null"}, "minimum": MinTemperatureCelsius, "maximum": MaxTemperatureCelsius}, "memory": nullableRef("UniFiMemoryStats"), "uptime_seconds": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "load_average": nullableRef("UniFiLoadAverage"),
 	})
-	uniFiAPIEndpoint := requiredObject([]string{"name", "status", "http_status", "error"}, map[string]any{
-		"name":        map[string]any{"type": "string", "enum": []string{"info", "sites", "devices", "device_detail", "device_stats", "clients", "networks", "lags", "legacy_stat_device", "legacy_stat_health", "legacy_stat_sysinfo", "topology", "port_anomalies", "wan_official", "wan_enriched", "wan_isp_status", "wan_load_balance", "wan_load_balance_config", "wan_slas"}},
+	uniFiAPIEndpoint := requiredObject([]string{"name", "required", "status", "http_status", "error"}, map[string]any{
+		"name":        map[string]any{"type": "string", "enum": []string{"info", "sites", "devices", "device_detail", "device_stats", "normalization", "clients", "networks", "lags", "legacy_stat_device", "legacy_stat_health", "legacy_stat_sysinfo", "topology", "port_anomalies", "wan_official", "wan_enriched", "wan_isp_status", "wan_load_balance", "wan_load_balance_config", "wan_slas"}},
+		"required":    map[string]any{"type": "boolean"},
 		"status":      map[string]any{"type": "string", "enum": []string{"ok", "error", "unsupported"}},
 		"http_status": map[string]any{"type": []string{"integer", "null"}, "minimum": 100, "maximum": 599},
 		"error":       nullableRef("ExtensionError"),
@@ -633,7 +634,7 @@ func extensionOpenAPISchemas() map[string]any {
 		"rx_errors": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_errors": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "rx_dropped": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_dropped": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
 		"rx_multicast": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_multicast": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "rx_broadcast": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_broadcast": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
 		"rx_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "tx_bps": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}, "rx_utilization_pct": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100}, "tx_utilization_pct": map[string]any{"type": []string{"number", "null"}, "minimum": 0, "maximum": 100},
-		"poe": map[string]any{"anyOf": []any{uniFiAPIPoE, map[string]any{"type": "null"}}}, "peer_count": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
+		"poe": map[string]any{"anyOf": []any{uniFiAPIPoE, map[string]any{"type": "null"}}}, "poe_passthrough_enabled": map[string]any{"type": []string{"boolean", "null"}}, "peer_count": map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
 	})
 	uniFiAPIPortSummary := requiredObject([]string{"total", "up", "down", "poe_active"}, map[string]any{
 		"total": map[string]any{"type": "integer", "minimum": 0}, "up": map[string]any{"type": "integer", "minimum": 0}, "down": map[string]any{"type": "integer", "minimum": 0}, "poe_active": map[string]any{"type": "integer", "minimum": 0}, "poe_total_power_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "poe_total_source": map[string]any{"type": "string", "enum": []string{"", "device_reported", "port_sum", "unavailable"}}, "poe_max_power_w": map[string]any{"type": []string{"number", "null"}, "minimum": 0},
