@@ -208,6 +208,9 @@
         "completeness": {"type": ["string", "null"], "enum": ["complete", "partial", "unavailable", null]},
         "health_source": {"type": ["string", "null"], "enum": ["native_status", "attribute_check", "unknown", null]},
         "native_status": {"type": ["string", "null"], "enum": ["available", "unavailable", "unknown", null]},
+        "configured_type": {"type": ["string", "null"], "maxLength": 64},
+        "effective_type": {"type": ["string", "null"], "maxLength": 64},
+        "resolution_source": {"type": ["string", "null"], "enum": ["explicit", "qualified_probe", "cached_probe", null]},
         "collection_status": {"enum": ["healthy", "partial", "unavailable", "unsupported", "permission_denied", "invalid_data"]},
         "error": {"$ref": "#/$defs/error"}
       },

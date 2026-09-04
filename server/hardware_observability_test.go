@@ -51,12 +51,16 @@ func validStorageFixture() StorageStats {
 	used := int64(25000000000)
 	available := int64(75000000000)
 	usage := 25.0
+	configuredType := "sat"
+	effectiveType := "sat"
+	resolutionSource := "qualified_probe"
 	return StorageStats{
 		PhysicalDisks: []PhysicalDiskStats{{
 			ID: "sda", Device: "/dev/sda", Model: hardwareText("Example Disk"),
 			CapacityBytes: &capacity, TemperatureC: &temperature, SMARTStatus: DiskSMARTPassed,
 			PowerOnHours: &powerOn, WrittenBytes: &written, ReadBytes: &read,
 			SMARTSource: hardwareText("smartctl-json"), CollectionStatus: "healthy",
+			ConfiguredType: &configuredType, EffectiveType: &effectiveType, ResolutionSource: &resolutionSource,
 		}},
 		Filesystems: []FilesystemStats{{
 			Source: hardwareText("/dev/mapper/vg-root"), Mountpoint: "/", FSType: hardwareText("ext4"),
@@ -75,6 +79,24 @@ func validClientBuildFixture() *ClientBuildInfo {
 	buildTime := "2026-07-28T12:00:00Z"
 	return &ClientBuildInfo{
 		Version: "2.5", Revision: strings.Repeat("a", 40), BuildTime: &buildTime, Protocol: "device_v2",
+	}
+}
+
+func TestSMARTTransportDiagnosticsAreBoundedAndOptional(t *testing.T) {
+	stats := mustDecodeUpdate(t, "update-normal.json")
+	storage := validStorageFixture()
+	stats.Hardware.Storage = &storage
+	if err := ValidateExtensionStats(stats); err != nil {
+		t.Fatalf("qualified SMART transport diagnostics rejected: %v", err)
+	}
+	storage.PhysicalDisks[0].ResolutionSource = hardwareText("scan_hint")
+	if err := ValidateExtensionStats(&ExtensionStats{
+		ExtensionVersion: ExtensionSchemaVersion,
+		Hardware:         stats.Hardware,
+		Docker:           stats.Docker,
+		Hermes:           stats.Hermes,
+	}); err == nil {
+		t.Fatal("unrecognized SMART resolution source was accepted")
 	}
 }
 

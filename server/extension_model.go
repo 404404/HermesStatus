@@ -269,6 +269,9 @@ type PhysicalDiskStats struct {
 	Completeness     *string         `json:"completeness"`
 	HealthSource     *string         `json:"health_source"`
 	NativeStatus     *string         `json:"native_status"`
+	ConfiguredType   *string         `json:"configured_type"`
+	EffectiveType    *string         `json:"effective_type"`
+	ResolutionSource *string         `json:"resolution_source"`
 	CollectionStatus string          `json:"collection_status"`
 	Error            *ExtensionError `json:"error"`
 }

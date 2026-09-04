@@ -534,6 +534,15 @@ func validatePhysicalDiskStats(index int, disk *PhysicalDiskStats) error {
 	if err := validateOptionalString(prefix+".smart_source", disk.SMARTSource, MaxDiskSmartSourceLength); err != nil {
 		return err
 	}
+	if err := validateOptionalString(prefix+".configured_type", disk.ConfiguredType, MaxDiskSmartSourceLength); err != nil {
+		return err
+	}
+	if err := validateOptionalString(prefix+".effective_type", disk.EffectiveType, MaxDiskSmartSourceLength); err != nil {
+		return err
+	}
+	if err := validateOptionalEnum(prefix+".resolution_source", disk.ResolutionSource, "explicit", "qualified_probe", "cached_probe"); err != nil {
+		return err
+	}
 	if err := validateOptionalEnum(prefix+".completeness", disk.Completeness, "complete", "partial", "unavailable"); err != nil {
 		return err
 	}
@@ -1185,6 +1194,9 @@ func SanitizeExtensionStats(input ExtensionStats) ExtensionStats {
 				disk.Device = SanitizeText(disk.Device)
 				disk.Model = sanitizeStringPointer(disk.Model)
 				disk.SMARTSource = sanitizeStringPointer(disk.SMARTSource)
+				disk.ConfiguredType = sanitizeStringPointer(disk.ConfiguredType)
+				disk.EffectiveType = sanitizeStringPointer(disk.EffectiveType)
+				disk.ResolutionSource = sanitizeStringPointer(disk.ResolutionSource)
 				disk.CollectionStatus = SanitizeText(disk.CollectionStatus)
 				disk.Error = sanitizeExtensionError(disk.Error)
 			}

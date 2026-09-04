@@ -108,6 +108,11 @@ SMART_TIMEOUT_SECONDS = 12
 # 2 only reports that an ATA/SMART command failed (or a checksum warning) and
 # may still accompany a useful JSON snapshot.
 SMARTCTL_UNUSABLE_STATUS_MASK = 0x03
+# A cached transport is discarded only after repeated inability to query it.
+# A SMART health failure is a valid observation and must never invalidate the
+# transport or trigger a different probe.
+SMART_TRANSPORT_CACHE_FAILURE_THRESHOLD = 2
+SMART_TRANSPORT_AVAILABILITY_ERRORS = frozenset({"smartctl_unavailable"})
 DOCKER_TIMEOUT_SECONDS = 4
 MAX_DOCKER_RESPONSE_BYTES = 4 * 1024 * 1024
 
@@ -1189,13 +1194,142 @@ def _collect_smart_candidate(candidate, device_type, command_runner=None):
     return result, None
 
 
-def collect_smart_devices(devices="auto", command_runner=None):
+def _is_synology_system(system_identity):
+    return isinstance(system_identity, dict) and (
+        system_identity.get("source") == "dsm-version"
+        or "synology" in str(system_identity.get("distribution") or "").lower()
+    )
+
+
+def _configured_smart_types(devices):
+    """Return explicit path/type declarations without trusting scan hints."""
+    if devices in (None, "", "auto"):
+        return {}
+    entries = devices if isinstance(devices, (list, tuple)) else [devices]
+    configured = {}
+    for entry in entries:
+        candidate = _parse_smart_device(entry)
+        if not candidate:
+            continue
+        path, device_type = candidate
+        if path not in configured or device_type:
+            configured[path] = device_type or None
+    return configured
+
+
+def _explicit_smart_candidates(devices):
+    """Build only the operator-authorized paths without scanning."""
+    entries = devices if isinstance(devices, (list, tuple)) else [devices]
+    candidates = []
+    for entry in entries:
+        candidate = _parse_smart_device(entry)
+        if candidate:
+            _append_smart_candidate(candidates, candidate)
+    return candidates
+
+
+def _smart_transport_candidates(scan_hint):
+    """Return bounded transport probes; scan/open output is a hint only."""
+    candidates = []
+    for device_type in ("sat", "ata", scan_hint, "scsi"):
+        if device_type and device_type not in candidates and _SAFE_SMART_TYPE_RE.fullmatch(device_type):
+            candidates.append(device_type)
+    return candidates
+
+
+def _smart_probe_is_usable(smart, error):
+    if not isinstance(smart, dict) or smart.get("health") not in {"passed", "failed"}:
+        return False
+    if smart.get("completeness") == "complete" and error is None:
+        return True
+    return (
+        smart.get("completeness") == "partial"
+        and isinstance(error, dict)
+        and error.get("code") == "smart_return_status_unavailable"
+    )
+
+
+def _smart_probe_is_availability_failure(error):
+    return isinstance(error, dict) and error.get("code") in SMART_TRANSPORT_AVAILABILITY_ERRORS
+
+
+def _set_smart_transport_diagnostics(smart, configured_type, effective_type, source):
+    if isinstance(smart, dict):
+        smart["configured_type"] = configured_type
+        smart["effective_type"] = effective_type
+        smart["resolution_source"] = source
+    return smart
+
+
+def _qualify_smart_transport(candidate, scan_hint, configured_type, command_runner, transport_cache):
+    """Resolve a path semantically and cache only qualified transports."""
+    cached = transport_cache.get(candidate) if isinstance(transport_cache, dict) else None
+    if isinstance(cached, dict) and isinstance(cached.get("type"), str):
+        cached_type = cached["type"]
+        smart, error = _collect_smart_candidate(candidate, cached_type, command_runner)
+        if _smart_probe_is_usable(smart, error):
+            cached["failure_streak"] = 0
+            return _set_smart_transport_diagnostics(smart, configured_type, cached_type, "cached_probe"), error
+        if _smart_probe_is_availability_failure(error):
+            cached["failure_streak"] = int(cached.get("failure_streak") or 0) + 1
+            if cached["failure_streak"] < SMART_TRANSPORT_CACHE_FAILURE_THRESHOLD:
+                return _set_smart_transport_diagnostics(smart, configured_type, cached_type, "cached_probe"), error
+            transport_cache.pop(candidate, None)
+        else:
+            # smart_value_invalid and health=failed are observations, not
+            # evidence that the transport changed; do not reprobe them.
+            return _set_smart_transport_diagnostics(smart, configured_type, cached_type, "cached_probe"), error
+
+    last_smart = None
+    last_error = None
+    preferred_smart = None
+    preferred_error = None
+    for device_type in _smart_transport_candidates(scan_hint):
+        smart, error = _collect_smart_candidate(candidate, device_type, command_runner)
+        last_smart, last_error = smart, error
+        if error and error.get("code") != "smartctl_unavailable":
+            preferred_smart, preferred_error = smart, error
+        if _smart_probe_is_usable(smart, error):
+            if isinstance(transport_cache, dict):
+                transport_cache[candidate] = {"type": device_type, "failure_streak": 0}
+            return _set_smart_transport_diagnostics(smart, configured_type, device_type, "qualified_probe"), error
+    smart, error = (preferred_smart, preferred_error) if preferred_error else (last_smart, last_error)
+    return _set_smart_transport_diagnostics(smart, configured_type, None, None), error
+
+
+def collect_smart_devices(
+    devices="auto", command_runner=None, system_identity=None, smart_transport_cache=None
+):
     """Return one bounded result per configured/discovered physical device."""
-    candidates = smart_candidates(devices, command_runner)
+    explicit_config = devices not in (None, "", "auto")
+    if explicit_config and isinstance(smart_transport_cache, dict) and smart_transport_cache:
+        # Once all configured path-only targets have a qualified transport,
+        # use the cache directly and avoid repeating scan hints each cycle.
+        candidates = _explicit_smart_candidates(devices)
+    else:
+        candidates = smart_candidates(devices, command_runner)
     records = []
     errors = []
+    configured_types = _configured_smart_types(devices)
+    synology = _is_synology_system(system_identity)
+    transport_cache = smart_transport_cache if isinstance(smart_transport_cache, dict) else {}
     for candidate, device_type in candidates:
-        smart, error = _collect_smart_candidate(candidate, device_type, command_runner)
+        configured_type = configured_types.get(candidate)
+        if configured_type:
+            # Explicit transport configuration is authoritative and is never
+            # replaced or supplemented by scan hints.
+            smart, error = _collect_smart_candidate(candidate, configured_type, command_runner)
+            _set_smart_transport_diagnostics(
+                smart, configured_type, configured_type, "explicit"
+            )
+        elif synology:
+            smart, error = _qualify_smart_transport(
+                candidate, device_type, configured_type, command_runner, transport_cache
+            )
+        else:
+            # Preserve established non-Synology scan behavior. A scan result
+            # is not presented as semantic qualification here.
+            smart, error = _collect_smart_candidate(candidate, device_type, command_runner)
         records.append((candidate, smart, error))
         if error:
             errors.append(error)
@@ -1596,6 +1730,9 @@ def _physical_disk_record(disk_id, smart=None, smart_error=None, graph_node=None
         "completeness": smart.get("completeness") if smart else "unavailable",
         "health_source": smart.get("health_source") if smart else "unknown",
         "native_status": smart.get("native_status") if smart else "unknown",
+        "configured_type": smart.get("configured_type") if smart else None,
+        "effective_type": smart.get("effective_type") if smart else None,
+        "resolution_source": smart.get("resolution_source") if smart else None,
         "collection_status": _smart_collection_status(smart, smart_error),
         "error": smart_error,
     }
@@ -1728,6 +1865,7 @@ def collect_hardware(
     cpu_stat_path="/proc/stat",
     cpu_usage_sleep=None,
     meminfo_path="/proc/meminfo",
+    smart_transport_cache=None,
 ):
     errors = list(identity_errors or [])
     cpu_usage, cpu_usage_error = collect_cpu_usage(cpu_stat_path, cpu_usage_sleep)
@@ -1742,7 +1880,10 @@ def collect_hardware(
             _error("hwmon_unavailable", "CPU temperature is unavailable", "hwmon", True)
         )
     configured_smart_devices = smart_device if smart_devices is None else smart_devices
-    smart_records, smart_error = collect_smart_devices(configured_smart_devices, command_runner)
+    smart_records, smart_error = collect_smart_devices(
+        configured_smart_devices, command_runner, system_identity,
+        smart_transport_cache,
+    )
     if smart_error:
         errors.append(smart_error)
 
@@ -2107,6 +2248,7 @@ class HostExtensionCollector(object):
         self._easytier = not_configured_easytier()
         self._unifi = not_collected_unifi(unifi_collector.config.profile_id) if unifi_collector is not None else not_configured_unifi()
         self._lock = threading.Lock()
+        self._smart_transport_cache = {}
         self._stop = threading.Event()
         self._started = False
 
@@ -2137,6 +2279,7 @@ class HostExtensionCollector(object):
                 system_identity=self.system_identity,
                 sys_block_root=self.sys_block_root,
                 cpu_details=self.cpu_details,
+                smart_transport_cache=self._smart_transport_cache,
             )
         except Exception:
             payload = not_reported_hardware()
