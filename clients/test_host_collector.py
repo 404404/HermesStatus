@@ -340,8 +340,8 @@ class HostCollectorTests(unittest.TestCase):
 
     def test_smart_auto_scan_open_prefers_qualified_types_and_deduplicates_paths(self):
         runner = SmartRunner(
-            scan_open_output="/dev/sdc -d sat\n/dev/sdd -d sat\n",
-            scan_output="/dev/sdc -d scsi\n/dev/sdd -d scsi\n",
+            scan_open_output=fixture_text("smart-scan-open.txt"),
+            scan_output=fixture_text("smart-scan.txt"),
         )
         with patch(
             "builtins.open",
@@ -358,7 +358,7 @@ class HostCollectorTests(unittest.TestCase):
     def test_smart_auto_scan_falls_back_when_scan_open_is_unavailable(self):
         runner = SmartRunner(
             scan_open_error=True,
-            scan_output="/dev/sdc -d scsi\n/dev/sdd -d scsi\n",
+            scan_output=fixture_text("smart-scan.txt"),
         )
         with patch("builtins.open", return_value=io.StringIO("")), patch(
             "host_collector.glob.glob", return_value=[]
@@ -373,9 +373,9 @@ class HostCollectorTests(unittest.TestCase):
     def test_path_only_smart_allowlist_uses_scan_open_without_adding_devices(self):
         runner = SmartRunner(
             scan_open_output=(
-                "/dev/sdc -d sat\n/dev/sdd -d sat\n/dev/sde -d sat\n"
+                fixture_text("smart-scan-open.txt") + "/dev/sde -d sat\n"
             ),
-            scan_output="/dev/sdc -d scsi\n/dev/sdd -d scsi\n",
+            scan_output=fixture_text("smart-scan.txt"),
         )
         candidates = smart_candidates(
             [{"path": "/dev/sdc"}, {"path": "/dev/sdd"}], runner
