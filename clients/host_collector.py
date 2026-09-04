@@ -768,26 +768,58 @@ def _base_block_device(device):
     return re.sub(r"p\d+$", "", device)
 
 
+def _append_smart_candidate(devices, candidate):
+    """Append a SMART candidate once per path, upgrading an unknown type."""
+    path, device_type = candidate
+    for index, existing in enumerate(devices):
+        if existing[0] != path:
+            continue
+        if not existing[1] and device_type:
+            devices[index] = (path, device_type)
+        return
+    devices.append((path, device_type))
+
+
+def _scan_smart_candidates(runner):
+    """Return bounded SMART scan results, preferring targets that opened."""
+    for scan_flag in ("--scan-open", "--scan"):
+        try:
+            _, output = runner(["smartctl", scan_flag], 4)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            continue
+        devices = []
+        for line in output.splitlines():
+            candidate = _parse_smart_device(line.split("#", 1)[0].strip())
+            if candidate:
+                _append_smart_candidate(devices, candidate)
+        if devices:
+            return devices[:MAX_PHYSICAL_DISKS]
+    return []
+
+
 def smart_candidates(configured="auto", command_runner=None):
     runner = command_runner or _default_command_runner
     if configured not in (None, "", "auto"):
         entries = configured if isinstance(configured, (list, tuple)) else [configured]
         devices = []
+        untyped_paths = set()
         for entry in entries:
             candidate = _parse_smart_device(entry)
-            if candidate and candidate not in devices:
-                devices.append(candidate)
+            if not candidate:
+                continue
+            _append_smart_candidate(devices, candidate)
+            if not candidate[1]:
+                untyped_paths.add(candidate[0])
+        if untyped_paths:
+            # Explicit paths remain the authorization boundary.  Discovery
+            # may only enrich a configured path whose type was omitted; it
+            # cannot add a newly discovered device to the allowlist.
+            for candidate in _scan_smart_candidates(runner):
+                if candidate[0] in untyped_paths:
+                    _append_smart_candidate(devices, candidate)
         return devices[:MAX_PHYSICAL_DISKS]
 
-    devices = []
-    try:
-        _, output = runner(["smartctl", "--scan"], 4)
-        for line in output.splitlines():
-            candidate = _parse_smart_device(line.split("#", 1)[0].strip())
-            if candidate and candidate not in devices:
-                devices.append(candidate)
-    except (OSError, subprocess.SubprocessError, ValueError):
-        pass
+    devices = _scan_smart_candidates(runner)
     try:
         with open("/proc/mounts", "r", encoding="utf-8", errors="replace") as handle:
             for line in handle:
@@ -795,16 +827,12 @@ def smart_candidates(configured="auto", command_runner=None):
                 if not device.startswith("/dev/"):
                     continue
                 device = _base_block_device(device)
-                candidate = (device, "")
-                if candidate not in devices:
-                    devices.append(candidate)
+                _append_smart_candidate(devices, (device, ""))
     except OSError:
         pass
     for pattern in ("/dev/nvme*n1", "/dev/sd?", "/dev/vd?"):
         for device in sorted(glob.glob(pattern)):
-            candidate = (device, "")
-            if candidate not in devices:
-                devices.append(candidate)
+            _append_smart_candidate(devices, (device, ""))
     return devices[:MAX_PHYSICAL_DISKS]
 
 

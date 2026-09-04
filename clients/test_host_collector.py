@@ -1,3 +1,4 @@
+import io
 import datetime
 import importlib.util
 import json
@@ -7,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from host_collector import (
@@ -73,20 +75,30 @@ class SmartRunner(object):
         unavailable=False,
         json_returncode=0,
         text_returncode=0,
+        scan_open_output=None,
+        scan_output=None,
+        scan_open_error=False,
     ):
         self.json_output = json_output
         self.text_output = text_output
         self.unavailable = unavailable
         self.json_returncode = json_returncode
         self.text_returncode = text_returncode
+        self.scan_open_output = scan_open_output
+        self.scan_output = scan_output
+        self.scan_open_error = scan_open_error
         self.commands = []
 
     def __call__(self, command, timeout):
         self.commands.append(list(command))
         if self.unavailable:
             raise FileNotFoundError("smartctl")
+        if command[:2] == ["smartctl", "--scan-open"]:
+            if self.scan_open_error:
+                raise OSError("scan-open unavailable")
+            return 0, self.scan_open_output or "/dev/example -d sat # fixture\n"
         if command[:2] == ["smartctl", "--scan"]:
-            return 0, "/dev/example -d sat # fixture\n"
+            return 0, self.scan_output or ""
         if "-j" in command:
             return self.json_returncode, self.json_output or ""
         return self.text_returncode, self.text_output or ""
@@ -100,7 +112,7 @@ class MultiSmartRunner(object):
 
     def __call__(self, command, timeout):
         self.commands.append(list(command))
-        if command[:2] == ["smartctl", "--scan"]:
+        if command[:2] in (["smartctl", "--scan-open"], ["smartctl", "--scan"]):
             return 0, ""
         if command[:1] == ["lsblk"]:
             return 0, json.dumps(
@@ -296,11 +308,88 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(smart["hours"], 21399)
         self.assertEqual(smart["written_bytes"], 6302680682 * 4096)
         self.assertEqual(smart["read_bytes"], 3720709960 * 4096)
-        self.assertIn(["smartctl", "-x", "/dev/example"], runner.commands)
+        self.assertIn(["smartctl", "-x", "-j", "-d", "sat", "/dev/example"], runner.commands)
+
+    def test_smart_mg08_and_mg06_device_statistics_are_complete(self):
+        expected = {
+            "smart-mg08.json": (12345, 32, 46, 18, 987654321, 1234567890),
+            "smart-mg06.json": (23456, 35, 50, 20, 123456789, 2345678901),
+        }
+        for fixture, values in expected.items():
+            with self.subTest(fixture=fixture):
+                hours, current, highest, lowest, written, read = values
+                runner = SmartRunner(json.dumps(fixture_json(fixture)))
+                smart, error = collect_smart(
+                    [{"path": "/dev/sdX", "type": "sat"}], runner
+                )
+                self.assertIsNone(error)
+                self.assertEqual(smart["health"], "passed")
+                self.assertEqual(smart["completeness"], "complete")
+                self.assertEqual(smart["hours"], hours)
+                self.assertEqual(
+                    (smart["current"], smart["highest"], smart["lowest"]),
+                    (current, highest, lowest),
+                )
+                self.assertEqual(smart["written_bytes"], written * 512)
+                self.assertEqual(smart["read_bytes"], read * 512)
+                self.assertIsNone(error)
 
     def test_smart_auto_scan_parses_device_and_type(self):
         runner = SmartRunner()
         self.assertEqual(smart_candidates("auto", runner)[0], ("/dev/example", "sat"))
+
+    def test_smart_auto_scan_open_prefers_qualified_types_and_deduplicates_paths(self):
+        runner = SmartRunner(
+            scan_open_output="/dev/sdc -d sat\n/dev/sdd -d sat\n",
+            scan_output="/dev/sdc -d scsi\n/dev/sdd -d scsi\n",
+        )
+        with patch(
+            "builtins.open",
+            return_value=io.StringIO("/dev/sdc /mnt ext4 rw 0 0\n/dev/sdd /data ext4 rw 0 0\n"),
+        ), patch(
+            "host_collector.glob.glob", return_value=["/dev/sdc"]
+        ):
+            candidates = smart_candidates("auto", runner)
+        self.assertEqual(candidates, [("/dev/sdc", "sat"), ("/dev/sdd", "sat")])
+        self.assertEqual(runner.commands, [["smartctl", "--scan-open"]])
+        self.assertNotIn(("/dev/sdc", ""), candidates)
+        self.assertNotIn(("/dev/sdd", ""), candidates)
+
+    def test_smart_auto_scan_falls_back_when_scan_open_is_unavailable(self):
+        runner = SmartRunner(
+            scan_open_error=True,
+            scan_output="/dev/sdc -d scsi\n/dev/sdd -d scsi\n",
+        )
+        with patch("builtins.open", return_value=io.StringIO("")), patch(
+            "host_collector.glob.glob", return_value=[]
+        ):
+            candidates = smart_candidates("auto", runner)
+        self.assertEqual(candidates, [("/dev/sdc", "scsi"), ("/dev/sdd", "scsi")])
+        self.assertEqual(
+            runner.commands,
+            [["smartctl", "--scan-open"], ["smartctl", "--scan"]],
+        )
+
+    def test_path_only_smart_allowlist_uses_scan_open_without_adding_devices(self):
+        runner = SmartRunner(
+            scan_open_output=(
+                "/dev/sdc -d sat\n/dev/sdd -d sat\n/dev/sde -d sat\n"
+            ),
+            scan_output="/dev/sdc -d scsi\n/dev/sdd -d scsi\n",
+        )
+        candidates = smart_candidates(
+            [{"path": "/dev/sdc"}, {"path": "/dev/sdd"}], runner
+        )
+        self.assertEqual(candidates, [("/dev/sdc", "sat"), ("/dev/sdd", "sat")])
+        self.assertNotIn(("/dev/sde", "sat"), candidates)
+
+    def test_explicit_smart_type_remains_authoritative_without_scanning(self):
+        runner = SmartRunner(scan_open_output="/dev/sda -d ata\n")
+        self.assertEqual(
+            smart_candidates([{"path": "/dev/sda", "type": "sat"}], runner),
+            [("/dev/sda", "sat")],
+        )
+        self.assertEqual(runner.commands, [])
 
     def test_smart_text_fallback(self):
         runner = SmartRunner("not-json", fixture_text("smart-normal.txt"))
