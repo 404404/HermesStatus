@@ -95,7 +95,7 @@ async function run(){
   assert.match(appSource, /组件诊断/);
   const diagnosticsPageMarkup = indexMarkup.slice(indexMarkup.indexOf('id="diagnosticsPage"'), indexMarkup.indexOf('id="hardwarePage"'));
   const unifiPageMarkup = indexMarkup.slice(indexMarkup.indexOf('id="unifiPage"'), indexMarkup.indexOf('id="dockerPage"'));
-  assert.match(diagnosticsPageMarkup, /id="unifiDiagnostics"/);
+  assert.doesNotMatch(diagnosticsPageMarkup, /id="unifiDiagnostics"/);
   assert.doesNotMatch(unifiPageMarkup, /id="unifiDiagnostics"/);
   assert.match(indexMarkup, /id="unifiEmptyState"/);
   assert.match(appSource, /invalid_value/);
@@ -107,6 +107,7 @@ async function run(){
   assert.match(collectionDiagnostics, /hardware/);
   assert.doesNotMatch(collectionDiagnostics, /<script>/);
   const disabledDiagnostics = app.collectionDiagnosticsMarkup([{domain: 'easytier', component: 'easytier', status: 'not_configured'}]);
+  assert.match(collectionDiagnostics, /<th>对应标签页<\/th>/);
   assert.match(disabledDiagnostics, /EasyTier/);
   assert.match(disabledDiagnostics, /该组件未在配置文件中开启采集/);
   assert.match(cssSource, /\.unifi-network-tabs\{[^}]*flex-wrap:wrap/);
@@ -288,13 +289,16 @@ async function run(){
   }};
   const systemCards = app.unifiSystemCards({...udwUniFi, api: apiFixture});
   const apiTelemetryMarkup = app.unifiApiTelemetryMarkup({...udwUniFi, api: apiFixture});
-  const apiDiagnosticsMarkup = app.unifiApiDiagnosticsMarkup({...udwUniFi, api: {
+  const apiDiagnosticsMarkup = app.collectionDiagnosticsMarkup([], {...udwUniFi, api: {
     ...apiFixture,
     endpoints: [
       {name: 'device_detail', required: true, status: 'ok', http_status: 200, error: null},
       {name: 'topology', required: false, status: 'unsupported', http_status: 404, error: {code: 'api_endpoint_unsupported'}}
     ]
   }});
+  assert.equal((apiDiagnosticsMarkup.match(/<table/g) || []).length, 1);
+  assert.match(apiDiagnosticsMarkup, /<th>对应标签页<\/th>/);
+  assert.match(apiDiagnosticsMarkup, /<th>必需<\/th>/);
   const portTelemetryMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: apiFixture});
   const noPoeApiFixture = {...apiFixture, telemetry: {...apiFixture.telemetry,
     identity: {...apiFixture.telemetry.identity, model: 'UCG Max', display_name: 'UCG Max'},
@@ -369,7 +373,7 @@ async function run(){
   assert.match(apiDiagnosticsMarkup, /不支持/);
   assert.match(apiDiagnosticsMarkup, /api_endpoint_unsupported/);
   assert.match(apiDiagnosticsMarkup, /HTTP/);
-  assert.match(indexMarkup, /id="unifiDiagnostics"/);
+  assert.doesNotMatch(indexMarkup, /id="unifiDiagnostics"/);
   assert.match(systemCards, /<h2>设备名称\/型号<\/h2>/);
   assert.match(systemCards, /UDW/);
   assert.match(systemCards, /UniFi Dream Wall/);

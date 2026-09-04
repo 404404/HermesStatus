@@ -779,12 +779,28 @@ function dashboardCondition(view, refreshError = null){
   return {kind: 'ready', title: '', message: ''};
 }
 
-function collectionDiagnosticsMarkup(value){
-  const diagnostics = Array.isArray(value)
+function collectionDiagnosticsMarkup(value, unifi = null){
+  const rawDiagnostics = Array.isArray(value)
     ? value
     : Array.isArray(value?.collectionDiagnostics)
       ? value.collectionDiagnostics
       : [];
+  const diagnostics = rawDiagnostics.slice();
+  const endpointByComponent = new Map();
+  const endpointStatus = {
+    ok: 'available', available: 'available', unsupported: 'unsupported',
+    partial: 'partial', disabled: 'not_configured', not_configured: 'not_configured',
+    not_collected: 'not_observed'
+  };
+  const endpoints = unifiIsConfigured(unifi) && Array.isArray(unifi?.api?.endpoints) ? unifi.api.endpoints : [];
+  for(const endpoint of endpoints){
+    const name = typeof endpoint?.name === 'string' && endpoint.name.trim() ? endpoint.name.trim().slice(0, 160) : 'unknown';
+    const component = `api.endpoint.${name}`;
+    endpointByComponent.set(component, endpoint);
+    if(!diagnostics.some(item => item?.domain === 'unifi' && item?.component === component)){
+      diagnostics.push({domain: 'unifi', component, status: endpointStatus[String(endpoint?.status || '').toLowerCase()] || 'degraded'});
+    }
+  }
   if(!diagnostics.length) return '<div class="table-empty">\u6682\u65e0\u91c7\u96c6\u8bca\u65ad\u8bb0\u5f55\u3002</div>';
   const domainLabels = {
     hardware: '硬件信息', docker: 'Docker', hermes: 'Hermes', lucky: 'Lucky',
@@ -792,22 +808,24 @@ function collectionDiagnosticsMarkup(value){
   };
   const rows = diagnostics.map(item => {
     const diagnostic = safeObject(item);
+    if(diagnostic.domain === 'unifi' && diagnostic.component === 'api.endpoint' && endpointByComponent.size) return '';
+    const endpoint = endpointByComponent.get(diagnostic.component);
+    const endpointError = safeObject(endpoint?.error);
     const status = textOrDash(diagnostic.status);
-    const reason = diagnostic.reason || (status === 'not_configured' ? '该组件未在配置文件中开启采集' : '');
-    return '<tr><td class="strong-cell">' + escapeHtml(domainLabels[diagnostic.domain] || textOrDash(diagnostic.domain)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.component)) + '</td><td>' + badge(status) + '</td><td class="mono">' + escapeHtml(textOrDash(diagnostic.code)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.field)) + '</td><td class="wide-cell">' + escapeHtml(textOrDash(reason)) + '</td><td class="mono">' + escapeHtml(textOrDash(diagnostic.source)) + '</td></tr>';
+    const reason = diagnostic.reason || endpointError.message || (status === 'not_configured' ? '该组件未在配置文件中开启采集' : '');
+    const code = diagnostic.code || endpointError.code || '';
+    const source = diagnostic.source || endpointError.source || '';
+    const required = typeof endpoint?.required === 'boolean' ? (endpoint.required ? '是' : '否') : '-';
+    const httpStatus = finiteNumber(endpoint?.http_status) === null ? '-' : formatInteger(endpoint.http_status);
+    const component = endpoint?.name || diagnostic.component;
+    return '<tr><td class="strong-cell">' + escapeHtml(domainLabels[diagnostic.domain] || textOrDash(diagnostic.domain)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(component)) + '</td><td>' + badge(status) + '</td><td>' + escapeHtml(required) + '</td><td>' + escapeHtml(httpStatus) + '</td><td class="mono">' + escapeHtml(textOrDash(code)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.field)) + '</td><td class="wide-cell">' + escapeHtml(textOrDash(reason)) + '</td><td class="mono">' + escapeHtml(textOrDash(source)) + '</td></tr>';
   }).join('');
-  return '<div class="table-wrap"><table class="data collection-diagnostics-table"><thead><tr><th>对应标签页</th><th>组件</th><th>采集状态</th><th>代码</th><th>字段</th><th>原因</th><th>来源</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  return '<div class="table-wrap"><table class="data collection-diagnostics-table"><thead><tr><th>对应标签页</th><th>组件</th><th>采集状态</th><th>必需</th><th>HTTP</th><th>代码</th><th>字段</th><th>原因</th><th>来源</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function renderCollectionDiagnostics(view){
   const element = byId('collectionDiagnostics');
-  if(element) element.innerHTML = collectionDiagnosticsMarkup(view.collectionDiagnostics);
-  const unifiDiagnostics = byId('unifiDiagnostics');
-  if(unifiDiagnostics){
-    unifiDiagnostics.innerHTML = unifiIsConfigured(view.unifi)
-      ? unifiApiDiagnosticsMarkup(view.unifi)
-      : '<div class="table-empty">UniFi 未在配置文件中开启采集。</div>';
-  }
+  if(element) element.innerHTML = collectionDiagnosticsMarkup(view.collectionDiagnostics, view.unifi);
 }
 
 function setPageState(condition){
@@ -1462,23 +1480,6 @@ function unifiApiTelemetryMarkup(unifi){
   if(!uplinks.length) return '<div class="unifi-api-unavailable">API 已连接，但当前响应未提供可显示的 UniFi 设备。</div>';
   const rows = uplinks.map(item => `<tr><td class="strong-cell">${escapeHtml(textOrDash(item.name))}</td><td>${escapeHtml(item.link_state ? statusText(item.link_state) : '-')}</td><td>${escapeHtml(unifiLinkBandwidth(item.speed_mbps))}</td></tr>`).join('');
   return `<div class="table-wrap"><table class="data unifi-api-table"><thead><tr><th>UniFi 设备型号</th><th>状态</th><th>链路</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-}
-
-function unifiApiDiagnosticsMarkup(unifi){
-  const api = safeObject(unifi?.api);
-  if(!api.enabled || api.status === 'disabled') return '<div class="unifi-api-unavailable">API 未启用。</div>';
-  const endpoints = Array.isArray(api.endpoints) ? api.endpoints : [];
-  if(!endpoints.length) return '<div class="unifi-api-unavailable">暂无 API 组件诊断。</div>';
-  const rows = endpoints.map(endpoint => {
-    const status = String(endpoint?.status || '').toLowerCase();
-    const statusLabel = status === 'ok' ? '正常' : status === 'unsupported' ? '不支持' : '异常';
-    const tone = status === 'ok' ? 'ok' : status === 'unsupported' ? 'neutral' : 'warn';
-    const required = typeof endpoint?.required === 'boolean' ? (endpoint.required ? '是' : '否') : '-';
-    const httpStatus = finiteNumber(endpoint?.http_status) === null ? '-' : formatInteger(endpoint.http_status);
-    const code = typeof endpoint?.error?.code === 'string' && endpoint.error.code ? endpoint.error.code : '-';
-    return '<tr><td class="strong-cell mono">' + escapeHtml(textOrDash(endpoint?.name)) + '</td><td>' + escapeHtml(required) + '</td><td><span class="badge ' + tone + '">' + statusLabel + '</span></td><td>' + escapeHtml(httpStatus) + '</td><td class="mono">' + escapeHtml(code) + '</td></tr>';
-  }).join('');
-  return '<div class="table-wrap"><table class="data unifi-diagnostics-table"><thead><tr><th>组件</th><th>必需</th><th>状态</th><th>HTTP</th><th>错误代码</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function unifiLinkBandwidth(value){
@@ -2501,7 +2502,6 @@ const exported = {
   unifiCollectionStatusText,
   unifiCollectionStatusMarkup,
   unifiApiTelemetryMarkup,
-  unifiApiDiagnosticsMarkup,
   unifiPortTelemetryMarkup,
   unifiPortStatusMarkup,
   unifiPortErrorText,
