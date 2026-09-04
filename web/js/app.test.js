@@ -91,7 +91,12 @@ async function run(){
   assert.match(indexMarkup, /id="diagnosticsTab"/);
   assert.match(indexMarkup, /id="diagnosticsPage"/);
   assert.match(indexMarkup, /id="collectionDiagnostics"/);
-  assert.match(appSource, /采集诊断/);
+  assert.match(indexMarkup, /data-page-target="easytier">EasyTier<\/button>[\s\S]*data-page-target="diagnostics">组件诊断<\/button>/);
+  assert.match(appSource, /组件诊断/);
+  const diagnosticsPageMarkup = indexMarkup.slice(indexMarkup.indexOf('id="diagnosticsPage"'), indexMarkup.indexOf('id="hardwarePage"'));
+  const unifiPageMarkup = indexMarkup.slice(indexMarkup.indexOf('id="unifiPage"'), indexMarkup.indexOf('id="dockerPage"'));
+  assert.match(diagnosticsPageMarkup, /id="unifiDiagnostics"/);
+  assert.doesNotMatch(unifiPageMarkup, /id="unifiDiagnostics"/);
   assert.match(indexMarkup, /id="unifiEmptyState"/);
   assert.match(appSource, /invalid_value/);
   assert.match(appSource, /未配置 UniFi 目标/);
@@ -101,6 +106,9 @@ async function run(){
   assert.match(collectionDiagnostics, /smart_value_invalid/);
   assert.match(collectionDiagnostics, /hardware/);
   assert.doesNotMatch(collectionDiagnostics, /<script>/);
+  const disabledDiagnostics = app.collectionDiagnosticsMarkup([{domain: 'easytier', component: 'easytier', status: 'not_configured'}]);
+  assert.match(disabledDiagnostics, /EasyTier/);
+  assert.match(disabledDiagnostics, /该组件未在配置文件中开启采集/);
   assert.match(cssSource, /\.unifi-network-tabs\{[^}]*flex-wrap:wrap/);
   assert.match(cssSource, /\.unifi-network-tab\{[^}]*white-space:nowrap/);
 
@@ -978,7 +986,7 @@ async function run(){
   assert.match(appSource, /refresh\('initial'\)/);
   assert.match(appSource, /setActivePage\(tab\.dataset\.pageTarget\)/);
   assert.match(appSource, /parseDashboardHash\(window\.location\.hash\)/);
-  assert.match(appSource, /\['hardware', 'diagnostics', 'unifi', 'docker', 'lucky', 'easytier'\]/);
+  assert.match(appSource, /\['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier', 'diagnostics'\]/);
   const homeHardwareSource = appSource.slice(appSource.indexOf('function renderHardware'), appSource.indexOf('function filesystemBackingDisks'));
   assert.deepEqual(
     [...homeHardwareSource.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1]),

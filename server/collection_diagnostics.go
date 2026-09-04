@@ -6,8 +6,9 @@ import (
 )
 
 const (
-	MaxCollectionDiagnostics    = 64
-	maxCollectionDiagnosticText = 160
+	MaxCollectionDiagnostics      = 64
+	maxCollectionDiagnosticText   = 160
+	collectionNotConfiguredReason = "该组件未在配置文件中开启采集"
 )
 
 type CollectionDiagnostic struct {
@@ -33,6 +34,11 @@ func collectionStatus(present, stale bool, extensionError *ExtensionError) strin
 	if extensionError != nil {
 		switch extensionError.Code {
 		case "not_configured":
+			return "not_configured"
+		case "not_reported":
+			// The current unified client uses this explicit error for a
+			// collector disabled in its configuration. Keep source errors
+			// (source_error, snapshot_unavailable, and similar) distinct.
 			return "not_configured"
 		case "not_installed":
 			return "not_installed"
@@ -81,6 +87,12 @@ func addCollectionDomainDiagnostic(
 		diagnostic.Reason = safeExtensionDiagnostic(extensionError.Message)
 		diagnostic.Source = safeExtensionDiagnostic(extensionError.Source)
 		diagnostic.Field = safeExtensionDiagnostic(field)
+	}
+	if diagnostic.Status == "not_configured" && diagnostic.Reason == "" {
+		diagnostic.Reason = collectionNotConfiguredReason
+	}
+	if extensionError != nil && extensionError.Code == "not_reported" {
+		diagnostic.Reason = collectionNotConfiguredReason
 	}
 	appendCollectionDiagnostic(diagnostics, seen, diagnostic)
 }
@@ -173,7 +185,11 @@ func buildCollectionDiagnostics(extension ExtensionStats, issues []extensionDeco
 		if !extension.UniFi.Configured {
 			unifiStatus = "not_configured"
 		}
-		appendCollectionDiagnostic(&diagnostics, seen, CollectionDiagnostic{Domain: "unifi", Component: "unifi", Status: unifiStatus})
+		unifiDiagnostic := CollectionDiagnostic{Domain: "unifi", Component: "unifi", Status: unifiStatus}
+		if unifiStatus == "not_configured" {
+			unifiDiagnostic.Reason = collectionNotConfiguredReason
+		}
+		appendCollectionDiagnostic(&diagnostics, seen, unifiDiagnostic)
 		addCollectionDomainDiagnostic(&diagnostics, seen, "unifi", "transport", true, extension.UniFi.Stale, extension.UniFi.Error, "unifi.transport")
 		api := extension.UniFi.API
 		if api == nil {

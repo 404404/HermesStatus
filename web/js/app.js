@@ -751,7 +751,7 @@ function dashboardCondition(view, refreshError = null){
     return {kind: 'stale', title: '设备数据已陈旧', message: '该设备的数据已超过刷新时限。'};
   }
   if(deviceStatus === 'degraded'){
-    return {kind: 'error', title: '设备部分数据不可用', message: '该设备仍在线，详细原因请查看“采集诊断”。'};
+    return {kind: 'error', title: '设备部分数据不可用', message: '该设备仍在线，详细原因请查看“组件诊断”。'};
   }
   // Device v2 has an authoritative server-side lifecycle status. Its legacy
   // IPv4/IPv6 probe fields are informational and must not mark an online
@@ -786,17 +786,28 @@ function collectionDiagnosticsMarkup(value){
       ? value.collectionDiagnostics
       : [];
   if(!diagnostics.length) return '<div class="table-empty">\u6682\u65e0\u91c7\u96c6\u8bca\u65ad\u8bb0\u5f55\u3002</div>';
+  const domainLabels = {
+    hardware: '硬件信息', docker: 'Docker', hermes: 'Hermes', lucky: 'Lucky',
+    easytier: 'EasyTier', unifi: 'UniFi', client_build: '构建信息'
+  };
   const rows = diagnostics.map(item => {
     const diagnostic = safeObject(item);
     const status = textOrDash(diagnostic.status);
-    return '<tr><td class="strong-cell">' + escapeHtml(textOrDash(diagnostic.domain)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.component)) + '</td><td>' + badge(status) + '</td><td class="mono">' + escapeHtml(textOrDash(diagnostic.code)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.field)) + '</td><td class="wide-cell">' + escapeHtml(textOrDash(diagnostic.reason)) + '</td><td class="mono">' + escapeHtml(textOrDash(diagnostic.source)) + '</td></tr>';
+    const reason = diagnostic.reason || (status === 'not_configured' ? '该组件未在配置文件中开启采集' : '');
+    return '<tr><td class="strong-cell">' + escapeHtml(domainLabels[diagnostic.domain] || textOrDash(diagnostic.domain)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.component)) + '</td><td>' + badge(status) + '</td><td class="mono">' + escapeHtml(textOrDash(diagnostic.code)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.field)) + '</td><td class="wide-cell">' + escapeHtml(textOrDash(reason)) + '</td><td class="mono">' + escapeHtml(textOrDash(diagnostic.source)) + '</td></tr>';
   }).join('');
-  return '<div class="table-wrap"><table class="data collection-diagnostics-table"><thead><tr><th>\u91c7\u96c6\u57df</th><th>\u7ec4\u4ef6</th><th>\u72b6\u6001</th><th>\u4ee3\u7801</th><th>\u5b57\u6bb5</th><th>\u539f\u56e0</th><th>\u6765\u6e90</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  return '<div class="table-wrap"><table class="data collection-diagnostics-table"><thead><tr><th>对应标签页</th><th>组件</th><th>采集状态</th><th>代码</th><th>字段</th><th>原因</th><th>来源</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function renderCollectionDiagnostics(view){
   const element = byId('collectionDiagnostics');
   if(element) element.innerHTML = collectionDiagnosticsMarkup(view.collectionDiagnostics);
+  const unifiDiagnostics = byId('unifiDiagnostics');
+  if(unifiDiagnostics){
+    unifiDiagnostics.innerHTML = unifiIsConfigured(view.unifi)
+      ? unifiApiDiagnosticsMarkup(view.unifi)
+      : '<div class="table-empty">UniFi 未在配置文件中开启采集。</div>';
+  }
 }
 
 function setPageState(condition){
@@ -1782,8 +1793,6 @@ function renderUniFi(view){
   byId('unifiMeta').textContent = configured ? `Profile：${textOrDash(unifi.profile)} · ${summary.text}` : '未配置 UniFi 目标';
   const apiTelemetry = byId('unifiApiTelemetry');
   if(apiTelemetry) apiTelemetry.innerHTML = '';
-  const apiDiagnostics = byId('unifiDiagnostics');
-  if(apiDiagnostics) apiDiagnostics.innerHTML = configured ? unifiApiDiagnosticsMarkup(unifi) : '<div class="table-empty">未配置 UniFi 目标。</div>';
   byId('unifiPorts').innerHTML = configured ? unifiPortTelemetryMarkup(unifi) : '<div class="unifi-api-unavailable">未配置 UniFi 目标。</div>';
   byId('unifiWan').innerHTML = configured ? unifiWanMarkup(unifi) : '<div class="table-empty">未配置 UniFi 目标。</div>';
   byId('unifiStorage').innerHTML = configured ? unifiStorageMarkup(unifi) : '<div class="table-empty">未配置 UniFi 目标。</div>';
@@ -1950,7 +1959,7 @@ function selectDevice(deviceId, options = {}){
 function applyPageVisibility(){
   const activePage = normalizePageName(dashboardState.activePage);
   dashboardState.activePage = activePage;
-	for(const page of ['home', 'hardware', 'diagnostics', 'unifi', 'docker', 'lucky', 'easytier']){
+	for(const page of ['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier', 'diagnostics']){
     const active = page === activePage;
     const tab = byId(`${page}Tab`);
     const panel = byId(`${page}Page`);
@@ -2342,7 +2351,7 @@ function bindInteractions(){
     tab.addEventListener('keydown', event => {
       if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-			const pages = ['home', 'hardware', 'diagnostics', 'unifi', 'docker', 'lucky', 'easytier'];
+			const pages = ['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier', 'diagnostics'];
 			const current = pages.indexOf(dashboardState.activePage);
 			const nextPage = event.key === 'Home' ? pages[0] : event.key === 'End' ? pages[pages.length - 1] : event.key === 'ArrowLeft' ? pages[(current - 1 + pages.length) % pages.length] : pages[(current + 1) % pages.length];
       setActivePage(nextPage);

@@ -21,11 +21,11 @@
         <nav class="nav" aria-label="主导航" role="tablist">
             <button id="homeTab" type="button" class="active" role="tab" aria-selected="true" aria-controls="homePage" aria-current="page" data-page-target="home">主页</button>
             <button id="hardwareTab" type="button" role="tab" aria-selected="false" aria-controls="hardwarePage" tabindex="-1" data-page-target="hardware">硬件信息</button>
-            <button id="diagnosticsTab" type="button" role="tab" aria-selected="false" aria-controls="diagnosticsPage" tabindex="-1" data-page-target="diagnostics">采集诊断</button>
             <button id="unifiTab" type="button" role="tab" aria-selected="false" aria-controls="unifiPage" tabindex="-1" data-page-target="unifi">UniFi</button>
             <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
             <button id="luckyTab" type="button" role="tab" aria-selected="false" aria-controls="luckyPage" tabindex="-1" data-page-target="lucky">Lucky</button>
             <button id="easytierTab" type="button" role="tab" aria-selected="false" aria-controls="easytierPage" tabindex="-1" data-page-target="easytier">EasyTier</button>
+            <button id="diagnosticsTab" type="button" role="tab" aria-selected="false" aria-controls="diagnosticsPage" tabindex="-1" data-page-target="diagnostics">组件诊断</button>
         </nav>
         <div class="actions">
             <span id="lastUpdate" class="last-update">上次刷新 -</span>
@@ -93,8 +93,12 @@
 
             <div id="diagnosticsPage" class="page-panel" role="tabpanel" aria-labelledby="diagnosticsTab" data-page="diagnostics" hidden>
                 <section class="data-section" aria-labelledby="collectionDiagnosticsTitle">
-                    <div class="section-head"><h2 id="collectionDiagnosticsTitle">采集诊断</h2><span class="section-meta">覆盖所有采集域；仅显示脱敏状态与有界诊断信息</span></div>
+                    <div class="section-head"><h2 id="collectionDiagnosticsTitle">组件采集诊断</h2><span class="section-meta">仅展示服务端收到的采集状态、错误代码和有界原因</span></div>
                     <div id="collectionDiagnostics" class="collection-diagnostics"></div>
+                </section>
+                <section class="data-section" aria-labelledby="unifiDiagnosticsTitle">
+                    <div class="section-head"><h2 id="unifiDiagnosticsTitle">UniFi 组件诊断</h2><span class="section-meta">仅显示服务端记录的有界状态与错误代码</span></div>
+                    <div id="unifiDiagnostics" class="unifi-diagnostics"></div>
                 </section>
             </div>
 
@@ -232,10 +236,6 @@
                 <section class="data-section" aria-labelledby="unifiSummaryTitle">
                     <div class="section-head"><h2 id="unifiSummaryTitle">UniFi 采集状态</h2><span id="unifiMeta" class="section-meta"></span></div>
                     <dl id="unifiSummary" class="detail-list unifi-summary"></dl>
-                </section>
-                <section class="data-section" aria-labelledby="unifiDiagnosticsTitle">
-                    <div class="section-head"><h2 id="unifiDiagnosticsTitle">UniFi 组件诊断</h2><span class="section-meta">仅显示有界状态与错误代码</span></div>
-                    <div id="unifiDiagnostics" class="unifi-diagnostics"></div>
                 </section>
                 <section class="data-section" aria-labelledby="unifiNetworkTitle">
                     <div class="section-head"><h2 id="unifiNetworkTitle">UniFi设备端口状态</h2><span class="section-meta">仅显示已验证的只读摘要</span></div>
