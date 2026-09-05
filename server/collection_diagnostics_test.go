@@ -27,6 +27,72 @@ func TestCollectionDiagnosticsExposeSanitizedBusinessError(t *testing.T) {
 	}
 }
 
+func fallbackDisk(status DiskSMARTStatus) PhysicalDiskStats {
+	completeness := "partial"
+	healthSource := "attribute_check"
+	nativeStatus := "unavailable"
+	return PhysicalDiskStats{
+		ID: "sdu", Device: "/dev/sdu", SMARTStatus: status,
+		Completeness: &completeness, HealthSource: &healthSource,
+		NativeStatus: &nativeStatus, CollectionStatus: "partial",
+		Error: &ExtensionError{
+			Code:    "smart_return_status_unavailable",
+			Message: "SMART native return status is unavailable; attribute health fallback was used",
+			Source:  "smartctl",
+		},
+	}
+}
+
+func physicalDiskDiagnostic(t *testing.T, disk PhysicalDiskStats) CollectionDiagnostic {
+	t.Helper()
+	diagnostics := buildCollectionDiagnostics(ExtensionStats{
+		Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{disk}}},
+	}, nil)
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Component == "storage.physical_disks" {
+			return diagnostic
+		}
+	}
+	t.Fatalf("physical-disk diagnostic was not emitted: %#v", diagnostics)
+	return CollectionDiagnostic{}
+}
+
+func TestCollectionDiagnosticsClassifyPassedSMARTFallbackAsNonFaultLimitation(t *testing.T) {
+	diagnostic := physicalDiskDiagnostic(t, fallbackDisk(DiskSMARTPassed))
+	if diagnostic.Status != "partial" || diagnostic.Code != "smart_return_status_unavailable" ||
+		diagnostic.Reason != smartAttributeFallbackReason || diagnostic.Source != "smartctl" {
+		t.Fatalf("unexpected non-fault SMART fallback diagnostic: %#v", diagnostic)
+	}
+	if extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{
+		PhysicalDisks: []PhysicalDiskStats{fallbackDisk(DiskSMARTPassed)},
+	}}}) {
+		t.Fatal("passed SMART attribute fallback degraded the hardware domain")
+	}
+}
+
+func TestCollectionDiagnosticsKeepFailedSMARTFallbackFaulted(t *testing.T) {
+	diagnostic := physicalDiskDiagnostic(t, fallbackDisk(DiskSMARTFailed))
+	if diagnostic.Status != "degraded" || diagnostic.Code != "smart_return_status_unavailable" {
+		t.Fatalf("failed SMART fallback was not kept faulted: %#v", diagnostic)
+	}
+	if !extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{
+		PhysicalDisks: []PhysicalDiskStats{fallbackDisk(DiskSMARTFailed)},
+	}}}) {
+		t.Fatal("failed SMART attribute fallback did not degrade the hardware domain")
+	}
+}
+
+func TestCollectionDiagnosticsKeepOtherSMARTErrorsFaulted(t *testing.T) {
+	for _, code := range []string{"smart_value_invalid", "smartctl_unavailable"} {
+		disk := fallbackDisk(DiskSMARTPassed)
+		disk.Error.Code = code
+		diagnostic := physicalDiskDiagnostic(t, disk)
+		if diagnostic.Status != "degraded" || diagnostic.Code != code {
+			t.Fatalf("SMART error %q was incorrectly classified: %#v", code, diagnostic)
+		}
+	}
+}
+
 func TestCollectionDiagnosticsPreserveDecoderFieldAndReason(t *testing.T) {
 	diagnostics := buildCollectionDiagnostics(ExtensionStats{}, []extensionDecodeIssue{{
 		Domain: "unifi", Code: "invalid_value", Field: "unifi.api.telemetry.ports", Reason: "port ownership contract rejected", PayloadLength: 999999,

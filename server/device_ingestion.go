@@ -318,9 +318,7 @@ func evaluateIdentity(
 }
 
 func usableSMARTAttributeFallback(disk PhysicalDiskStats) bool {
-	return disk.CollectionStatus == "partial" &&
-		disk.SMARTStatus == DiskSMARTPassed &&
-		disk.Error != nil && disk.Error.Code == "smart_return_status_unavailable"
+	return smartAttributeFallbackObservation(disk) && disk.SMARTStatus == DiskSMARTPassed
 }
 
 func storageHasOnlyUsableSMARTAttributeFallback(storage *StorageStats) bool {

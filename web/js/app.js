@@ -812,13 +812,16 @@ function collectionDiagnosticsMarkup(value, unifi = null){
     const endpoint = endpointByComponent.get(diagnostic.component);
     const endpointError = safeObject(endpoint?.error);
     const status = textOrDash(diagnostic.status);
+    const statusLabel = status === 'partial' && diagnostic.code === 'smart_return_status_unavailable'
+      ? '部分成功'
+      : statusText(status);
     const reason = diagnostic.reason || endpointError.message || (status === 'not_configured' ? '该组件未在配置文件中开启采集' : '');
     const code = diagnostic.code || endpointError.code || '';
     const source = diagnostic.source || endpointError.source || '';
     const required = typeof endpoint?.required === 'boolean' ? (endpoint.required ? '是' : '否') : '-';
     const httpStatus = finiteNumber(endpoint?.http_status) === null ? '-' : formatInteger(endpoint.http_status);
     const component = endpoint?.name || diagnostic.component;
-    return '<tr><td class="strong-cell">' + escapeHtml(domainLabels[diagnostic.domain] || textOrDash(diagnostic.domain)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(component)) + '</td><td>' + badge(status) + '</td><td>' + escapeHtml(required) + '</td><td>' + escapeHtml(httpStatus) + '</td><td class="mono">' + escapeHtml(textOrDash(code)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.field)) + '</td><td class="wide-cell">' + escapeHtml(textOrDash(reason)) + '</td><td class="mono">' + escapeHtml(textOrDash(source)) + '</td></tr>';
+    return '<tr><td class="strong-cell">' + escapeHtml(domainLabels[diagnostic.domain] || textOrDash(diagnostic.domain)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(component)) + '</td><td><span class="badge ' + statusTone(status) + '">' + escapeHtml(statusLabel) + '</span></td><td>' + escapeHtml(required) + '</td><td>' + escapeHtml(httpStatus) + '</td><td class="mono">' + escapeHtml(textOrDash(code)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.field)) + '</td><td class="wide-cell">' + escapeHtml(textOrDash(reason)) + '</td><td class="mono">' + escapeHtml(textOrDash(source)) + '</td></tr>';
   }).join('');
   return '<div class="table-wrap"><table class="data collection-diagnostics-table"><thead><tr><th>对应标签页</th><th>组件</th><th>采集状态</th><th>必需</th><th>HTTP</th><th>代码</th><th>字段</th><th>原因</th><th>来源</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }

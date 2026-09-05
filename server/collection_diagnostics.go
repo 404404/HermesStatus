@@ -9,6 +9,7 @@ const (
 	MaxCollectionDiagnostics      = 64
 	maxCollectionDiagnosticText   = 160
 	collectionNotConfiguredReason = "该组件未在配置文件中开启采集"
+	smartAttributeFallbackReason  = "SMART 原生状态不可用，已使用属性检查结果"
 )
 
 type CollectionDiagnostic struct {
@@ -115,6 +116,37 @@ func addCollectionErrorDiagnostic(
 	})
 }
 
+func smartAttributeFallbackObservation(disk PhysicalDiskStats) bool {
+	return (disk.SMARTStatus == DiskSMARTPassed || disk.SMARTStatus == DiskSMARTFailed) &&
+		disk.CollectionStatus == "partial" &&
+		disk.Completeness != nil && *disk.Completeness == "partial" &&
+		disk.HealthSource != nil && *disk.HealthSource == "attribute_check" &&
+		disk.NativeStatus != nil && *disk.NativeStatus == "unavailable" &&
+		disk.Error != nil && disk.Error.Code == "smart_return_status_unavailable"
+}
+
+func addPhysicalDiskDiagnostic(
+	diagnostics *[]CollectionDiagnostic,
+	seen map[string]struct{},
+	disk PhysicalDiskStats,
+) {
+	if disk.Error == nil {
+		return
+	}
+	status := "degraded"
+	reason := safeExtensionDiagnostic(disk.Error.Message)
+	if smartAttributeFallbackObservation(disk) && disk.SMARTStatus == DiskSMARTPassed {
+		status = "partial"
+		reason = smartAttributeFallbackReason
+	}
+	appendCollectionDiagnostic(diagnostics, seen, CollectionDiagnostic{
+		Domain: "hardware", Component: "storage.physical_disks", Status: status,
+		Code:  safeExtensionDiagnostic(disk.Error.Code),
+		Field: "hardware.storage.physical_disks[].error", Reason: reason,
+		Source: safeExtensionDiagnostic(disk.Error.Source),
+	})
+}
+
 func apiDiagnosticStatus(value string) string {
 	switch value {
 	case "ok", "available":
@@ -146,7 +178,7 @@ func buildCollectionDiagnostics(extension ExtensionStats, issues []extensionDeco
 		} else {
 			addCollectionDomainDiagnostic(&diagnostics, seen, "hardware", "storage", true, storage.Stale, storage.Error, "hardware.storage.error")
 			for _, disk := range storage.PhysicalDisks {
-				addCollectionErrorDiagnostic(&diagnostics, seen, "hardware", "storage.physical_disks", "hardware.storage.physical_disks[].error", disk.Error)
+				addPhysicalDiskDiagnostic(&diagnostics, seen, disk)
 			}
 			for _, filesystem := range storage.Filesystems {
 				addCollectionErrorDiagnostic(&diagnostics, seen, "hardware", "storage.filesystems", "hardware.storage.filesystems[].error", filesystem.Error)

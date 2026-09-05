@@ -110,6 +110,13 @@ async function run(){
   assert.match(collectionDiagnostics, /<th>对应标签页<\/th>/);
   assert.match(disabledDiagnostics, /EasyTier/);
   assert.match(disabledDiagnostics, /该组件未在配置文件中开启采集/);
+  const smartFallbackDiagnostics = app.collectionDiagnosticsMarkup([{
+    domain: 'hardware', component: 'storage.physical_disks', status: 'partial',
+    code: 'smart_return_status_unavailable', field: 'hardware.storage.physical_disks[].error',
+    reason: 'SMART 原生状态不可用，已使用属性检查结果', source: 'smartctl'
+  }]);
+  assert.match(smartFallbackDiagnostics, /部分成功/);
+  assert.doesNotMatch(smartFallbackDiagnostics, /部分异常/);
   assert.match(cssSource, /\.unifi-network-tabs\{[^}]*flex-wrap:wrap/);
   assert.match(cssSource, /\.unifi-network-tab\{[^}]*white-space:nowrap/);
 
