@@ -59,7 +59,7 @@ DSM 存储是分层的。为目标数据卷配置窄范围只读 probe，并将�
 
 ## UniFi target（可选）
 
-仅在需要已验证 target 时，才将 `unifi` 对象加入同一个 Device v2 文件。UDW 与 UCG Max 都使用管理员显式选择的 profile；未知 profile 必须 fail-closed。配置中不存在 command、path、token、SSH-key 或 shell 字段：
+仅在需要已验证 target 时，才将 `unifi` 对象加入同一个 Device v2 文件。profile 只选择有界采集 source，不能建立 controller 硬件 identity 或静态能力；静态能力只在 runtime identity 通过冻结 Catalog 的 verified alias 后投影。未知 profile 必须 fail-closed。配置中不存在 command、path、token、SSH-key 或 shell 字段：
 
 ```json
 "unifi": {
@@ -75,4 +75,4 @@ DSM 存储是分层的。为目标数据卷配置窄范围只读 probe，并将�
 }
 ```
 
-禁用时严格使用 `"unifi": {"enabled": false}`，或移除可选对象。credential 与 known-host 文件须分别以 root-owned 只读方式挂载。profile capability 不能证明硬件物理存在：UCG Max 的 `fan1=0` 是观测值，不是风扇健康失败；未知 NVMe capability/presence 必须继续保持 unknown。
+禁用时严格使用 `"unifi": {"enabled": false}`，或移除可选对象。credential 与 known-host 文件须分别以 root-owned 只读方式挂载。profile 不能证明硬件物理存在：UCG Max 的 `fan1=0` 是观测值，不是风扇健康失败；未知 runtime model 保留观测但不投影静态能力，未知 NVMe capability/presence 必须继续保持 unknown。

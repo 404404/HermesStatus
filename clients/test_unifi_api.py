@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from unifi_api import API_COLLECTION_MAX_SECONDS, API_ENDPOINTS, APIError, UniFiAPICollector, _annotate_wan_payload, _context, _read_key, _request, _port_record, _ports, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
+from unifi_api import API_COLLECTION_MAX_SECONDS, API_ENDPOINTS, APIError, UniFiAPICollector, _annotate_wan_payload, _context, _read_key, _request, _port_record, _ports, _device_summary, _merge_wans, _network_groups, _statistics_wans, _site_records, _v2_site_path, _legacy_site_path
 
 
 class UniFiAPITests(unittest.TestCase):
@@ -173,12 +173,17 @@ class UniFiAPITests(unittest.TestCase):
     def test_single_site_selection_and_site_scoped_paths(self):
         calls = []
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls), target_profile="udw").collect()
-        self.assertEqual(result["status"], "partial")
-        self.assertEqual(result["error"]["code"], "api_partial_failure")
+        self.assertEqual(result["status"], "available")
+        self.assertIsNone(result["error"])
         self.assertEqual([x["name"] for x in result["endpoints"]], [
-            "info", "sites", "devices", "clients", "networks",
-            "lags", "legacy_stat_device", "legacy_stat_health", "legacy_stat_sysinfo", "topology", "port_anomalies", "wan_official", "wan_enriched", "wan_load_balance", "wan_load_balance_config", "wan_slas", "wan_isp_status"
+            "info", "sites", "devices", "device_detail", "device_stats", "clients", "networks",
+            "lags", "legacy_stat_device", "legacy_stat_health", "legacy_stat_sysinfo", "topology", "port_anomalies", "wan_official", "wan_enriched", "wan_load_balance", "wan_load_balance_config", "wan_slas", "wan_isp_status", "normalization"
         ])
+        by_name = {item["name"]: item for item in result["endpoints"]}
+        self.assertTrue(by_name["device_detail"]["required"])
+        self.assertTrue(by_name["device_stats"]["required"])
+        self.assertFalse(by_name["clients"]["required"])
+        self.assertTrue(by_name["normalization"]["required"])
         self.assertIn("/proxy/network/integration/v1/sites/site-a/devices", calls)
         self.assertIn("/proxy/network/integration/v1/sites/site-a/clients", calls)
         self.assertIn("/proxy/network/integration/v1/sites/site-a/networks", calls)
@@ -327,6 +332,35 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(wans[0]["link_speed_mbps"], 1000)
         self.assertNotIn("speedtest", wans[0])
 
+    def test_per_device_poe_current_and_catalog_budget_are_isolated(self):
+        summary = _device_summary([
+            {"id": "udw-1", "model": "UniFi Dream Wall", "name": "UDW", "type": "gateway", "state": "ONLINE"},
+            {"id": "xg-1", "model": "US XG 6 PoE", "name": "XG", "type": "switch", "state": "ONLINE"},
+        ], ports=[
+            {"device_id": "udw-1", "poe": {"power_w": 4.0}},
+            {"device_id": "udw-1", "poe": {"power_w": 5.0}},
+            {"device_id": "xg-1", "poe": {"power_w": 7.0}},
+            {"device_id": "not-in-inventory", "poe": {"power_w": 99.0}},
+        ])
+        by_id = {item["device_id"]: item for item in summary["items"]}
+        self.assertEqual(by_id["udw-1"]["capabilities"]["poe"]["absolute_max_poe_budget_w"], 420)
+        self.assertEqual(by_id["udw-1"]["poe"], {"current_source": "port_sum", "current_power_w": 9.0})
+        self.assertEqual(by_id["xg-1"]["capabilities"]["poe"]["absolute_max_poe_budget_w"], 170)
+        self.assertEqual(by_id["xg-1"]["poe"], {"current_source": "port_sum", "current_power_w": 7.0})
+        self.assertNotIn("not-in-inventory", by_id)
+
+    def test_per_device_explicit_poe_current_wins_only_for_matching_target(self):
+        summary = _device_summary([
+            {"id": "udw-1", "model": "UniFi Dream Wall", "type": "gateway", "state": "ONLINE"},
+            {"id": "xg-1", "model": "US XG 6 PoE", "type": "switch", "state": "ONLINE"},
+        ], target={"id": "udw-1", "model": "UniFi Dream Wall"}, target_detail={"id": "udw-1", "poe_total_power_w": 20.0}, ports=[
+            {"device_id": "udw-1", "poe": {"power_w": 4.0}},
+            {"device_id": "xg-1", "poe": {"power_w": 7.0}},
+        ])
+        by_id = {item["device_id"]: item for item in summary["items"]}
+        self.assertEqual(by_id["udw-1"]["poe"], {"current_source": "device_reported", "current_power_w": 20.0})
+        self.assertEqual(by_id["xg-1"]["poe"]["current_power_w"], 7.0)
+
     def test_device_reported_poe_total_wins_over_port_sum(self):
         legacy = {"data": [{"device_id": "device", "port_table": [
             {"port_idx": 1, "up": True, "port_poe": True, "poe_power": "4.0"},
@@ -450,9 +484,10 @@ class UniFiAPITests(unittest.TestCase):
             {"device_id": "udw-1", "port_table": [{"port_idx": 1, "up": True}]},
         ]}
         records, _ = _ports(legacy, devices[2], {}, 1.0, devices=devices)
-        self.assertEqual([(item["device_id"], item["port_idx"]) for item in records], [("switch-1", 8), ("udw-1", 1)])
-        self.assertEqual(records[0]["device_id"], "switch-1")
-        self.assertEqual(records[1]["device_id"], "udw-1")
+        self.assertEqual([(item["device_id"], item["port_idx"]) for item in records], [("ap-1", 1), ("switch-1", 8), ("udw-1", 1)])
+        self.assertEqual(records[0]["device_id"], "ap-1")
+        self.assertEqual(records[1]["device_id"], "switch-1")
+        self.assertEqual(records[2]["device_id"], "udw-1")
 
     def test_verified_catalog_ports_join_by_device_id_and_physical_index(self):
         import copy
@@ -481,8 +516,8 @@ class UniFiAPITests(unittest.TestCase):
         )
         a_port = next(item for item in records if item["device_id"] == "device-a" and item["port_idx"] == 1)
         b_port = next(item for item in records if item["device_id"] == "device-b" and item["port_idx"] == 20)
-        self.assertEqual(a_port["name"], "RJ45-1")
-        self.assertEqual(b_port["name"], "SFP+-2")
+        self.assertEqual(a_port["name"], "Port 1")
+        self.assertEqual(b_port["name"], "Port 20")
         self.assertEqual(a_port["model_id"], "UDW")
         self.assertEqual(b_port["model_id"], "UDW")
         self.assertEqual(a_port["device_id"], "device-a")
@@ -501,6 +536,98 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(len(matching), 1)
         self.assertEqual(matching[0]["speed_mbps"], 100)
 
+    def test_catalog_uplink_role_remaps_explicit_runtime_uplink_index(self):
+        devices = [{"id": "ap-1", "model": "U6 IW", "name": "AP", "state": "ONLINE"}]
+        legacy = {"data": [{"device_id": "ap-1", "port_table": [
+            {"port_idx": 99, "up": True, "is_uplink": True, "speed": 1000}
+        ]}]}
+        records, _ = _ports(legacy, devices[0], {}, 1.0, devices=devices)
+        runtime = next(item for item in records if item.get("speed_mbps") == 1000)
+        self.assertEqual(runtime["port_idx"], 5)
+        self.assertEqual(runtime["roles"], ["lan", "uplink", "data_in"])
+
+    def test_uplink_without_catalog_role_uses_exact_index(self):
+        from unifi_api import _static_port_for_runtime
+        static_ports = {5: {"index": 5, "roles": ["lan"]}}
+        self.assertEqual(
+            _static_port_for_runtime({"port_idx": 5, "is_uplink": True}, static_ports),
+            static_ports[5],
+        )
+
+    def test_single_port_ap_projects_only_explicit_wired_uplink(self):
+        devices = [
+            {"id": "mesh-1", "model": "U6 Mesh", "name": "Mesh", "state": "ONLINE",
+             "uplink": {"connection_type": "ethernet", "up": True, "speed_mbps": 1000}},
+            {"id": "ac-1", "model": "AC Mesh", "name": "AC", "state": "ONLINE",
+             "uplink": {"connection_type": "wireless", "up": True}},
+        ]
+        legacy = {"data": [
+            {"device_id": "mesh-1", "port_table": []},
+            {"device_id": "ac-1", "port_table": []},
+        ]}
+        records, _ = _ports(legacy, devices[0], {}, 1.0, devices=devices)
+        mesh = next(item for item in records if item["device_id"] == "mesh-1")
+        ac = next(item for item in records if item["device_id"] == "ac-1")
+        self.assertTrue(mesh["up"])
+        self.assertEqual(mesh["speed_mbps"], 1000)
+        self.assertNotIn("up", ac)
+        self.assertNotIn("speed_mbps", ac)
+
+    def test_ambiguous_catalog_uplink_does_not_fallback_to_runtime_index(self):
+        from unifi_api import _static_port_for_runtime
+        static_ports = {
+            5: {"index": 5, "roles": ["lan", "uplink", "data_in"]},
+            6: {"index": 6, "roles": ["lan", "uplink", "data_in"]},
+        }
+        self.assertIsNone(_static_port_for_runtime({"port_idx": 5, "is_uplink": True}, static_ports))
+
+    def test_passthrough_runtime_boolean_is_projected_only_when_mode_is_qualified(self):
+        devices = [{"id": "ap-1", "model": "U6 IW", "name": "AP", "state": "ONLINE"}]
+        for enabled, expected in ((True, True), (False, False)):
+            legacy = {"data": [{"device_id": "ap-1", "port_table": [
+                {"port_idx": 1, "poe_enable": enabled, "poe_mode": "passthrough"}
+            ]}]}
+            records, _ = _ports(legacy, devices[0], {}, 1.0, devices=devices)
+            port = next(item for item in records if item["port_idx"] == 1)
+            self.assertEqual(port["poe_passthrough_enabled"], expected)
+        legacy = {"data": [{"device_id": "ap-1", "port_table": [
+            {"port_idx": 1, "poe_enable": True}
+        ]}]}
+        records, _ = _ports(legacy, devices[0], {}, 1.0, devices=devices)
+        port = next(item for item in records if item["port_idx"] == 1)
+        self.assertNotIn("poe_passthrough_enabled", port)
+
+    def test_unknown_runtime_model_keeps_runtime_port_without_static_capabilities(self):
+        from unifi_api import _ports
+        devices = [
+            {"id": "unknown-1", "model": "Unmaintained Switch", "name": "Unknown", "state": "ONLINE"},
+            {"id": "udw-1", "model": "UniFi Dream Wall", "name": "UDW", "state": "ONLINE"},
+        ]
+        legacy = {"data": [
+            {"device_id": "unknown-1", "port_table": [{"port_idx": 1, "up": True, "speed": 1000, "port_poe": True}]},
+            {"device_id": "udw-1", "port_table": [{"port_idx": 1, "up": True, "speed": 1000}]},
+        ]}
+        records, _ = _ports(legacy, devices[1], {}, 1.0, devices=devices)
+        unknown = next(item for item in records if item["device_id"] == "unknown-1" and item["port_idx"] == 1)
+        known = next(item for item in records if item["device_id"] == "udw-1" and item["port_idx"] == 1)
+        self.assertNotIn("model_id", unknown)
+        self.assertNotIn("max_speed_mbps", unknown)
+        self.assertNotIn("connector", unknown)
+        self.assertIn("poe", unknown)
+        self.assertEqual(known["model_id"], "UDW")
+        self.assertIn("max_speed_mbps", known)
+
+    def test_catalog_ports_are_emitted_when_runtime_record_is_absent(self):
+        from unifi_api import _ports
+        devices = [{"id": "mesh-1", "model": "U6 Mesh", "name": "Mesh", "state": "ONLINE"}]
+        records, _ = _ports({"data": []}, devices[0], {}, 1.0, devices=devices)
+        self.assertEqual(records, [{
+            "device_id": "mesh-1", "port_idx": 1, "name": "Port 1", "connector": "rj45",
+            "model_profile_status": "known", "media": "rj45", "roles": ["lan", "uplink", "data_in"], "poe_in": True, "poe_out": False,
+            "model_id": "U6-Mesh", "max_speed_mbps": 1000.0,
+            "poe_standard": "poe", "poe": {"supported": False, "class": "poe"},
+        }])
+
     def test_target_resolution_does_not_depend_on_device_order(self):
         calls = []
         devices = [
@@ -509,8 +636,8 @@ class UniFiAPITests(unittest.TestCase):
             {"id": "switch-1", "model": "USW", "name": "Switch", "state": "ONLINE"},
         ]
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls, devices=devices), target_profile="udw").collect()
-        self.assertEqual(result["status"], "partial")
-        self.assertEqual(result["error"]["code"], "api_partial_failure")
+        self.assertEqual(result["status"], "available")
+        self.assertIsNone(result["error"])
         self.assertEqual(result["telemetry"]["identity"]["model"], "UDW")
 
     def test_missing_target_is_explicit_error(self):
@@ -521,13 +648,53 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(result["error"]["code"], "api_partial_failure")
         self.assertEqual(next(item for item in result["endpoints"] if item["name"] == "devices")["error"]["code"], "api_target_resolution")
 
-    def test_optional_endpoint_failure_is_partial_capability_not_global_error(self):
+    def test_optional_endpoint_404_is_unsupported_without_degrading_status(self):
         calls = []
         result = UniFiAPICollector(self.config, request=self._fixture_request(calls, fail="/clients"), target_profile="udw").collect()
+        self.assertEqual(result["status"], "available")
+        self.assertIsNone(result["error"])
+        clients = next(item for item in result["endpoints"] if item["name"] == "clients")
+        self.assertFalse(clients["required"])
+        self.assertEqual(clients["status"], "unsupported")
+        self.assertEqual(clients["http_status"], 404)
+        self.assertEqual(clients["error"]["code"], "api_endpoint_unsupported")
+        self.assertIsNotNone(result["telemetry"]["devices"])
+
+    def test_optional_endpoint_timeout_is_partial(self):
+        calls = []
+        base = self._fixture_request(calls)
+
+        def request(config, path, key):
+            if path.endswith("/clients"):
+                raise APIError("api_timeout")
+            return base(config, path, key)
+
+        result = UniFiAPICollector(self.config, request=request, target_profile="udw").collect()
         self.assertEqual(result["status"], "partial")
         self.assertEqual(result["error"]["code"], "api_partial_failure")
-        self.assertEqual(next(item for item in result["endpoints"] if item["name"] == "clients")["status"], "unsupported")
+        clients = next(item for item in result["endpoints"] if item["name"] == "clients")
+        self.assertFalse(clients["required"])
+        self.assertEqual(clients["status"], "error")
+        self.assertEqual(clients["error"]["code"], "api_timeout")
         self.assertIsNotNone(result["telemetry"]["devices"])
+
+    def test_optional_fanout_404_remains_unsupported_diagnostic(self):
+        calls = []
+        base = self._fixture_request(calls)
+
+        def request(config, path, key):
+            if path.endswith("/wan2/isp-status"):
+                raise APIError("api_endpoint_unsupported", status=404)
+            return base(config, path, key)
+
+        result = UniFiAPICollector(self.config, request=request, target_profile="udw").collect()
+        self.assertEqual(result["status"], "available")
+        endpoint = next(item for item in result["endpoints"] if item["name"] == "wan_isp_status")
+        self.assertFalse(endpoint["required"])
+        self.assertEqual(endpoint["status"], "unsupported")
+        self.assertEqual(endpoint["http_status"], 404)
+        self.assertEqual(endpoint["error"]["code"], "api_endpoint_unsupported")
+        self.assertIsNotNone(result["telemetry"]["wans"])
 
     def test_required_auth_failure_is_unavailable(self):
         result = UniFiAPICollector(self.config, request=lambda config, path, key: (_ for _ in ()).throw(APIError("api_auth_failure", status=401)), target_profile="udw").collect()
@@ -577,6 +744,10 @@ class UniFiAPITests(unittest.TestCase):
         self.assertEqual(result["status"], "partial")
         self.assertIsNone(result["telemetry"])
         self.assertEqual(result["error"]["code"], "api_partial_failure")
+        normalization = next(item for item in result["endpoints"] if item["name"] == "normalization")
+        self.assertTrue(normalization["required"])
+        self.assertEqual(normalization["status"], "error")
+        self.assertEqual(normalization["error"]["code"], "api_parse_failure")
 
     def test_api_endpoint_registry_has_no_root_resources(self):
         self.assertEqual(API_ENDPOINTS, (

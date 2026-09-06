@@ -73,6 +73,7 @@ type UniFiAPIStats struct {
 
 type UniFiAPIEndpoint struct {
 	Name       string          `json:"name"`
+	Required   bool            `json:"required"`
 	Status     string          `json:"status"`
 	HTTPStatus *int            `json:"http_status"`
 	Error      *ExtensionError `json:"error"`
@@ -184,42 +185,43 @@ type UniFiAPITemperature struct {
 }
 
 type UniFiAPIPort struct {
-	DeviceID           string       `json:"device_id"`
-	PortIndex          int          `json:"port_idx"`
-	Name               *string      `json:"name,omitempty"`
-	Media              *string      `json:"media,omitempty"`
-	Connector          *string      `json:"connector,omitempty"`
-	Roles              []string     `json:"roles,omitempty"`
-	PoEIn              *bool        `json:"poe_in,omitempty"`
-	PoEOut             *bool        `json:"poe_out,omitempty"`
-	PoEStandard        *string      `json:"poe_standard,omitempty"`
-	ModelID            *string      `json:"model_id,omitempty"`
-	ModelProfileStatus *string      `json:"model_profile_status,omitempty"`
-	Enabled            *bool        `json:"enabled,omitempty"`
-	Up                 *bool        `json:"up,omitempty"`
-	SpeedMbps          *float64     `json:"speed_mbps,omitempty"`
-	MaxSpeedMbps       *float64     `json:"max_speed_mbps,omitempty"`
-	Duplex             *bool        `json:"duplex,omitempty"`
-	Autoneg            *bool        `json:"autoneg,omitempty"`
-	Uplink             *bool        `json:"uplink,omitempty"`
-	RxBytes            *int64       `json:"rx_bytes,omitempty"`
-	TxBytes            *int64       `json:"tx_bytes,omitempty"`
-	RxPackets          *int64       `json:"rx_packets,omitempty"`
-	TxPackets          *int64       `json:"tx_packets,omitempty"`
-	RxErrors           *int64       `json:"rx_errors,omitempty"`
-	TxErrors           *int64       `json:"tx_errors,omitempty"`
-	RxDropped          *int64       `json:"rx_dropped,omitempty"`
-	TxDropped          *int64       `json:"tx_dropped,omitempty"`
-	RxMulticast        *int64       `json:"rx_multicast,omitempty"`
-	TxMulticast        *int64       `json:"tx_multicast,omitempty"`
-	RxBroadcast        *int64       `json:"rx_broadcast,omitempty"`
-	TxBroadcast        *int64       `json:"tx_broadcast,omitempty"`
-	RxBPS              *int64       `json:"rx_bps,omitempty"`
-	TxBPS              *int64       `json:"tx_bps,omitempty"`
-	RxUtilizationPct   *float64     `json:"rx_utilization_pct,omitempty"`
-	TxUtilizationPct   *float64     `json:"tx_utilization_pct,omitempty"`
-	PoE                *UniFiAPIPoE `json:"poe,omitempty"`
-	PeerCount          *int         `json:"peer_count,omitempty"`
+	DeviceID              string       `json:"device_id"`
+	PortIndex             int          `json:"port_idx"`
+	Name                  *string      `json:"name,omitempty"`
+	Media                 *string      `json:"media,omitempty"`
+	Connector             *string      `json:"connector,omitempty"`
+	Roles                 []string     `json:"roles,omitempty"`
+	PoEIn                 *bool        `json:"poe_in,omitempty"`
+	PoEOut                *bool        `json:"poe_out,omitempty"`
+	PoEStandard           *string      `json:"poe_standard,omitempty"`
+	ModelID               *string      `json:"model_id,omitempty"`
+	ModelProfileStatus    *string      `json:"model_profile_status,omitempty"`
+	Enabled               *bool        `json:"enabled,omitempty"`
+	Up                    *bool        `json:"up,omitempty"`
+	SpeedMbps             *float64     `json:"speed_mbps,omitempty"`
+	MaxSpeedMbps          *float64     `json:"max_speed_mbps,omitempty"`
+	Duplex                *bool        `json:"duplex,omitempty"`
+	Autoneg               *bool        `json:"autoneg,omitempty"`
+	Uplink                *bool        `json:"uplink,omitempty"`
+	RxBytes               *int64       `json:"rx_bytes,omitempty"`
+	TxBytes               *int64       `json:"tx_bytes,omitempty"`
+	RxPackets             *int64       `json:"rx_packets,omitempty"`
+	TxPackets             *int64       `json:"tx_packets,omitempty"`
+	RxErrors              *int64       `json:"rx_errors,omitempty"`
+	TxErrors              *int64       `json:"tx_errors,omitempty"`
+	RxDropped             *int64       `json:"rx_dropped,omitempty"`
+	TxDropped             *int64       `json:"tx_dropped,omitempty"`
+	RxMulticast           *int64       `json:"rx_multicast,omitempty"`
+	TxMulticast           *int64       `json:"tx_multicast,omitempty"`
+	RxBroadcast           *int64       `json:"rx_broadcast,omitempty"`
+	TxBroadcast           *int64       `json:"tx_broadcast,omitempty"`
+	RxBPS                 *int64       `json:"rx_bps,omitempty"`
+	TxBPS                 *int64       `json:"tx_bps,omitempty"`
+	RxUtilizationPct      *float64     `json:"rx_utilization_pct,omitempty"`
+	TxUtilizationPct      *float64     `json:"tx_utilization_pct,omitempty"`
+	PoE                   *UniFiAPIPoE `json:"poe,omitempty"`
+	PoEPassthroughEnabled *bool        `json:"poe_passthrough_enabled,omitempty"`
+	PeerCount             *int         `json:"peer_count,omitempty"`
 }
 
 type UniFiAPIPoE struct {
@@ -276,10 +278,37 @@ type UniFiAPIClientSummary struct {
 }
 
 type UniFiAPIDeviceSummary struct {
-	Total   int            `json:"total"`
-	Online  int            `json:"online"`
-	Offline int            `json:"offline"`
-	ByType  map[string]int `json:"by_type"`
+	Total   int              `json:"total"`
+	Online  int              `json:"online"`
+	Offline int              `json:"offline"`
+	ByType  map[string]int   `json:"by_type"`
+	Items   []UniFiAPIDevice `json:"items,omitempty"`
+}
+
+type UniFiAPIDevice struct {
+	DeviceID           string                      `json:"device_id"`
+	Name               *string                     `json:"name,omitempty"`
+	Model              *string                     `json:"model,omitempty"`
+	ModelID            *string                     `json:"model_id,omitempty"`
+	ModelProfileStatus *string                     `json:"model_profile_status,omitempty"`
+	DeviceType         *string                     `json:"device_type,omitempty"`
+	ManagementIP       *string                     `json:"management_ip,omitempty"`
+	Online             *bool                       `json:"online,omitempty"`
+	Capabilities       *UniFiAPIDeviceCapabilities `json:"capabilities,omitempty"`
+	PoE                *UniFiAPIDevicePoERuntime   `json:"poe,omitempty"`
+}
+
+type UniFiAPIDeviceCapabilities struct {
+	PoE *UniFiAPIDevicePoECapability `json:"poe,omitempty"`
+}
+
+type UniFiAPIDevicePoECapability struct {
+	AbsoluteMaxPoEBudgetW *float64 `json:"absolute_max_poe_budget_w"`
+}
+
+type UniFiAPIDevicePoERuntime struct {
+	CurrentPowerW *float64 `json:"current_power_w,omitempty"`
+	CurrentSource string   `json:"current_source,omitempty"`
 }
 
 type UniFiAPINetworkSummary struct {

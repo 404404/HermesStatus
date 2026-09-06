@@ -147,6 +147,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: python3 scripts/check_release_boundaries.py
+      - run: python3 scripts/check_unifi_static_authority.py
 
   publish_2_6_candidate:
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'codex/2.6-') }}

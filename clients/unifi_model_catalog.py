@@ -9,9 +9,10 @@ from pathlib import Path
 
 CATALOG_SCHEMA_VERSION = 1
 SUPPORTED_CATALOG_SCHEMA_VERSIONS = frozenset({CATALOG_SCHEMA_VERSION})
-CATALOG_SOURCE_REVISION = "a838d664378a328750abed0fb9f622b1f11c5733"
-CATALOG_BUNDLE_SHA256 = "1daa97051a6a406d6e4e6b6004fb492a7287d59c4815f33a5c49ef1b54d495e1"
+CATALOG_SOURCE_REVISION = "486dacbcb8d0f14e5ee171ce99c6a5ffabc0fb62"
+CATALOG_BUNDLE_SHA256 = "2251eddb656af89483a3497ca2fe46bf60339c3f96ae38b3390761d7f379a371"
 CATALOG_BUNDLE_PATH = Path(__file__).with_name("unifi_catalog") / "catalog.json"
+CATALOG_PROVENANCE_PATH = CATALOG_BUNDLE_PATH.with_name("catalog-provenance.json")
 # Compatibility name only; this is a bundle path, not a model-table directory.
 MODEL_DIRECTORY = CATALOG_BUNDLE_PATH
 
@@ -23,7 +24,8 @@ POWER_PROFILE_STATUSES = {"verified", "candidate", "unsupported"}
 POWER_FIELD_STATUSES = {"verified", "candidate", "unknown", "not_applicable"}
 INPUT_METHODS = {"ac_mains", "ac_adapter", "dc_adapter", "usb_c", "poe"}
 SELECTION_MODES = {"fixed", "auto_detected", "controller_manual"}
-CONNECTORS = {"rj45", "sfp", "sfp_plus", "sfp28", "other"}
+CONNECTORS = {"rj45", "sfp", "sfp_plus", "sfp28", "qsfp28", "other"}
+PORT_ROLES = {"lan", "wan", "downstream", "uplink", "data_in", "poe_passthrough"}
 STORAGE_TYPES = {"emmc", "ssd", "sata_ssd", "nvme", "microsd", "tf", "other"}
 STORAGE_KINDS = {"fixed_device", "user_slot", "removable_media"}
 PRESENCE_STATES = {"present", "not_populated", "unknown"}
@@ -118,7 +120,7 @@ def _ports(model):
         _number(port["max_speed_mbps"], f"{field}.max_speed_mbps", integer=True)
         if port["max_speed_mbps"] not in {None, 10, 100, 1000, 2500, 5000, 10000, 25000, 100000}:
             raise ModelCatalogError(f"invalid {field}.max_speed_mbps")
-        if not isinstance(port["roles"], list) or not port["roles"] or len(set(port["roles"])) != len(port["roles"]) or any(role not in {"lan", "wan"} for role in port["roles"]):
+        if not isinstance(port["roles"], list) or len(port["roles"]) > 4 or len(set(port["roles"])) != len(port["roles"]) or any(role not in PORT_ROLES for role in port["roles"]):
             raise ModelCatalogError(f"invalid {field}.roles")
         if port["poe_in"] not in {True, False, None} or port["poe_out"] not in {True, False, None}:
             raise ModelCatalogError(f"invalid {field}.poe flags")
@@ -281,6 +283,21 @@ def _paths(path):
     return candidate, candidate.with_name("catalog.sha256")
 
 
+def _validate_default_provenance() -> None:
+    expected = {
+        "catalog_sha256": CATALOG_BUNDLE_SHA256,
+        "catalog_schema_version": CATALOG_SCHEMA_VERSION,
+        "repository": "404404/UniFi_Catalog",
+        "revision": CATALOG_SOURCE_REVISION,
+    }
+    try:
+        provenance = json.loads(CATALOG_PROVENANCE_PATH.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ModelCatalogError("catalog provenance unavailable") from exc
+    if provenance != expected:
+        raise ModelCatalogError("catalog provenance does not match the pinned artifact")
+
+
 def load_catalog(path=CATALOG_BUNDLE_PATH):
     """Load a checksum-verified, schema-compatible Catalog V1 bundle."""
     bundle_path, digest_path = _paths(path)
@@ -294,6 +311,8 @@ def load_catalog(path=CATALOG_BUNDLE_PATH):
         raise ModelCatalogError("invalid catalog.sha256")
     if bundle_path == CATALOG_BUNDLE_PATH and match.group("digest") != CATALOG_BUNDLE_SHA256:
         raise ModelCatalogError("catalog bundle does not match the pinned artifact")
+    if bundle_path == CATALOG_BUNDLE_PATH:
+        _validate_default_provenance()
     actual = hashlib.sha256(raw).hexdigest()
     if actual != match.group("digest"):
         raise ModelCatalogError("catalog bundle checksum mismatch")

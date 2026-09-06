@@ -73,7 +73,7 @@ const (
 	MaxDockerPayloadBytes       = 512 * 1024
 	MaxHermesPayloadBytes       = 1 << 20
 	MaxEasyTierPayloadBytes     = 64 * 1024
-	MaxUniFiPayloadBytes        = 64 * 1024
+	MaxUniFiPayloadBytes        = 256 * 1024
 	MaxEasyTierTextLength       = 128
 	MaxUniFiTextLength          = 128
 	MaxUniFiFans                = 8
@@ -83,7 +83,9 @@ const (
 	MaxUniFiAPIEndpoints        = 24
 	MaxUniFiAPIWans             = 16
 	MaxUniFiAPIUplinks          = 32
+	MaxUniFiAPIDevices          = 64
 	MaxUniFiAPITemperatures     = 16
+	MaxUniFiPortRoles           = 4
 	// Per-device limits cover one physical port table or static PoE map.
 	MaxUniFiPortsPerDevice = 64
 	// Site-wide API telemetry is the bounded union of all device observations.
@@ -267,6 +269,9 @@ type PhysicalDiskStats struct {
 	Completeness     *string         `json:"completeness"`
 	HealthSource     *string         `json:"health_source"`
 	NativeStatus     *string         `json:"native_status"`
+	ConfiguredType   *string         `json:"configured_type"`
+	EffectiveType    *string         `json:"effective_type"`
+	ResolutionSource *string         `json:"resolution_source"`
 	CollectionStatus string          `json:"collection_status"`
 	Error            *ExtensionError `json:"error"`
 }

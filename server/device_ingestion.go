@@ -148,6 +148,7 @@ func (a *App) ingestDeviceUpdateAt(
 	}
 	node.Stats = stats
 	node.Extension = extensionSnapshotAt(extension, now)
+	node.CollectionDiagnostics = buildCollectionDiagnostics(extension, issues)
 	node.HasUpdate = true
 	node.LastUpdate = now
 	node.LastSeen = now
@@ -317,9 +318,7 @@ func evaluateIdentity(
 }
 
 func usableSMARTAttributeFallback(disk PhysicalDiskStats) bool {
-	return disk.CollectionStatus == "partial" &&
-		disk.SMARTStatus == DiskSMARTPassed &&
-		disk.Error != nil && disk.Error.Code == "smart_return_status_unavailable"
+	return smartAttributeFallbackObservation(disk) && disk.SMARTStatus == DiskSMARTPassed
 }
 
 func storageHasOnlyUsableSMARTAttributeFallback(storage *StorageStats) bool {
@@ -523,6 +522,7 @@ func (a *App) updateAgent(
 	}
 	node.Stats = update
 	node.Extension = extensionSnapshotAt(extension, now)
+	node.CollectionDiagnostics = buildCollectionDiagnostics(extension, nil)
 	node.HasUpdate = true
 	node.LastUpdate = now
 	node.LastSeen = now

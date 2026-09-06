@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "HermesStatus UniFi profile V1",
+  "title": "HermesStatus UniFi collection profile V1",
   "type": "object",
   "required": [
     "schema_version",
@@ -8,11 +8,9 @@
     "platform",
     "generic",
     "diagnostics",
-    "fans",
-    "power",
-    "storage",
     "health_policy"
   ],
+  "additionalProperties": false,
   "properties": {
     "schema_version": {
       "const": 1
@@ -26,207 +24,54 @@
     "platform": {
       "const": "unifi_console"
     },
-    "storage": {
+    "generic": {
       "type": "object",
       "required": [
-        "nvme",
-        "sata_ssd",
-        "tf"
+        "cpu_temperature",
+        "cpu_usage",
+        "memory",
+        "uptime",
+        "load_average"
       ],
       "additionalProperties": false,
       "properties": {
-        "nvme": {
-          "type": "object",
-          "required": [
-            "supported",
-            "present",
-            "observed",
-            "capacity_bytes"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "supported": {
-              "enum": [
-                true,
-                false,
-                "unknown"
-              ]
-            },
-            "present": {
-              "enum": [
-                "present",
-                "not_populated",
-                "unknown",
-                "dynamic"
-              ]
-            },
-            "observed": {
-              "enum": [
-                true,
-                false,
-                "unknown"
-              ]
-            },
-            "capacity_bytes": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 0
-            }
-          }
-        },
-        "sata_ssd": {
-          "type": "object",
-          "required": [
-            "supported",
-            "present",
-            "observed",
-            "capacity_bytes"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "supported": {
-              "enum": [
-                true,
-                false,
-                "unknown"
-              ]
-            },
-            "present": {
-              "enum": [
-                "present",
-                "not_populated",
-                "unknown",
-                "dynamic"
-              ]
-            },
-            "observed": {
-              "enum": [
-                true,
-                false,
-                "unknown"
-              ]
-            },
-            "capacity_bytes": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 0
-            }
-          }
-        },
-        "tf": {
-          "type": "object",
-          "required": [
-            "supported",
-            "present",
-            "observed",
-            "capacity_bytes"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "supported": {
-              "enum": [
-                true,
-                false,
-                "unknown"
-              ]
-            },
-            "present": {
-              "enum": [
-                "present",
-                "not_populated",
-                "unknown",
-                "dynamic"
-              ]
-            },
-            "observed": {
-              "enum": [
-                true,
-                false,
-                "unknown"
-              ]
-            },
-            "capacity_bytes": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 0
-            }
-          }
-        }
+        "cpu_temperature": { "$ref": "#/$defs/source" },
+        "cpu_usage": { "$ref": "#/$defs/source" },
+        "memory": { "$ref": "#/$defs/source" },
+        "uptime": { "$ref": "#/$defs/source" },
+        "load_average": { "$ref": "#/$defs/source" }
       }
     },
-    "cpu_model": {
-      "type": "string",
-      "maxLength": 128
-    },
-    "poe": {
+    "diagnostics": {
       "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "supported",
-        "total_max_power_w",
-        "port_max_power_w"
-      ],
-      "properties": {
-        "supported": {
-          "type": "boolean"
-        },
-        "total_max_power_w": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "exclusiveMinimum": 0
-        },
-        "port_max_power_w": {
-          "type": "object",
-          "maxProperties": 64,
-          "additionalProperties": {
-            "type": "number",
-            "exclusiveMinimum": 0
-          }
-        }
-      }
+      "additionalProperties": { "$ref": "#/$defs/source" }
     },
-    "power": {
+    "health_policy": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
-        "psu_slots",
-        "presence",
-        "sensor_mapping",
-        "max_power_w"
+        "optional_diagnostics_affect_health",
+        "zero_rpm_is_failure_when_present"
       ],
+      "additionalProperties": false,
       "properties": {
-        "psu_slots": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "presence": {
-          "enum": [
-            "present",
-            "not_populated",
-            "unknown",
-            "dynamic"
-          ]
-        },
-        "sensor_mapping": {
-          "const": "unknown"
-        },
-        "max_power_w": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "exclusiveMinimum": 0
-        }
+        "optional_diagnostics_affect_health": { "const": false },
+        "zero_rpm_is_failure_when_present": { "type": "boolean" }
       }
     }
   },
-  "additionalProperties": false
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["source"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "primary": { "type": "boolean" },
+        "formula": { "type": "string", "minLength": 1 },
+        "health_affecting": { "const": false },
+        "zones": { "type": "object" },
+        "expected_name": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
 }

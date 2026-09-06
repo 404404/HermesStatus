@@ -63,13 +63,16 @@ func TestHTTPStatsAndOpenAPIExposeOnlyStructuredExtensions(t *testing.T) {
 		t.Fatalf("stats response does not reference StatsDocument: %#v", responseSchema)
 	}
 	schemas := spec["components"].(map[string]any)["schemas"].(map[string]any)
-	for _, name := range []string{"HardwareStats", "CPUUsageStats", "CPUDetails", "MemoryDetails", "DockerStats", "HermesStats", "LuckyStats", "LuckyServiceStats", "LuckyVersionStats", "LuckyDynamicDNSStats", "LuckyWebServicesStats", "LuckyPortForwardsStats", "LuckyCertificatesStats", "ConfigModelSummary", "AuxiliaryModelSummary", "DelegationSummary", "SanitizedConfigSummary", "MixtureOfAgentsStats", "EasyTierExpectationValues", "EasyTierExpectationProjection", "UniFiFanStats", "UniFiPowerStats", "UniFiMemoryStats", "UniFiLoadAverage", "UniFiSystemStats", "UniFiStats", "StatsServer", "StatsDocument"} {
+	for _, name := range []string{"HardwareStats", "CPUUsageStats", "CPUDetails", "MemoryDetails", "DockerStats", "HermesStats", "LuckyStats", "LuckyServiceStats", "LuckyVersionStats", "LuckyDynamicDNSStats", "LuckyWebServicesStats", "LuckyPortForwardsStats", "LuckyCertificatesStats", "ConfigModelSummary", "AuxiliaryModelSummary", "DelegationSummary", "SanitizedConfigSummary", "MixtureOfAgentsStats", "EasyTierExpectationValues", "EasyTierExpectationProjection", "UniFiFanStats", "UniFiPowerStats", "UniFiMemoryStats", "UniFiLoadAverage", "UniFiSystemStats", "CollectionDiagnostic", "UniFiStats", "StatsServer", "StatsDocument"} {
 		schema := schemas[name].(map[string]any)
 		if schema["additionalProperties"] != false {
 			t.Fatalf("%s is not allowlisted: %#v", name, schema)
 		}
 	}
 	statsServer := schemas["StatsServer"].(map[string]any)
+	if _, ok := statsServer["properties"].(map[string]any)["collection_diagnostics"]; !ok {
+		t.Fatalf("StatsServer is missing collection diagnostics: %#v", statsServer)
+	}
 	if _, ok := statsServer["properties"].(map[string]any)["easytier_expectation"]; !ok {
 		t.Fatalf("StatsServer is missing the emitted easytier_expectation property: %#v", statsServer)
 	}

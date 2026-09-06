@@ -78,6 +78,7 @@ type NodeState struct {
 	Restored               bool
 	IdentityError          bool
 	Degraded               bool
+	CollectionDiagnostics  []CollectionDiagnostic
 }
 
 type App struct {
@@ -369,6 +370,16 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 		base["easytier"] = extension.EasyTier
 		base["unifi"] = extension.UniFi
 		base["client_build"] = extension.ClientBuild
+		diagnostics := node.CollectionDiagnostics
+		if diagnostics == nil {
+			diagnostics = buildCollectionDiagnostics(ExtensionStats{
+				ExtensionVersion: extension.ExtensionVersion,
+				Hardware:         extension.Hardware, Docker: extension.Docker, Hermes: extension.Hermes,
+				Lucky: extension.Lucky, EasyTier: extension.EasyTier, UniFi: extension.UniFi,
+				ClientBuild: extension.ClientBuild,
+			}, nil)
+		}
+		base["collection_diagnostics"] = diagnostics
 		if a.registry != nil {
 			device, _ := a.registryDevice(deviceID)
 			status := a.deviceStatusAt(node, now)

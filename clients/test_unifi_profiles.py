@@ -20,35 +20,19 @@ class ProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(ProfileError, "unknown_profile"):
             load_profile(self.profiles, "not-a-profile")
 
-    def test_storage_capabilities_capture_udw_media(self):
-        udw = load_profile(self.profiles, "udw")
-        self.assertEqual(set(udw["storage"]), {"nvme", "sata_ssd", "tf"})
-        self.assertEqual(udw["storage"]["nvme"]["supported"], False)
-        self.assertEqual(udw["storage"]["sata_ssd"]["capacity_bytes"], 128000000000)
-        self.assertEqual(udw["storage"]["tf"]["present"], "not_populated")
-        self.assertEqual(udw["diagnostics"]["filesystem"]["source"], "unifi.udw.ssd_filesystem")
-        self.assertEqual(udw["cpu_model"], "Annapurna AL324")
+    def test_profiles_contain_collection_contract_only(self):
+        required = {"schema_version", "profile_id", "platform", "generic", "diagnostics", "health_policy"}
+        forbidden = {"fans", "power", "storage", "cpu_model", "poe"}
+        for profile_id in ("udw", "ucg-max"):
+            profile = load_profile(self.profiles, profile_id)
+            self.assertEqual(set(profile), required)
+            self.assertTrue(forbidden.isdisjoint(profile))
+        self.assertEqual(load_profile(self.profiles, "udw")["diagnostics"]["filesystem"]["source"], "unifi.udw.ssd_filesystem")
 
-    def test_ucg_max_profile_declares_cpu_and_nvme_capability(self):
+    def test_profiles_preserve_collector_sources(self):
         ucg = load_profile(self.profiles, "ucg-max")
-        self.assertEqual(ucg["cpu_model"], "Qualcomm IPQ5322")
         self.assertEqual(ucg["diagnostics"]["hwmon"]["source"], "linux.sensors_json")
         self.assertEqual(ucg["diagnostics"]["hwmon"]["expected_name"], "lm63")
-        self.assertTrue(ucg["fans"]["channels"][0]["supported"])
-        self.assertEqual(ucg["fans"]["channels"][0]["present"], "present")
-        self.assertTrue(ucg["storage"]["nvme"]["supported"])
-        self.assertFalse(ucg["storage"]["sata_ssd"]["supported"])
-
-    def test_fixed_poe_and_power_limits_are_profile_data(self):
-        udw = load_profile(self.profiles, "udw")
-        self.assertTrue(udw["poe"]["supported"])
-        self.assertEqual(udw["poe"]["total_max_power_w"], 420)
-        self.assertEqual(udw["poe"]["port_max_power_w"]["1"], 15.4)
-        self.assertEqual(udw["poe"]["port_max_power_w"]["12"], 60)
-        self.assertEqual(udw["power"]["max_power_w"], 550)
-        ucg = load_profile(self.profiles, "ucg-max")
-        self.assertFalse(ucg["poe"]["supported"])
-        self.assertIsNone(ucg["power"]["max_power_w"])
 
     def test_unknown_source_rejected(self):
         profile = copy.deepcopy(load_profile(self.profiles, "udw"))
@@ -56,16 +40,10 @@ class ProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(ProfileError, "unknown source"):
             validate_profile(profile)
 
-    def test_unknown_presence_rejected(self):
+    def test_static_capability_fields_are_rejected(self):
         profile = copy.deepcopy(load_profile(self.profiles, "udw"))
-        profile["fans"]["channels"][0]["present"] = "maybe"
-        with self.assertRaisesRegex(ProfileError, "invalid fan capability"):
-            validate_profile(profile)
-
-    def test_duplicate_fans_rejected(self):
-        profile = copy.deepcopy(load_profile(self.profiles, "udw"))
-        profile["fans"]["channels"][1]["id"] = "fan1"
-        with self.assertRaisesRegex(ProfileError, "duplicate"):
+        profile["storage"] = {}
+        with self.assertRaisesRegex(ProfileError, "unexpected or missing root profile fields"):
             validate_profile(profile)
 
     def test_no_arbitrary_command_field(self):

@@ -55,6 +55,7 @@ async function run(){
   assert.equal(app.normalizePageName('docker'), 'docker');
   assert.equal(app.normalizePageName('lucky'), 'lucky');
   assert.equal(app.normalizePageName('unifi'), 'unifi');
+  assert.equal(app.normalizePageName('diagnostics'), 'diagnostics');
   assert.equal(app.normalizePageName('unexpected'), 'home');
   assert.equal(app.pageFromHash(''), 'home');
   assert.equal(app.pageFromHash('#home'), 'home');
@@ -62,6 +63,7 @@ async function run(){
   assert.equal(app.pageFromHash('#docker'), 'docker');
   assert.equal(app.pageFromHash('#lucky'), 'lucky');
   assert.equal(app.pageFromHash('#unifi'), 'unifi');
+  assert.equal(app.pageFromHash('#diagnostics'), 'diagnostics');
   assert.equal(app.pageFromHash('#invalid'), 'home');
   assert.deepEqual(app.parseDashboardHash('#docker?device=device-alpha'), {
     page: 'docker', deviceId: 'device-alpha', needsRewrite: false
@@ -71,6 +73,7 @@ async function run(){
   assert.equal(app.parseDashboardHash('#home?device=device-a&unexpected=1').needsRewrite, true);
   assert.equal(app.parseDashboardHash('#home?device=%3Cscript%3E').deviceId, null);
   assert.equal(app.canonicalDashboardHash('docker', 'device-alpha'), '#docker?device=device-alpha');
+  assert.equal(app.canonicalDashboardHash('diagnostics', null), '#diagnostics');
   assert.equal(app.canonicalDashboardHash('unexpected', null), '#home');
   assert.equal(app.validDeviceId('device-alpha'), true);
   assert.equal(app.validDeviceId('DEVICE-ALPHA'), false);
@@ -85,9 +88,35 @@ async function run(){
   assert.match(appSource, /EasyTier远端节点数/);
   assert.match(appSource, /EasyTier流量统计/);
   assert.match(indexMarkup, /id="unifiPorts"/);
+  assert.match(indexMarkup, /id="diagnosticsTab"/);
+  assert.match(indexMarkup, /id="diagnosticsPage"/);
+  assert.match(indexMarkup, /id="collectionDiagnostics"/);
+  assert.match(indexMarkup, /data-page-target="easytier">EasyTier<\/button>[\s\S]*data-page-target="diagnostics">组件诊断<\/button>/);
+  assert.match(appSource, /组件诊断/);
+  const diagnosticsPageMarkup = indexMarkup.slice(indexMarkup.indexOf('id="diagnosticsPage"'), indexMarkup.indexOf('id="hardwarePage"'));
+  const unifiPageMarkup = indexMarkup.slice(indexMarkup.indexOf('id="unifiPage"'), indexMarkup.indexOf('id="dockerPage"'));
+  assert.doesNotMatch(diagnosticsPageMarkup, /id="unifiDiagnostics"/);
+  assert.doesNotMatch(unifiPageMarkup, /id="unifiDiagnostics"/);
   assert.match(indexMarkup, /id="unifiEmptyState"/);
   assert.match(appSource, /invalid_value/);
   assert.match(appSource, /未配置 UniFi 目标/);
+  assert.equal(app.unifiErrorText({error: {code: 'payload_too_large'}}), 'UniFi 遥测数据过大');
+  assert.doesNotMatch(appSource, /已配置 UniFi 目标，但访问失败，请检查 SSH 密码和 API Key/);
+  const collectionDiagnostics = app.collectionDiagnosticsMarkup([{domain: "hardware", component: "storage.physical_disks", status: "degraded", code: "smart_value_invalid", field: "hardware.storage.physical_disks[].error", reason: "<script>", source: "smartctl"}]);
+  assert.match(collectionDiagnostics, /smart_value_invalid/);
+  assert.match(collectionDiagnostics, /hardware/);
+  assert.doesNotMatch(collectionDiagnostics, /<script>/);
+  const disabledDiagnostics = app.collectionDiagnosticsMarkup([{domain: 'easytier', component: 'easytier', status: 'not_configured'}]);
+  assert.match(collectionDiagnostics, /<th>对应标签页<\/th>/);
+  assert.match(disabledDiagnostics, /EasyTier/);
+  assert.match(disabledDiagnostics, /该组件未在配置文件中开启采集/);
+  const smartFallbackDiagnostics = app.collectionDiagnosticsMarkup([{
+    domain: 'hardware', component: 'storage.physical_disks', status: 'partial',
+    code: 'smart_return_status_unavailable', field: 'hardware.storage.physical_disks[].error',
+    reason: 'SMART 原生状态不可用，已使用属性检查结果', source: 'smartctl'
+  }]);
+  assert.match(smartFallbackDiagnostics, /部分成功/);
+  assert.doesNotMatch(smartFallbackDiagnostics, /部分异常/);
   assert.match(cssSource, /\.unifi-network-tabs\{[^}]*flex-wrap:wrap/);
   assert.match(cssSource, /\.unifi-network-tab\{[^}]*white-space:nowrap/);
 
@@ -194,7 +223,7 @@ async function run(){
   assert.match(app.unifiSystemRows(ucgMaxUniFi).map(row => row.join(' ')).join(' '), /可用内存回退估算/);
   assert.match(app.unifiFanRows(udwUniFi), /1,698 RPM/);
   assert.match(app.unifiFanRows(ucgMaxUniFi), /0 RPM/);
-  assert.match(app.unifiFanRows(ucgMaxUniFi), /支持/);
+  assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /支持能力/);
   assert.match(app.unifiFanRows(ucgMaxUniFi), /已安装/);
   assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /观测/);
   assert.doesNotMatch(app.unifiFanRows(ucgMaxUniFi), /失败/);
@@ -217,6 +246,7 @@ async function run(){
   }};
   const storageMarkup = app.unifiStorageMarkup(storageWithUsage);
   assert.match(storageMarkup, /unifi-storage-table/);
+  assert.doesNotMatch(storageMarkup, /支持能力/);
   assert.match(storageMarkup, /64\.0 GB \/ 110 GB/);
   assert.match(storageMarkup, /50%/);
   const storageWithoutFilesystemTotal = app.unifiStorageMarkup({...udwUniFi, storage: {
@@ -234,7 +264,8 @@ async function run(){
   }});
   assert.match(unsupportedStorageMarkup, /暂无可显示的存储能力/);
   assert.doesNotMatch(unsupportedStorageMarkup, /NVMe|不支持/);
-  assert.match(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /不支持[\s\S]*未安装/);
+  assert.doesNotMatch(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /支持能力|不支持/);
+  assert.match(app.unifiPowerRows({...udwUniFi, power_supplies: [{id: 'psu1', supported: 'unsupported', present: 'not_present', observed: false, state: 'not_observed'}]}), /未安装/);
   assert.match(app.unifiPowerRows(udwUniFi), /未提供/);
   assert.equal(app.unifiPowerRows(ucgMaxUniFi), '');
   assert.equal(app.unifiPowerSectionVisible(ucgMaxUniFi), false);
@@ -248,10 +279,16 @@ async function run(){
     ],
     clients: {total: 19, wired: 14, wireless: 5, observed: true},
     networks: {total: 3, vlan: 3},
+    devices: {total: 2, online: 1, offline: 1, by_type: {gateway: 1, switch: 1}, items: [
+      {device_id: 'udw-1', name: 'UniFi Dream Wall', model: 'UniFi Dream Wall', model_id: 'UDW', model_profile_status: 'known', device_type: 'gateway', management_ip: '192.168.1.1', online: true,
+        capabilities: {poe: {absolute_max_poe_budget_w: 420}}, poe: {current_power_w: 6.64, current_source: 'device_reported'}},
+      {device_id: 'switch-1', name: 'USW Flex Mini', model: 'USW Flex Mini', model_id: 'USW-Flex-Mini', model_profile_status: 'known', device_type: 'switch', management_ip: '192.168.1.2', online: false,
+        capabilities: {poe: {absolute_max_poe_budget_w: 0}}, poe: {current_source: 'unavailable'}}
+    ]},
     ports: [
       {device_id: 'udw-1', port_idx: 10, name: 'Port 10', media: 'GE', poe_out: false, up: false, enabled: true, uplink: false, speed_mbps: 0, max_speed_mbps: 1000, rx_bytes: 0, tx_bytes: 0, poe: {supported: false}},
       {device_id: 'udw-1', port_idx: 2, name: 'Port 2', media: 'GE', poe_out: true, up: true, enabled: true, uplink: false, speed_mbps: 1000, max_speed_mbps: 2500, rx_bytes: 1000, tx_bytes: 2000, tx_errors: 2, tx_dropped: 3, rx_errors: 0, rx_dropped: 1, poe: {supported: true, active: true, power_w: 3.32, max_power_w: 30}, peer_count: 1},
-      {device_id: 'udw-1', port_idx: 7, name: 'Port 7', media: '2.5GE', poe_out: true, up: true, enabled: true, uplink: true, speed_mbps: 2500, max_speed_mbps: 2500, rx_bytes: 1000, tx_bytes: 2000, rx_bps: 1000000, tx_bps: 2000000, poe: {supported: true, active: true, power_w: 3.32, max_power_w: 30}, peer_count: 1},
+      {device_id: 'udw-1', port_idx: 7, name: 'Port 7', connector: 'sfp_plus', media: '2.5GE', poe_out: true, up: true, enabled: true, uplink: true, speed_mbps: 2500, max_speed_mbps: 2500, rx_bytes: 1000, tx_bytes: 2000, rx_bps: 1000000, tx_bps: 2000000, poe: {supported: true, active: true, power_w: 3.32, max_power_w: 30}, peer_count: 1},
       {device_id: 'switch-1', port_idx: 1, name: 'Port 1', media: 'GE', poe_out: false, up: true, enabled: true, uplink: false, speed_mbps: 1000, max_speed_mbps: 1000, rx_bytes: 0, tx_bytes: 0, poe: {supported: false}}
     ],
     port_summary: {total: 1, up: 1, down: 0, poe_active: 1, poe_total_power_w: 3.32},
@@ -259,23 +296,44 @@ async function run(){
   }};
   const systemCards = app.unifiSystemCards({...udwUniFi, api: apiFixture});
   const apiTelemetryMarkup = app.unifiApiTelemetryMarkup({...udwUniFi, api: apiFixture});
+  const apiDiagnosticsMarkup = app.collectionDiagnosticsMarkup([], {...udwUniFi, api: {
+    ...apiFixture,
+    endpoints: [
+      {name: 'device_detail', required: true, status: 'ok', http_status: 200, error: null},
+      {name: 'topology', required: false, status: 'unsupported', http_status: 404, error: {code: 'api_endpoint_unsupported'}}
+    ]
+  }});
+  assert.equal((apiDiagnosticsMarkup.match(/<table/g) || []).length, 1);
+  assert.match(apiDiagnosticsMarkup, /<th>对应标签页<\/th>/);
+  assert.match(apiDiagnosticsMarkup, /<th>必需<\/th>/);
   const portTelemetryMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: apiFixture});
   const noPoeApiFixture = {...apiFixture, telemetry: {...apiFixture.telemetry,
     identity: {...apiFixture.telemetry.identity, model: 'UCG Max', display_name: 'UCG Max'},
     uplinks: [{name: 'UCG Max', device_id: 'ucg-1', model: 'UCG Max', model_profile_status: 'known', device_type: 'gateway', management_ip: '192.168.1.1', online: true, link_state: 'ONLINE'}],
     ports: [1, 2, 3].map(port_idx => ({device_id: 'ucg-1', port_idx, name: `Port ${port_idx}`, poe_out: false, up: true, speed_mbps: 2500, max_speed_mbps: 2500}))
   }};
-  const numericIpMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, uplinks: [
-    {...apiFixture.telemetry.uplinks[0], management_ip: '192.168.1.10'},
-    {...apiFixture.telemetry.uplinks[1], management_ip: '192.168.1.2'}
-  ]}}});
+  const numericIpMarkup = app.unifiPortTelemetryMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry,
+    devices: {...apiFixture.telemetry.devices, items: apiFixture.telemetry.devices.items.map((item, index) => ({...item, management_ip: index === 0 ? '192.168.1.10' : '192.168.1.2'}))},
+    uplinks: [
+      {...apiFixture.telemetry.uplinks[0], management_ip: '192.168.1.10'},
+      {...apiFixture.telemetry.uplinks[1], management_ip: '192.168.1.2'}
+    ]
+  }}});
   const wanMarkup = app.unifiWanMarkup({...udwUniFi, api: {...apiFixture, telemetry: {...apiFixture.telemetry, wans: [{id: 'wan1', name: 'WAN', online: true, role: 'active', isp: 'Example ISP', asn: '64500', link_speed_mbps: 2500, latency_ms: 12.3, speedtest: {observed: true, timestamp: '2026-01-01T00:00:00Z', latency_ms: 2.5, download_mbps: 900, upload_mbps: 100}}]}}});
   assert.match(portTelemetryMarkup, /unifi-ports-table/);
   assert.match(portTelemetryMarkup, /Port 7/);
   assert.match(portTelemetryMarkup, /2\.5 GbE/);
-  assert.match(portTelemetryMarkup, />7<\/td>/);
-  assert.match(portTelemetryMarkup, /端口编号/);
-  assert.match(portTelemetryMarkup, />上行</);
+  assert.match(portTelemetryMarkup, /<th>端口<\/th>/);
+  assert.ok(portTelemetryMarkup.indexOf('<th>端口</th>') < portTelemetryMarkup.indexOf('<th>编号</th>'));
+  assert.ok(portTelemetryMarkup.indexOf('<th>编号</th>') < portTelemetryMarkup.indexOf('<th>类型</th>'));
+  assert.ok(portTelemetryMarkup.indexOf('<th>类型</th>') < portTelemetryMarkup.indexOf('<th>状态</th>'));
+  assert.ok(portTelemetryMarkup.indexOf('<th>状态</th>') < portTelemetryMarkup.indexOf('<th>已连接 / 最大速率</th>'));
+  assert.match(portTelemetryMarkup, /<th>编号<\/th>/);
+  assert.match(portTelemetryMarkup, /<th>类型<\/th>/);
+  assert.match(portTelemetryMarkup, /<th>已连接 \/ 最大速率<\/th>/);
+  assert.match(portTelemetryMarkup, /SFP\+/);
+  assert.doesNotMatch(portTelemetryMarkup, /端口编号/);
+  assert.doesNotMatch(portTelemetryMarkup, />上行</);
   assert.match(portTelemetryMarkup, /2\.5 GbE \/ 2\.5 GbE/);
   assert.match(portTelemetryMarkup, /30 W/);
   assert.match(portTelemetryMarkup, /2\.00 KB/);
@@ -284,9 +342,11 @@ async function run(){
   assert.match(portTelemetryMarkup, /发送 \/ 接收 \(错误\/丢弃\)/);
   assert.match(portTelemetryMarkup, /2 \/ 3 \/ 0 \/ 1/);
   assert.match(portTelemetryMarkup, /PoE 总功率 6\.64 W \/ 420 W/);
+  assert.doesNotMatch(portTelemetryMarkup, /PoE 总功率 6\.64 W \/ 60 W/);
   assert.match(portTelemetryMarkup, /PoE 总功率使用率/);
   assert.match(portTelemetryMarkup, /unifi-poe-summary-value[\s\S]*usage-bar/);
-  assert.match(portTelemetryMarkup, /未连接 \/ 1 GbE/);
+  assert.match(portTelemetryMarkup, /<span class="badge warn">未连接<\/span>/);
+  assert.match(portTelemetryMarkup, /<td>- \/ 1 GbE<\/td>/);
   assert.match(portTelemetryMarkup, /发送 \/ 接收 \(错误\/丢弃\)/);
   assert.match(wanMarkup, /Example ISP/);
   assert.match(wanMarkup, /<th>延迟<\/th>/);
@@ -295,20 +355,32 @@ async function run(){
   assert.match(wanMarkup, /AS64500/);
   assert.doesNotMatch(wanMarkup, /丢包|抖动|实时/);
   assert.doesNotMatch(portTelemetryMarkup, /<th>RX<\/th>|<th>TX<\/th>|<th>连接<\/th>/);
-  assert.equal(app.unifiPortLinkText({up: false, speed_mbps: 1000, max_speed_mbps: 10000}), '未连接 / 10 GbE');
+  assert.equal(app.unifiPortLinkText({up: false, speed_mbps: 1000, max_speed_mbps: 10000}), '- / 10 GbE');
   assert.equal(app.unifiPortLinkText({up: true, speed_mbps: 1000}), '1 GbE / -');
-  assert.equal(app.unifiPortLinkText({up: true, speed_mbps: 1000, max_speed_mbps: 10000}, false), '1 GbE / -');
+  assert.equal(app.unifiPortLinkText({up: true, speed_mbps: 1000, max_speed_mbps: 10000}, false), '1 GbE');
+  assert.equal(app.unifiPortLinkText({max_speed_mbps: 1000}, false), '-');
+  assert.equal(app.unifiPortConnectorText('sfp_plus'), 'SFP+');
+  assert.equal(app.unifiPortConnectorText('qsfp28'), 'QSFP28');
+  assert.equal(app.unifiPortConnectorText('unknown'), '-');
   assert.equal(app.unifiPortPoeText({poe: {supported: false, power_w: 0}}), '-');
+  assert.equal(app.unifiPortPoeText({poe_in: true, poe_out: false}), 'PoE IN');
+  assert.equal(app.unifiPortPoeText({roles: ['poe_passthrough'], poe_out: true, poe_passthrough_enabled: true}), '透传');
+  assert.equal(app.unifiPortPoeText({roles: ['poe_passthrough'], poe_out: true, poe_passthrough_enabled: false}), '-');
   assert.doesNotMatch(portTelemetryMarkup, /mac_table|mac_address|192\\.168/);
   assert.match(apiTelemetryMarkup, /UniFi 设备型号/);
   assert.match(apiTelemetryMarkup, /UniFi Dream Wall/);
   assert.match(apiTelemetryMarkup, /在线/);
   assert.match(apiTelemetryMarkup, /2\.5 GbE/);
-  assert.equal(app.unifiLinkBandwidth(100), 'FE');
-  assert.equal(app.unifiLinkBandwidth(1000), '1 GbE');
-  assert.equal(app.unifiLinkBandwidth(10000), '10 GbE');
+  const bandwidthCases = new Map([[10, '10 Mbps'], [100, '100 Mbps'], [1000, '1 GbE'], [2500, '2.5 GbE'], [5000, '5 GbE'], [10000, '10 GbE'], [25000, '25 GbE'], [100000, '100 GbE']]);
+  for(const [value, expected] of bandwidthCases) assert.equal(app.unifiLinkBandwidth(value), expected);
   assert.doesNotMatch(apiTelemetryMarkup, /WAN|双工|速率|设备身份|连接客户端/);
   assert.match(apiTelemetryMarkup, /unifi-api-table/);
+  assert.match(apiDiagnosticsMarkup, /device_detail/);
+  assert.match(apiDiagnosticsMarkup, /topology/);
+  assert.match(apiDiagnosticsMarkup, /不支持/);
+  assert.match(apiDiagnosticsMarkup, /api_endpoint_unsupported/);
+  assert.match(apiDiagnosticsMarkup, /HTTP/);
+  assert.doesNotMatch(indexMarkup, /id="unifiDiagnostics"/);
   assert.match(systemCards, /<h2>设备名称\/型号<\/h2>/);
   assert.match(systemCards, /UDW/);
   assert.match(systemCards, /UniFi Dream Wall/);
@@ -338,8 +410,8 @@ async function run(){
   assert.match(portTelemetryMarkup, /UniFi Dream Wall/);
   assert.match(portTelemetryMarkup, /USW Flex Mini \(离线\)/);
   assert.ok(numericIpMarkup.indexOf('USW Flex Mini (离线)') < numericIpMarkup.indexOf('UniFi Dream Wall'));
-  assert.ok(portTelemetryMarkup.indexOf('>2</td>') < portTelemetryMarkup.indexOf('>7</td>'));
-  assert.ok(portTelemetryMarkup.indexOf('>7</td>') < portTelemetryMarkup.indexOf('>10</td>'));
+  assert.ok(portTelemetryMarkup.indexOf('>Port 2</td>') < portTelemetryMarkup.indexOf('>Port 7</td>'));
+  assert.ok(portTelemetryMarkup.indexOf('>Port 7</td>') < portTelemetryMarkup.indexOf('>Port 10</td>'));
   assert.doesNotMatch(portTelemetryMarkup, /已连接 · 上联/);
   assert.doesNotMatch(portTelemetryMarkup, /switch-1/);
   const noPoeMarkup = app.unifiPortTelemetryMarkup({...ucgMaxUniFi, api: noPoeApiFixture});
@@ -351,8 +423,13 @@ async function run(){
     ports: [{device_id: 'future-1', port_idx: 1, name: 'Port 1', up: true, speed_mbps: 1000}]
   }};
   const unknownMarkup = app.unifiPortTelemetryMarkup({...ucgMaxUniFi, api: unknownApiFixture});
-  assert.match(unknownMarkup, /<th>PoE<\/th>/);
+  assert.doesNotMatch(unknownMarkup, /<th>PoE<\/th>/);
   assert.doesNotMatch(unknownMarkup, /PoE 总功率/);
+  const unknownRuntimeMarkup = app.unifiPortTelemetryMarkup({...ucgMaxUniFi, api: {...unknownApiFixture, telemetry: {...unknownApiFixture.telemetry,
+    ports: [{device_id: 'future-1', port_idx: 1, name: 'Port 1', up: true, speed_mbps: 1000, poe: {active: true, power_w: 7.5}}]
+  }}});
+  assert.match(unknownRuntimeMarkup, /<th>PoE<\/th>/);
+  assert.match(unknownRuntimeMarkup, /PoE 总功率 7\.5 W \/ -/);
   assert.doesNotMatch(systemCards, /card-mini-meta"[^>]*>\(网络 \/ VLAN\)<\/div>/);
   const cardLabels = ['设备名称/型号', 'CPU', '内存', '负载', '连接客户端', 'CPU 温度', '运行时间', '控制器状态 (版本)', '网络应用状态 (版本)', '网络摘要'];
   let previous = -1;
@@ -920,7 +997,7 @@ async function run(){
   assert.match(appSource, /refresh\('initial'\)/);
   assert.match(appSource, /setActivePage\(tab\.dataset\.pageTarget\)/);
   assert.match(appSource, /parseDashboardHash\(window\.location\.hash\)/);
-  assert.match(appSource, /\['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier'\]/);
+  assert.match(appSource, /\['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier', 'diagnostics'\]/);
   const homeHardwareSource = appSource.slice(appSource.indexOf('function renderHardware'), appSource.indexOf('function filesystemBackingDisks'));
   assert.deepEqual(
     [...homeHardwareSource.matchAll(/<h2>([^<]+)<\/h2>/g)].map(match => match[1]),

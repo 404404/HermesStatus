@@ -1,0 +1,32 @@
+{
+  "model_name": "TOSHIBA MG08ADA800E",
+  "smart_status": {
+    "passed": true
+  },
+  "logical_block_size": 512,
+  "user_capacity": {
+    "bytes": 8001563222016
+  },
+  "ata_device_statistics": {
+    "pages": [
+      {
+        "number": 1,
+        "name": "General Statistics",
+        "table": [
+          {"offset": 16, "name": "Power-on Hours", "value": 12345},
+          {"offset": 24, "name": "Logical Sectors Written", "value": 987654321},
+          {"offset": 40, "name": "Logical Sectors Read", "value": 1234567890}
+        ]
+      },
+      {
+        "number": 5,
+        "name": "Temperature Statistics",
+        "table": [
+          {"offset": 8, "name": "Current Temperature", "value": 32},
+          {"offset": 32, "name": "Highest Temperature", "value": 46},
+          {"offset": 40, "name": "Lowest Temperature", "value": 18}
+        ]
+      }
+    ]
+  }
+}

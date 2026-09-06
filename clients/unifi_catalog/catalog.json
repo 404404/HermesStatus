@@ -10,7 +10,14 @@
         "official-u6-enterprise-iw-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "U6 Enterprise IW",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-u6-enterprise-iw-controller-identity-20260901"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -19,24 +26,27 @@
         "items": [
           {
             "index": 1,
-            "label": "2.5 GbE data-in",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "downstream",
+              "poe_passthrough"
             ],
-            "max_speed_mbps": 2500,
-            "poe_in": true,
-            "poe_out": false,
+            "max_speed_mbps": 1000,
+            "poe_in": false,
+            "poe_out": true,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
           },
           {
             "index": 2,
-            "label": "GbE data-out-1",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "downstream"
             ],
             "max_speed_mbps": 1000,
             "poe_in": false,
@@ -47,10 +57,11 @@
           },
           {
             "index": 3,
-            "label": "GbE data-out-2",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "downstream"
             ],
             "max_speed_mbps": 1000,
             "poe_in": false,
@@ -61,10 +72,11 @@
           },
           {
             "index": 4,
-            "label": "GbE data-out-3",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "downstream"
             ],
             "max_speed_mbps": 1000,
             "poe_in": false,
@@ -75,14 +87,16 @@
           },
           {
             "index": 5,
-            "label": "GbE data-out-4",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "uplink",
+              "data_in"
             ],
-            "max_speed_mbps": 1000,
-            "poe_in": false,
-            "poe_out": null,
+            "max_speed_mbps": 2500,
+            "poe_in": true,
+            "poe_out": false,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
@@ -158,7 +172,14 @@
         "official-u6-iw-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "U6 IW",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-u6-iw-controller-identity-20260901"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -167,24 +188,27 @@
         "items": [
           {
             "index": 1,
-            "label": "GbE data-in",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "downstream",
+              "poe_passthrough"
             ],
             "max_speed_mbps": 1000,
-            "poe_in": true,
-            "poe_out": false,
+            "poe_in": false,
+            "poe_out": true,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
           },
           {
             "index": 2,
-            "label": "GbE data-out-1",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "downstream"
             ],
             "max_speed_mbps": 1000,
             "poe_in": false,
@@ -195,10 +219,11 @@
           },
           {
             "index": 3,
-            "label": "GbE data-out-2",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "downstream"
             ],
             "max_speed_mbps": 1000,
             "poe_in": false,
@@ -209,10 +234,11 @@
           },
           {
             "index": 4,
-            "label": "GbE data-out-3",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "downstream"
             ],
             "max_speed_mbps": 1000,
             "poe_in": false,
@@ -223,14 +249,16 @@
           },
           {
             "index": 5,
-            "label": "GbE data-out-4",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "uplink",
+              "data_in"
             ],
             "max_speed_mbps": 1000,
-            "poe_in": false,
-            "poe_out": null,
+            "poe_in": true,
+            "poe_out": false,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
@@ -306,7 +334,14 @@
         "official-u6-mesh-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "U6 Mesh",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-u6-mesh-controller-identity-20260901"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -315,10 +350,12 @@
         "items": [
           {
             "index": 1,
-            "label": "GbE uplink",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "uplink",
+              "data_in"
             ],
             "max_speed_mbps": 1000,
             "poe_in": true,
@@ -398,7 +435,14 @@
         "official-uap-ac-m-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "AC Mesh",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-ac-mesh-controller-identity-20260901"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -407,10 +451,12 @@
         "items": [
           {
             "index": 1,
-            "label": "GbE uplink",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
-              "lan"
+              "lan",
+              "uplink",
+              "data_in"
             ],
             "max_speed_mbps": 1000,
             "poe_in": true,
@@ -499,7 +545,7 @@
         "items": [
           {
             "index": 1,
-            "label": "GbE data-in",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -513,7 +559,7 @@
           },
           {
             "index": 2,
-            "label": "GbE data-out-1",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -527,7 +573,7 @@
           },
           {
             "index": 3,
-            "label": "GbE data-out-2",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -541,7 +587,7 @@
           },
           {
             "index": 4,
-            "label": "GbE data-out-3",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -555,7 +601,7 @@
           },
           {
             "index": 5,
-            "label": "GbE data-out-4",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -670,7 +716,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan",
@@ -685,7 +731,7 @@
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan",
@@ -700,7 +746,7 @@
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan",
@@ -715,7 +761,7 @@
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan",
@@ -730,7 +776,7 @@
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan",
@@ -861,7 +907,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -869,13 +915,13 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe++",
-            "poe_max_power_w": 60,
+            "poe_standard": "poe",
+            "poe_max_power_w": 15.4,
             "combo_group": null
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -883,13 +929,13 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe++",
-            "poe_max_power_w": 60,
+            "poe_standard": "poe",
+            "poe_max_power_w": 15.4,
             "combo_group": null
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -897,13 +943,13 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe++",
-            "poe_max_power_w": 60,
+            "poe_standard": "poe",
+            "poe_max_power_w": 15.4,
             "combo_group": null
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -911,13 +957,13 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe++",
-            "poe_max_power_w": 60,
+            "poe_standard": "poe",
+            "poe_max_power_w": 15.4,
             "combo_group": null
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -931,7 +977,7 @@
           },
           {
             "index": 6,
-            "label": "RJ45-6",
+            "label": "Port 6",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -945,7 +991,7 @@
           },
           {
             "index": 7,
-            "label": "RJ45-7",
+            "label": "Port 7",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -959,7 +1005,7 @@
           },
           {
             "index": 8,
-            "label": "RJ45-8",
+            "label": "Port 8",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -973,7 +1019,7 @@
           },
           {
             "index": 9,
-            "label": "RJ45-9",
+            "label": "Port 9",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -981,13 +1027,13 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe",
-            "poe_max_power_w": 15.4,
+            "poe_standard": "poe++",
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 10,
-            "label": "RJ45-10",
+            "label": "Port 10",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -995,13 +1041,13 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe",
-            "poe_max_power_w": 15.4,
+            "poe_standard": "poe++",
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 11,
-            "label": "RJ45-11",
+            "label": "Port 11",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1009,13 +1055,13 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe",
-            "poe_max_power_w": 15.4,
+            "poe_standard": "poe++",
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 12,
-            "label": "RJ45-12",
+            "label": "Port 12",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1023,13 +1069,13 @@
             "max_speed_mbps": 1000,
             "poe_in": false,
             "poe_out": true,
-            "poe_standard": "poe",
-            "poe_max_power_w": 15.4,
+            "poe_standard": "poe++",
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 13,
-            "label": "RJ45-13",
+            "label": "Port 13",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1043,7 +1089,7 @@
           },
           {
             "index": 14,
-            "label": "RJ45-14",
+            "label": "Port 14",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1057,7 +1103,7 @@
           },
           {
             "index": 15,
-            "label": "RJ45-15",
+            "label": "Port 15",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1071,7 +1117,7 @@
           },
           {
             "index": 16,
-            "label": "RJ45-16",
+            "label": "Port 16",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1085,59 +1131,48 @@
           },
           {
             "index": 17,
-            "label": "RJ45-17",
-            "connector": "rj45",
-            "roles": [
-              "lan"
-            ],
-            "max_speed_mbps": 1000,
-            "poe_in": false,
-            "poe_out": false,
+            "label": "Port 17",
+            "connector": "sfp_plus",
+            "roles": [],
+            "max_speed_mbps": 10000,
+            "poe_in": null,
+            "poe_out": null,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
           },
           {
             "index": 18,
-            "label": "RJ45-18",
+            "label": "Port 18",
             "connector": "rj45",
-            "roles": [
-              "lan",
-              "wan"
-            ],
-            "max_speed_mbps": 2500,
-            "poe_in": false,
-            "poe_out": false,
+            "roles": [],
+            "max_speed_mbps": 1000,
+            "poe_in": null,
+            "poe_out": null,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
           },
           {
             "index": 19,
-            "label": "SFP+-1",
-            "connector": "sfp_plus",
-            "roles": [
-              "lan",
-              "wan"
-            ],
-            "max_speed_mbps": 10000,
-            "poe_in": false,
-            "poe_out": false,
+            "label": "Port 19",
+            "connector": "rj45",
+            "roles": [],
+            "max_speed_mbps": 2500,
+            "poe_in": null,
+            "poe_out": null,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
           },
           {
             "index": 20,
-            "label": "SFP+-2",
+            "label": "Port 20",
             "connector": "sfp_plus",
-            "roles": [
-              "lan",
-              "wan"
-            ],
+            "roles": [],
             "max_speed_mbps": 10000,
-            "poe_in": false,
-            "poe_out": false,
+            "poe_in": null,
+            "poe_out": null,
             "poe_standard": null,
             "poe_max_power_w": null,
             "combo_group": null
@@ -1235,7 +1270,14 @@
         "official-us-xg-6poe-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "US XG 6 PoE",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-us-xg-6poe-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -1244,7 +1286,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1258,7 +1300,7 @@
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1272,7 +1314,7 @@
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1286,7 +1328,7 @@
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1300,7 +1342,7 @@
           },
           {
             "index": 5,
-            "label": "SFP+-1",
+            "label": "Port 5",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -1314,7 +1356,7 @@
           },
           {
             "index": 6,
-            "label": "SFP+-2",
+            "label": "Port 6",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -1406,7 +1448,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1415,12 +1457,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1429,12 +1471,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1443,12 +1485,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1457,12 +1499,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1471,12 +1513,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 6,
-            "label": "RJ45-6",
+            "label": "Port 6",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1485,12 +1527,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 7,
-            "label": "RJ45-7",
+            "label": "Port 7",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1499,12 +1541,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 8,
-            "label": "RJ45-8",
+            "label": "Port 8",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1513,12 +1555,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 9,
-            "label": "SFP+-1",
+            "label": "Port 9",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -1532,7 +1574,7 @@
           },
           {
             "index": 10,
-            "label": "SFP+-2",
+            "label": "Port 10",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -1615,7 +1657,14 @@
         "official-usw-flex-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "USW Flex",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-usw-flex-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -1624,7 +1673,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1 upstream",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1638,7 +1687,7 @@
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1647,12 +1696,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 25,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1661,12 +1710,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 25,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1675,12 +1724,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 25,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1689,7 +1738,7 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 25,
+            "poe_max_power_w": 30,
             "combo_group": null
           }
         ]
@@ -1895,7 +1944,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1909,7 +1958,7 @@
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1923,7 +1972,7 @@
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1937,7 +1986,7 @@
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -1951,7 +2000,7 @@
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2084,7 +2133,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2098,7 +2147,7 @@
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2112,7 +2161,7 @@
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2126,7 +2175,7 @@
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2140,7 +2189,7 @@
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2154,7 +2203,7 @@
           },
           {
             "index": 6,
-            "label": "RJ45-6",
+            "label": "Port 6",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2168,7 +2217,7 @@
           },
           {
             "index": 7,
-            "label": "RJ45-7",
+            "label": "Port 7",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2182,7 +2231,7 @@
           },
           {
             "index": 8,
-            "label": "RJ45-8",
+            "label": "Port 8",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2196,21 +2245,21 @@
           },
           {
             "index": 9,
-            "label": "RJ45-9",
+            "label": "Port 9",
             "connector": "rj45",
             "roles": [
               "lan"
             ],
             "max_speed_mbps": 10000,
-            "poe_in": false,
+            "poe_in": true,
             "poe_out": false,
-            "poe_standard": null,
+            "poe_standard": "poe+",
             "poe_max_power_w": null,
             "combo_group": null
           },
           {
             "index": 10,
-            "label": "SFP+-1",
+            "label": "Port 10",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -2375,7 +2424,14 @@
         "official-usw-flex-2-5g-8-poe-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "USW Flex 2.5G 8 PoE",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-usw-flex-2-5g-8-poe-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -2384,7 +2440,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2393,12 +2449,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2407,12 +2463,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2421,12 +2477,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2435,12 +2491,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2449,12 +2505,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 6,
-            "label": "RJ45-6",
+            "label": "Port 6",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2463,12 +2519,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 7,
-            "label": "RJ45-7",
+            "label": "Port 7",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2477,12 +2533,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 8,
-            "label": "RJ45-8",
+            "label": "Port 8",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2491,12 +2547,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 9,
-            "label": "RJ45-9 PoE+++ input",
+            "label": "Port 9",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2510,7 +2566,7 @@
           },
           {
             "index": 10,
-            "label": "SFP+-1",
+            "label": "Port 10",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -2804,7 +2860,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2818,7 +2874,7 @@
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2832,7 +2888,7 @@
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2846,7 +2902,7 @@
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2860,7 +2916,7 @@
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -2984,7 +3040,14 @@
         "official-usw-pro-hd-24-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "USW Pro HD 24",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-usw-pro-hd-24-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -2993,7 +3056,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3007,7 +3070,7 @@
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3021,7 +3084,7 @@
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3035,7 +3098,7 @@
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3049,7 +3112,7 @@
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3063,7 +3126,7 @@
           },
           {
             "index": 6,
-            "label": "RJ45-6",
+            "label": "Port 6",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3077,7 +3140,7 @@
           },
           {
             "index": 7,
-            "label": "RJ45-7",
+            "label": "Port 7",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3091,7 +3154,7 @@
           },
           {
             "index": 8,
-            "label": "RJ45-8",
+            "label": "Port 8",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3105,7 +3168,7 @@
           },
           {
             "index": 9,
-            "label": "RJ45-9",
+            "label": "Port 9",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3119,7 +3182,7 @@
           },
           {
             "index": 10,
-            "label": "RJ45-10",
+            "label": "Port 10",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3133,7 +3196,7 @@
           },
           {
             "index": 11,
-            "label": "RJ45-11",
+            "label": "Port 11",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3147,7 +3210,7 @@
           },
           {
             "index": 12,
-            "label": "RJ45-12",
+            "label": "Port 12",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3161,7 +3224,7 @@
           },
           {
             "index": 13,
-            "label": "RJ45-13",
+            "label": "Port 13",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3175,7 +3238,7 @@
           },
           {
             "index": 14,
-            "label": "RJ45-14",
+            "label": "Port 14",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3189,7 +3252,7 @@
           },
           {
             "index": 15,
-            "label": "RJ45-15",
+            "label": "Port 15",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3203,7 +3266,7 @@
           },
           {
             "index": 16,
-            "label": "RJ45-16",
+            "label": "Port 16",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3217,7 +3280,7 @@
           },
           {
             "index": 17,
-            "label": "RJ45-17",
+            "label": "Port 17",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3231,7 +3294,7 @@
           },
           {
             "index": 18,
-            "label": "RJ45-18",
+            "label": "Port 18",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3245,7 +3308,7 @@
           },
           {
             "index": 19,
-            "label": "RJ45-19",
+            "label": "Port 19",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3259,7 +3322,7 @@
           },
           {
             "index": 20,
-            "label": "RJ45-20",
+            "label": "Port 20",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3273,7 +3336,7 @@
           },
           {
             "index": 21,
-            "label": "RJ45-21",
+            "label": "Port 21",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3287,7 +3350,7 @@
           },
           {
             "index": 22,
-            "label": "RJ45-22",
+            "label": "Port 22",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3301,7 +3364,7 @@
           },
           {
             "index": 23,
-            "label": "RJ45-23",
+            "label": "Port 23",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3315,7 +3378,7 @@
           },
           {
             "index": 24,
-            "label": "RJ45-24",
+            "label": "Port 24",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3329,7 +3392,7 @@
           },
           {
             "index": 25,
-            "label": "SFP+-1",
+            "label": "Port 25",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -3343,7 +3406,7 @@
           },
           {
             "index": 26,
-            "label": "SFP+-2",
+            "label": "Port 26",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -3357,7 +3420,7 @@
           },
           {
             "index": 27,
-            "label": "SFP+-3",
+            "label": "Port 27",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -3371,7 +3434,7 @@
           },
           {
             "index": 28,
-            "label": "SFP+-4",
+            "label": "Port 28",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -3504,7 +3567,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3513,12 +3576,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3527,12 +3590,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3541,12 +3604,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3555,12 +3618,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3569,12 +3632,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 6,
-            "label": "RJ45-6",
+            "label": "Port 6",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3583,12 +3646,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 7,
-            "label": "RJ45-7",
+            "label": "Port 7",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3597,12 +3660,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 8,
-            "label": "RJ45-8",
+            "label": "Port 8",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3611,12 +3674,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 9,
-            "label": "RJ45-9",
+            "label": "Port 9",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3625,12 +3688,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 10,
-            "label": "RJ45-10",
+            "label": "Port 10",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3639,12 +3702,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 11,
-            "label": "RJ45-11",
+            "label": "Port 11",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3653,12 +3716,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 12,
-            "label": "RJ45-12",
+            "label": "Port 12",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3667,12 +3730,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 13,
-            "label": "RJ45-13",
+            "label": "Port 13",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3681,12 +3744,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 14,
-            "label": "RJ45-14",
+            "label": "Port 14",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3695,12 +3758,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 15,
-            "label": "RJ45-15",
+            "label": "Port 15",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3709,12 +3772,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 16,
-            "label": "RJ45-16",
+            "label": "Port 16",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3723,12 +3786,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 17,
-            "label": "RJ45-17",
+            "label": "Port 17",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3737,12 +3800,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 18,
-            "label": "RJ45-18",
+            "label": "Port 18",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3751,12 +3814,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 19,
-            "label": "RJ45-19",
+            "label": "Port 19",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3765,12 +3828,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 20,
-            "label": "RJ45-20",
+            "label": "Port 20",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3779,12 +3842,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 21,
-            "label": "RJ45-21",
+            "label": "Port 21",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3793,12 +3856,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 22,
-            "label": "RJ45-22",
+            "label": "Port 22",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3807,12 +3870,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 23,
-            "label": "RJ45-23",
+            "label": "Port 23",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3821,12 +3884,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 24,
-            "label": "RJ45-24",
+            "label": "Port 24",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -3835,12 +3898,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe++",
-            "poe_max_power_w": 64,
+            "poe_max_power_w": 60,
             "combo_group": null
           },
           {
             "index": 25,
-            "label": "SFP+-1",
+            "label": "Port 25",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -3854,7 +3917,7 @@
           },
           {
             "index": 26,
-            "label": "SFP+-2",
+            "label": "Port 26",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -3868,7 +3931,7 @@
           },
           {
             "index": 27,
-            "label": "SFP+-3",
+            "label": "Port 27",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -3882,7 +3945,7 @@
           },
           {
             "index": 28,
-            "label": "SFP+-4",
+            "label": "Port 28",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -4015,7 +4078,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4029,7 +4092,7 @@
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4043,7 +4106,7 @@
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4057,7 +4120,7 @@
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4071,7 +4134,7 @@
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4085,7 +4148,7 @@
           },
           {
             "index": 6,
-            "label": "RJ45-6",
+            "label": "Port 6",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4099,7 +4162,7 @@
           },
           {
             "index": 7,
-            "label": "RJ45-7",
+            "label": "Port 7",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4113,7 +4176,7 @@
           },
           {
             "index": 8,
-            "label": "RJ45-8",
+            "label": "Port 8",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4127,7 +4190,7 @@
           },
           {
             "index": 9,
-            "label": "RJ45-9",
+            "label": "Port 9",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4141,7 +4204,7 @@
           },
           {
             "index": 10,
-            "label": "RJ45-10",
+            "label": "Port 10",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4155,7 +4218,7 @@
           },
           {
             "index": 11,
-            "label": "RJ45-11",
+            "label": "Port 11",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4169,7 +4232,7 @@
           },
           {
             "index": 12,
-            "label": "RJ45-12",
+            "label": "Port 12",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4183,7 +4246,7 @@
           },
           {
             "index": 13,
-            "label": "RJ45-13",
+            "label": "Port 13",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4197,7 +4260,7 @@
           },
           {
             "index": 14,
-            "label": "RJ45-14",
+            "label": "Port 14",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4211,7 +4274,7 @@
           },
           {
             "index": 15,
-            "label": "RJ45-15",
+            "label": "Port 15",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4225,7 +4288,7 @@
           },
           {
             "index": 16,
-            "label": "RJ45-16",
+            "label": "Port 16",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4239,7 +4302,7 @@
           },
           {
             "index": 17,
-            "label": "SFP+-1",
+            "label": "Port 17",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -4253,7 +4316,7 @@
           },
           {
             "index": 18,
-            "label": "SFP+-2",
+            "label": "Port 18",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -4377,7 +4440,14 @@
         "official-usw-pro-max-16-poe-techspecs-20260830"
       ],
       "runtime_identifiers": {
-        "api_model": [],
+        "api_model": [
+          {
+            "value": "USW Pro Max 16 PoE",
+            "status": "verified",
+            "provenance": "qualified_controller",
+            "evidence_id": "runtime-usw-pro-max-16-poe-controller-identity-20260831"
+          }
+        ],
         "sysid": [],
         "ssh_model": []
       },
@@ -4386,7 +4456,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4395,12 +4465,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4409,12 +4479,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4423,12 +4493,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4437,12 +4507,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4451,12 +4521,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 6,
-            "label": "RJ45-6",
+            "label": "Port 6",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4465,12 +4535,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 7,
-            "label": "RJ45-7",
+            "label": "Port 7",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4479,12 +4549,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 8,
-            "label": "RJ45-8",
+            "label": "Port 8",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4493,12 +4563,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 9,
-            "label": "RJ45-9",
+            "label": "Port 9",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4507,12 +4577,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 10,
-            "label": "RJ45-10",
+            "label": "Port 10",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4521,12 +4591,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 11,
-            "label": "RJ45-11",
+            "label": "Port 11",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4535,12 +4605,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 12,
-            "label": "RJ45-12",
+            "label": "Port 12",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4549,12 +4619,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 13,
-            "label": "RJ45-13",
+            "label": "Port 13",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4568,7 +4638,7 @@
           },
           {
             "index": 14,
-            "label": "RJ45-14",
+            "label": "Port 14",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4582,7 +4652,7 @@
           },
           {
             "index": 15,
-            "label": "RJ45-15",
+            "label": "Port 15",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4596,7 +4666,7 @@
           },
           {
             "index": 16,
-            "label": "RJ45-16",
+            "label": "Port 16",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4610,7 +4680,7 @@
           },
           {
             "index": 17,
-            "label": "SFP+-1",
+            "label": "Port 17",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -4624,7 +4694,7 @@
           },
           {
             "index": 18,
-            "label": "SFP+-2",
+            "label": "Port 18",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -4716,7 +4786,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4730,7 +4800,7 @@
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4744,7 +4814,7 @@
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4758,7 +4828,7 @@
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4772,7 +4842,7 @@
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4786,7 +4856,7 @@
           },
           {
             "index": 6,
-            "label": "RJ45-6",
+            "label": "Port 6",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4800,7 +4870,7 @@
           },
           {
             "index": 7,
-            "label": "RJ45-7",
+            "label": "Port 7",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4814,7 +4884,7 @@
           },
           {
             "index": 8,
-            "label": "RJ45-8",
+            "label": "Port 8",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4828,7 +4898,7 @@
           },
           {
             "index": 9,
-            "label": "RJ45-9",
+            "label": "Port 9",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4842,7 +4912,7 @@
           },
           {
             "index": 10,
-            "label": "RJ45-10",
+            "label": "Port 10",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4856,7 +4926,7 @@
           },
           {
             "index": 11,
-            "label": "RJ45-11",
+            "label": "Port 11",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4870,7 +4940,7 @@
           },
           {
             "index": 12,
-            "label": "RJ45-12",
+            "label": "Port 12",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4884,7 +4954,7 @@
           },
           {
             "index": 13,
-            "label": "RJ45-13",
+            "label": "Port 13",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4898,7 +4968,7 @@
           },
           {
             "index": 14,
-            "label": "RJ45-14",
+            "label": "Port 14",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4912,7 +4982,7 @@
           },
           {
             "index": 15,
-            "label": "RJ45-15",
+            "label": "Port 15",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4926,7 +4996,7 @@
           },
           {
             "index": 16,
-            "label": "RJ45-16",
+            "label": "Port 16",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4940,7 +5010,7 @@
           },
           {
             "index": 17,
-            "label": "RJ45-17",
+            "label": "Port 17",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4954,7 +5024,7 @@
           },
           {
             "index": 18,
-            "label": "RJ45-18",
+            "label": "Port 18",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4968,7 +5038,7 @@
           },
           {
             "index": 19,
-            "label": "RJ45-19",
+            "label": "Port 19",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4982,7 +5052,7 @@
           },
           {
             "index": 20,
-            "label": "RJ45-20",
+            "label": "Port 20",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -4996,7 +5066,7 @@
           },
           {
             "index": 21,
-            "label": "RJ45-21",
+            "label": "Port 21",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5010,7 +5080,7 @@
           },
           {
             "index": 22,
-            "label": "RJ45-22",
+            "label": "Port 22",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5024,7 +5094,7 @@
           },
           {
             "index": 23,
-            "label": "RJ45-23",
+            "label": "Port 23",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5038,7 +5108,7 @@
           },
           {
             "index": 24,
-            "label": "RJ45-24",
+            "label": "Port 24",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5052,7 +5122,7 @@
           },
           {
             "index": 25,
-            "label": "SFP+-1",
+            "label": "Port 25",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -5066,7 +5136,7 @@
           },
           {
             "index": 26,
-            "label": "SFP+-2",
+            "label": "Port 26",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -5199,7 +5269,7 @@
         "items": [
           {
             "index": 1,
-            "label": "RJ45-1",
+            "label": "Port 1",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5208,12 +5278,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 2,
-            "label": "RJ45-2",
+            "label": "Port 2",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5222,12 +5292,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 3,
-            "label": "RJ45-3",
+            "label": "Port 3",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5236,12 +5306,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 4,
-            "label": "RJ45-4",
+            "label": "Port 4",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5250,12 +5320,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 5,
-            "label": "RJ45-5",
+            "label": "Port 5",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5264,12 +5334,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 6,
-            "label": "RJ45-6",
+            "label": "Port 6",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5278,12 +5348,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 7,
-            "label": "RJ45-7",
+            "label": "Port 7",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5292,12 +5362,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 8,
-            "label": "RJ45-8",
+            "label": "Port 8",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5306,12 +5376,12 @@
             "poe_in": false,
             "poe_out": true,
             "poe_standard": "poe+",
-            "poe_max_power_w": 32,
+            "poe_max_power_w": 30,
             "combo_group": null
           },
           {
             "index": 9,
-            "label": "RJ45-9",
+            "label": "Port 9",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5325,7 +5395,7 @@
           },
           {
             "index": 10,
-            "label": "RJ45-10",
+            "label": "Port 10",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5339,7 +5409,7 @@
           },
           {
             "index": 11,
-            "label": "RJ45-11",
+            "label": "Port 11",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5353,7 +5423,7 @@
           },
           {
             "index": 12,
-            "label": "RJ45-12",
+            "label": "Port 12",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5367,7 +5437,7 @@
           },
           {
             "index": 13,
-            "label": "RJ45-13",
+            "label": "Port 13",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5381,7 +5451,7 @@
           },
           {
             "index": 14,
-            "label": "RJ45-14",
+            "label": "Port 14",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5395,7 +5465,7 @@
           },
           {
             "index": 15,
-            "label": "RJ45-15",
+            "label": "Port 15",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5409,7 +5479,7 @@
           },
           {
             "index": 16,
-            "label": "RJ45-16",
+            "label": "Port 16",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5423,7 +5493,7 @@
           },
           {
             "index": 17,
-            "label": "RJ45-17",
+            "label": "Port 17",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5437,7 +5507,7 @@
           },
           {
             "index": 18,
-            "label": "RJ45-18",
+            "label": "Port 18",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5451,7 +5521,7 @@
           },
           {
             "index": 19,
-            "label": "RJ45-19",
+            "label": "Port 19",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5465,7 +5535,7 @@
           },
           {
             "index": 20,
-            "label": "RJ45-20",
+            "label": "Port 20",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5479,7 +5549,7 @@
           },
           {
             "index": 21,
-            "label": "RJ45-21",
+            "label": "Port 21",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5493,7 +5563,7 @@
           },
           {
             "index": 22,
-            "label": "RJ45-22",
+            "label": "Port 22",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5507,7 +5577,7 @@
           },
           {
             "index": 23,
-            "label": "RJ45-23",
+            "label": "Port 23",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5521,7 +5591,7 @@
           },
           {
             "index": 24,
-            "label": "RJ45-24",
+            "label": "Port 24",
             "connector": "rj45",
             "roles": [
               "lan"
@@ -5535,7 +5605,7 @@
           },
           {
             "index": 25,
-            "label": "SFP+-1",
+            "label": "Port 25",
             "connector": "sfp_plus",
             "roles": [
               "lan"
@@ -5549,7 +5619,7 @@
           },
           {
             "index": 26,
-            "label": "SFP+-2",
+            "label": "Port 26",
             "connector": "sfp_plus",
             "roles": [
               "lan"

@@ -35,7 +35,7 @@ WAN_ENDPOINTS = (
     ("legacy_stat_health", "legacy"),
     ("legacy_stat_sysinfo", "legacy"),
 )
-REQUIRED_ENDPOINTS = frozenset({"info", "sites", "devices", "device_detail"})
+REQUIRED_ENDPOINTS = frozenset({"info", "sites", "devices", "device_detail", "device_stats"})
 SITE_RESOURCE_LIMIT = 32
 API_ID_LIMIT = 128
 MAX_RESPONSE_BYTES = 1 << 20
@@ -421,12 +421,28 @@ def _status_online(value):
     return None
 
 
-def _device_summary(devices):
-    if not devices:
+def _device_summary(devices, *, target=None, target_detail=None, ports=None):
+    """Project bounded per-device identity, Catalog capability, and PoE state.
+
+    Static budgets are resolved from the verified Catalog model selected by the
+    device's exact runtime identity. Runtime current is first taken from an
+    explicit device-level observation and otherwise summed only across ports
+    carrying that same device_id.
+    """
+    if not devices and not isinstance(target, dict):
         return None
+    source_devices = list((devices or [])[:MAX_API_ITEMS])
+    known_ids = {
+        _identifier(_first(item, "id", "device_id", "deviceId", "_id", "external_id"))
+        for item in source_devices if isinstance(item, dict)
+    }
+    target_id = _identifier(_first(target, "id", "device_id", "deviceId", "_id", "external_id")) if isinstance(target, dict) else None
+    if isinstance(target, dict) and target_id and target_id not in known_ids and len(source_devices) < MAX_API_ITEMS:
+        source_devices.append(target)
+
     online = offline = 0
     by_type = {"gateway": 0, "ap": 0, "switch": 0, "other": 0}
-    for item in devices[:MAX_API_ITEMS]:
+    for item in source_devices:
         state = _status_online(_first(item, "online", "is_online", "status", "state"))
         if state is True:
             online += 1
@@ -442,7 +458,49 @@ def _device_summary(devices):
         else:
             bucket = "other"
         by_type[bucket] += 1
-    return {"total": len(devices), "online": online, "offline": offline, "by_type": by_type}
+
+    port_totals = {}
+    for port in ports or []:
+        if not isinstance(port, dict):
+            continue
+        device_id = _identifier(port.get("device_id"))
+        poe = port.get("poe")
+        power = _decimal(poe.get("power_w"), minimum=0) if isinstance(poe, dict) and poe.get("supported") is not False else None
+        if device_id and power is not None:
+            port_totals[device_id] = port_totals.get(device_id, 0.0) + power
+
+    items = []
+    seen = set()
+    for item in source_devices:
+        descriptor = _device_descriptor(item, include_capabilities=True)
+        device_id = descriptor.get("device_id")
+        if not device_id or device_id in seen:
+            continue
+        seen.add(device_id)
+        current = None
+        current_source = "unavailable"
+        if device_id == target_id and isinstance(target_detail, dict):
+            current, _ = _device_poe_totals(target_detail)
+            if current is not None:
+                current_source = "device_reported"
+        if current is None:
+            current, _ = _device_poe_totals(item)
+            if current is not None:
+                current_source = "device_reported"
+        if current is None and device_id in port_totals:
+            current = port_totals[device_id]
+            current_source = "port_sum"
+        descriptor["poe"] = {"current_source": current_source}
+        if current is not None:
+            descriptor["poe"]["current_power_w"] = round(current, 2)
+        items.append(descriptor)
+        if len(items) >= MAX_API_ITEMS:
+            break
+
+    result = {"total": len(source_devices), "online": online, "offline": offline, "by_type": by_type}
+    if items:
+        result["items"] = items
+    return result
 
 
 def _client_summary(clients):
@@ -821,7 +879,7 @@ def _network_groups(payload):
             break
     return result
 
-def _device_descriptor(device):
+def _device_descriptor(device, *, include_capabilities=False):
     if not isinstance(device, dict):
         return {}
     result = {}
@@ -836,10 +894,14 @@ def _device_descriptor(device):
         result["name"] = model
     if model:
         result["model"] = model
-    model_profile = resolve_model(MODEL_CATALOG, model)
-    if model_profile is not None:
-        result["model_id"] = model_profile["canonical_sku"]
+    model_record = resolve_model(MODEL_CATALOG, model)
+    if model_record is not None:
+        result["model_id"] = model_record["canonical_sku"]
         result["model_profile_status"] = "known"
+        if include_capabilities:
+            power = model_record.get("power")
+            if isinstance(power, dict):
+                result["capabilities"] = {"poe": {"absolute_max_poe_budget_w": power.get("absolute_max_poe_budget_w")}}
     else:
         result["model_profile_status"] = "unknown"
     device_type = _text(_first(device, "type", "device_type", "deviceType", "category", "role"))
@@ -957,8 +1019,9 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_power_w=
         index = _counter(port, "port_idx", "idx", "portIndex")
     if index is None or index < 1 or index > 65535:
         return None
-    result = {"device_id": device_id, "port_idx": index}
+    result = {"device_id": device_id, "port_idx": index, "name": static_port["label"] if static_port is not None else f"Port {index}"}
     if static_port is not None:
+        result["model_profile_status"] = "known"
         result["name"] = static_port["label"]
         result["connector"] = static_port["connector"]
         result["media"] = static_port["connector"]
@@ -978,7 +1041,7 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_power_w=
         ("up", ("up", "link_up", "is_up")),
         ("uplink", ("is_uplink", "uplink")),
     ):
-        if static_port is not None and output in {"name", "media"}:
+        if output == "name" or (static_port is not None and output == "media"):
             continue
         value = _first(port, *keys)
         if output in {"duplex", "autoneg", "enabled", "up", "uplink"}:
@@ -1050,6 +1113,12 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_power_w=
     poe = _poe_record(poe_input, max_power_w=max_power_w if static_port is None else static_port["poe_max_power_w"])
     if poe is not None:
         result["poe"] = poe
+    if static_port is not None and "poe_passthrough" in static_port.get("roles", []):
+        passthrough_enabled = _boolean(_first(port, "poe_enable", "poe_enabled"))
+        passthrough_mode = _text(_first(port, "poe_mode", "poeMode"))
+        mode_token = "".join(character for character in str(passthrough_mode or "").casefold() if character.isalnum())
+        if passthrough_enabled is not None and mode_token in {"passthrough", "poepassthrough"}:
+            result["poe_passthrough_enabled"] = passthrough_enabled
     connection = port.get("last_connection")
     if isinstance(connection, dict) and connection.get("connected") is True:
         result["peer_count"] = 1
@@ -1098,6 +1167,108 @@ def _stable_port_record_key(item):
     return json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _static_port_for_runtime(port, static_ports):
+    """Associate an explicit runtime uplink with one Catalog physical port."""
+    runtime_index = _counter(port, "port_idx", "idx", "portIndex")
+    runtime_uplink = _boolean(_first(port, "is_uplink", "uplink")) is True
+    if not runtime_uplink:
+        return static_ports.get(runtime_index)
+    candidates = [
+        item for item in static_ports.values()
+        if "uplink" in item.get("roles", []) and "data_in" in item.get("roles", [])
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    if not candidates:
+        # Some maintained switches report a runtime uplink on a normal data
+        # port. With no role-qualified Catalog candidate, the only safe
+        # association is the exact physical index.
+        return static_ports.get(runtime_index)
+    # Multiple role-qualified targets are ambiguous. Do not guess.
+    return None
+
+
+_WIRED_UPLINK_KIND_KEYS = (
+    "connection_type", "connectionType", "medium", "network_type",
+    "networkType", "link_type", "linkType", "uplink",
+)
+_WIRED_UPLINK_BOOL_KEYS = ("wired", "is_wired", "isWired")
+_WIRED_UPLINK_STATE_KEYS = (
+    "link_state", "linkState", "connection_state", "connectionState",
+    "link_status", "linkStatus", "connected", "is_connected",
+)
+_WIRED_UPLINK_SPEED_KEYS = (
+    "speed_mbps", "speedMbps", "link_speed_mbps", "linkSpeedMbps", "speed",
+)
+_WIRED_UPLINK_NESTED_KEYS = (
+    "uplink", "uplinks", "interfaces", "interface", "connection", "link",
+    "ethernet",
+)
+
+
+def _bounded_uplink_records(device, depth=0):
+    if not isinstance(device, dict) or depth > 2:
+        return
+    yield device
+    for key in _WIRED_UPLINK_NESTED_KEYS:
+        value = device.get(key)
+        if isinstance(value, dict):
+            yield from _bounded_uplink_records(value, depth + 1)
+        elif isinstance(value, list):
+            for item in value[:8]:
+                if isinstance(item, dict):
+                    yield from _bounded_uplink_records(item, depth + 1)
+
+
+def _explicit_wired_uplink_observation(device):
+    wireless_seen = False
+    for item in _bounded_uplink_records(device):
+        kind = _text(_first(item, *_WIRED_UPLINK_KIND_KEYS))
+        normalized = (kind or "").strip().lower().replace("-", "").replace("_", "").replace(" ", "")
+        if any(token in normalized for token in ("wireless", "wifi", "wlan", "mesh")):
+            wireless_seen = True
+            continue
+        wired = _boolean(_first(item, *_WIRED_UPLINK_BOOL_KEYS))
+        explicit_kind = any(token in normalized for token in ("wired", "ethernet", "rj45", "sfp", "gbe", "2.5ge", "10ge"))
+        if wired is not True and not explicit_kind:
+            continue
+        result = {}
+        up = _boolean(_first(item, "up", "link_up", "is_up"))
+        if up is None:
+            up = _boolean(_first(item, "connected", "is_connected"))
+        if up is None:
+            up = _status_online(_first(item, *_WIRED_UPLINK_STATE_KEYS))
+        if up is not None:
+            result["up"] = up
+        speed = _decimal(_first(item, *_WIRED_UPLINK_SPEED_KEYS), minimum=0)
+        if speed is not None:
+            result["speed"] = speed
+        result["is_uplink"] = True
+        return result
+    return None
+
+
+def _single_port_ap_runtime(device, model, static_ports, raw_ports):
+    if not isinstance(model, dict) or model.get("device_type") != "ap":
+        return None
+    if any(
+        _counter(port, "port_idx", "idx", "portIndex") is not None
+        for port in raw_ports if isinstance(port, dict)
+    ):
+        return None
+    candidates = [
+        port for port in static_ports.values()
+        if "uplink" in port.get("roles", []) and "data_in" in port.get("roles", [])
+    ]
+    if len(candidates) != 1:
+        return None
+    observation = _explicit_wired_uplink_observation(device)
+    if observation is None:
+        return None
+    observation["port_idx"] = candidates[0]["index"]
+    return observation
+
+
 def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=None, devices=None):
     target_id = _identifier(target.get("id")) if isinstance(target, dict) else None
     if not target_id:
@@ -1128,14 +1299,16 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
         raw_ports = legacy.get("port_table") if isinstance(legacy.get("port_table"), list) else []
         for port in raw_ports[:MAX_UNIFI_PORTS_PER_DEVICE]:
             index = _counter(port, "port_idx", "idx", "portIndex")
-            detail = detail_capabilities.get(index, {})
+            static_port = _static_port_for_runtime(port, static_ports) if static_ports else None
+            physical_index = static_port["index"] if static_port is not None else index
+            detail = detail_capabilities.get(physical_index, {})
             item = _port_record(
                 port,
                 device_id=device_id,
                 previous_samples=previous_samples,
                 sample_time=sample_time,
                 max_power_w=detail.get("max_power_w"),
-                static_port=static_ports.get(index),
+                static_port=static_port,
                 model_id=model["canonical_sku"] if model else None,
             )
             if item is not None:
@@ -1143,8 +1316,26 @@ def _ports(legacy_payload, target, previous_samples, sample_time, target_detail=
                 current = runtime_by_key.get(key)
                 if current is None or _stable_port_record_key(item) < _stable_port_record_key(current):
                     runtime_by_key[key] = item
-    if not matched:
+        fallback_port = _single_port_ap_runtime(known_devices[device_id], model, static_ports, raw_ports)
+        if fallback_port is not None:
+            static_port = _static_port_for_runtime(fallback_port, static_ports)
+            item = _port_record(
+                fallback_port,
+                device_id=device_id,
+                previous_samples=previous_samples,
+                sample_time=sample_time,
+                static_port=static_port,
+                model_id=model["canonical_sku"] if model else None,
+            )
+            if item is not None:
+                runtime_by_key[(device_id, item["port_idx"])] = item
+    # The Catalog is the left side of this join. A controller may omit a
+    # device's runtime port observations entirely, while its resolved static
+    # physical topology remains safe and useful to display.
+    catalog_device_ids = {device_id for device_id, model in device_models.items() if model is not None}
+    if not matched and not catalog_device_ids:
         return None, None
+    matched_device_ids.update(catalog_device_ids)
 
     port_records = []
     for device_id in sorted(matched_device_ids):
@@ -1287,7 +1478,7 @@ def _telemetry(payloads, *, site=None, target=None, previous_samples=None, sampl
         "uplinks": uplinks,
         "temperatures": _temperature_records(devices) or None,
         "clients": _client_summary(clients),
-        "devices": _device_summary(devices),
+        "devices": _device_summary(devices, target=target, target_detail=target_detail, ports=ports),
         "networks": _network_summary(networks),
         "ports": ports,
         "port_summary": port_summary,
@@ -1391,6 +1582,7 @@ class UniFiAPICollector:
                 if report:
                     endpoint_results.append({
                         "name": name,
+                        "required": required,
                         "status": "unsupported" if exc.code == "api_endpoint_unsupported" else "error",
                         "http_status": exc.status,
                         "error": error,
@@ -1398,7 +1590,7 @@ class UniFiAPICollector:
                 failures.append((name, error, required))
                 return None
             if report:
-                endpoint_results.append({"name": name, "status": "ok", "http_status": status, "error": None})
+                endpoint_results.append({"name": name, "required": required, "status": "ok", "http_status": status, "error": None})
             payloads[name] = payload
             return payload
 
@@ -1418,19 +1610,30 @@ class UniFiAPICollector:
                     if exc.code == "api_timeout" and self._clock() >= deadline:
                         break
             if successes and not errors:
-                endpoint_results.append({"name": name, "status": "ok", "http_status": 200, "error": None})
+                endpoint_results.append({"name": name, "required": required, "status": "ok", "http_status": 200, "error": None})
                 payloads[name] = successes
                 return successes
             if successes and errors:
+                # A supplemental fan-out can legitimately hit a controller
+                # version where only some optional paths exist. Preserve the
+                # successful observations, while retaining an unsupported
+                # diagnostic for the missing capability.
+                if all(error.get("code") == "api_endpoint_unsupported" for error in errors):
+                    error = errors[0]
+                    endpoint_results.append({"name": name, "required": required, "status": "unsupported", "http_status": error.get("http_status"), "error": error})
+                    payloads[name] = successes
+                    failures.append((name, error, required))
+                    failure_details[name] = error
+                    return successes
                 error = _safe_error("api_partial_failure")
-                endpoint_results.append({"name": name, "status": "error", "http_status": None, "error": error})
+                endpoint_results.append({"name": name, "required": required, "status": "error", "http_status": None, "error": error})
                 payloads[name] = successes
                 failures.append((name, error, required))
                 failure_details[name] = error
                 return successes
             if errors:
                 error = errors[0]
-                endpoint_results.append({"name": name, "status": "unsupported" if error.get("http_status") == 404 else "error", "http_status": error.get("http_status"), "error": error})
+                endpoint_results.append({"name": name, "required": required, "status": "unsupported" if error.get("http_status") == 404 else "error", "http_status": error.get("http_status"), "error": error})
                 failures.append((name, error, required))
                 failure_details[name] = error
             return None
@@ -1469,15 +1672,13 @@ class UniFiAPICollector:
                     failures.append(("devices", error, True))
                 if target is not None:
                     device_id = _identifier(target.get("id"))
-                    detail = call("device_detail", _site_path(site_id, "devices", device_id), required=True, report=False)
-                    stats = call("device_stats", _site_path(site_id, "devices", device_id, "statistics/latest"), required=True, report=False)
+                    detail = call("device_detail", _site_path(site_id, "devices", device_id), required=True)
+                    stats = call("device_stats", _site_path(site_id, "devices", device_id, "statistics/latest"), required=True)
                     if detail is None or stats is None:
-                        error = failure_details.get("device_detail") or failure_details.get("device_stats") or _safe_error("api_target_resolution")
-                        for item in endpoint_results:
-                            if item["name"] == "devices":
-                                item.update({"status": "error", "http_status": error.get("http_status"), "error": error})
-                                break
-                        failures.append(("devices", error, True))
+                        # The individual required endpoint entries above carry
+                        # the actionable failure. Do not collapse them into a
+                        # duplicate devices error.
+                        pass
                     call("clients", _site_path(site_id, "clients"), required=False)
                     call("networks", _site_path(site_id, "networks"), required=False)
                     internal_reference = _identifier(selected_site.get("internal_reference"))
@@ -1516,11 +1717,14 @@ class UniFiAPICollector:
         except (APIError, AttributeError, KeyError, TypeError, ValueError) as exc:
             error = _safe_error(exc.code if isinstance(exc, APIError) else "api_parse_failure")
             failure_details["normalization"] = error
+            endpoint_results.append({"name": "normalization", "required": True, "status": "error", "http_status": None, "error": error})
             failures.append(("normalization", error, True))
-        successful_count = sum(1 for item in endpoint_results if item["status"] == "ok")
-        failed_count = sum(1 for item in endpoint_results if item["status"] != "ok")
+        else:
+            endpoint_results.append({"name": "normalization", "required": True, "status": "ok", "http_status": None, "error": None})
+        successful_count = sum(1 for item in endpoint_results if item["status"] == "ok" and item["name"] != "normalization")
         required_failures = [error for _, error, required in failures if required]
-        if required_failures and successful_count and failed_count:
+        optional_failures = [error for _, error, required in failures if not required and error.get("code") != "api_endpoint_unsupported"]
+        if required_failures and successful_count:
             error = _safe_error("api_partial_failure")
             status = "partial"
             last_success = attempted if successful_count else None
@@ -1528,7 +1732,7 @@ class UniFiAPICollector:
             error = required_failures[0]
             status = "unavailable"
             last_success = None
-        elif failed_count:
+        elif optional_failures:
             error = _safe_error("api_partial_failure")
             status = "partial"
             last_success = attempted

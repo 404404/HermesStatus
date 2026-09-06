@@ -25,6 +25,7 @@
             <button id="dockerTab" type="button" role="tab" aria-selected="false" aria-controls="dockerPage" tabindex="-1" data-page-target="docker">Docker</button>
             <button id="luckyTab" type="button" role="tab" aria-selected="false" aria-controls="luckyPage" tabindex="-1" data-page-target="lucky">Lucky</button>
             <button id="easytierTab" type="button" role="tab" aria-selected="false" aria-controls="easytierPage" tabindex="-1" data-page-target="easytier">EasyTier</button>
+            <button id="diagnosticsTab" type="button" role="tab" aria-selected="false" aria-controls="diagnosticsPage" tabindex="-1" data-page-target="diagnostics">组件诊断</button>
         </nav>
         <div class="actions">
             <span id="lastUpdate" class="last-update">上次刷新 -</span>
@@ -87,6 +88,13 @@
                             <tbody id="profilesBody"></tbody>
                         </table>
                     </div>
+                </section>
+            </div>
+
+            <div id="diagnosticsPage" class="page-panel" role="tabpanel" aria-labelledby="diagnosticsTab" data-page="diagnostics" hidden>
+                <section class="data-section" aria-labelledby="collectionDiagnosticsTitle">
+                    <div class="section-head"><h2 id="collectionDiagnosticsTitle">组件采集诊断</h2><span class="section-meta">仅展示服务端收到的采集状态、错误代码和有界原因</span></div>
+                    <div id="collectionDiagnostics" class="collection-diagnostics"></div>
                 </section>
             </div>
 
@@ -239,11 +247,11 @@
                 </section>
                 <section class="data-section" aria-labelledby="unifiFansTitle">
                     <div class="section-head"><h2 id="unifiFansTitle">风扇</h2></div>
-                    <div class="table-wrap"><table class="data unifi-fans-table"><thead><tr><th>通道</th><th>支持能力</th><th>物理在位</th><th>转速</th><th>采集错误</th></tr></thead><tbody id="unifiFansBody"></tbody></table></div>
+                    <div class="table-wrap"><table class="data unifi-fans-table"><thead><tr><th>通道</th><th>物理在位</th><th>转速</th><th>采集错误</th></tr></thead><tbody id="unifiFansBody"></tbody></table></div>
                 </section>
                 <section class="data-section" aria-labelledby="unifiPowerTitle">
                     <div class="section-head"><h2 id="unifiPowerTitle">电源</h2><span class="section-meta">功率和电源风扇转速需有数据源</span></div>
-                    <div class="table-wrap"><table class="data unifi-power-table"><thead><tr><th>槽位</th><th>支持能力</th><th>物理在位</th><th>功率</th><th>风扇转速</th><th>采集错误</th></tr></thead><tbody id="unifiPowerBody"></tbody></table></div>
+                    <div class="table-wrap"><table class="data unifi-power-table"><thead><tr><th>槽位</th><th>物理在位</th><th>功率</th><th>风扇转速</th><th>采集错误</th></tr></thead><tbody id="unifiPowerBody"></tbody></table></div>
                 </section>
             </div>
         </div>

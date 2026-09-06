@@ -175,7 +175,7 @@ function modelBreakdown(profile){
 }
 
 function normalizePageName(value){
-	return ['hardware', 'unifi', 'docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
+	return ['hardware', 'diagnostics', 'unifi', 'docker', 'lucky', 'easytier'].includes(value) ? value : 'home';
 }
 
 function valueAt(objectValue, keys){
@@ -527,7 +527,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
   const host = devices.find(device => device.device_id === selectedDeviceId) ||
     (selectedDeviceId === null ? devices[0] : null) ||
     (!hasV2Devices ? selectSingleHost(documentObject.servers) : null);
-	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, unifi: {}, easytierExpectation: {}, profiles: [], containers: [] };
+	if(!host) return { host: null, devices, document: documentObject, hardware: {}, docker: {}, hermes: {}, lucky: {}, easytier: {}, unifi: {}, collectionDiagnostics: [], easytierExpectation: {}, profiles: [], containers: [] };
 
   const hardware = safeObject(host.hardware);
   const docker = safeObject(host.docker);
@@ -549,6 +549,7 @@ function buildViewModel(documentValue, selectedDeviceId = null){
 		lucky,
 		easytier,
 		unifi,
+		collectionDiagnostics: Array.isArray(host.collection_diagnostics) ? host.collection_diagnostics : [],
 		easytierExpectation: safeObject(host.easytier_expectation),
     profiles: Array.isArray(hermes.profiles) ? hermes.profiles : [],
     containers: Array.isArray(docker.containers) ? docker.containers : [],
@@ -597,7 +598,7 @@ function statusText(value){
     running: '运行中', healthy: '正常', ok: '正常', active: '活动',
     stopped: '已停止', down: '离线', unauthorized: '未授权', timeout: '超时',
 		exited: '已退出', dead: '异常', degraded: '部分异常', partial: '部分采集', stale: '已陈旧',
-		not_configured: '未配置', error: '异常', valid: '有效', expiring: '即将到期',
+		not_configured: '未配置', not_reported: '未报告', not_installed: '未安装', error: '异常', valid: '有效', expiring: '即将到期',
 		expired: '已过期', not_yet_valid: '尚未生效', invalid: '无效',
 		supported: '支持', unsupported: '不支持', matched: '匹配', mismatch: '不匹配', not_observable: '未观察到',
     online: '在线', offline: '离线', up: '在线', connected: '在线', adopted: '在线', active: '在线', down: '离线', disconnected: '离线', never_seen: '从未上线', disabled: '已禁用',
@@ -750,7 +751,7 @@ function dashboardCondition(view, refreshError = null){
     return {kind: 'stale', title: '设备数据已陈旧', message: '该设备的数据已超过刷新时限。'};
   }
   if(deviceStatus === 'degraded'){
-    return {kind: 'error', title: '设备部分数据不可用', message: '该设备仍在线，但至少一个业务域异常。'};
+    return {kind: 'error', title: '设备部分数据不可用', message: '该设备仍在线，详细原因请查看“组件诊断”。'};
   }
   // Device v2 has an authoritative server-side lifecycle status. Its legacy
   // IPv4/IPv6 probe fields are informational and must not mark an online
@@ -776,6 +777,58 @@ function dashboardCondition(view, refreshError = null){
     return {kind: 'unknown', title: '状态未知', message: 'stats.json 未包含完整扩展状态。'};
   }
   return {kind: 'ready', title: '', message: ''};
+}
+
+function collectionDiagnosticsMarkup(value, unifi = null){
+  const rawDiagnostics = Array.isArray(value)
+    ? value
+    : Array.isArray(value?.collectionDiagnostics)
+      ? value.collectionDiagnostics
+      : [];
+  const diagnostics = rawDiagnostics.slice();
+  const endpointByComponent = new Map();
+  const endpointStatus = {
+    ok: 'available', available: 'available', unsupported: 'unsupported',
+    partial: 'partial', disabled: 'not_configured', not_configured: 'not_configured',
+    not_collected: 'not_observed'
+  };
+  const endpoints = unifiIsConfigured(unifi) && Array.isArray(unifi?.api?.endpoints) ? unifi.api.endpoints : [];
+  for(const endpoint of endpoints){
+    const name = typeof endpoint?.name === 'string' && endpoint.name.trim() ? endpoint.name.trim().slice(0, 160) : 'unknown';
+    const component = `api.endpoint.${name}`;
+    endpointByComponent.set(component, endpoint);
+    if(!diagnostics.some(item => item?.domain === 'unifi' && item?.component === component)){
+      diagnostics.push({domain: 'unifi', component, status: endpointStatus[String(endpoint?.status || '').toLowerCase()] || 'degraded'});
+    }
+  }
+  if(!diagnostics.length) return '<div class="table-empty">\u6682\u65e0\u91c7\u96c6\u8bca\u65ad\u8bb0\u5f55\u3002</div>';
+  const domainLabels = {
+    hardware: '硬件信息', docker: 'Docker', hermes: 'Hermes', lucky: 'Lucky',
+    easytier: 'EasyTier', unifi: 'UniFi', client_build: '构建信息'
+  };
+  const rows = diagnostics.map(item => {
+    const diagnostic = safeObject(item);
+    if(diagnostic.domain === 'unifi' && diagnostic.component === 'api.endpoint' && endpointByComponent.size) return '';
+    const endpoint = endpointByComponent.get(diagnostic.component);
+    const endpointError = safeObject(endpoint?.error);
+    const status = textOrDash(diagnostic.status);
+    const statusLabel = status === 'partial' && diagnostic.code === 'smart_return_status_unavailable'
+      ? '部分成功'
+      : statusText(status);
+    const reason = diagnostic.reason || endpointError.message || (status === 'not_configured' ? '该组件未在配置文件中开启采集' : '');
+    const code = diagnostic.code || endpointError.code || '';
+    const source = diagnostic.source || endpointError.source || '';
+    const required = typeof endpoint?.required === 'boolean' ? (endpoint.required ? '是' : '否') : '-';
+    const httpStatus = finiteNumber(endpoint?.http_status) === null ? '-' : formatInteger(endpoint.http_status);
+    const component = endpoint?.name || diagnostic.component;
+    return '<tr><td class="strong-cell">' + escapeHtml(domainLabels[diagnostic.domain] || textOrDash(diagnostic.domain)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(component)) + '</td><td><span class="badge ' + statusTone(status) + '">' + escapeHtml(statusLabel) + '</span></td><td>' + escapeHtml(required) + '</td><td>' + escapeHtml(httpStatus) + '</td><td class="mono">' + escapeHtml(textOrDash(code)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.field)) + '</td><td class="wide-cell">' + escapeHtml(textOrDash(reason)) + '</td><td class="mono">' + escapeHtml(textOrDash(source)) + '</td></tr>';
+  }).join('');
+  return '<div class="table-wrap"><table class="data collection-diagnostics-table"><thead><tr><th>对应标签页</th><th>组件</th><th>采集状态</th><th>必需</th><th>HTTP</th><th>代码</th><th>字段</th><th>原因</th><th>来源</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function renderCollectionDiagnostics(view){
+  const element = byId('collectionDiagnostics');
+  if(element) element.innerHTML = collectionDiagnosticsMarkup(view.collectionDiagnostics, view.unifi);
 }
 
 function setPageState(condition){
@@ -1316,16 +1369,12 @@ function unifiSystemCards(unifi){
 
 function unifiFanRows(unifi){
   const fans = Array.isArray(unifi.fans) ? unifi.fans : [];
-  if(!fans.length) return '<tr><td colspan="5" class="table-empty">暂无可显示的风扇观测。</td></tr>';
+  if(!fans.length) return '<tr><td colspan="4" class="table-empty">暂无可显示的风扇观测。</td></tr>';
   return fans.map(fan => {
     const rpm = finiteNumber(fan.rpm);
     const rpmText = rpm === null ? '—' : `${formatInteger(rpm)} RPM`;
-    return `<tr><td class="strong-cell mono">${escapeHtml(textOrDash(fan.id))}</td><td>${badge(fan.supported)}</td><td>${escapeHtml(unifiPresenceText(fan.present))}</td><td>${escapeHtml(rpmText)}</td><td>${fan.error ? escapeHtml(unifiErrorText({error: fan.error})) : '无'}</td></tr>`;
+    return `<tr><td class="strong-cell mono">${escapeHtml(textOrDash(fan.id))}</td><td>${escapeHtml(unifiPresenceText(fan.present))}</td><td>${escapeHtml(rpmText)}</td><td>${fan.error ? escapeHtml(unifiErrorText({error: fan.error})) : '无'}</td></tr>`;
   }).join('');
-}
-
-function unifiPoeProfile(unifi){
-  return safeObject(unifi?.poe);
 }
 
 function unifiPowerProfile(unifi){
@@ -1334,7 +1383,7 @@ function unifiPowerProfile(unifi){
 
 function unifiPowerSectionVisible(unifi){
   const powerProfile = unifiPowerProfile(unifi);
-  return unifi?.profile === 'udw' && powerProfile.supported === true
+  return powerProfile.supported === true
     && Number.isInteger(powerProfile.psu_slots) && powerProfile.psu_slots > 0;
 }
 
@@ -1342,7 +1391,7 @@ function unifiPowerRows(unifi){
   const supplies = Array.isArray(unifi?.power_supplies) ? unifi.power_supplies : [];
   const powerProfile = unifiPowerProfile(unifi);
   if(!unifiPowerSectionVisible(unifi)) return '';
-  if(!supplies.length) return '<tr><td colspan="6" class="table-empty">暂无可显示的电源观测。</td></tr>';
+  if(!supplies.length) return '<tr><td colspan="5" class="table-empty">暂无可显示的电源观测。</td></tr>';
   return supplies.map(supply => {
     const watts = finiteNumber(supply.power_watts ?? supply.power_w ?? supply.watts);
     const maximum = finiteNumber(supply.max_power_w ?? supply.power_max_w ?? supply.max_watts ?? powerProfile.max_device_consumption_w ?? powerProfile.max_power_w);
@@ -1352,7 +1401,7 @@ function unifiPowerRows(unifi){
     const powerPercent = !unsupported && watts !== null && maximum !== null && maximum > 0 ? (watts / maximum) * 100 : null;
     const powerMarkup = `<div class="unifi-power-inline"><div class="unifi-power-value">${escapeHtml(powerText)}</div>${powerPercent === null ? '' : resourceBar(powerPercent, '电源功率使用率')}</div>`;
     const fanText = fanRpm === null ? '未提供' : `${formatInteger(fanRpm)} RPM`;
-    return `<tr><td class="strong-cell mono">${escapeHtml(textOrDash(supply.id))}</td><td>${badge(supply.supported)}</td><td>${escapeHtml(unifiPresenceText(supply.present))}</td><td>${powerMarkup}</td><td>${escapeHtml(fanText)}</td><td>${supply.error ? escapeHtml(unifiErrorText({error: supply.error})) : '无'}</td></tr>`;
+    return `<tr><td class="strong-cell mono">${escapeHtml(textOrDash(supply.id))}</td><td>${escapeHtml(unifiPresenceText(supply.present))}</td><td>${powerMarkup}</td><td>${escapeHtml(fanText)}</td><td>${supply.error ? escapeHtml(unifiErrorText({error: supply.error})) : '无'}</td></tr>`;
   }).join('');
 }
 
@@ -1382,7 +1431,6 @@ function unifiStorageRows(unifi){
     const observation = unsupported || notInstalled ? '-' : capability.observed === true ? '已观察到' : '未观察到';
     const usage = unsupported || notInstalled ? {usedText: '-', percentMarkup: '-'} : unifiStorageUsage(capability);
     const value = [
-      badge(capability.supported),
       escapeHtml(unsupported ? '-' : unifiPresenceText(capability.present)),
       escapeHtml(observation),
       `<span class="health-inline-meta">${escapeHtml(capacityText)}</span>`,
@@ -1410,9 +1458,9 @@ function unifiStorageMarkup(unifi){
     const presence = unsupported ? '-' : unifiPresenceText(capability.present);
     const observation = unsupported || notInstalled ? '-' : capability.observed === true ? '已观察到' : '未观察到';
     const capacityText = unsupported || notInstalled ? '-' : capacity === null ? '容量未知' : formatBytes(capacity);
-    return `<tr><td class="strong-cell">${escapeHtml(label)}</td><td>${badge(capability.supported)}</td><td>${escapeHtml(presence)}</td><td>${escapeHtml(observation)}</td><td>${escapeHtml(capacityText)}</td><td>${escapeHtml(usage.usedText)}</td><td class="table-usage">${usage.percentMarkup}</td></tr>`;
+    return `<tr><td class="strong-cell">${escapeHtml(label)}</td><td>${escapeHtml(presence)}</td><td>${escapeHtml(observation)}</td><td>${escapeHtml(capacityText)}</td><td>${escapeHtml(usage.usedText)}</td><td class="table-usage">${usage.percentMarkup}</td></tr>`;
   }).join('');
-  return `<div class="table-wrap"><table class="data unifi-storage-table"><thead><tr><th>类型</th><th>支持能力</th><th>在位</th><th>观测</th><th>容量</th><th>文件系统已用 / 总容量</th><th>使用率</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="table-wrap"><table class="data unifi-storage-table"><thead><tr><th>类型</th><th>在位</th><th>观测</th><th>容量</th><th>文件系统已用 / 总容量</th><th>使用率</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function unifiApiBoolean(value){
@@ -1440,11 +1488,10 @@ function unifiApiTelemetryMarkup(unifi){
 function unifiLinkBandwidth(value){
   const number = finiteNumber(value);
   if(number === null || number <= 0) return '-';
-  if(number >= 10000) return '10 GbE';
-  if(number >= 2500) return '2.5 GbE';
-  if(number >= 1000) return `${Number.isInteger(number / 1000) ? number / 1000 : (number / 1000).toFixed(1)} GbE`;
-  if(number >= 100) return 'FE';
-  return `${formatInteger(number)} Mbps`;
+  if(number < 1000) return `${formatInteger(number)} Mbps`;
+  const gbe = number / 1000;
+  const formatted = Number.isInteger(gbe) ? String(gbe) : String(Number(gbe.toFixed(3)));
+  return `${formatted} GbE`;
 }
 
 function unifiPortRate(value){
@@ -1457,15 +1504,14 @@ function unifiPortRate(value){
 }
 
 function unifiPortStatus(port){
-  if(port?.uplink === true) return '上行';
   if(port?.up === true) return '已连接';
   if(port?.up === false || port?.enabled === false) return '未连接';
-  return '未知';
+  return '-';
 }
 
 function unifiPortStatusMarkup(port){
   const text = unifiPortStatus(port);
-  const tone = text === '已连接' || text === '上行' ? 'ok' : text === '未连接' ? 'warn' : 'neutral';
+  const tone = text === '已连接' ? 'ok' : text === '未连接' ? 'warn' : 'neutral';
   return `<span class="badge ${tone}">${text}</span>`;
 }
 
@@ -1475,25 +1521,34 @@ function unifiPowerText(value){
   return `${Number(number.toFixed(number >= 10 ? 1 : 2))} W`;
 }
 
-function unifiPortPoeText(port, profile = null){
-  if(typeof port?.poe_out === 'boolean' && port.poe_out === false) return '-';
-  const profilePoe = profile && Object.keys(profile).length ? profile : null;
+function unifiPortPoeText(port){
+  const roles = Array.isArray(port?.roles) ? port.roles : [];
+  if(roles.includes('poe_passthrough')) return port?.poe_passthrough_enabled === true ? '透传' : '-';
+  if(port?.poe_in === true && port?.poe_out !== true) return 'PoE IN';
+  if(port?.poe_out !== true) return '-';
   const poe = safeObject(port?.poe);
-  if(profilePoe?.supported === false) return '-';
-  if(!Object.keys(poe).length && profilePoe?.supported !== true) return '-';
-  if(poe.supported === false && profilePoe?.supported !== true) return '-';
+  if(!Object.keys(poe).length || poe.supported === false) return '-';
   const current = unifiPowerText(poe.power_w);
-  const configuredMaximum = profilePoe?.port_max_power_w?.[String(port?.port_idx)] ?? profilePoe?.port_max_power_w?.[port?.port_idx];
-  const maximum = unifiPowerText(poe.max_power_w ?? configuredMaximum);
+  const maximum = unifiPowerText(poe.max_power_w);
   if(current === '-' && maximum === '-') return '-';
   return `${current} / ${maximum}`;
 }
 
+function unifiPortConnectorText(value){
+  const connector = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return ({rj45: 'RJ45', sfp: 'SFP', sfp_plus: 'SFP+', 'sfp+': 'SFP+', sfp28: 'SFP28', qsfp28: 'QSFP28'})[connector] || '-';
+}
+
+function unifiPortMaxSpeedText(port){
+  return unifiLinkBandwidth(port?.max_speed_mbps);
+}
+
 function unifiPortLinkText(port, allowMaximum = true){
   const maximum = allowMaximum ? unifiLinkBandwidth(port?.max_speed_mbps) : '-';
-  if(port?.up !== true) return maximum === '-' ? '未连接' : `未连接 / ${maximum}`;
-  const current = unifiLinkBandwidth(port.speed_mbps);
-  if(current === '-' && maximum === '-') return '-';
+  if(!allowMaximum) return port?.up === true ? unifiLinkBandwidth(port.speed_mbps) : '-';
+  const notConnected = port?.up === false || (port?.up === undefined && port?.enabled === false);
+  const current = port?.up === true ? unifiLinkBandwidth(port.speed_mbps) : '-';
+  if(notConnected || port?.up !== true) return `${current} / ${maximum}`;
   return `${current} / ${maximum}`;
 }
 
@@ -1595,17 +1650,22 @@ function unifiPortTelemetryMarkup(unifi){
   const ports = Array.isArray(telemetry.ports) ? telemetry.ports.slice() : [];
   const identity = safeObject(telemetry.identity);
   const descriptors = new Map();
-  const uplinks = Array.isArray(telemetry.uplinks) ? telemetry.uplinks : [];
-  uplinks.forEach(item => {
+  const mergeDescriptor = item => {
     const id = typeof item?.device_id === 'string' ? item.device_id.trim() : '';
     if(!id) return;
     const current = descriptors.get(id) || {device_id: id};
     for(const field of ['name', 'model', 'model_id', 'model_profile_status', 'device_type', 'management_ip']){
       if((current[field] === undefined || current[field] === null || current[field] === '') && item?.[field] !== undefined && item?.[field] !== null) current[field] = String(item[field]);
     }
-    if(typeof item?.online === 'boolean') current.online = item.online;
+    if(typeof item?.online === 'boolean' && typeof current.online !== 'boolean') current.online = item.online;
+    if(item?.capabilities && !current.capabilities) current.capabilities = item.capabilities;
+    if(item?.poe && !current.poe) current.poe = item.poe;
     descriptors.set(id, current);
-  });
+  };
+  const deviceItems = Array.isArray(telemetry.devices?.items) ? telemetry.devices.items : [];
+  deviceItems.forEach(mergeDescriptor);
+  const uplinks = Array.isArray(telemetry.uplinks) ? telemetry.uplinks : [];
+  uplinks.forEach(mergeDescriptor);
   const groups = new Map();
   ports.forEach((port, index) => {
     const id = typeof port?.device_id === 'string' ? port.device_id.trim() : '';
@@ -1636,53 +1696,59 @@ function unifiPortTelemetryMarkup(unifi){
     });
     return [key, entries.map(entry => entry.port)];
   });
-  const profilePoe = unifiPoeProfile(unifi);
-  const groupEntries = orderedGroups.map(([key, items], index) => ({
-    key: 'unifi-device-' + index,
-    sourceKey: key,
-    label: deviceLabel(key, descriptors.get(key)),
-    modelProfileStatus: descriptors.get(key)?.model_profile_status || 'unknown',
-    showPoe: (descriptors.get(key)?.model_profile_status || 'unknown') !== 'known'
-      || items.some(port => typeof port?.poe_out !== 'boolean' || port.poe_out === true),
-    ports: items
-  }));
-  const tabs = groupEntries.map((group, index) => `<button id="${group.key}-tab" class="unifi-network-tab" type="button" role="tab" aria-selected="${index === 0 ? 'true' : 'false'}" aria-controls="${group.key}-panel" data-unifi-device-tab="${group.key}" tabindex="${index === 0 ? '0' : '-1'}">${escapeHtml(group.label)}</button>`).join('');
-  const globalSummary = safeObject(telemetry.port_summary);
-  const groupPoeSummary = ports => {
-    const poe = ports.map(port => safeObject(port?.poe)).filter(item => item.supported !== false);
-    const current = poe.map(item => finiteNumber(item.power_w)).filter(value => value !== null);
-    const maximum = poe.map(item => finiteNumber(item.max_power_w)).filter(value => value !== null);
+  const groupEntries = orderedGroups.map(([key, items], index) => {
+    const descriptor = descriptors.get(key);
+    const modelProfileStatus = descriptor?.model_profile_status
+      || items.find(port => port?.model_profile_status)?.model_profile_status
+      || 'unknown';
+    const staticPoePort = items.some(port => port?.poe_in === true || port?.poe_out === true
+      || (Array.isArray(port?.roles) && port.roles.includes('poe_passthrough')));
+    const runtimePoeObserved = items.some(port => {
+      const poe = safeObject(port?.poe);
+      return finiteNumber(poe.power_w) !== null || poe.active === true;
+    });
     return {
-      current: current.length ? current.reduce((sum, value) => sum + value, 0) : null,
-      maximum: maximum.length ? maximum.reduce((sum, value) => sum + value, 0) : null
+      key: 'unifi-device-' + index,
+      sourceKey: key,
+      label: deviceLabel(key, descriptor),
+      modelProfileStatus,
+      descriptor,
+      showPoe: modelProfileStatus === 'known' ? staticPoePort : runtimePoeObserved,
+      ports: items
+    };
+  });
+  const tabs = groupEntries.map((group, index) => `<button id="${group.key}-tab" class="unifi-network-tab" type="button" role="tab" aria-selected="${index === 0 ? 'true' : 'false'}" aria-controls="${group.key}-panel" data-unifi-device-tab="${group.key}" tabindex="${index === 0 ? '0' : '-1'}">${escapeHtml(group.label)}</button>`).join('');
+  const groupPoeSummary = (ports, descriptor) => {
+    const devicePoe = safeObject(descriptor?.poe);
+    const explicitCurrent = devicePoe.current_source === 'unavailable' ? null : finiteNumber(devicePoe.current_power_w);
+    const poe = ports.map(port => safeObject(port?.poe)).filter(item => item.supported !== false);
+    const portCurrent = poe.map(item => finiteNumber(item.power_w)).filter(value => value !== null);
+    const staticPoe = safeObject(safeObject(descriptor?.capabilities).poe);
+    return {
+      current: explicitCurrent !== null ? explicitCurrent : portCurrent.length ? portCurrent.reduce((sum, value) => sum + value, 0) : null,
+      maximum: finiteNumber(staticPoe.absolute_max_poe_budget_w)
     };
   };
-  const poeSummaryMarkup = (summary, showPoe, fallback = false) => {
-    if(!showPoe) return '';
-    const currentValue = summary.current ?? (fallback ? globalSummary.poe_total_power_w : null);
-    if(!fallback && summary.current === null && summary.maximum === null) return '';
-    const maximumValue = fallback
-      ? (finiteNumber(globalSummary.poe_max_power_w) ?? finiteNumber(profilePoe.absolute_max_poe_budget_w) ?? finiteNumber(profilePoe.total_max_power_w) ?? finiteNumber(summary.maximum))
-      : finiteNumber(summary.maximum);
-    const current = unifiPowerText(currentValue);
-    const maximum = unifiPowerText(maximumValue);
-    const poeText = current === '-' && maximum === '-' ? '-' : `${current}${maximum === '-' ? '' : ` / ${maximum}`}`;
-    const percent = finiteNumber(currentValue) !== null && finiteNumber(maximumValue) > 0 ? (finiteNumber(currentValue) / finiteNumber(maximumValue)) * 100 : null;
+  const poeSummaryMarkup = (summary, showPoe) => {
+    if(!showPoe || (summary.current === null && summary.maximum === null)) return '';
+    const current = unifiPowerText(summary.current);
+    const maximum = unifiPowerText(summary.maximum);
+    const poeText = current === '-' && maximum === '-' ? '-' : `${current} / ${maximum}`;
+    const percent = finiteNumber(summary.current) !== null && finiteNumber(summary.maximum) > 0 ? (finiteNumber(summary.current) / finiteNumber(summary.maximum)) * 100 : null;
     return `<div class="unifi-port-summary"><div class="unifi-poe-summary-value">PoE 总功率 ${escapeHtml(poeText)}</div>${percent === null ? '' : resourceBar(percent, 'PoE 总功率使用率')}</div>`;
   };
   const panels = groupEntries.map((group, index) => {
     const rows = group.ports.map(port => {
-    const portName = textOrDash(port.name) === '-' ? `Port ${formatInteger(port.port_idx)}` : textOrDash(port.name);
-    const groupPoeProfile = group.modelProfileStatus === 'known' ? profilePoe : null;
-    const poeCell = group.showPoe ? `<td>${escapeHtml(unifiPortPoeText(port, groupPoeProfile))}</td>` : '';
-    return `<tr><td class="strong-cell">${escapeHtml(portName)}</td><td>${escapeHtml(formatInteger(port.port_idx))}</td><td>${unifiPortStatusMarkup(port)}</td><td>${escapeHtml(unifiPortLinkText(port, group.modelProfileStatus === 'known'))}</td>${poeCell}<td>${escapeHtml(unifiPortTraffic(port.tx_bytes))}</td><td>${escapeHtml(unifiPortTraffic(port.rx_bytes))}</td><td>${escapeHtml(unifiPortErrorText(port))}</td></tr>`;
+    const portNumber = Number.isInteger(finiteNumber(port?.port_idx)) ? formatInteger(port.port_idx) : '-';
+    const catalogLabel = typeof port?.name === 'string' && port.name.trim() ? port.name.trim() : `Port ${portNumber}`;
+    const poeCell = group.showPoe ? `<td>${escapeHtml(unifiPortPoeText(port))}</td>` : '';
+    return `<tr><td class="strong-cell">${escapeHtml(catalogLabel)}</td><td>${escapeHtml(portNumber)}</td><td>${escapeHtml(unifiPortConnectorText(port.connector))}</td><td>${unifiPortStatusMarkup(port)}</td><td>${escapeHtml(unifiPortLinkText(port))}</td>${poeCell}<td>${escapeHtml(unifiPortTraffic(port.tx_bytes))}</td><td>${escapeHtml(unifiPortTraffic(port.rx_bytes))}</td><td>${escapeHtml(unifiPortErrorText(port))}</td></tr>`;
     }).join('');
-    const body = rows || `<tr><td colspan="${group.showPoe ? 8 : 7}" class="table-empty">当前未取得该设备端口数据。</td></tr>`;
-    const summary = groupPoeSummary(group.ports);
-    const fallback = group.showPoe && group.modelProfileStatus === 'known' && (groupEntries.length === 1 || index === 0);
+    const body = rows || `<tr><td colspan="${group.showPoe ? 9 : 8}" class="table-empty">当前未取得该设备端口数据。</td></tr>`;
+    const summary = groupPoeSummary(group.ports, group.descriptor);
     const modelNotice = group.modelProfileStatus === 'unknown' ? '<div class="unifi-model-unavailable">机型端口参数未维护</div>' : '';
     const poeHeader = group.showPoe ? '<th>PoE</th>' : '';
-    return `<section id="${group.key}-panel" class="unifi-device-panel" role="tabpanel" aria-labelledby="${group.key}-tab" data-unifi-device-panel="${group.key}"${index === 0 ? '' : ' hidden'}>${modelNotice}${poeSummaryMarkup(summary, group.showPoe, fallback)}<div class="table-wrap"><table class="data unifi-ports-table"><thead><tr><th>端口名称</th><th>端口编号</th><th>状态</th><th>链路</th>${poeHeader}<th>累计发送流量</th><th>累计接收流量</th><th>发送 / 接收 (错误/丢弃)</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
+    return `<section id="${group.key}-panel" class="unifi-device-panel" role="tabpanel" aria-labelledby="${group.key}-tab" data-unifi-device-panel="${group.key}"${index === 0 ? '' : ' hidden'}>${modelNotice}${poeSummaryMarkup(summary, group.showPoe)}<div class="table-wrap"><table class="data unifi-ports-table"><thead><tr><th>端口</th><th>编号</th><th>类型</th><th>状态</th><th>已连接 / 最大速率</th>${poeHeader}<th>累计发送流量</th><th>累计接收流量</th><th>发送 / 接收 (错误/丢弃)</th></tr></thead><tbody>${body}</tbody></table></div></section>`;
   }).join('');
   return `<div class="unifi-device-tabs" role="tablist" aria-label="UniFi 设备"><div class="unifi-network-tabs">${tabs}</div>${panels}</div>`;
 }
@@ -1713,7 +1779,7 @@ function renderUniFi(view){
   if(emptyState){
     emptyState.hidden = !pageUnavailable;
     emptyState.textContent = configured
-      ? '已配置 UniFi 目标，但访问失败，请检查 SSH 密码和 API Key'
+      ? (unifi.error && unifiErrorText(unifi) !== '-' ? `UniFi 访问失败：${unifiErrorText(unifi)}` : '已配置 UniFi 目标，但访问失败，请检查 UniFi 采集配置')
       : '未配置 UniFi 目标';
   }
   for(const section of document.querySelectorAll('#unifiPage > section')) section.hidden = pageUnavailable;
@@ -1860,6 +1926,7 @@ function renderDashboard(view){
 	renderLucky(view);
 	renderEasyTier(view);
   renderUniFi(view);
+  renderCollectionDiagnostics(view);
   if(!byId('deviceDiagnosticsModal').hidden) renderDeviceDiagnostics(view);
   if(!byId('aboutModal').hidden) renderBuildProvenance(view);
   applyPageVisibility();
@@ -1896,7 +1963,7 @@ function selectDevice(deviceId, options = {}){
 function applyPageVisibility(){
   const activePage = normalizePageName(dashboardState.activePage);
   dashboardState.activePage = activePage;
-	for(const page of ['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier']){
+	for(const page of ['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier', 'diagnostics']){
     const active = page === activePage;
     const tab = byId(`${page}Tab`);
     const panel = byId(`${page}Page`);
@@ -2288,7 +2355,7 @@ function bindInteractions(){
     tab.addEventListener('keydown', event => {
       if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-			const pages = ['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier'];
+			const pages = ['home', 'hardware', 'unifi', 'docker', 'lucky', 'easytier', 'diagnostics'];
 			const current = pages.indexOf(dashboardState.activePage);
 			const nextPage = event.key === 'Home' ? pages[0] : event.key === 'End' ? pages[pages.length - 1] : event.key === 'ArrowLeft' ? pages[(current - 1 + pages.length) % pages.length] : pages[(current + 1) % pages.length];
       setActivePage(nextPage);
@@ -2426,10 +2493,12 @@ const exported = {
   dashboardCondition,
   deviceDisplayName,
 	deviceDiagnosticsMarkup,
+	collectionDiagnosticsMarkup,
 	deviceShortName,
 	luckyIsConfigured,
 	easytierIsConfigured,
   unifiIsConfigured,
+  unifiErrorText,
   unifiTransportSummary,
   unifiApiStatusText,
   unifiCollectionStatus,
@@ -2439,8 +2508,10 @@ const exported = {
   unifiPortTelemetryMarkup,
   unifiPortStatusMarkup,
   unifiPortErrorText,
+  unifiPortConnectorText,
   unifiWanMarkup,
   unifiPortLinkText,
+  unifiPortMaxSpeedText,
   unifiPortPoeText,
   unifiPortRate,
   unifiLinkBandwidth,

@@ -281,7 +281,7 @@ func validateUniFiAPI(value *UniFiAPIStats) error {
 	if value.Status == "disabled" || len(value.Endpoints) > MaxUniFiAPIEndpoints {
 		return validationError(validationCodeInvalidValue, "unifi.api", "enabled API state is invalid")
 	}
-	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "clients": true, "networks": true, "legacy_stat_device": true, "lags": true, "topology": true, "port_anomalies": true, "wan_official": true, "wan_enriched": true, "wan_isp_status": true, "wan_load_balance": true, "wan_load_balance_config": true, "wan_slas": true, "legacy_stat_health": true, "legacy_stat_sysinfo": true}
+	allowed := map[string]bool{"info": true, "sites": true, "devices": true, "device_detail": true, "device_stats": true, "normalization": true, "clients": true, "networks": true, "legacy_stat_device": true, "lags": true, "topology": true, "port_anomalies": true, "wan_official": true, "wan_enriched": true, "wan_isp_status": true, "wan_load_balance": true, "wan_load_balance_config": true, "wan_slas": true, "legacy_stat_health": true, "legacy_stat_sysinfo": true}
 	seen := map[string]bool{}
 	okCount, failedCount := 0, 0
 	for _, endpoint := range value.Endpoints {
@@ -298,13 +298,19 @@ func validateUniFiAPI(value *UniFiAPIStats) error {
 				return validationError(validationCodeInvalidValue, "unifi.api.endpoints.error", "successful endpoint must not contain an error")
 			}
 		} else {
-			failedCount++
 			if endpoint.Error == nil {
 				return validationError(validationCodeInvalidValue, "unifi.api.endpoints.error", "failed endpoint requires an error")
 			}
 			if err := ValidateExtensionError("unifi.api.endpoints.error", endpoint.Error); err != nil {
 				return err
 			}
+			// An optional 404 is a capability observation, not a failed API
+			// collection. Required failures and optional non-404 failures remain
+			// part of the API status calculation.
+			if endpoint.Status == "unsupported" && !endpoint.Required {
+				continue
+			}
+			failedCount++
 		}
 	}
 	if value.Status == "available" && failedCount != 0 {
@@ -454,6 +460,48 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 				return validationError(validationCodeInvalidValue, "unifi.api.telemetry.devices.by_type", "contains an invalid count")
 			}
 		}
+		if len(value.Devices.Items) > MaxUniFiAPIDevices {
+			return validationError(validationCodeInvalidValue, "unifi.api.telemetry.devices.items", "is too large")
+		}
+		seenDeviceIDs := make(map[string]struct{}, len(value.Devices.Items))
+		for index, item := range value.Devices.Items {
+			prefix := "unifi.api.telemetry.devices.items[" + strconv.Itoa(index) + "]"
+			if err := validateRequiredString(prefix+".device_id", item.DeviceID, MaxUniFiTextLength); err != nil {
+				return err
+			}
+			if _, exists := seenDeviceIDs[item.DeviceID]; exists {
+				return validationError(validationCodeInvalidValue, prefix+".device_id", "is duplicated")
+			}
+			seenDeviceIDs[item.DeviceID] = struct{}{}
+			for field, text := range map[string]*string{
+				"name": item.Name, "model": item.Model, "model_id": item.ModelID,
+				"model_profile_status": item.ModelProfileStatus, "device_type": item.DeviceType,
+				"management_ip": item.ManagementIP,
+			} {
+				if err := validateOptionalString(prefix+"."+field, text, MaxUniFiTextLength); err != nil {
+					return err
+				}
+			}
+			if item.ModelProfileStatus != nil && *item.ModelProfileStatus != "known" && *item.ModelProfileStatus != "unknown" {
+				return validationError(validationCodeInvalidValue, prefix+".model_profile_status", "is invalid")
+			}
+			if item.Capabilities != nil && item.Capabilities.PoE != nil {
+				if err := validateOptionalFloat(prefix+".capabilities.poe.absolute_max_poe_budget_w", item.Capabilities.PoE.AbsoluteMaxPoEBudgetW, float64(MaxSafeInteger)); err != nil {
+					return err
+				}
+			}
+			if item.PoE != nil {
+				if err := validateOptionalFloat(prefix+".poe.current_power_w", item.PoE.CurrentPowerW, float64(MaxSafeInteger)); err != nil {
+					return err
+				}
+				if item.PoE.CurrentSource != "" && item.PoE.CurrentSource != "device_reported" && item.PoE.CurrentSource != "port_sum" && item.PoE.CurrentSource != "unavailable" {
+					return validationError(validationCodeInvalidValue, prefix+".poe.current_source", "is invalid")
+				}
+				if item.PoE.CurrentSource == "unavailable" && item.PoE.CurrentPowerW != nil {
+					return validationError(validationCodeInvalidValue, prefix+".poe.current_power_w", "unavailable current must be null")
+				}
+			}
+		}
 	}
 	if value.Networks != nil && (value.Networks.Total < 0 || value.Networks.VLAN < 0 || value.Networks.VLAN > value.Networks.Total) {
 		return validationError(validationCodeInvalidValue, "unifi.api.telemetry.networks", "counts are invalid")
@@ -480,7 +528,7 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 				return err
 			}
 		}
-		if item.Connector != nil && *item.Connector != "rj45" && *item.Connector != "sfp" && *item.Connector != "sfp_plus" && *item.Connector != "sfp28" && *item.Connector != "other" {
+		if item.Connector != nil && *item.Connector != "rj45" && *item.Connector != "sfp" && *item.Connector != "sfp_plus" && *item.Connector != "sfp28" && *item.Connector != "qsfp28" && *item.Connector != "other" {
 			return validationError(validationCodeInvalidValue, prefix+".connector", "is invalid")
 		}
 		if item.PoEStandard != nil && *item.PoEStandard != "poe" && *item.PoEStandard != "poe+" && *item.PoEStandard != "poe++" && *item.PoEStandard != "poe+++" {
@@ -489,12 +537,12 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 		if item.ModelProfileStatus != nil && *item.ModelProfileStatus != "known" && *item.ModelProfileStatus != "unknown" {
 			return validationError(validationCodeInvalidValue, prefix+".model_profile_status", "is invalid")
 		}
-		if len(item.Roles) > 2 {
+		if len(item.Roles) > MaxUniFiPortRoles {
 			return validationError(validationCodeInvalidValue, prefix+".roles", "is too large")
 		}
 		seenRoles := map[string]struct{}{}
 		for _, role := range item.Roles {
-			if role != "lan" && role != "wan" {
+			if role != "lan" && role != "wan" && role != "downstream" && role != "uplink" && role != "data_in" && role != "poe_passthrough" {
 				return validationError(validationCodeInvalidValue, prefix+".roles", "contains an invalid role")
 			}
 			if _, exists := seenRoles[role]; exists {
@@ -520,6 +568,18 @@ func validateUniFiAPITelemetry(value *UniFiAPITelemetry) error {
 		}
 		if item.PeerCount != nil && (*item.PeerCount < 0 || int64(*item.PeerCount) > MaxSafeInteger) {
 			return validationError(validationCodeInvalidValue, prefix+".peer_count", "is invalid")
+		}
+		if item.PoEPassthroughEnabled != nil {
+			hasPassthroughRole := false
+			for _, role := range item.Roles {
+				if role == "poe_passthrough" {
+					hasPassthroughRole = true
+					break
+				}
+			}
+			if !hasPassthroughRole {
+				return validationError(validationCodeInvalidValue, prefix+".poe_passthrough_enabled", "requires a poe_passthrough role")
+			}
 		}
 		if item.PoE != nil {
 			poe := item.PoE
@@ -945,6 +1005,33 @@ func sanitizeUniFiAPITelemetry(input *UniFiAPITelemetry) *UniFiAPITelemetry {
 		devices.ByType = make(map[string]int, len(input.Devices.ByType))
 		for key, count := range input.Devices.ByType {
 			devices.ByType[SanitizeText(key)] = count
+		}
+		devices.Items = append([]UniFiAPIDevice(nil), input.Devices.Items...)
+		if devices.Items == nil && input.Devices.Items != nil {
+			devices.Items = make([]UniFiAPIDevice, 0)
+		}
+		for index := range devices.Items {
+			item := &devices.Items[index]
+			item.DeviceID = SanitizeText(item.DeviceID)
+			item.Name = sanitizeStringPointer(item.Name)
+			item.Model = sanitizeStringPointer(item.Model)
+			item.ModelID = sanitizeStringPointer(item.ModelID)
+			item.ModelProfileStatus = sanitizeStringPointer(item.ModelProfileStatus)
+			item.DeviceType = sanitizeStringPointer(item.DeviceType)
+			item.ManagementIP = sanitizeStringPointer(item.ManagementIP)
+			if item.Capabilities != nil {
+				capabilities := *item.Capabilities
+				if capabilities.PoE != nil {
+					poe := *capabilities.PoE
+					capabilities.PoE = &poe
+				}
+				item.Capabilities = &capabilities
+			}
+			if item.PoE != nil {
+				poe := *item.PoE
+				poe.CurrentSource = SanitizeText(poe.CurrentSource)
+				item.PoE = &poe
+			}
 		}
 		result.Devices = &devices
 	}

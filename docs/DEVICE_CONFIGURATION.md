@@ -60,8 +60,10 @@ DSM storage is layered. Configure narrow read-only probes for the intended data 
 ## UniFi target (optional)
 
 Add the `unifi` object to the same Device v2 file only when a qualified target
-is intended. Both UDW and UCG Max use an administrator-selected profile; an
-unknown profile fails closed. The configuration has no command, path, token,
+is intended. The profile selects the bounded collection sources; it does not
+establish controller hardware identity or static capabilities. An unknown
+profile fails closed, while static capability is projected only after a
+verified runtime Catalog identity. The configuration has no command, path, token,
 SSH-key or shell field:
 
 ```json
@@ -80,6 +82,7 @@ SSH-key or shell field:
 
 To disable the integration, use exactly `"unifi": {"enabled": false}` or
 remove the optional object. The credential and known-host files are separate,
-root-owned, read-only mounts. Profile capability does not prove hardware
-presence: UCG Max `fan1=0` is an observed value, not a fan-health failure;
-unknown NVMe capability/presence remains unknown.
+root-owned, read-only mounts. The profile does not prove hardware presence:
+UCG Max `fan1=0` is an observed value, not a fan-health failure; unknown
+runtime models retain observations but withhold static capability. Unknown
+NVMe capability/presence remains unknown.

@@ -619,6 +619,7 @@
       "type": "object",
       "required": [
         "name",
+        "required",
         "status",
         "http_status",
         "error"
@@ -626,13 +627,16 @@
       "properties": {
         "name": {
           "enum": [
-            "info", "sites", "devices", "clients", "networks", "lags",
-            "device_detail", "device_stats", "clients", "networks", "lags",
+            "info", "sites", "devices", "device_detail", "device_stats",
+            "normalization", "clients", "networks", "lags",
             "legacy_stat_device", "legacy_stat_health", "legacy_stat_sysinfo",
             "topology", "port_anomalies", "wan_official", "wan_enriched",
             "wan_isp_status", "wan_load_balance", "wan_load_balance_config",
             "wan_slas"
           ]
+        },
+        "required": {
+          "type": "boolean"
         },
         "status": {
           "enum": [
@@ -988,6 +992,7 @@
         "rx_utilization_pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
         "tx_utilization_pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
         "poe": {"anyOf": [{"$ref": "#/$defs/apiPoE"}, {"type": "null"}]},
+        "poe_passthrough_enabled": {"type": ["boolean", "null"]},
         "peer_count": {"type": ["integer", "null"], "minimum": 0}
       },
       "additionalProperties": false

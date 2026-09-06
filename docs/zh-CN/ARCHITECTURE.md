@@ -45,4 +45,4 @@ HermesStatus 不是 EasyTier 管理器、远程执行服务、告警系统、时
 
 UniFi V1 是远端观测域，不是第二套 Client 身份或控制通道。Device v2 Client 每个采集周期只执行一次有界、固定的 OpenSSH session，并且仅规范化 symbolic source：`ubnt-systool cputemp`、聚合 `/proc/stat`、选定的 `/proc/meminfo`、`/proc/uptime` 与 `/proc/loadavg`。Server 只接收有界的遥测投影。
 
-profile 由管理员显式选择并 fail-closed。UDW 与 UCG Max 共用 Generic Collector，风扇、PSU、thermal 和 NVMe 差异只在 profile 数据中表达。`supported`、`present`、`observed` 必须分离：0 RPM、未观察到的块设备或可选诊断源均不能推断物理故障。UniFi 传输失败只会使 UniFi target stale，不能修改 Device v2 身份，也不能使采集主机离线。
+profile 由管理员显式选择并 fail-closed，但只包含有界采集 source 和 formula，不能建立硬件 identity 或静态能力。UDW 与 UCG Max 共用 Generic Collector，硬件差异由 runtime identity 通过冻结 Catalog 的 verified alias 后投影。`supported`、`present`、`observed` 必须分离：0 RPM、未观察到的块设备或可选诊断源均不能推断物理故障。UniFi 传输失败只会使 UniFi target stale，不能修改 Device v2 身份，也不能使采集主机离线。
