@@ -109,6 +109,9 @@ func persistedDeviceFromNode(
 	if err := validateCollectionDiagnostics(diagnostics); err != nil {
 		return contracts.PersistedDevice{}, errors.New("collection diagnostics are invalid")
 	}
+	if err := validateCollectionDiagnosticIssues(node.CollectionDiagnosticIssues); err != nil {
+		return contracts.PersistedDevice{}, errors.New("collection diagnostic issues are invalid")
+	}
 	if node.HasUpdate {
 		stats, err := rawJSON(node.Stats)
 		if err != nil {
@@ -117,16 +120,17 @@ func persistedDeviceFromNode(
 		observations["stats"] = stats
 	}
 	for key, value := range map[string]any{
-		"last_network_in":        node.LastNetworkIn,
-		"last_network_out":       node.LastNetworkOut,
-		"extension_version":      node.Extension.ExtensionVersion,
-		"received_at":            node.Extension.ReceivedAt,
-		"identity_status":        node.IdentityStatus,
-		"reported_name":          node.ReportedName,
-		"reported_fqdn":          node.ReportedFQDN,
-		"reported_hostname":      node.ReportedHostname,
-		"degraded":               node.Degraded,
-		"collection_diagnostics": diagnostics,
+		"last_network_in":              node.LastNetworkIn,
+		"last_network_out":             node.LastNetworkOut,
+		"extension_version":            node.Extension.ExtensionVersion,
+		"received_at":                  node.Extension.ReceivedAt,
+		"identity_status":              node.IdentityStatus,
+		"reported_name":                node.ReportedName,
+		"reported_fqdn":                node.ReportedFQDN,
+		"reported_hostname":            node.ReportedHostname,
+		"degraded":                     node.Degraded,
+		"collection_diagnostics":       diagnostics,
+		"collection_diagnostic_issues": node.CollectionDiagnosticIssues,
 	} {
 		raw, err := rawJSON(value)
 		if err != nil {
@@ -373,6 +377,13 @@ func restorePersistedDeviceFields(node *NodeState, persisted contracts.Persisted
 			return errors.New("persisted collection diagnostics are invalid")
 		}
 		node.CollectionDiagnostics = diagnostics
+	}
+	if raw, exists := persisted.RuntimeObservations["collection_diagnostic_issues"]; exists {
+		var issues []extensionDecodeIssue
+		if err := decodeStrictRuntime(raw, &issues); err != nil || validateCollectionDiagnosticIssues(issues) != nil {
+			return errors.New("persisted collection diagnostic issues are invalid")
+		}
+		node.CollectionDiagnosticIssues = cloneCollectionDiagnosticIssues(issues)
 	}
 	_ = decodeOptionalObservation(
 		persisted.RuntimeObservations, "extension_version", &node.Extension.ExtensionVersion,

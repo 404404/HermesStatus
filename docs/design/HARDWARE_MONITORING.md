@@ -23,7 +23,7 @@ preferred. When native return status is unavailable but attributes and
 thresholds provide a trustworthy fallback, the disk may be `passed` with
 `partial` quality, `health_source: attribute_check` and a diagnostic warning.
 That useful partial state does not by itself degrade the entire storage or
-device state. A real failed health result remains a failure.
+device state. A real failed health result remains a failure. If a trusted fallback coexists with a different invalid SMART field, both diagnostics remain visible and the integrity error stays primary.
 
 ## Least privilege
 

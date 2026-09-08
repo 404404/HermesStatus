@@ -66,6 +66,9 @@ func DecodeExtensionStatsJSON(data []byte) (*ExtensionStats, error) {
 	if err := decodeStrictJSON(data, &stats); err != nil {
 		return nil, err
 	}
+	if err := markEmbeddedEasyTierCountMetadataPresence(data, stats.EasyTier); err != nil {
+		return nil, err
+	}
 	stats = SanitizeExtensionStats(stats)
 	if err := ValidateExtensionStats(&stats); err != nil {
 		return nil, err
@@ -82,6 +85,9 @@ func DecodeExtensionSnapshotJSON(data []byte) (*ExtensionSnapshot, error) {
 	}
 	var snapshot ExtensionSnapshot
 	if err := decodeStrictJSON(data, &snapshot); err != nil {
+		return nil, err
+	}
+	if err := markEmbeddedEasyTierCountMetadataPresence(data, snapshot.EasyTier); err != nil {
 		return nil, err
 	}
 	stats := SanitizeExtensionStats(ExtensionStats{
@@ -560,7 +566,8 @@ func validatePhysicalDiskStats(index int, disk *PhysicalDiskStats) error {
 			disk.HealthSource == nil || *disk.HealthSource != "attribute_check" ||
 			disk.NativeStatus == nil || *disk.NativeStatus != "unavailable" ||
 			(disk.SMARTStatus != DiskSMARTPassed && disk.SMARTStatus != DiskSMARTFailed) ||
-			disk.Error == nil || disk.Error.Code != "smart_return_status_unavailable" {
+			disk.Error == nil || (disk.Error.Code != "smart_return_status_unavailable" &&
+			disk.Error.Code != "smart_value_invalid" && disk.Error.Code != "sector_size_unknown") {
 			return validationError(validationCodeInvalidValue, prefix+".collection_status", "partial SMART requires an attribute-check fallback")
 		}
 	}

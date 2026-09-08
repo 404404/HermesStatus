@@ -38,6 +38,7 @@ from host_collector import (
     resolve_backing_physical_disks,
     smart_candidates,
     _smart_transport_candidates,
+    _smart_probe_is_usable,
 )
 from lucky_collector import not_configured_lucky
 from easytier_collector import not_configured_easytier
@@ -628,6 +629,26 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(smart["health_source"], "attribute_check")
         self.assertEqual(smart["native_status"], "unavailable")
         self.assertEqual(error["code"], "smart_return_status_unavailable")
+
+    def test_attribute_fallback_keeps_an_invalid_temperature_as_the_primary_error(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 100, "worst": 100, "thresh": 36}]
+        }
+        set_smart_temperature(data, 999)
+        runner = SmartRunner(
+            json.dumps(data),
+            "SMART Status not supported: Incomplete response\n"
+            "This result is based on an Attribute check.\n"
+            "SMART overall-health self-assessment test result: PASSED\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertEqual(smart["health"], "passed")
+        self.assertEqual(smart["health_source"], "attribute_check")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertIsNone(smart["current"])
+        self.assertEqual(error["code"], "smart_value_invalid")
+        self.assertTrue(_smart_probe_is_usable(smart, error))
 
     def test_attribute_fallback_keeps_storage_domain_healthy(self):
         data = fixture_json("smart-normal.json")

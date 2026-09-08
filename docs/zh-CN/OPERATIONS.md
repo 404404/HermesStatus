@@ -25,4 +25,4 @@ Server 生命周期时钟是权威来源。恢复状态在收到新的已接受�
 
 ## EasyTier 观测
 
-没有远端 peer 时，Direct/Relay/IPv6-UDP-Direct 应为“不可观测”。当前 2.0 在部分 2.6.4 输出中存在本机节点被计入 peer 汇总的已知限制；在修复前请以详细行而非汇总作为远端 peer 数量依据。
+没有远端 peer 时，Direct/Relay/IPv6-UDP-Direct 应为“不可观测”。部分 2.6.4 输出包含本机 peer 时，Client 使用 own-peer-ID/`Local` 标记排除该行。若界面显示“其余明细未显示”，应以观察总数而非已显示行数判断规模。

@@ -166,7 +166,10 @@
         "code": {"type": ["string", "null"], "maxLength": 160},
         "field": {"type": ["string", "null"], "maxLength": 160},
         "reason": {"type": ["string", "null"], "maxLength": 160},
-        "source": {"type": ["string", "null"], "maxLength": 160}
+        "source": {"type": ["string", "null"], "maxLength": 160},
+        "resource": {"type": ["string", "null"], "maxLength": 160},
+        "observed_count": {"type": ["integer", "null"], "minimum": 0, "maximum": 4096},
+        "displayed_count": {"type": ["integer", "null"], "minimum": 0, "maximum": 64}
       },
       "additionalProperties": false
     },

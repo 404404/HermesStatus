@@ -1176,9 +1176,17 @@ def _collect_smart_candidate(candidate, device_type, command_runner=None):
         "health_source": health_source,
         "native_status": native_status,
     }
+    # The compatibility fallback describes the quality of a trustworthy
+    # health verdict.  It must not hide a separate invalid field: callers
+    # retain the bounded healthy values while surfacing the primary data
+    # validation failure.
     if sector_error:
         return result, _error(
             "sector_size_unknown", "Logical sector size is unavailable", "smartctl", False
+        )
+    if invalid_value:
+        return result, _error(
+            "smart_value_invalid", "One or more SMART values are invalid", "smartctl", False
         )
     if attribute_fallback:
         return result, _error(
@@ -1186,10 +1194,6 @@ def _collect_smart_candidate(candidate, device_type, command_runner=None):
             "SMART native return status is unavailable; attribute health fallback was used",
             "smartctl",
             False,
-        )
-    if invalid_value:
-        return result, _error(
-            "smart_value_invalid", "One or more SMART values are invalid", "smartctl", False
         )
     return result, None
 
@@ -1240,12 +1244,17 @@ def _smart_transport_candidates(scan_hint):
 def _smart_probe_is_usable(smart, error):
     if not isinstance(smart, dict) or smart.get("health") not in {"passed", "failed"}:
         return False
-    if smart.get("completeness") == "complete" and error is None:
+    error_code = error.get("code") if isinstance(error, dict) else None
+    # A valid passed or failed health verdict proves the transport identity
+    # even if another bounded field was invalid.  Do not probe alternate
+    # transports merely to look for a more convenient result.
+    if smart.get("completeness") == "complete" and error_code in {None, "smart_value_invalid", "sector_size_unknown"}:
         return True
     return (
         smart.get("completeness") == "partial"
-        and isinstance(error, dict)
-        and error.get("code") == "smart_return_status_unavailable"
+        and smart.get("health_source") == "attribute_check"
+        and smart.get("native_status") == "unavailable"
+        and error_code in {"smart_return_status_unavailable", "smart_value_invalid", "sector_size_unknown"}
     )
 
 

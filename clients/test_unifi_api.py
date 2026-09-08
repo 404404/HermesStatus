@@ -262,9 +262,22 @@ class UniFiAPITests(unittest.TestCase):
         second = _port_record({**base, "rx_bytes": 3000, "tx_bytes": 6000}, device_id="device", previous_samples=previous, sample_time=11.0)
         self.assertEqual(second["rx_bps"], 16000)
         self.assertEqual(second["tx_bps"], 32000)
-        self.assertEqual(second["rx_utilization_pct"], 0.01)
+        self.assertEqual(second["rx_utilization_pct"], 0.0)
         reset = _port_record({**base, "rx_bytes": 10, "tx_bytes": 20}, device_id="device", previous_samples=previous, sample_time=12.0)
         self.assertNotIn("rx_bps", reset)
+
+    def test_port_utilization_uses_bits_per_second_once_for_each_direction(self):
+        previous = {}
+        base = {"port_idx": 10, "up": True, "speed": 1000, "rx_bytes": 0, "tx_bytes": 0}
+        _port_record(base, device_id="device", previous_samples=previous, sample_time=10.0)
+        item = _port_record(
+            {**base, "rx_bytes": 12_500_000, "tx_bytes": 12_500_000},
+            device_id="device", previous_samples=previous, sample_time=11.0,
+        )
+        self.assertEqual(item["rx_bps"], 100_000_000)
+        self.assertEqual(item["tx_bps"], 100_000_000)
+        self.assertEqual(item["rx_utilization_pct"], 10.0)
+        self.assertEqual(item["tx_utilization_pct"], 10.0)
 
     def test_counter_directions_are_validated_independently(self):
         previous = {}

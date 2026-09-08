@@ -1102,7 +1102,11 @@ def _port_record(port, *, device_id, previous_samples, sample_time, max_power_w=
                 if speed:
                     for rate_key, utilization_key in (("rx_bps", "rx_utilization_pct"), ("tx_bps", "tx_utilization_pct")):
                         if rate_key in rates:
-                            result[utilization_key] = round(rates[rate_key] * 8 / (speed * 1_000_000) * 100, 2)
+                            # `rates` is already bits per second. Applying a
+                            # second byte-to-bit conversion here inflated the
+                            # presentation by eight (for example 100 Mbps on
+                            # a 1 Gbps link appeared as 80% rather than 10%).
+                            result[utilization_key] = round(rates[rate_key] / (speed * 1_000_000) * 100, 2)
     previous_samples[sample_key] = current_sample
     poe_input = port
     if static_port is not None:

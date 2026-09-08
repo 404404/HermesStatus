@@ -1,25 +1,37 @@
 package main
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 )
 
 const (
 	MaxCollectionDiagnostics      = 64
+	maxCollectionDiagnosticIssues = 16
 	maxCollectionDiagnosticText   = 160
 	collectionNotConfiguredReason = "该组件未在配置文件中开启采集"
 	smartAttributeFallbackReason  = "SMART 原生状态不可用，已使用属性检查结果"
 )
 
 type CollectionDiagnostic struct {
-	Domain    string `json:"domain"`
-	Component string `json:"component"`
-	Status    string `json:"status"`
-	Code      string `json:"code,omitempty"`
-	Field     string `json:"field,omitempty"`
-	Reason    string `json:"reason,omitempty"`
-	Source    string `json:"source,omitempty"`
+	Domain         string `json:"domain"`
+	Component      string `json:"component"`
+	Status         string `json:"status"`
+	Code           string `json:"code,omitempty"`
+	Field          string `json:"field,omitempty"`
+	Reason         string `json:"reason,omitempty"`
+	Source         string `json:"source,omitempty"`
+	Resource       string `json:"resource,omitempty"`
+	ObservedCount  int    `json:"observed_count,omitempty"`
+	DisplayedCount int    `json:"displayed_count,omitempty"`
+}
+
+func cloneCollectionDiagnosticIssues(issues []extensionDecodeIssue) []extensionDecodeIssue {
+	if len(issues) == 0 {
+		return nil
+	}
+	return append([]extensionDecodeIssue(nil), issues...)
 }
 
 var collectionDiagnosticStatuses = map[string]struct{}{
@@ -62,9 +74,9 @@ func appendCollectionDiagnostic(
 	}
 	key := strings.Join([]string{
 		diagnostic.Domain, diagnostic.Component, diagnostic.Status,
-		diagnostic.Code, diagnostic.Field, diagnostic.Reason, diagnostic.Source,
+		diagnostic.Resource, diagnostic.Code, diagnostic.Field, diagnostic.Source,
 	}, "\x00")
-	if _, exists := seen[key]; exists || len(*diagnostics) >= MaxCollectionDiagnostics {
+	if _, exists := seen[key]; exists {
 		return
 	}
 	seen[key] = struct{}{}
@@ -101,7 +113,7 @@ func addCollectionDomainDiagnostic(
 func addCollectionErrorDiagnostic(
 	diagnostics *[]CollectionDiagnostic,
 	seen map[string]struct{},
-	domain, component, field string,
+	domain, component, resource, field string,
 	extensionError *ExtensionError,
 ) {
 	if extensionError == nil {
@@ -109,10 +121,11 @@ func addCollectionErrorDiagnostic(
 	}
 	appendCollectionDiagnostic(diagnostics, seen, CollectionDiagnostic{
 		Domain: domain, Component: component, Status: "degraded",
-		Code:   safeExtensionDiagnostic(extensionError.Code),
-		Field:  safeExtensionDiagnostic(field),
-		Reason: safeExtensionDiagnostic(extensionError.Message),
-		Source: safeExtensionDiagnostic(extensionError.Source),
+		Code:     safeExtensionDiagnostic(extensionError.Code),
+		Resource: safeExtensionDiagnostic(resource),
+		Field:    safeExtensionDiagnostic(field),
+		Reason:   safeExtensionDiagnostic(extensionError.Message),
+		Source:   safeExtensionDiagnostic(extensionError.Source),
 	})
 }
 
@@ -121,8 +134,24 @@ func smartAttributeFallbackObservation(disk PhysicalDiskStats) bool {
 		disk.CollectionStatus == "partial" &&
 		disk.Completeness != nil && *disk.Completeness == "partial" &&
 		disk.HealthSource != nil && *disk.HealthSource == "attribute_check" &&
-		disk.NativeStatus != nil && *disk.NativeStatus == "unavailable" &&
-		disk.Error != nil && disk.Error.Code == "smart_return_status_unavailable"
+		disk.NativeStatus != nil && *disk.NativeStatus == "unavailable"
+}
+
+func diagnosticResourceForDisk(disk PhysicalDiskStats) string {
+	if value := safeExtensionDiagnostic(disk.ID); value != "" {
+		return value
+	}
+	return safeExtensionDiagnostic(disk.Device)
+}
+
+func diagnosticResourceForFilesystem(filesystem FilesystemStats) string {
+	if value := safeExtensionDiagnostic(filesystem.Mountpoint); value != "" {
+		return value
+	}
+	if filesystem.Source != nil {
+		return safeExtensionDiagnostic(*filesystem.Source)
+	}
+	return ""
 }
 
 func addPhysicalDiskDiagnostic(
@@ -130,20 +159,74 @@ func addPhysicalDiskDiagnostic(
 	seen map[string]struct{},
 	disk PhysicalDiskStats,
 ) {
-	if disk.Error == nil {
-		return
+	resource := diagnosticResourceForDisk(disk)
+	fallback := smartAttributeFallbackObservation(disk)
+	if disk.Error != nil {
+		status := "degraded"
+		reason := safeExtensionDiagnostic(disk.Error.Message)
+		if fallback && disk.SMARTStatus == DiskSMARTPassed && disk.Error.Code == "smart_return_status_unavailable" {
+			status = "partial"
+			reason = smartAttributeFallbackReason
+		}
+		appendCollectionDiagnostic(diagnostics, seen, CollectionDiagnostic{
+			Domain: "hardware", Component: "storage.physical_disks", Status: status,
+			Code: safeExtensionDiagnostic(disk.Error.Code), Resource: resource,
+			Field: "hardware.storage.physical_disks[].error", Reason: reason,
+			Source: safeExtensionDiagnostic(disk.Error.Source),
+		})
 	}
-	status := "degraded"
-	reason := safeExtensionDiagnostic(disk.Error.Message)
-	if smartAttributeFallbackObservation(disk) && disk.SMARTStatus == DiskSMARTPassed {
-		status = "partial"
-		reason = smartAttributeFallbackReason
+	if fallback && (disk.Error == nil || disk.Error.Code != "smart_return_status_unavailable") {
+		status := "partial"
+		if disk.SMARTStatus == DiskSMARTFailed {
+			status = "degraded"
+		}
+		appendCollectionDiagnostic(diagnostics, seen, CollectionDiagnostic{
+			Domain: "hardware", Component: "storage.physical_disks", Status: status,
+			Code: "smart_return_status_unavailable", Resource: resource,
+			Field: "hardware.storage.physical_disks[].native_status", Reason: smartAttributeFallbackReason,
+			Source: "smartctl",
+		})
 	}
-	appendCollectionDiagnostic(diagnostics, seen, CollectionDiagnostic{
-		Domain: "hardware", Component: "storage.physical_disks", Status: status,
-		Code:  safeExtensionDiagnostic(disk.Error.Code),
-		Field: "hardware.storage.physical_disks[].error", Reason: reason,
-		Source: safeExtensionDiagnostic(disk.Error.Source),
+	if disk.SMARTStatus == DiskSMARTFailed && disk.Error == nil {
+		appendCollectionDiagnostic(diagnostics, seen, CollectionDiagnostic{
+			Domain: "hardware", Component: "storage.physical_disks", Status: "degraded",
+			Code: "smart_health_failed", Resource: resource,
+			Field: "hardware.storage.physical_disks[].smart_status", Reason: "SMART health check reported failed",
+			Source: "smartctl",
+		})
+	}
+}
+
+func collectionDiagnosticSeverity(status string) int {
+	switch status {
+	case "degraded":
+		return 0
+	case "unavailable", "stale":
+		return 1
+	case "partial":
+		return 2
+	case "not_configured", "not_reported", "not_installed", "unsupported", "not_observed":
+		return 3
+	default:
+		return 4
+	}
+}
+
+func limitCollectionDiagnostics(diagnostics []CollectionDiagnostic) []CollectionDiagnostic {
+	if len(diagnostics) <= MaxCollectionDiagnostics {
+		return diagnostics
+	}
+	ordered := append([]CollectionDiagnostic(nil), diagnostics...)
+	sort.SliceStable(ordered, func(left, right int) bool {
+		return collectionDiagnosticSeverity(ordered[left].Status) < collectionDiagnosticSeverity(ordered[right].Status)
+	})
+	displayed := MaxCollectionDiagnostics - 1
+	limited := append([]CollectionDiagnostic(nil), ordered[:displayed]...)
+	return append(limited, CollectionDiagnostic{
+		Domain: "collection_diagnostics", Component: "collection_diagnostics", Resource: "collection_diagnostics",
+		Status: "partial", Code: "diagnostics_truncated", Field: "collection_diagnostics",
+		Reason: "Collection diagnostics were truncated", Source: "server",
+		ObservedCount: len(diagnostics), DisplayedCount: displayed,
 	})
 }
 
@@ -181,7 +264,7 @@ func buildCollectionDiagnostics(extension ExtensionStats, issues []extensionDeco
 				addPhysicalDiskDiagnostic(&diagnostics, seen, disk)
 			}
 			for _, filesystem := range storage.Filesystems {
-				addCollectionErrorDiagnostic(&diagnostics, seen, "hardware", "storage.filesystems", "hardware.storage.filesystems[].error", filesystem.Error)
+				addCollectionErrorDiagnostic(&diagnostics, seen, "hardware", "storage.filesystems", diagnosticResourceForFilesystem(filesystem), "hardware.storage.filesystems[].error", filesystem.Error)
 			}
 		}
 	}
@@ -196,7 +279,7 @@ func buildCollectionDiagnostics(extension ExtensionStats, issues []extensionDeco
 	} else {
 		addCollectionDomainDiagnostic(&diagnostics, seen, "hermes", "hermes", true, extension.Hermes.Stale, extension.Hermes.Error, "hermes.error")
 		for _, profile := range extension.Hermes.Profiles {
-			addCollectionErrorDiagnostic(&diagnostics, seen, "hermes", "profiles", "hermes.profiles[].error", profile.Error)
+			addCollectionErrorDiagnostic(&diagnostics, seen, "hermes", "profiles", profile.Profile, "hermes.profiles[].error", profile.Error)
 		}
 	}
 
@@ -239,9 +322,9 @@ func buildCollectionDiagnostics(extension ExtensionStats, issues []extensionDeco
 				}
 				appendCollectionDiagnostic(&diagnostics, seen, CollectionDiagnostic{
 					Domain: "unifi", Component: component,
-					Status: apiDiagnosticStatus(endpoint.Status),
+					Status: apiDiagnosticStatus(endpoint.Status), Resource: endpointName,
 				})
-				addCollectionErrorDiagnostic(&diagnostics, seen, "unifi", "api.endpoint", "unifi.api.endpoints[].error", endpoint.Error)
+				addCollectionErrorDiagnostic(&diagnostics, seen, "unifi", "api.endpoint", endpointName, "unifi.api.endpoints[].error", endpoint.Error)
 			}
 		}
 	}
@@ -254,12 +337,13 @@ func buildCollectionDiagnostics(extension ExtensionStats, issues []extensionDeco
 	for _, issue := range issues {
 		appendCollectionDiagnostic(&diagnostics, seen, CollectionDiagnostic{
 			Domain: issue.Domain, Component: issue.Domain, Status: "degraded",
-			Code:   safeExtensionDiagnostic(issue.Code),
-			Field:  safeExtensionDiagnostic(issue.Field),
-			Reason: safeExtensionDiagnostic(issue.Reason),
+			Code:     safeExtensionDiagnostic(issue.Code),
+			Resource: safeExtensionDiagnostic(issue.Domain),
+			Field:    safeExtensionDiagnostic(issue.Field),
+			Reason:   safeExtensionDiagnostic(issue.Reason),
 		})
 	}
-	return diagnostics
+	return limitCollectionDiagnostics(diagnostics)
 }
 
 func validateCollectionDiagnostics(diagnostics []CollectionDiagnostic) error {
@@ -283,7 +367,7 @@ func validateCollectionDiagnostics(diagnostics []CollectionDiagnostic) error {
 		}
 		for field, value := range map[string]string{
 			"code": diagnostic.Code, "field": diagnostic.Field,
-			"reason": diagnostic.Reason, "source": diagnostic.Source,
+			"reason": diagnostic.Reason, "source": diagnostic.Source, "resource": diagnostic.Resource,
 		} {
 			if value == "" {
 				continue
@@ -297,6 +381,37 @@ func validateCollectionDiagnostics(diagnostics []CollectionDiagnostic) error {
 		}
 		if diagnostic.Code != "" && !errorCodePattern.MatchString(diagnostic.Code) {
 			return validationError(validationCodeInvalidValue, prefix+".code", "code contains unsupported characters")
+		}
+		if diagnostic.ObservedCount != 0 || diagnostic.DisplayedCount != 0 {
+			if diagnostic.Code != "diagnostics_truncated" || diagnostic.ObservedCount <= diagnostic.DisplayedCount || diagnostic.DisplayedCount < 0 || diagnostic.ObservedCount > 4096 {
+				return validationError(validationCodeInvalidValue, prefix+".observed_count", "truncation counts are invalid")
+			}
+		}
+	}
+	return nil
+}
+
+func validateCollectionDiagnosticIssues(issues []extensionDecodeIssue) error {
+	if len(issues) > maxCollectionDiagnosticIssues {
+		return validationError(validationCodeInvalidValue, "collection_diagnostic_issues", "array is too large")
+	}
+	for index, issue := range issues {
+		prefix := "collection_diagnostic_issues[" + strconv.Itoa(index) + "]"
+		for field, value := range map[string]string{
+			"domain": issue.Domain, "code": issue.Code, "field": issue.Field, "reason": issue.Reason,
+		} {
+			if value == "" {
+				continue
+			}
+			if err := validateRequiredString(prefix+"."+field, value, maxCollectionDiagnosticText); err != nil {
+				return err
+			}
+			if ContainsSecretLikeText(value) {
+				return validationError(validationCodeInvalidValue, prefix+"."+field, "contains disallowed content")
+			}
+		}
+		if issue.Domain == "" || issue.Code == "" || !errorCodePattern.MatchString(issue.Code) || issue.PayloadLength < 0 || issue.PayloadLength > MaxExtensionPayloadBytes {
+			return validationError(validationCodeInvalidValue, prefix, "issue is invalid")
 		}
 	}
 	return nil

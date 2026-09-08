@@ -106,6 +106,10 @@ async function run(){
   assert.match(collectionDiagnostics, /smart_value_invalid/);
   assert.match(collectionDiagnostics, /hardware/);
   assert.doesNotMatch(collectionDiagnostics, /<script>/);
+  const truncationDiagnostics = app.collectionDiagnosticsMarkup([{domain: 'collection_diagnostics', component: 'collection_diagnostics', resource: 'collection_diagnostics', status: 'partial', code: 'diagnostics_truncated', observed_count: 70, displayed_count: 63}]);
+  assert.match(truncationDiagnostics, /collection_diagnostics/);
+  assert.match(truncationDiagnostics, /诊断已截断：观察到 70 条，显示 63 条/);
+  assert.match(truncationDiagnostics, /资源/);
   const disabledDiagnostics = app.collectionDiagnosticsMarkup([{domain: 'easytier', component: 'easytier', status: 'not_configured'}]);
   assert.match(collectionDiagnostics, /<th>对应标签页<\/th>/);
   assert.match(disabledDiagnostics, /EasyTier/);

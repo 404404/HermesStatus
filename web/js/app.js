@@ -815,15 +815,21 @@ function collectionDiagnosticsMarkup(value, unifi = null){
     const statusLabel = status === 'partial' && diagnostic.code === 'smart_return_status_unavailable'
       ? '部分成功'
       : statusText(status);
-    const reason = diagnostic.reason || endpointError.message || (status === 'not_configured' ? '该组件未在配置文件中开启采集' : '');
+    const observedCount = finiteNumber(diagnostic.observed_count);
+    const displayedCount = finiteNumber(diagnostic.displayed_count);
+    const truncationReason = diagnostic.code === 'diagnostics_truncated' && observedCount !== null && displayedCount !== null
+      ? `诊断已截断：观察到 ${formatInteger(observedCount)} 条，显示 ${formatInteger(displayedCount)} 条`
+      : '';
     const code = diagnostic.code || endpointError.code || '';
     const source = diagnostic.source || endpointError.source || '';
+    const reason = truncationReason || diagnostic.reason || endpointError.message || (status === 'not_configured' ? '该组件未在配置文件中开启采集' : '');
     const required = typeof endpoint?.required === 'boolean' ? (endpoint.required ? '是' : '否') : '-';
     const httpStatus = finiteNumber(endpoint?.http_status) === null ? '-' : formatInteger(endpoint.http_status);
     const component = endpoint?.name || diagnostic.component;
-    return '<tr><td class="strong-cell">' + escapeHtml(domainLabels[diagnostic.domain] || textOrDash(diagnostic.domain)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(component)) + '</td><td><span class="badge ' + statusTone(status) + '">' + escapeHtml(statusLabel) + '</span></td><td>' + escapeHtml(required) + '</td><td>' + escapeHtml(httpStatus) + '</td><td class="mono">' + escapeHtml(textOrDash(code)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.field)) + '</td><td class="wide-cell">' + escapeHtml(textOrDash(reason)) + '</td><td class="mono">' + escapeHtml(textOrDash(source)) + '</td></tr>';
+    const resource = diagnostic.resource || endpoint?.name || '';
+    return '<tr><td class="strong-cell">' + escapeHtml(domainLabels[diagnostic.domain] || textOrDash(diagnostic.domain)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(component)) + '</td><td class="mono">' + escapeHtml(textOrDash(resource)) + '</td><td><span class="badge ' + statusTone(status) + '">' + escapeHtml(statusLabel) + '</span></td><td>' + escapeHtml(required) + '</td><td>' + escapeHtml(httpStatus) + '</td><td class="mono">' + escapeHtml(textOrDash(code)) + '</td><td class="wide-cell mono">' + escapeHtml(textOrDash(diagnostic.field)) + '</td><td class="wide-cell">' + escapeHtml(textOrDash(reason)) + '</td><td class="mono">' + escapeHtml(textOrDash(source)) + '</td></tr>';
   }).join('');
-  return '<div class="table-wrap"><table class="data collection-diagnostics-table"><thead><tr><th>对应标签页</th><th>组件</th><th>采集状态</th><th>必需</th><th>HTTP</th><th>代码</th><th>字段</th><th>原因</th><th>来源</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  return '<div class="table-wrap"><table class="data collection-diagnostics-table"><thead><tr><th>对应标签页</th><th>组件</th><th>资源</th><th>采集状态</th><th>必需</th><th>HTTP</th><th>代码</th><th>字段</th><th>原因</th><th>来源</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function renderCollectionDiagnostics(view){
@@ -1205,6 +1211,11 @@ function renderEasyTier(view){
 	const trafficText = commandAvailable('stats_show')
 		? `${formatBytes(traffic.bytes_rx)} / ${formatBytes(traffic.bytes_tx)} / ${formatBytes(traffic.bytes_forwarded)}`
 		: '数据不可用';
+	const boundedCountText = (value, displayed, truncated) => {
+		const total = finiteNumber(value);
+		const shown = finiteNumber(displayed);
+		return total === null ? '—' : truncated === true && shown !== null ? `${formatInteger(total)}（显示 ${formatInteger(shown)}）` : formatInteger(total);
+	};
 	const peerSummary = !commandAvailable('peer_list')
 		? '数据不可用'
 		: peers.total === 0
@@ -1217,7 +1228,7 @@ function renderEasyTier(view){
 		['版本兼容性', escapeHtml(easyTierCompatibilityText(node.schema_compatibility))],
 		['远端节点', escapeHtml(peerSummary)],
 		['IPv6 UDP Direct', escapeHtml(ipv6UdpDirectText(peers, commandAvailable('peer_list')))],
-		['路由数', escapeHtml(commandAvailable('route_list') ? formatInteger(routes.total) : '数据不可用')],
+		['路由数', escapeHtml(commandAvailable('route_list') ? boundedCountText(routes.total, routes.displayed_total, routes.truncated) : '数据不可用')],
 		['TCP Listener / Connector / Active', escapeHtml(`${tcpListenerText} / ${tcpConnectorText} / ${tcpActiveText}`)],
 		['接收 / 发送 / 转发', escapeHtml(trafficText)]
 	];
@@ -1234,11 +1245,14 @@ function renderEasyTier(view){
 	] : [['EasyTier expectation', '未配置', '—']];
 	byId('easytierExpectationBody').innerHTML = expectationRows.map(([label, expectedValue, observedValue], index) => `<tr><td class="strong-cell">${escapeHtml(label)}</td><td>${escapeHtml(expectedValue)}</td><td>${escapeHtml(observedValue)}</td>${index === 0 ? `<td rowspan="${expectationRows.length}">${expectationBadge(expectation.result || 'not_configured')}</td>` : ''}</tr>`).join('');
 	const peerItems = Array.isArray(peers.items) ? peers.items : [];
-	byId('easytierPeersBody').innerHTML = !commandAvailable('peer_list') ? '<tr><td colspan="10" class="table-empty">节点数据当前不可用。</td></tr>' : peerItems.length ? peerItems.map(peer => `<tr><td>${escapeHtml(textOrDash(peer.hostname || peer.peer_id))}</td><td>${escapeHtml(textOrDash(peer.overlay_ipv4))}</td><td>${escapeHtml(easyTierPathText(peer.path_state))}</td><td>${escapeHtml(listText(peer.established_tunnels))}</td><td>${escapeHtml(textOrDash(peer.address_family))}</td><td>${escapeHtml(formatLatency(peer.latency_ms))}</td><td>${escapeHtml(formatLoss(peer.loss_rate))}</td><td>${escapeHtml(textOrDash(peer.rx_display || formatBytes(peer.rx_bytes)))}</td><td>${escapeHtml(textOrDash(peer.tx_display || formatBytes(peer.tx_bytes)))}</td><td>${escapeHtml(textOrDash(peer.version))}</td></tr>`).join('') : '<tr><td colspan="10" class="table-empty">当前未观察到 EasyTier 节点。</td></tr>';
+	const peerRows = peerItems.map(peer => `<tr><td>${escapeHtml(textOrDash(peer.hostname || peer.peer_id))}</td><td>${escapeHtml(textOrDash(peer.overlay_ipv4))}</td><td>${escapeHtml(easyTierPathText(peer.path_state))}</td><td>${escapeHtml(listText(peer.established_tunnels))}</td><td>${escapeHtml(textOrDash(peer.address_family))}</td><td>${escapeHtml(formatLatency(peer.latency_ms))}</td><td>${escapeHtml(formatLoss(peer.loss_rate))}</td><td>${escapeHtml(textOrDash(peer.rx_display || formatBytes(peer.rx_bytes)))}</td><td>${escapeHtml(textOrDash(peer.tx_display || formatBytes(peer.tx_bytes)))}</td><td>${escapeHtml(textOrDash(peer.version))}</td></tr>`);
+	byId('easytierPeersBody').innerHTML = !commandAvailable('peer_list') ? '<tr><td colspan="10" class="table-empty">节点数据当前不可用。</td></tr>' : peerRows.length ? `${peers.truncated === true ? `<tr><td colspan="10" class="table-empty">观察到 ${escapeHtml(boundedCountText(peers.total, peers.displayed_total, true))} 个远端节点；其余明细未显示。</td></tr>` : ''}${peerRows.join('')}` : '<tr><td colspan="10" class="table-empty">当前未观察到 EasyTier 节点。</td></tr>';
 	const routeItems = Array.isArray(routes.items) ? routes.items : [];
-	byId('easytierRoutesBody').innerHTML = !commandAvailable('route_list') ? '<tr><td colspan="7" class="table-empty">路由数据当前不可用。</td></tr>' : routeItems.length ? routeItems.map(route => `<tr><td>${escapeHtml(route.is_local ? '本地' : textOrDash(route.hostname || route.peer_id))}</td><td>${escapeHtml(textOrDash(route.overlay_ipv4))}</td><td>${escapeHtml(listText(route.proxy_cidrs))}</td><td class="mono">${escapeHtml(textOrDash(route.next_hop_peer_id))}</td><td>${escapeHtml(easyTierPathText(route.path_state))}</td><td>${escapeHtml(formatLatency(route.path_latency_ms))}</td><td>${escapeHtml(formatInteger(route.cost))}</td></tr>`).join('') : '<tr><td colspan="7" class="table-empty">当前未观察到 EasyTier 路由。</td></tr>';
+	const routeRows = routeItems.map(route => `<tr><td>${escapeHtml(route.is_local ? '本地' : textOrDash(route.hostname || route.peer_id))}</td><td>${escapeHtml(textOrDash(route.overlay_ipv4))}</td><td>${escapeHtml(listText(route.proxy_cidrs))}</td><td class="mono">${escapeHtml(textOrDash(route.next_hop_peer_id))}</td><td>${escapeHtml(easyTierPathText(route.path_state))}</td><td>${escapeHtml(formatLatency(route.path_latency_ms))}</td><td>${escapeHtml(formatInteger(route.cost))}</td></tr>`);
+	byId('easytierRoutesBody').innerHTML = !commandAvailable('route_list') ? '<tr><td colspan="7" class="table-empty">路由数据当前不可用。</td></tr>' : routeRows.length ? `${routes.truncated === true ? `<tr><td colspan="7" class="table-empty">观察到 ${escapeHtml(boundedCountText(routes.total, routes.displayed_total, true))} 条路由；其余明细未显示。</td></tr>` : ''}${routeRows.join('')}` : '<tr><td colspan="7" class="table-empty">当前未观察到 EasyTier 路由。</td></tr>';
 	const connectorItems = Array.isArray(connectors.items) ? connectors.items : [];
-	byId('easytierConnectorsBody').innerHTML = !commandAvailable('connector_list') ? '<tr><td colspan="3" class="table-empty">连接器数据当前不可用。</td></tr>' : connectorItems.length ? connectorItems.map(connector => `<tr><td>${escapeHtml(textOrDash(connector.transport))}</td><td>${escapeHtml(textOrDash(connector.endpoint || connector.url))}</td><td>${badge(connector.status)}</td></tr>`).join('') : '<tr><td colspan="3" class="table-empty">未配置出站连接器。</td></tr>';
+	const connectorRows = connectorItems.map(connector => `<tr><td>${escapeHtml(textOrDash(connector.transport))}</td><td>${escapeHtml(textOrDash(connector.endpoint || connector.url))}</td><td>${badge(connector.status)}</td></tr>`);
+	byId('easytierConnectorsBody').innerHTML = !commandAvailable('connector_list') ? '<tr><td colspan="3" class="table-empty">连接器数据当前不可用。</td></tr>' : connectorRows.length ? `${connectors.truncated === true ? `<tr><td colspan="3" class="table-empty">观察到 ${escapeHtml(boundedCountText(connectors.total, connectors.displayed_total, true))} 个连接器；其余明细未显示。</td></tr>` : ''}${connectorRows.join('')}` : '<tr><td colspan="3" class="table-empty">未配置出站连接器。</td></tr>';
 }
 
 function listText(value){ return Array.isArray(value) && value.length ? value.map(textOrDash).join('、') : '-'; }
