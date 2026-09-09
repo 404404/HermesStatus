@@ -83,7 +83,7 @@ func TestCollectionDiagnosticsKeepFailedSMARTFallbackFaulted(t *testing.T) {
 }
 
 func TestCollectionDiagnosticsKeepOtherSMARTErrorsFaulted(t *testing.T) {
-	for _, code := range []string{"smart_value_invalid", "smartctl_unavailable"} {
+	for _, code := range []string{"smart_value_invalid", "sector_size_unknown", "smartctl_unavailable"} {
 		disk := fallbackDisk(DiskSMARTPassed)
 		disk.Error.Code = code
 		diagnostic := physicalDiskDiagnostic(t, disk)
@@ -144,6 +144,27 @@ func TestCollectionDiagnosticsKeepPrimarySMARTValueErrorWithFallbackEvidence(t *
 	}
 	if !extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{disk}}}}) {
 		t.Fatal("SMART value error was incorrectly hidden by attribute fallback handling")
+	}
+}
+
+func TestCollectionDiagnosticsKeepFailedSMARTHealthAlongsideValueError(t *testing.T) {
+	disk := fallbackDisk(DiskSMARTFailed)
+	disk.CollectionStatus = "invalid_data"
+	disk.Error = &ExtensionError{Code: "smart_value_invalid", Message: "temperature is invalid", Source: "smartctl"}
+	diagnostics := buildCollectionDiagnostics(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{disk}}}}, nil)
+	found := map[string]bool{}
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Component == "storage.physical_disks" && diagnostic.Resource == "sdu" && diagnostic.Status == "degraded" {
+			found[diagnostic.Code] = true
+		}
+	}
+	for _, code := range []string{"smart_value_invalid", "smart_return_status_unavailable", "smart_health_failed"} {
+		if !found[code] {
+			t.Fatalf("failed SMART fact %q was lost: %#v", code, diagnostics)
+		}
+	}
+	if !extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{disk}}}}) {
+		t.Fatal("failed SMART health was hidden by the field-quality error")
 	}
 }
 

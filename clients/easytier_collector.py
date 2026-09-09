@@ -602,6 +602,11 @@ class EasyTierCollector(object):
     def _apply_peers(payload, value, own_peer_id):
         peers = _as_observed_list(value)
         result = payload["peers"]
+        # The peer list is only a bounded presentation. Aggregates must use
+        # every accepted remote observation, otherwise moving one peer across
+        # the display boundary changes the topology conclusion.
+        topology_observable = True
+        has_ipv6_udp_direct = False
         for peer in peers:
             peer_id = _safe_text(_lookup(peer, "peer_id", "virtual_peer_id", "id"), 32)
             cost = _safe_text(_lookup(peer, "cost"), 64)
@@ -655,13 +660,25 @@ class EasyTierCollector(object):
                 result["direct"] += 1
             else:
                 result["unknown_path"] += 1
+            if (
+                path_state == "unknown"
+                or transport == "unknown"
+                or family == "unknown"
+            ):
+                topology_observable = False
+            elif (
+                path_state == "direct"
+                and transport == "udp"
+                and family == "ipv6"
+            ):
+                has_ipv6_udp_direct = True
         result["displayed_total"] = len(result["items"])
         result["truncated"] = result["displayed_total"] < result["total"]
-        if result["total"] and all(item["path_state"] != "unknown" and item["transport"] != "unknown" and item["address_family"] != "unknown" for item in result["items"]):
-            result["ipv6_udp_direct"] = any(
-                item["path_state"] == "direct" and item["transport"] == "udp" and item["address_family"] == "ipv6"
-                for item in result["items"]
-            )
+        # `None` is intentional: no remote peers, or incomplete transport
+        # evidence, cannot prove the negative. A boolean is emitted only once
+        # every remote observation is classifiable.
+        if result["total"] and topology_observable:
+            result["ipv6_udp_direct"] = has_ipv6_udp_direct
 
     @staticmethod
     def _apply_routes(payload, value, own_peer_id, own_overlay_ipv4=None):

@@ -131,7 +131,6 @@ func addCollectionErrorDiagnostic(
 
 func smartAttributeFallbackObservation(disk PhysicalDiskStats) bool {
 	return (disk.SMARTStatus == DiskSMARTPassed || disk.SMARTStatus == DiskSMARTFailed) &&
-		disk.CollectionStatus == "partial" &&
 		disk.Completeness != nil && *disk.Completeness == "partial" &&
 		disk.HealthSource != nil && *disk.HealthSource == "attribute_check" &&
 		disk.NativeStatus != nil && *disk.NativeStatus == "unavailable"
@@ -187,7 +186,9 @@ func addPhysicalDiskDiagnostic(
 			Source: "smartctl",
 		})
 	}
-	if disk.SMARTStatus == DiskSMARTFailed && disk.Error == nil {
+	// Health is a separate business fact from collection and field-quality
+	// errors. Keep it visible even if another SMART value is invalid.
+	if disk.SMARTStatus == DiskSMARTFailed {
 		appendCollectionDiagnostic(diagnostics, seen, CollectionDiagnostic{
 			Domain: "hardware", Component: "storage.physical_disks", Status: "degraded",
 			Code: "smart_health_failed", Resource: resource,

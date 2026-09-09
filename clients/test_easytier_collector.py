@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 
-from easytier_collector import EasyTierCollector, _command_duration_ms, load_easytier_config, not_configured_easytier
+from easytier_collector import EasyTierCollector, _command_duration_ms, _empty_payload, load_easytier_config, not_configured_easytier
 
 
 class Result(object):
@@ -240,6 +240,31 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertEqual(payload["peers"]["displayed_total"], 16)
         self.assertTrue(payload["peers"]["truncated"])
         self.assertEqual(len(payload["peers"]["items"]), 16)
+
+    def test_peer_topology_aggregate_uses_all_observations_not_display_order(self):
+        def peer(index, tunnels="tcp,tcp6", cost="p2p"):
+            return {
+                "id": 20000 + index, "ipv4": "10.250.250.%d" % (index + 2),
+                "cost": cost, "tunnel_proto": tunnels,
+                "rx_bytes": "0 B", "tx_bytes": "0 B",
+            }
+
+        def apply(records):
+            payload = _empty_payload("healthy")
+            EasyTierCollector._apply_peers(payload, records, None)
+            return payload["peers"]
+
+        records = [peer(index) for index in range(16)] + [peer(16, "udp,udp6")]
+        summary = apply(records)
+        self.assertEqual((summary["total"], summary["displayed_total"]), (17, 16))
+        self.assertTrue(summary["truncated"])
+        self.assertTrue(summary["ipv6_udp_direct"])
+        self.assertEqual(summary["ipv6_udp_direct"], apply([records[-1]] + records[:-1])["ipv6_udp_direct"])
+
+        self.assertFalse(apply([peer(index) for index in range(17)])["ipv6_udp_direct"])
+        unknown = apply(records[:16] + [peer(16, "unknown")])
+        self.assertIsNone(unknown["ipv6_udp_direct"])
+        self.assertIsNone(apply([])["ipv6_udp_direct"])
 
     def test_traffic_baseline_resets_for_identity_change_and_long_gap(self):
         collector = EasyTierCollector(environ=self.environ, runner=Runner())

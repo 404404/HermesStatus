@@ -163,7 +163,13 @@ func persistedDeviceFromNode(
 		domainValues["client_build"] = node.Extension.ClientBuild
 	}
 	for key, value := range domainValues {
-		raw, err := rawJSON(value)
+		var raw json.RawMessage
+		var err error
+		if key == "easytier" {
+			raw, err = marshalPersistedEasyTierStats(value.(*EasyTierStats))
+		} else {
+			raw, err = rawJSON(value)
+		}
 		if err != nil {
 			return contracts.PersistedDevice{}, err
 		}
@@ -179,6 +185,56 @@ func persistedDeviceFromNode(
 		RuntimeObservations:    observations,
 		Domains:                domains,
 	}, nil
+}
+
+// marshalPersistedEasyTierStats preserves zero-valued detail-count metadata.
+// API output may omit such fields for old clients, but restored state must
+// retain whether the sender made the field explicit.
+func marshalPersistedEasyTierStats(stats *EasyTierStats) (json.RawMessage, error) {
+	if stats == nil {
+		return rawJSON(stats)
+	}
+	raw, err := rawJSON(stats)
+	if err != nil {
+		return nil, err
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return nil, err
+	}
+	counts := []struct {
+		key     string
+		present bool
+		values  map[string]any
+	}{
+		{key: "peers", present: stats.Peers.countMetadataPresent, values: map[string]any{"displayed_total": stats.Peers.DisplayedTotal, "truncated": stats.Peers.Truncated}},
+		{key: "routes", present: stats.Routes.countMetadataPresent, values: map[string]any{"displayed_total": stats.Routes.DisplayedTotal, "truncated": stats.Routes.Truncated}},
+		{key: "connectors", present: stats.Connectors.countMetadataPresent, values: map[string]any{"displayed_total": stats.Connectors.DisplayedTotal, "truncated": stats.Connectors.Truncated}},
+		{key: "traffic", present: stats.Traffic.byInstanceCountMetadataPresent, values: map[string]any{"by_instance_total": stats.Traffic.ByInstanceTotal, "by_instance_displayed": stats.Traffic.ByInstanceDisplayed, "by_instance_truncated": stats.Traffic.ByInstanceTruncated}},
+		{key: "traffic", present: stats.Traffic.samplesCountMetadataPresent, values: map[string]any{"samples_total": stats.Traffic.SamplesTotal, "samples_displayed": stats.Traffic.SamplesDisplayed, "samples_truncated": stats.Traffic.SamplesTruncated}},
+	}
+	for _, count := range counts {
+		if !count.present {
+			continue
+		}
+		var section map[string]json.RawMessage
+		if err := json.Unmarshal(object[count.key], &section); err != nil {
+			return nil, err
+		}
+		for field, value := range count.values {
+			encoded, err := rawJSON(value)
+			if err != nil {
+				return nil, err
+			}
+			section[field] = encoded
+		}
+		encoded, err := rawJSON(section)
+		if err != nil {
+			return nil, err
+		}
+		object[count.key] = encoded
+	}
+	return rawJSON(object)
 }
 
 func timeStringPointer(value time.Time) *string {
@@ -420,10 +476,12 @@ func restorePersistedDeviceFields(node *NodeState, persisted contracts.Persisted
 		}
 		node.Extension.Lucky = &value
 	}
-	if raw, exists := persisted.Domains["easytier"]; exists {
+	if raw, exists := persisted.Domains["easytier"]; exists && string(bytes.TrimSpace(raw)) != "null" {
 		var value EasyTierStats
-		if err := decodeStrictRuntime(raw, &value); err != nil {
-			return err
+		if err := decodeStrictRuntime(raw, &value); err != nil ||
+			markEasyTierCountMetadataPresence(raw, &value) != nil ||
+			ValidateEasyTierStats(&value) != nil {
+			return errors.New("persisted easytier telemetry is invalid")
 		}
 		node.Extension.EasyTier = &value
 	}

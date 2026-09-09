@@ -15,6 +15,129 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+func TestPersistenceEasyTierCountMetadataRetainsWirePresenceAndValidation(t *testing.T) {
+	legacy, err := DecodeEasyTierStatsJSON(readEasyTierV27Fixture(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	zero := validEasyTierFixture()
+	zero.Peers = EasyTierPeerStats{countMetadataPresent: true}
+	nonzero := validEasyTierFixture()
+	peer := EasyTierPeer{PathState: "direct", Transport: "udp", AddressFamily: "ipv6"}
+	nonzero.Peers = EasyTierPeerStats{Total: 17, DisplayedTotal: 16, Truncated: true, Direct: 17, Items: make([]EasyTierPeer, 16), countMetadataPresent: true}
+	for index := range nonzero.Peers.Items {
+		nonzero.Peers.Items[index] = peer
+	}
+	for _, testCase := range []struct {
+		name    string
+		stats   *EasyTierStats
+		present bool
+	}{
+		{name: "legacy omitted", stats: legacy, present: false},
+		{name: "explicit zero", stats: &zero, present: true},
+		{name: "normal nonzero", stats: &nonzero, present: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			raw, err := marshalPersistedEasyTierStats(testCase.stats)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var document struct {
+				Peers map[string]json.RawMessage `json:"peers"`
+			}
+			if err := json.Unmarshal(raw, &document); err != nil {
+				t.Fatal(err)
+			}
+			_, present := document.Peers["displayed_total"]
+			if present != testCase.present {
+				t.Fatalf("count metadata presence changed: raw=%s", raw)
+			}
+			restored := &NodeState{Extension: newNotReportedExtensionSnapshot(time.Now())}
+			persisted := contracts.PersistedDevice{RuntimeObservations: map[string]json.RawMessage{}, Domains: map[string]json.RawMessage{"easytier": raw}}
+			if err := restorePersistedDeviceFields(restored, persisted); err != nil {
+				t.Fatalf("valid persisted %s EasyTier telemetry was rejected: %v", testCase.name, err)
+			}
+			if restored.Extension.EasyTier.Peers.countMetadataPresent != testCase.present {
+				t.Fatalf("restored count metadata presence changed: %#v", restored.Extension.EasyTier.Peers)
+			}
+		})
+	}
+	raw, err := marshalPersistedEasyTierStats(&zero)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var invalid map[string]any
+	if err := json.Unmarshal(raw, &invalid); err != nil {
+		t.Fatal(err)
+	}
+	invalid["peers"].(map[string]any)["total"] = 1
+	raw, err = json.Marshal(invalid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted := contracts.PersistedDevice{RuntimeObservations: map[string]json.RawMessage{}, Domains: map[string]json.RawMessage{"easytier": raw}}
+	if err := restorePersistedDeviceFields(&NodeState{Extension: newNotReportedExtensionSnapshot(time.Now())}, persisted); err == nil {
+		t.Fatal("contradictory explicit EasyTier count metadata was accepted during restore")
+	}
+}
+
+func TestPersistenceEasyTierWireCountMetadataSurvivesServerRestart(t *testing.T) {
+	registry := testRegistry(testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil))
+	app := newMultiDeviceTestApp(t, minimalTestConfig(), registry, contracts.LegacyMappingDocument{Version: 1})
+	stats := validEasyTierFixture()
+	stats.Peers = EasyTierPeerStats{}
+	raw, err := json.Marshal(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var easyTier map[string]any
+	if err := json.Unmarshal(raw, &easyTier); err != nil {
+		t.Fatal(err)
+	}
+	peers, ok := easyTier["peers"].(map[string]any)
+	if !ok {
+		t.Fatal("valid EasyTier fixture peers are invalid")
+	}
+	// This is the new wire form, not a manually populated Server struct: the
+	// explicit zero values carry a different validation contract than omission.
+	peers["displayed_total"] = 0
+	peers["truncated"] = false
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(structuredUpdatePayload(t, "update-normal.json", nil), &fields); err != nil {
+		t.Fatal(err)
+	}
+	fields["easytier"], err = json.Marshal(easyTier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if issues, err := app.ingestDeviceUpdateAt(deviceIngestRequest{
+		DeviceID: "device-alpha", ProtocolMode: "device_v2", CollectedAt: now,
+		FlatStats: payload, Generation: 1,
+	}, now); err != nil || len(issues) != 0 {
+		t.Fatalf("new EasyTier wire update was not accepted: issues=%#v err=%v", issues, err)
+	}
+	if !app.nodes["device-alpha"].Extension.EasyTier.Peers.countMetadataPresent {
+		t.Fatal("new EasyTier count metadata was not marked on the online decode path")
+	}
+	if err := app.PersistStats(); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := NewApp(app.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(restarted.Close)
+	restored := restarted.nodes["device-alpha"].Extension.EasyTier.Peers
+	if !restored.countMetadataPresent || restored.Total != 0 || restored.DisplayedTotal != 0 || restored.Truncated {
+		t.Fatalf("persisted explicit zero EasyTier metadata changed after restart: %#v", restored)
+	}
+}
+
 func TestPersistenceV2WriteReadAndRestartNeverRestoresOnline(t *testing.T) {
 	registry := testRegistry(
 		testRegistryDevice("device-alpha", "Alpha", 10, true, "device_v2", nil),
