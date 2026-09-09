@@ -1,0 +1,83 @@
+{
+  "cpu": 1,
+  "extension_version": "1.0-draft",
+  "hardware": {
+    "cpu_details": null,
+    "cpu_model": "Example CPU",
+    "cpu_temperature": null,
+    "disk_device": "/dev/sdu",
+    "disk_power_on_hours": 21399,
+    "disk_read_bytes": 15240027996160,
+    "disk_smart_source": "smartctl-json-text",
+    "disk_smart_status": "unknown",
+    "disk_temperature": null,
+    "disk_written_bytes": 25815780073472,
+    "error": {
+      "code": "partial_failure",
+      "http_status": null,
+      "message": "One or more extension sources are unavailable",
+      "retryable": true,
+      "source": "host-collector"
+    },
+    "memory_details": null,
+    "stale": false,
+    "storage": {
+      "error": {
+        "code": "smart_value_invalid",
+        "http_status": null,
+        "message": "One or more SMART values are invalid",
+        "retryable": false,
+        "source": "smartctl"
+      },
+      "filesystems": [],
+      "physical_disks": [
+        {
+          "capacity_bytes": 1000,
+          "collection_status": "invalid_data",
+          "completeness": "partial",
+          "configured_type": "sat",
+          "device": "/dev/sdu",
+          "effective_type": "sat",
+          "error": {
+            "code": "smart_value_invalid",
+            "http_status": null,
+            "message": "One or more SMART values are invalid",
+            "retryable": false,
+            "source": "smartctl"
+          },
+          "health_source": "attribute_check",
+          "id": "sdu",
+          "model": null,
+          "native_status": "unavailable",
+          "power_on_hours": 21399,
+          "read_bytes": 15240027996160,
+          "resolution_source": "explicit",
+          "smart_source": "smartctl-json-text",
+          "smart_status": "passed",
+          "temperature_c": null,
+          "written_bytes": 25815780073472
+        }
+      ],
+      "stale": false,
+      "summary": {
+        "filesystem_count": 0,
+        "physical_disk_count": 1,
+        "smart_failed": 0,
+        "smart_passed": 1,
+        "smart_unknown": 0,
+        "temperature_max_c": null,
+        "temperature_min_c": null
+      },
+      "updated_at": "2026-07-15T00:00:00Z"
+    },
+    "system_identity": {
+      "architecture": null,
+      "distribution": null,
+      "kernel_release": null,
+      "pretty_name": null,
+      "release_version": null,
+      "source": "unavailable"
+    },
+    "updated_at": "2026-07-15T00:00:00Z"
+  }
+}

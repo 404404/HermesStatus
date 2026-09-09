@@ -285,6 +285,24 @@ func TestPartialSMARTAttributeFallbackIsStrictAndPreservesHealth(t *testing.T) {
 	}
 }
 
+func TestPartialSMARTFallbackKeepsSecondaryInvalidValueFaulted(t *testing.T) {
+	stats := mustDecodeUpdate(t, "update-normal.json")
+	storage := validStorageFixture()
+	disk := &storage.PhysicalDisks[0]
+	disk.CollectionStatus = "partial"
+	disk.Completeness = hardwareText("partial")
+	disk.HealthSource = hardwareText("attribute_check")
+	disk.NativeStatus = hardwareText("unavailable")
+	disk.Error = &ExtensionError{Code: "smart_value_invalid", Source: "smartctl", Message: "temperature is invalid"}
+	stats.Hardware.Storage = &storage
+	if err := ValidateExtensionStats(stats); err != nil {
+		t.Fatalf("partial SMART fallback with secondary value error rejected: %v", err)
+	}
+	if !extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &storage}}) {
+		t.Fatal("secondary SMART value error was hidden by attribute fallback")
+	}
+}
+
 func TestHardwareObservabilityRejectsSerialAndInvalidClientBuild(t *testing.T) {
 	var payload map[string]any
 	if err := json.Unmarshal(readFixture(t, "update-normal.json"), &payload); err != nil {

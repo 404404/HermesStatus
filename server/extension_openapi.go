@@ -35,13 +35,16 @@ func extensionOpenAPISchemas() map[string]any {
 	collectionDiagnostic := requiredObject(
 		[]string{"domain", "component", "status"},
 		map[string]any{
-			"domain":    map[string]any{"type": "string", "maxLength": maxCollectionDiagnosticText},
-			"component": map[string]any{"type": "string", "maxLength": maxCollectionDiagnosticText},
-			"status":    map[string]any{"type": "string", "enum": []string{"available", "degraded", "unavailable", "stale", "not_reported", "not_configured", "not_installed", "unsupported", "partial", "not_observed"}},
-			"code":      nullableString(maxCollectionDiagnosticText, "Bounded diagnostic code"),
-			"field":     nullableString(maxCollectionDiagnosticText, "Bounded diagnostic field path"),
-			"reason":    nullableString(maxCollectionDiagnosticText, "Bounded diagnostic reason"),
-			"source":    nullableString(maxCollectionDiagnosticText, "Bounded diagnostic source"),
+			"domain":          map[string]any{"type": "string", "maxLength": maxCollectionDiagnosticText},
+			"component":       map[string]any{"type": "string", "maxLength": maxCollectionDiagnosticText},
+			"status":          map[string]any{"type": "string", "enum": []string{"available", "degraded", "unavailable", "stale", "not_reported", "not_configured", "not_installed", "unsupported", "partial", "not_observed"}},
+			"code":            nullableString(maxCollectionDiagnosticText, "Bounded diagnostic code"),
+			"field":           nullableString(maxCollectionDiagnosticText, "Bounded diagnostic field path"),
+			"reason":          nullableString(maxCollectionDiagnosticText, "Bounded diagnostic reason"),
+			"source":          nullableString(maxCollectionDiagnosticText, "Bounded diagnostic source"),
+			"resource":        nullableString(maxCollectionDiagnosticText, "Stable affected resource identity"),
+			"observed_count":  nullableInteger(4096, "Observed diagnostic count when truncated"),
+			"displayed_count": nullableInteger(MaxCollectionDiagnostics, "Displayed diagnostic count when truncated"),
 		},
 	)
 	extensionError := requiredObject(
@@ -503,10 +506,10 @@ func extensionOpenAPISchemas() map[string]any {
 	easyTierStats := requiredObject([]string{"status", "source", "node", "peers", "routes", "connectors", "traffic", "command_status", "updated_at", "stale", "error"}, map[string]any{
 		"status": easyTierStatus, "source": map[string]any{"type": "string", "enum": []string{"easytier_cli", "unavailable"}},
 		"node":           schemaRef("EasyTierNodeStats"),
-		"peers":          requiredObject([]string{"total", "direct", "relay", "unknown_path"}, map[string]any{"total": integerOpenAPISchema(), "direct": integerOpenAPISchema(), "relay": integerOpenAPISchema(), "unknown_path": integerOpenAPISchema(), "ipv6_udp_direct": map[string]any{"type": []string{"boolean", "null"}}, "items": map[string]any{"type": "array", "maxItems": MaxDockerCount, "items": easyTierPeer}}),
-		"routes":         requiredObject([]string{"total"}, map[string]any{"total": integerOpenAPISchema(), "items": map[string]any{"type": "array", "maxItems": MaxDockerCount, "items": easyTierRoute}}),
-		"connectors":     requiredObject([]string{"total", "tcp_configured", "tcp_active"}, map[string]any{"total": integerOpenAPISchema(), "tcp_configured": map[string]any{"type": "boolean"}, "tcp_active": map[string]any{"type": "boolean"}, "tcp_listener_available": map[string]any{"type": []string{"boolean", "null"}}, "items": map[string]any{"type": "array", "maxItems": MaxDockerCount, "items": easyTierConnector}}),
-		"traffic":        requiredObject([]string{"bytes_rx", "bytes_tx", "bytes_forwarded"}, map[string]any{"bytes_rx": integerOpenAPISchema(), "bytes_tx": integerOpenAPISchema(), "bytes_forwarded": integerOpenAPISchema()}),
+		"peers":          requiredObject([]string{"total", "direct", "relay", "unknown_path"}, map[string]any{"total": integerOpenAPISchema(), "displayed_total": nullableInteger(16, "Displayed bounded peer count"), "truncated": map[string]any{"type": "boolean"}, "direct": integerOpenAPISchema(), "relay": integerOpenAPISchema(), "unknown_path": integerOpenAPISchema(), "ipv6_udp_direct": map[string]any{"type": []string{"boolean", "null"}}, "items": map[string]any{"type": "array", "maxItems": 16, "items": easyTierPeer}}),
+		"routes":         requiredObject([]string{"total"}, map[string]any{"total": integerOpenAPISchema(), "displayed_total": nullableInteger(16, "Displayed bounded route count"), "truncated": map[string]any{"type": "boolean"}, "items": map[string]any{"type": "array", "maxItems": 16, "items": easyTierRoute}}),
+		"connectors":     requiredObject([]string{"total", "tcp_configured", "tcp_active"}, map[string]any{"total": integerOpenAPISchema(), "displayed_total": nullableInteger(16, "Displayed bounded connector count"), "truncated": map[string]any{"type": "boolean"}, "tcp_configured": map[string]any{"type": "boolean"}, "tcp_active": map[string]any{"type": "boolean"}, "tcp_listener_available": map[string]any{"type": []string{"boolean", "null"}}, "items": map[string]any{"type": "array", "maxItems": 16, "items": easyTierConnector}}),
+		"traffic":        requiredObject([]string{"bytes_rx", "bytes_tx", "bytes_forwarded"}, map[string]any{"bytes_rx": integerOpenAPISchema(), "bytes_tx": integerOpenAPISchema(), "bytes_forwarded": integerOpenAPISchema(), "packets_rx": integerOpenAPISchema(), "packets_tx": integerOpenAPISchema(), "rx_bps": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "tx_bps": map[string]any{"type": []string{"number", "null"}, "minimum": 0}, "by_instance_total": nullableInteger(MaxDockerCount, "Observed instance-traffic count"), "by_instance_displayed": nullableInteger(16, "Displayed bounded instance-traffic count"), "by_instance_truncated": map[string]any{"type": "boolean"}, "samples_total": nullableInteger(MaxDockerCount, "Observed metric sample count"), "samples_displayed": nullableInteger(64, "Displayed bounded metric sample count"), "samples_truncated": map[string]any{"type": "boolean"}, "by_instance": map[string]any{"type": "array", "maxItems": 16}, "samples": map[string]any{"type": "array", "maxItems": 64}}),
 		"command_status": requiredObject([]string{"node_info", "peer_list", "route_list", "connector_list", "stats_show"}, map[string]any{"node_info": schemaRef("EasyTierCommandStatus"), "peer_list": schemaRef("EasyTierCommandStatus"), "route_list": schemaRef("EasyTierCommandStatus"), "connector_list": schemaRef("EasyTierCommandStatus"), "stats_show": schemaRef("EasyTierCommandStatus")}),
 		"updated_at":     nullableString(MaxTimestampLength, "Client collection time in RFC3339"), "stale": map[string]any{"type": "boolean"}, "error": nullableRef("ExtensionError"),
 	})

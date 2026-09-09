@@ -38,6 +38,7 @@ from host_collector import (
     resolve_backing_physical_disks,
     smart_candidates,
     _smart_transport_candidates,
+    _smart_probe_is_usable,
 )
 from lucky_collector import not_configured_lucky
 from easytier_collector import not_configured_easytier
@@ -628,6 +629,90 @@ class HostCollectorTests(unittest.TestCase):
         self.assertEqual(smart["health_source"], "attribute_check")
         self.assertEqual(smart["native_status"], "unavailable")
         self.assertEqual(error["code"], "smart_return_status_unavailable")
+
+    def test_attribute_fallback_keeps_an_invalid_temperature_as_the_primary_error(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 100, "worst": 100, "thresh": 36}]
+        }
+        set_smart_temperature(data, 999)
+        runner = SmartRunner(
+            json.dumps(data),
+            "SMART Status not supported: Incomplete response\n"
+            "This result is based on an Attribute check.\n"
+            "SMART overall-health self-assessment test result: PASSED\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertEqual(smart["health"], "passed")
+        self.assertEqual(smart["health_source"], "attribute_check")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertIsNone(smart["current"])
+        self.assertEqual(error["code"], "smart_value_invalid")
+        self.assertTrue(_smart_probe_is_usable(smart, error))
+
+    def test_attribute_fallback_failed_keeps_health_with_invalid_temperature(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 1, "worst": 1, "thresh": 36}]
+        }
+        set_smart_temperature(data, 999)
+        runner = SmartRunner(
+            json.dumps(data),
+            "SMART Status not supported: Incomplete response\n"
+            "This result is based on an Attribute check.\n"
+            "SMART overall-health self-assessment test result: FAILED\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertEqual(smart["health"], "failed")
+        self.assertEqual(smart["health_source"], "attribute_check")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertIsNone(smart["current"])
+        self.assertEqual(error["code"], "smart_value_invalid")
+        self.assertTrue(_smart_probe_is_usable(smart, error))
+
+    def test_attribute_fallback_keeps_unknown_sector_size_as_a_real_error(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {
+            "table": [{"id": 5, "value": 100, "worst": 100, "thresh": 36}]
+        }
+        del data["logical_block_size"]
+        runner = SmartRunner(
+            json.dumps(data),
+            "SMART Status not supported: Incomplete response\n"
+            "This result is based on an Attribute check.\n"
+            "SMART overall-health self-assessment test result: PASSED\n",
+        )
+        smart, error = collect_smart("/dev/example", runner)
+        self.assertEqual(smart["health"], "passed")
+        self.assertEqual(smart["health_source"], "attribute_check")
+        self.assertEqual(smart["native_status"], "unavailable")
+        self.assertEqual(error["code"], "sector_size_unknown")
+        self.assertTrue(_smart_probe_is_usable(smart, error))
+
+    def test_smart_attribute_fallback_invalid_temperature_wire_fixture_is_current(self):
+        data = fixture_json("smart-normal.json")
+        data["ata_smart_attributes"] = {"table": [{"id": 5, "value": 100, "worst": 100, "thresh": 36}]}
+        set_smart_temperature(data, 999)
+
+        def runner(command, _timeout):
+            if command[:1] == ["lsblk"]:
+                return 0, json.dumps({"blockdevices": [{"name": "sdu", "kname": "sdu", "type": "disk", "size": 1000}]})
+            if "-j" in command:
+                return 0, json.dumps(data)
+            return 0, (
+                "SMART Status not supported: Incomplete response\n"
+                "This result is based on an Attribute check.\n"
+                "SMART overall-health self-assessment test result: PASSED\n"
+            )
+
+        hardware = collect_hardware(
+            "Example CPU", smart_devices=[{"path": "/dev/sdu", "type": "sat"}], command_runner=runner,
+            hwmon_root="/missing-hwmon", sys_block_root="/no-sys-block", cpu_stat_path="/missing-stat",
+            meminfo_path="/missing-meminfo", system_identity={"distribution": None, "release_version": None, "pretty_name": None, "kernel_release": None, "architecture": None, "source": "unavailable"}, now=FIXED_NOW,
+        )
+        wire = {"cpu": 1, "extension_version": EXTENSION_VERSION, "hardware": hardware}
+        expected = json.loads((ROOT / "testdata" / "smart-attribute-fallback-invalid-temperature.json").read_text(encoding="utf-8"))
+        self.assertEqual(wire, expected)
 
     def test_attribute_fallback_keeps_storage_domain_healthy(self):
         data = fixture_json("smart-normal.json")

@@ -297,6 +297,24 @@ func TestSnapshotRecomputesFreshnessWithoutMutatingNodeState(t *testing.T) {
 	}
 }
 
+func TestSnapshotDiagnosticsUseSameFreshnessProjectionAndRetainDecodeEvidence(t *testing.T) {
+	app := newTestApp(t, minimalTestConfig())
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	extension := mustDecodeUpdate(t, "update-normal.json")
+	updatedAt := now.Add(-hardwareStaleAfter - time.Second).Format(time.RFC3339)
+	extension.Hardware.UpdatedAt = &updatedAt
+	app.nodeMu.Lock()
+	node := app.nodes["s01"]
+	node.Extension = extensionSnapshotAt(*extension, now)
+	node.CollectionDiagnosticIssues = []extensionDecodeIssue{{Domain: "unifi", Code: "invalid_value", Field: "unifi.api.telemetry.ports", Reason: "port ownership rejected", PayloadLength: 128}}
+	app.nodeMu.Unlock()
+	server := app.snapshotStatsAt(false, now)["servers"].([]any)[0].(map[string]any)
+	diagnostics, err := json.Marshal(server["collection_diagnostics"])
+	if !server["hardware"].(*HardwareStats).Stale || err != nil || !strings.Contains(string(diagnostics), "unifi.api.telemetry.ports") {
+		t.Fatalf("freshness or decoder evidence disagreed with snapshot: %#v", server["collection_diagnostics"])
+	}
+}
+
 func TestSnapshotReceivedAtAndUpdatedAtAreStable(t *testing.T) {
 	app := newTestApp(t, minimalTestConfig())
 	extension := mustDecodeUpdate(t, "update-normal.json")

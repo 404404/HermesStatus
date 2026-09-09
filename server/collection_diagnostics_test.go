@@ -83,13 +83,115 @@ func TestCollectionDiagnosticsKeepFailedSMARTFallbackFaulted(t *testing.T) {
 }
 
 func TestCollectionDiagnosticsKeepOtherSMARTErrorsFaulted(t *testing.T) {
-	for _, code := range []string{"smart_value_invalid", "smartctl_unavailable"} {
+	for _, code := range []string{"smart_value_invalid", "sector_size_unknown", "smartctl_unavailable"} {
 		disk := fallbackDisk(DiskSMARTPassed)
 		disk.Error.Code = code
 		diagnostic := physicalDiskDiagnostic(t, disk)
 		if diagnostic.Status != "degraded" || diagnostic.Code != code {
 			t.Fatalf("SMART error %q was incorrectly classified: %#v", code, diagnostic)
 		}
+	}
+}
+
+func TestCollectionDiagnosticsKeepSameSMARTErrorForEachDisk(t *testing.T) {
+	err := &ExtensionError{Code: "smartctl_unavailable", Message: "SMART command failed", Source: "smartctl"}
+	diskOne := PhysicalDiskStats{ID: "sdc", Device: "/dev/sdc", Error: err}
+	diskTwo := PhysicalDiskStats{ID: "sdd", Device: "/dev/sdd", Error: err}
+	diagnostics := buildCollectionDiagnostics(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{diskOne, diskTwo}}}}, nil)
+	found := map[string]bool{}
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Component == "storage.physical_disks" && diagnostic.Code == "smartctl_unavailable" {
+			found[diagnostic.Resource] = true
+		}
+	}
+	if !found["sdc"] || !found["sdd"] {
+		t.Fatalf("disk-scoped errors were merged or lost: %#v", diagnostics)
+	}
+}
+
+func TestCollectionDiagnosticsEmitFaultForFailedSMARTWithoutCollectorError(t *testing.T) {
+	disk := PhysicalDiskStats{ID: "sdc", Device: "/dev/sdc", SMARTStatus: DiskSMARTFailed, CollectionStatus: "healthy"}
+	diagnostics := buildCollectionDiagnostics(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{disk}}}}, nil)
+	found := false
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == "smart_health_failed" && diagnostic.Resource == "sdc" && diagnostic.Status == "degraded" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("failed SMART result had no disk diagnostic: %#v", diagnostics)
+	}
+	if !extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{disk}}}}) {
+		t.Fatal("failed SMART result did not degrade hardware health")
+	}
+}
+
+func TestCollectionDiagnosticsKeepPrimarySMARTValueErrorWithFallbackEvidence(t *testing.T) {
+	disk := fallbackDisk(DiskSMARTPassed)
+	disk.Error = &ExtensionError{Code: "smart_value_invalid", Message: "temperature is invalid", Source: "smartctl"}
+	diagnostics := buildCollectionDiagnostics(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{disk}}}}, nil)
+	primary, fallback := false, false
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == "smart_value_invalid" && diagnostic.Status == "degraded" {
+			primary = true
+		}
+		if diagnostic.Code == "smart_return_status_unavailable" && diagnostic.Status == "partial" {
+			fallback = true
+		}
+	}
+	if !primary || !fallback {
+		t.Fatalf("SMART primary error or fallback evidence was lost: %#v", diagnostics)
+	}
+	if !extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{disk}}}}) {
+		t.Fatal("SMART value error was incorrectly hidden by attribute fallback handling")
+	}
+}
+
+func TestCollectionDiagnosticsKeepFailedSMARTHealthAlongsideValueError(t *testing.T) {
+	disk := fallbackDisk(DiskSMARTFailed)
+	disk.CollectionStatus = "invalid_data"
+	disk.Error = &ExtensionError{Code: "smart_value_invalid", Message: "temperature is invalid", Source: "smartctl"}
+	diagnostics := buildCollectionDiagnostics(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{disk}}}}, nil)
+	found := map[string]bool{}
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Component == "storage.physical_disks" && diagnostic.Resource == "sdu" && diagnostic.Status == "degraded" {
+			found[diagnostic.Code] = true
+		}
+	}
+	for _, code := range []string{"smart_value_invalid", "smart_return_status_unavailable", "smart_health_failed"} {
+		if !found[code] {
+			t.Fatalf("failed SMART fact %q was lost: %#v", code, diagnostics)
+		}
+	}
+	if !extensionHasBusinessError(ExtensionStats{Hardware: &HardwareStats{Storage: &StorageStats{PhysicalDisks: []PhysicalDiskStats{disk}}}}) {
+		t.Fatal("failed SMART health was hidden by the field-quality error")
+	}
+}
+
+func TestCollectionDiagnosticsTruncateAfterPrioritizingFaults(t *testing.T) {
+	diagnostics := make([]CollectionDiagnostic, 0, 70)
+	for index := 0; index < 60; index++ {
+		diagnostics = append(diagnostics, CollectionDiagnostic{Domain: "hardware", Component: "normal", Status: "available"})
+	}
+	for index := 0; index < 10; index++ {
+		diagnostics = append(diagnostics, CollectionDiagnostic{Domain: "hardware", Component: "fault", Status: "degraded", Code: "smart_value_invalid"})
+	}
+	limited := limitCollectionDiagnostics(diagnostics)
+	if len(limited) != MaxCollectionDiagnostics {
+		t.Fatalf("diagnostic limit was not applied: %d", len(limited))
+	}
+	truncation := limited[len(limited)-1]
+	if truncation.Code != "diagnostics_truncated" || truncation.ObservedCount != 70 || truncation.DisplayedCount != MaxCollectionDiagnostics-1 {
+		t.Fatalf("truncation evidence is incomplete: %#v", truncation)
+	}
+	degraded := 0
+	for _, diagnostic := range limited[:len(limited)-1] {
+		if diagnostic.Status == "degraded" {
+			degraded++
+		}
+	}
+	if degraded != 10 {
+		t.Fatalf("normal diagnostics displaced faults during truncation: %#v", limited)
 	}
 }
 

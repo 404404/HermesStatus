@@ -26,6 +26,9 @@ func DecodeEasyTierStatsJSON(data []byte) (*EasyTierStats, error) {
 	if err := decodeStrictJSON(data, &stats); err != nil {
 		return nil, err
 	}
+	if err := markEasyTierCountMetadataPresence(data, &stats); err != nil {
+		return nil, err
+	}
 	stats = SanitizeEasyTierStats(stats)
 	if err := ValidateEasyTierStats(&stats); err != nil {
 		return nil, err
@@ -73,24 +76,24 @@ func ValidateEasyTierStats(stats *EasyTierStats) error {
 	if stats.Routes.Total < 0 || stats.Routes.Total > MaxDockerCount || stats.Connectors.Total < 0 || stats.Connectors.Total > MaxDockerCount {
 		return validationError(validationCodeInvalidValue, "easytier", "counts are invalid")
 	}
-	if stats.Peers.Items != nil && (len(stats.Peers.Items) != stats.Peers.Total || len(stats.Peers.Items) > MaxDockerCount) {
-		return validationError(validationCodeInvalidValue, "easytier.peers.items", "does not match the bounded total")
+	if err := validateEasyTierDisplayedCount("easytier.peers.items", stats.Peers.Total, stats.Peers.DisplayedTotal, stats.Peers.Truncated, stats.Peers.countMetadataPresent, len(stats.Peers.Items), 16); err != nil {
+		return err
 	}
 	for index := range stats.Peers.Items {
 		if err := validateEasyTierPeer(&stats.Peers.Items[index]); err != nil {
 			return err
 		}
 	}
-	if stats.Routes.Items != nil && (len(stats.Routes.Items) != stats.Routes.Total || len(stats.Routes.Items) > MaxDockerCount) {
-		return validationError(validationCodeInvalidValue, "easytier.routes.items", "does not match the bounded total")
+	if err := validateEasyTierDisplayedCount("easytier.routes.items", stats.Routes.Total, stats.Routes.DisplayedTotal, stats.Routes.Truncated, stats.Routes.countMetadataPresent, len(stats.Routes.Items), 16); err != nil {
+		return err
 	}
 	for index := range stats.Routes.Items {
 		if err := validateEasyTierRoute(&stats.Routes.Items[index]); err != nil {
 			return err
 		}
 	}
-	if stats.Connectors.Items != nil && (len(stats.Connectors.Items) != stats.Connectors.Total || len(stats.Connectors.Items) > MaxDockerCount) {
-		return validationError(validationCodeInvalidValue, "easytier.connectors.items", "does not match the bounded total")
+	if err := validateEasyTierDisplayedCount("easytier.connectors.items", stats.Connectors.Total, stats.Connectors.DisplayedTotal, stats.Connectors.Truncated, stats.Connectors.countMetadataPresent, len(stats.Connectors.Items), 16); err != nil {
+		return err
 	}
 	for index := range stats.Connectors.Items {
 		if err := validateEasyTierConnector(&stats.Connectors.Items[index]); err != nil {
@@ -120,8 +123,14 @@ func ValidateEasyTierStats(stats *EasyTierStats) error {
 	if err := validateOptionalBoundedFloat("easytier.traffic.tx_bps", stats.Traffic.TXBPS, float64(MaxSafeInteger)); err != nil {
 		return err
 	}
-	if len(stats.Traffic.ByInstance) > 16 || len(stats.Traffic.Samples) > 64 {
-		return validationError(validationCodeInvalidValue, "easytier.traffic", "contains too many bounded detail items")
+	if stats.Traffic.ByInstanceTotal < 0 || stats.Traffic.ByInstanceTotal > MaxDockerCount || stats.Traffic.SamplesTotal < 0 || stats.Traffic.SamplesTotal > MaxDockerCount {
+		return validationError(validationCodeInvalidValue, "easytier.traffic", "detail totals are invalid")
+	}
+	if err := validateEasyTierDisplayedCount("easytier.traffic.by_instance", stats.Traffic.ByInstanceTotal, stats.Traffic.ByInstanceDisplayed, stats.Traffic.ByInstanceTruncated, stats.Traffic.byInstanceCountMetadataPresent, len(stats.Traffic.ByInstance), 16); err != nil {
+		return err
+	}
+	if err := validateEasyTierDisplayedCount("easytier.traffic.samples", stats.Traffic.SamplesTotal, stats.Traffic.SamplesDisplayed, stats.Traffic.SamplesTruncated, stats.Traffic.samplesCountMetadataPresent, len(stats.Traffic.Samples), 64); err != nil {
+		return err
 	}
 	for index := range stats.Traffic.ByInstance {
 		if err := validateEasyTierInstanceTraffic(&stats.Traffic.ByInstance[index]); err != nil {
@@ -194,6 +203,62 @@ func validEasyTierStatus(value EasyTierStatus) bool {
 
 func validEasyTierSource(value EasyTierSource) bool {
 	return value == EasyTierSourceCLI || value == EasyTierSourceUnavailable
+}
+
+func markEmbeddedEasyTierCountMetadataPresence(data []byte, stats *EasyTierStats) error {
+	if stats == nil {
+		return nil
+	}
+	var raw struct {
+		EasyTier json.RawMessage `json:"easytier"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return validationError(validationCodeInvalidJSON, "extension", "payload is not valid JSON")
+	}
+	if len(raw.EasyTier) == 0 || string(raw.EasyTier) == "null" {
+		return nil
+	}
+	return markEasyTierCountMetadataPresence(raw.EasyTier, stats)
+}
+func markEasyTierCountMetadataPresence(data []byte, stats *EasyTierStats) error {
+	var raw struct {
+		Peers      map[string]json.RawMessage `json:"peers"`
+		Routes     map[string]json.RawMessage `json:"routes"`
+		Connectors map[string]json.RawMessage `json:"connectors"`
+		Traffic    map[string]json.RawMessage `json:"traffic"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return validationError(validationCodeInvalidJSON, "easytier", "payload is not valid JSON")
+	}
+	hasAny := func(values map[string]json.RawMessage, names ...string) bool {
+		for _, name := range names {
+			if _, exists := values[name]; exists {
+				return true
+			}
+		}
+		return false
+	}
+	stats.Peers.countMetadataPresent = hasAny(raw.Peers, "displayed_total", "truncated")
+	stats.Routes.countMetadataPresent = hasAny(raw.Routes, "displayed_total", "truncated")
+	stats.Connectors.countMetadataPresent = hasAny(raw.Connectors, "displayed_total", "truncated")
+	stats.Traffic.byInstanceCountMetadataPresent = hasAny(raw.Traffic, "by_instance_total", "by_instance_displayed", "by_instance_truncated")
+	stats.Traffic.samplesCountMetadataPresent = hasAny(raw.Traffic, "samples_total", "samples_displayed", "samples_truncated")
+	return nil
+}
+func validateEasyTierDisplayedCount(field string, total, displayed int, truncated, metadataPresent bool, itemCount, limit int) error {
+	if itemCount > limit {
+		return validationError(validationCodeInvalidValue, field, "displayed items exceed the limit")
+	}
+	// Only a genuinely omitted pre-count-metadata field can retain the old
+	// total-without-details contract. Explicit zero metadata is new wire data
+	// and therefore must agree with its detail list and truncation marker.
+	if !metadataPresent && displayed == 0 && !truncated {
+		return nil
+	}
+	if displayed != itemCount || displayed > total || truncated != (displayed < total) {
+		return validationError(validationCodeInvalidValue, field, "displayed count does not match the bounded total")
+	}
+	return nil
 }
 
 func validEasyTierAdministrativeRole(value string) bool {

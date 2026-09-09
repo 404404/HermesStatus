@@ -65,20 +65,21 @@ type NodeState struct {
 	LastUpdate     time.Time
 	Pong           bool
 
-	IdentityStatus         string
-	ProtocolMode           string
-	ReportedName           *string
-	ReportedFQDN           *string
-	ReportedHostname       *string
-	LastSeen               time.Time
-	CollectedAt            time.Time
-	LastAcceptedGeneration uint64
-	LastRequestDigest      [sha256.Size]byte
-	HasLastRequestDigest   bool
-	Restored               bool
-	IdentityError          bool
-	Degraded               bool
-	CollectionDiagnostics  []CollectionDiagnostic
+	IdentityStatus             string
+	ProtocolMode               string
+	ReportedName               *string
+	ReportedFQDN               *string
+	ReportedHostname           *string
+	LastSeen                   time.Time
+	CollectedAt                time.Time
+	LastAcceptedGeneration     uint64
+	LastRequestDigest          [sha256.Size]byte
+	HasLastRequestDigest       bool
+	Restored                   bool
+	IdentityError              bool
+	Degraded                   bool
+	CollectionDiagnostics      []CollectionDiagnostic
+	CollectionDiagnosticIssues []extensionDecodeIssue
 }
 
 type App struct {
@@ -331,8 +332,11 @@ func (a *App) SnapshotStats() map[string]any {
 }
 
 func (a *App) snapshotStats(consumeReload bool) map[string]any {
+	return a.snapshotStatsAt(consumeReload, time.Now())
+}
+
+func (a *App) snapshotStatsAt(consumeReload bool, now time.Time) map[string]any {
 	runtime := a.RuntimeSnapshot()
-	now := time.Now()
 	serverKeys := make([]string, 0, len(runtime.Servers))
 	if a.registry != nil {
 		for _, device := range sortedRegistryDevices(a.registry) {
@@ -370,15 +374,14 @@ func (a *App) snapshotStats(consumeReload bool) map[string]any {
 		base["easytier"] = extension.EasyTier
 		base["unifi"] = extension.UniFi
 		base["client_build"] = extension.ClientBuild
-		diagnostics := node.CollectionDiagnostics
-		if diagnostics == nil {
-			diagnostics = buildCollectionDiagnostics(ExtensionStats{
-				ExtensionVersion: extension.ExtensionVersion,
-				Hardware:         extension.Hardware, Docker: extension.Docker, Hermes: extension.Hermes,
-				Lucky: extension.Lucky, EasyTier: extension.EasyTier, UniFi: extension.UniFi,
-				ClientBuild: extension.ClientBuild,
-			}, nil)
-		}
+		// Freshness and diagnostic status use the same projection instant.
+		// Decode evidence is retained separately so field/reason details survive.
+		diagnostics := buildCollectionDiagnostics(ExtensionStats{
+			ExtensionVersion: extension.ExtensionVersion,
+			Hardware:         extension.Hardware, Docker: extension.Docker, Hermes: extension.Hermes,
+			Lucky: extension.Lucky, EasyTier: extension.EasyTier, UniFi: extension.UniFi,
+			ClientBuild: extension.ClientBuild,
+		}, node.CollectionDiagnosticIssues)
 		base["collection_diagnostics"] = diagnostics
 		if a.registry != nil {
 			device, _ := a.registryDevice(deviceID)

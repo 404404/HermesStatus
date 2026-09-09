@@ -25,7 +25,9 @@ MAX_OUTPUT_BYTES = 512 * 1024
 # The server's strict EasyTier projection cap is 64 KiB. All retained data is
 # bounded before it reaches the Device v2 payload.
 MAX_ITEMS = 16
+MAX_SOURCE_ITEMS = 256
 MAX_STATS_ITEMS = 64
+MAX_SOURCE_STATS_ITEMS = 256
 SAFE_TEXT_LIMIT = 128
 MAX_COMMAND_DURATION_MS = 30000
 # EasyTier 2.6.4 exposes these five stable, read-only JSON commands. Route is
@@ -63,7 +65,8 @@ def _error(code, source="easytier"):
         "not_configured": "EasyTier monitoring is not configured",
         "easytier_cli_unavailable": "EasyTier CLI is unavailable",
         "rpc_unavailable": "EasyTier loopback RPC is unavailable",
-        "command_failed": "EasyTier command is unavailable",
+        "command_failed": "EasyTier command execution failed",
+        "command_timeout": "EasyTier command timed out",
         "invalid_data": "EasyTier returned invalid monitoring data",
         "unsupported_version": "EasyTier version is not supported",
         "invalid_configuration": "EasyTier monitoring configuration is invalid",
@@ -225,13 +228,13 @@ def _empty_payload(status="not_configured", error=None):
             "stun_info": {"udp_nat_type": None, "tcp_nat_type": None, "public_ips": [], "last_update_time": None},
             "schema_compatibility": "unknown",
         },
-        "peers": {"total": 0, "direct": 0, "relay": 0, "unknown_path": 0, "ipv6_udp_direct": None, "items": []},
-        "routes": {"total": 0, "items": []},
-        "connectors": {"total": 0, "tcp_configured": False, "tcp_active": False, "tcp_listener_available": None, "items": []},
+        "peers": {"total": 0, "displayed_total": 0, "truncated": False, "direct": 0, "relay": 0, "unknown_path": 0, "ipv6_udp_direct": None, "items": []},
+        "routes": {"total": 0, "displayed_total": 0, "truncated": False, "items": []},
+        "connectors": {"total": 0, "displayed_total": 0, "truncated": False, "tcp_configured": False, "tcp_active": False, "tcp_listener_available": None, "items": []},
         "traffic": {
             "bytes_rx": 0, "bytes_tx": 0, "bytes_forwarded": 0,
             "packets_rx": 0, "packets_tx": 0,
-            "rx_bps": None, "tx_bps": None, "by_instance": [], "samples": [],
+            "rx_bps": None, "tx_bps": None, "by_instance": [], "by_instance_total": 0, "by_instance_displayed": 0, "by_instance_truncated": False, "samples": [], "samples_total": 0, "samples_displayed": 0, "samples_truncated": False,
         },
         "command_status": command_status,
         "updated_at": None,
@@ -356,7 +359,7 @@ def _list_payload(value, keys):
 
 
 def _metric_samples(value):
-    if not isinstance(value, list) or len(value) > MAX_STATS_ITEMS:
+    if not isinstance(value, list) or len(value) > MAX_SOURCE_STATS_ITEMS:
         return None
     result = []
     identities = set()
@@ -408,10 +411,10 @@ def _valid_command_payload(name, value):
         return isinstance(value, dict) and _safe_text(_lookup(value, "peer_id"), 32) is not None and _safe_text(_lookup(value, "version")) is not None
     if name == "peer_list":
         items = _list_payload(value, ("peers", "data", "items"))
-        return items is not None and len(items) <= MAX_ITEMS and all(isinstance(item, dict) and _safe_text(_lookup(item, "peer_id", "virtual_peer_id", "id"), 32) is not None for item in items)
+        return items is not None and len(items) <= MAX_SOURCE_ITEMS and all(isinstance(item, dict) and _safe_text(_lookup(item, "peer_id", "virtual_peer_id", "id"), 32) is not None for item in items)
     if name == "route_list":
         items = _list_payload(value, ("routes", "data", "items"))
-        return items is not None and len(items) <= MAX_ITEMS and all(
+        return items is not None and len(items) <= MAX_SOURCE_ITEMS and all(
             isinstance(item, dict) and (
                 _safe_text(_lookup(item, "peer_id", "virtual_peer_id", "id"), 32) is not None
                 or _internal_ip(_lookup(item, "overlay_ipv4", "virtual_ipv4", "ipv4")) is not None
@@ -420,7 +423,7 @@ def _valid_command_payload(name, value):
         )
     if name == "connector_list":
         items = _list_payload(value, ("connectors", "data", "items"))
-        return items is not None and len(items) <= MAX_ITEMS and all(isinstance(item, dict) for item in items)
+        return items is not None and len(items) <= MAX_SOURCE_ITEMS and all(isinstance(item, dict) for item in items)
     if name == "stats_show":
         metrics = _metric_samples(value)
         networks = _network_names(metrics or [])
@@ -438,6 +441,16 @@ def _as_list(value):
         for key in ("peers", "routes", "connectors", "data", "items"):
             if isinstance(value.get(key), list):
                 return value[key][:MAX_ITEMS]
+    return []
+
+
+def _as_observed_list(value):
+    if isinstance(value, list):
+        return value[:MAX_SOURCE_ITEMS]
+    if isinstance(value, dict):
+        for key in ("peers", "routes", "connectors", "data", "items"):
+            if isinstance(value.get(key), list):
+                return value[key][:MAX_SOURCE_ITEMS]
     return []
 
 
@@ -473,6 +486,7 @@ class EasyTierCollector(object):
         self.config = load_easytier_config(argv, environ)
         self.runner = runner or subprocess.run
         self.clock = clock or time.monotonic
+        self._last_command_success = {}
         self._previous_traffic = None
 
     def _run(self, command):
@@ -508,24 +522,31 @@ class EasyTierCollector(object):
                     raise ValueError("invalid command payload")
                 values[name] = value
                 command_status = _empty_command("healthy", None)
+                self._last_command_success[name] = collected_at
                 command_status["last_success_at"] = collected_at
                 command_status["collected_at"] = collected_at
                 command_status["duration_ms"] = _command_duration_ms(started, self.clock())
                 payload["command_status"][name] = command_status
                 successful += 1
-            except (OSError, subprocess.TimeoutExpired, RuntimeError):
-                command_status = _empty_command("unavailable", _error("command_failed", "easytier." + name))
+            except (OSError, subprocess.TimeoutExpired, RuntimeError) as exc:
+                command_status = _empty_command("unavailable", _error("command_timeout" if isinstance(exc, subprocess.TimeoutExpired) else "command_failed", "easytier." + name))
+                command_status["last_success_at"] = self._last_command_success.get(name)
                 command_status["collected_at"] = collected_at
                 command_status["duration_ms"] = _command_duration_ms(started, self.clock())
                 payload["command_status"][name] = command_status
             except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
                 command_status = _empty_command("invalid_data", _error("invalid_data", "easytier." + name))
                 command_status["collected_at"] = collected_at
+                command_status["last_success_at"] = self._last_command_success.get(name)
                 command_status["duration_ms"] = _command_duration_ms(started, self.clock())
                 payload["command_status"][name] = command_status
 
         if successful == 0:
-            return _empty_payload("unavailable", _error("rpc_unavailable"))
+            codes = {item.get("error", {}).get("code") for item in payload["command_status"].values() if isinstance(item.get("error"), dict)}
+            payload["status"] = "unavailable"
+            payload["error"] = _error("command_timeout" if codes == {"command_timeout"} else "command_failed")
+            payload["updated_at"] = _now()
+            return payload
         self._apply_node(payload, values.get("node_info"))
         self._apply_peers(payload, values.get("peer_list"), payload["node"]["peer_id"])
         self._apply_routes(payload, values.get("route_list"), payload["node"]["peer_id"], payload["node"]["overlay_ipv4"])
@@ -579,8 +600,13 @@ class EasyTierCollector(object):
 
     @staticmethod
     def _apply_peers(payload, value, own_peer_id):
-        peers = _as_list(value)
+        peers = _as_observed_list(value)
         result = payload["peers"]
+        # The peer list is only a bounded presentation. Aggregates must use
+        # every accepted remote observation, otherwise moving one peer across
+        # the display boundary changes the topology conclusion.
+        topology_observable = True
+        has_ipv6_udp_direct = False
         for peer in peers:
             peer_id = _safe_text(_lookup(peer, "peer_id", "virtual_peer_id", "id"), 32)
             cost = _safe_text(_lookup(peer, "cost"), 64)
@@ -625,7 +651,8 @@ class EasyTierCollector(object):
                 "tx_packets": _counter(_lookup(peer, "tx_packets")),
                 "closed": bool(_lookup(peer, "closed", "is_closed")),
             }
-            result["items"].append(item)
+            if len(result["items"]) < MAX_ITEMS:
+                result["items"].append(item)
             result["total"] += 1
             if path_state == "relayed":
                 result["relay"] += 1
@@ -633,15 +660,30 @@ class EasyTierCollector(object):
                 result["direct"] += 1
             else:
                 result["unknown_path"] += 1
-        if result["total"] and all(item["path_state"] != "unknown" and item["transport"] != "unknown" and item["address_family"] != "unknown" for item in result["items"]):
-            result["ipv6_udp_direct"] = any(
-                item["path_state"] == "direct" and item["transport"] == "udp" and item["address_family"] == "ipv6"
-                for item in result["items"]
-            )
+            if (
+                path_state == "unknown"
+                or transport == "unknown"
+                or family == "unknown"
+            ):
+                topology_observable = False
+            elif (
+                path_state == "direct"
+                and transport == "udp"
+                and family == "ipv6"
+            ):
+                has_ipv6_udp_direct = True
+        result["displayed_total"] = len(result["items"])
+        result["truncated"] = result["displayed_total"] < result["total"]
+        # `None` is intentional: no remote peers, or incomplete transport
+        # evidence, cannot prove the negative. A boolean is emitted only once
+        # every remote observation is classifiable.
+        if result["total"] and topology_observable:
+            result["ipv6_udp_direct"] = has_ipv6_udp_direct
 
     @staticmethod
     def _apply_routes(payload, value, own_peer_id, own_overlay_ipv4=None):
-        for route in _as_list(value):
+        result = payload["routes"]
+        for route in _as_observed_list(value):
             peer_id = _safe_text(_lookup(route, "peer_id", "virtual_peer_id", "id"), 32)
             overlay_ipv4 = _internal_ip(_lookup(route, "overlay_ipv4", "virtual_ipv4", "ipv4"))
             next_hop = _safe_text(_lookup(route, "next_hop_peer_id", "next_hop", "next_hop_hostname", "next_hop_ipv4"), 128)
@@ -655,8 +697,9 @@ class EasyTierCollector(object):
                 (peer_id is not None and own_peer_id is not None and peer_id == own_peer_id)
                 or (peer_id is None and own_overlay_ipv4 is not None and overlay_ipv4 == own_overlay_ipv4)
             )
-            payload["routes"]["total"] += 1
-            payload["routes"]["items"].append({
+            result["total"] += 1
+            if len(result["items"]) < MAX_ITEMS:
+                result["items"].append({
                     "peer_id": peer_id,
                     "overlay_ipv4": overlay_ipv4,
                     "hostname": _safe_text(_lookup(route, "hostname", "name")),
@@ -669,9 +712,11 @@ class EasyTierCollector(object):
                     "is_local": own_route,
                 })
 
+        result["displayed_total"] = len(result["items"])
+        result["truncated"] = result["displayed_total"] < result["total"]
     @staticmethod
     def _apply_connectors(payload, value):
-        connectors = _as_list(value)
+        connectors = _as_observed_list(value)
         result = payload["connectors"]
         result["total"] = len(connectors)
         for connector in connectors:
@@ -685,7 +730,8 @@ class EasyTierCollector(object):
             endpoint = (("[%s]" % host if host and ":" in host else host) + (":%d" % port if host and port else "")) if host else None
             raw_status = _bounded_number(_lookup(connector, "status"), 2147483647)
             active = raw_status == 0
-            result["items"].append({
+            if len(result["items"]) < MAX_ITEMS:
+                result["items"].append({
                 "url": safe_url,
                 "endpoint": endpoint,
                 "transport": transport,
@@ -698,13 +744,18 @@ class EasyTierCollector(object):
                 result["tcp_configured"] = True
                 if active:
                     result["tcp_active"] = True
+        result["displayed_total"] = len(result["items"])
+        result["truncated"] = result["displayed_total"] < result["total"]
 
     def _apply_stats(self, payload, value, collected_monotonic):
         metrics = _metric_samples(value)
         if metrics is None:
             return
         traffic = payload["traffic"]
-        traffic["samples"] = metrics
+        traffic["samples_total"] = len(metrics)
+        traffic["samples_displayed"] = min(len(metrics), MAX_STATS_ITEMS)
+        traffic["samples_truncated"] = traffic["samples_displayed"] < traffic["samples_total"]
+        traffic["samples"] = metrics[:MAX_STATS_ITEMS]
         networks = _network_names(metrics)
         if len(networks) == 1:
             payload["node"]["network_name"] = networks[0]
@@ -729,16 +780,21 @@ class EasyTierCollector(object):
             key = tuple((name, sample_labels.get(name)) for name in ("network_name", "from_instance_id", "to_instance_id"))
             row = grouped.setdefault(key, {"network_name": sample_labels.get("network_name"), "from_instance_id": sample_labels.get("from_instance_id"), "to_instance_id": sample_labels.get("to_instance_id"), "bytes_rx": None, "bytes_tx": None, "packets_rx": None, "packets_tx": None})
             row[{"traffic_bytes_rx_by_instance": "bytes_rx", "traffic_bytes_tx_by_instance": "bytes_tx", "traffic_packets_rx_by_instance": "packets_rx", "traffic_packets_tx_by_instance": "packets_tx"}[sample["name"]]] = sample["value"]
-        traffic["by_instance"] = list(grouped.values())[:MAX_ITEMS]
+        rows = list(grouped.values())
+        traffic["by_instance_total"] = len(rows)
+        traffic["by_instance_displayed"] = min(len(rows), MAX_ITEMS)
+        traffic["by_instance_truncated"] = traffic["by_instance_displayed"] < traffic["by_instance_total"]
+        traffic["by_instance"] = rows[:MAX_ITEMS]
 
-        current = (traffic["bytes_rx"], traffic["bytes_tx"], collected_monotonic)
+        identity = (payload["node"].get("network_name"), payload["node"].get("inst_id"))
+        current = (traffic["bytes_rx"], traffic["bytes_tx"], collected_monotonic, identity)
         previous = self._previous_traffic
         self._previous_traffic = current
         if previous is None:
             return
-        old_rx, old_tx, old_at = previous
+        old_rx, old_tx, old_at, old_identity = previous
         interval = collected_monotonic - old_at
-        if interval <= 0 or traffic["bytes_rx"] < old_rx or traffic["bytes_tx"] < old_tx:
+        if identity != old_identity or interval <= 0 or interval > self.config["interval_seconds"] * 2 or traffic["bytes_rx"] < old_rx or traffic["bytes_tx"] < old_tx:
             return
         traffic["rx_bps"] = (traffic["bytes_rx"] - old_rx) * 8.0 / interval
         traffic["tx_bps"] = (traffic["bytes_tx"] - old_tx) * 8.0 / interval

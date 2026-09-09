@@ -109,6 +109,9 @@ func persistedDeviceFromNode(
 	if err := validateCollectionDiagnostics(diagnostics); err != nil {
 		return contracts.PersistedDevice{}, errors.New("collection diagnostics are invalid")
 	}
+	if err := validateCollectionDiagnosticIssues(node.CollectionDiagnosticIssues); err != nil {
+		return contracts.PersistedDevice{}, errors.New("collection diagnostic issues are invalid")
+	}
 	if node.HasUpdate {
 		stats, err := rawJSON(node.Stats)
 		if err != nil {
@@ -117,16 +120,17 @@ func persistedDeviceFromNode(
 		observations["stats"] = stats
 	}
 	for key, value := range map[string]any{
-		"last_network_in":        node.LastNetworkIn,
-		"last_network_out":       node.LastNetworkOut,
-		"extension_version":      node.Extension.ExtensionVersion,
-		"received_at":            node.Extension.ReceivedAt,
-		"identity_status":        node.IdentityStatus,
-		"reported_name":          node.ReportedName,
-		"reported_fqdn":          node.ReportedFQDN,
-		"reported_hostname":      node.ReportedHostname,
-		"degraded":               node.Degraded,
-		"collection_diagnostics": diagnostics,
+		"last_network_in":              node.LastNetworkIn,
+		"last_network_out":             node.LastNetworkOut,
+		"extension_version":            node.Extension.ExtensionVersion,
+		"received_at":                  node.Extension.ReceivedAt,
+		"identity_status":              node.IdentityStatus,
+		"reported_name":                node.ReportedName,
+		"reported_fqdn":                node.ReportedFQDN,
+		"reported_hostname":            node.ReportedHostname,
+		"degraded":                     node.Degraded,
+		"collection_diagnostics":       diagnostics,
+		"collection_diagnostic_issues": node.CollectionDiagnosticIssues,
 	} {
 		raw, err := rawJSON(value)
 		if err != nil {
@@ -159,7 +163,13 @@ func persistedDeviceFromNode(
 		domainValues["client_build"] = node.Extension.ClientBuild
 	}
 	for key, value := range domainValues {
-		raw, err := rawJSON(value)
+		var raw json.RawMessage
+		var err error
+		if key == "easytier" {
+			raw, err = marshalPersistedEasyTierStats(value.(*EasyTierStats))
+		} else {
+			raw, err = rawJSON(value)
+		}
 		if err != nil {
 			return contracts.PersistedDevice{}, err
 		}
@@ -175,6 +185,56 @@ func persistedDeviceFromNode(
 		RuntimeObservations:    observations,
 		Domains:                domains,
 	}, nil
+}
+
+// marshalPersistedEasyTierStats preserves zero-valued detail-count metadata.
+// API output may omit such fields for old clients, but restored state must
+// retain whether the sender made the field explicit.
+func marshalPersistedEasyTierStats(stats *EasyTierStats) (json.RawMessage, error) {
+	if stats == nil {
+		return rawJSON(stats)
+	}
+	raw, err := rawJSON(stats)
+	if err != nil {
+		return nil, err
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return nil, err
+	}
+	counts := []struct {
+		key     string
+		present bool
+		values  map[string]any
+	}{
+		{key: "peers", present: stats.Peers.countMetadataPresent, values: map[string]any{"displayed_total": stats.Peers.DisplayedTotal, "truncated": stats.Peers.Truncated}},
+		{key: "routes", present: stats.Routes.countMetadataPresent, values: map[string]any{"displayed_total": stats.Routes.DisplayedTotal, "truncated": stats.Routes.Truncated}},
+		{key: "connectors", present: stats.Connectors.countMetadataPresent, values: map[string]any{"displayed_total": stats.Connectors.DisplayedTotal, "truncated": stats.Connectors.Truncated}},
+		{key: "traffic", present: stats.Traffic.byInstanceCountMetadataPresent, values: map[string]any{"by_instance_total": stats.Traffic.ByInstanceTotal, "by_instance_displayed": stats.Traffic.ByInstanceDisplayed, "by_instance_truncated": stats.Traffic.ByInstanceTruncated}},
+		{key: "traffic", present: stats.Traffic.samplesCountMetadataPresent, values: map[string]any{"samples_total": stats.Traffic.SamplesTotal, "samples_displayed": stats.Traffic.SamplesDisplayed, "samples_truncated": stats.Traffic.SamplesTruncated}},
+	}
+	for _, count := range counts {
+		if !count.present {
+			continue
+		}
+		var section map[string]json.RawMessage
+		if err := json.Unmarshal(object[count.key], &section); err != nil {
+			return nil, err
+		}
+		for field, value := range count.values {
+			encoded, err := rawJSON(value)
+			if err != nil {
+				return nil, err
+			}
+			section[field] = encoded
+		}
+		encoded, err := rawJSON(section)
+		if err != nil {
+			return nil, err
+		}
+		object[count.key] = encoded
+	}
+	return rawJSON(object)
 }
 
 func timeStringPointer(value time.Time) *string {
@@ -374,6 +434,13 @@ func restorePersistedDeviceFields(node *NodeState, persisted contracts.Persisted
 		}
 		node.CollectionDiagnostics = diagnostics
 	}
+	if raw, exists := persisted.RuntimeObservations["collection_diagnostic_issues"]; exists {
+		var issues []extensionDecodeIssue
+		if err := decodeStrictRuntime(raw, &issues); err != nil || validateCollectionDiagnosticIssues(issues) != nil {
+			return errors.New("persisted collection diagnostic issues are invalid")
+		}
+		node.CollectionDiagnosticIssues = cloneCollectionDiagnosticIssues(issues)
+	}
 	_ = decodeOptionalObservation(
 		persisted.RuntimeObservations, "extension_version", &node.Extension.ExtensionVersion,
 	)
@@ -409,10 +476,12 @@ func restorePersistedDeviceFields(node *NodeState, persisted contracts.Persisted
 		}
 		node.Extension.Lucky = &value
 	}
-	if raw, exists := persisted.Domains["easytier"]; exists {
+	if raw, exists := persisted.Domains["easytier"]; exists && string(bytes.TrimSpace(raw)) != "null" {
 		var value EasyTierStats
-		if err := decodeStrictRuntime(raw, &value); err != nil {
-			return err
+		if err := decodeStrictRuntime(raw, &value); err != nil ||
+			markEasyTierCountMetadataPresence(raw, &value) != nil ||
+			ValidateEasyTierStats(&value) != nil {
+			return errors.New("persisted easytier telemetry is invalid")
 		}
 		node.Extension.EasyTier = &value
 	}

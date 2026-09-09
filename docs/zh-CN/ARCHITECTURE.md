@@ -35,7 +35,7 @@ Collector 使用固定 allowlist 与解析器，不提供远程 shell、任意�
 
 EasyTier 仅用于监控。Client 使用配置好的 loopback RPC 与固定只读 CLI，绝不管理 connector、route、credential、端口转发、日志或服务重启。`supported`、`present` 与 `observed` 是不同概念，不能由 0 RPM、缺失设备或缺失 peer 推断。
 
-无远端 peer 时，Direct、Relay 与 IPv6-UDP-Direct 为 `not_observable`，而不是 false 或 0。当前版本已知局限：部分 EasyTier 2.6.4 输出会在 peer 列表中包含本机节点，因此远端 peer 汇总在修复本机 peer 过滤前可能偏大。
+无远端 peer 时，Direct、Relay 与 IPv6-UDP-Direct 为 `not_observable`，而不是 false 或 0。部分 EasyTier 2.6.4 输出会在 peer 列表中包含本机节点；Client 使用 own-peer-ID 或 `Local` 标记将该行严格排除。明细保留有界显示数、观察总数与截断标记，不会把展示上限当成拓扑总数。
 
 ## 明确不在范围内
 

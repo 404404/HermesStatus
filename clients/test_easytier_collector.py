@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 
-from easytier_collector import EasyTierCollector, _command_duration_ms, load_easytier_config, not_configured_easytier
+from easytier_collector import EasyTierCollector, _command_duration_ms, _empty_payload, load_easytier_config, not_configured_easytier
 
 
 class Result(object):
@@ -201,6 +201,83 @@ class EasyTierCollectorTests(unittest.TestCase):
         self.assertEqual(route_timeout["status"], "degraded")
         self.assertEqual(route_timeout["command_status"]["route_list"]["status"], "unavailable")
         self.assertEqual(route_timeout["routes"]["items"], [])
+
+    def test_all_command_failures_keep_command_evidence_and_last_success(self):
+        failures = {("node",), ("peer",), ("route",), ("connector",), ("stats",)}
+        runner = Runner()
+        collector = EasyTierCollector(environ=self.environ, runner=runner)
+        first = collector.collect()
+        runner.failures = failures
+        payload = collector.collect()
+        self.assertEqual(payload["status"], "unavailable")
+        self.assertEqual(payload["error"]["code"], "command_timeout")
+        for command in payload["command_status"].values():
+            self.assertEqual(command["error"]["code"], "command_timeout")
+            self.assertIsNotNone(command["collected_at"])
+            self.assertIsNotNone(command["duration_ms"])
+            self.assertIsNotNone(command["last_success_at"])
+        self.assertEqual(
+            payload["command_status"]["node_info"]["last_success_at"],
+            first["command_status"]["node_info"]["last_success_at"],
+        )
+
+
+    def test_seventeen_peer_observations_are_bounded_not_rejected(self):
+        class ManyPeersRunner(Runner):
+            def __call__(self, argv, **kwargs):
+                if tuple(argv[5:]) == ("peer",):
+                    self.calls.append((list(argv), kwargs))
+                    return Result([{
+                        "id": 20000 + index, "ipv4": "10.250.250.%d" % (index + 2),
+                        "hostname": "peer-%d" % index, "cost": "p2p",
+                        "rx_bytes": "0 B", "tx_bytes": "0 B",
+                    } for index in range(17)])
+                return super().__call__(argv, **kwargs)
+
+        payload = EasyTierCollector(environ=self.environ, runner=ManyPeersRunner()).collect()
+        self.assertEqual(payload["status"], "healthy")
+        self.assertEqual(payload["peers"]["total"], 17)
+        self.assertEqual(payload["peers"]["displayed_total"], 16)
+        self.assertTrue(payload["peers"]["truncated"])
+        self.assertEqual(len(payload["peers"]["items"]), 16)
+
+    def test_peer_topology_aggregate_uses_all_observations_not_display_order(self):
+        def peer(index, tunnels="tcp,tcp6", cost="p2p"):
+            return {
+                "id": 20000 + index, "ipv4": "10.250.250.%d" % (index + 2),
+                "cost": cost, "tunnel_proto": tunnels,
+                "rx_bytes": "0 B", "tx_bytes": "0 B",
+            }
+
+        def apply(records):
+            payload = _empty_payload("healthy")
+            EasyTierCollector._apply_peers(payload, records, None)
+            return payload["peers"]
+
+        records = [peer(index) for index in range(16)] + [peer(16, "udp,udp6")]
+        summary = apply(records)
+        self.assertEqual((summary["total"], summary["displayed_total"]), (17, 16))
+        self.assertTrue(summary["truncated"])
+        self.assertTrue(summary["ipv6_udp_direct"])
+        self.assertEqual(summary["ipv6_udp_direct"], apply([records[-1]] + records[:-1])["ipv6_udp_direct"])
+
+        self.assertFalse(apply([peer(index) for index in range(17)])["ipv6_udp_direct"])
+        unknown = apply(records[:16] + [peer(16, "unknown")])
+        self.assertIsNone(unknown["ipv6_udp_direct"])
+        self.assertIsNone(apply([])["ipv6_udp_direct"])
+
+    def test_traffic_baseline_resets_for_identity_change_and_long_gap(self):
+        collector = EasyTierCollector(environ=self.environ, runner=Runner())
+        payload = {"node": {"network_name": "home", "inst_id": "one"}, "traffic": {}}
+        collector._apply_stats(payload, stats(100, 200), 0)
+        collector._apply_stats(payload, stats(200, 300), 61)
+        self.assertIsNone(payload["traffic"].get("rx_bps"))
+        self.assertIsNone(payload["traffic"].get("tx_bps"))
+
+        payload = {"node": {"network_name": "home", "inst_id": "two"}, "traffic": {}}
+        collector._apply_stats(payload, stats(300, 400), 62)
+        self.assertIsNone(payload["traffic"].get("rx_bps"))
+        self.assertIsNone(payload["traffic"].get("tx_bps"))
 
     def test_command_duration_and_secure_configuration(self):
         self.assertEqual(_command_duration_ms(0, 30.001), 30000)

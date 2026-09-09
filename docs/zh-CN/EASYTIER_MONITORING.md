@@ -20,4 +20,4 @@ expectation 是操作员诊断，不是设备身份。它可比较 network、ove
 
 ## 当前限制
 
-部分 EasyTier 2.6.4 输出可能在 peer-list 响应中包含本机节点。当前 2.0 可能将该行计入远端 peer 汇总；计划通过严格 own-peer-ID filter 修复。修复前不要把受影响汇总当作拓扑事实。
+部分 EasyTier 2.6.4 输出可能在 peer-list 响应中包含本机节点。Client 会按 own-peer-ID 或显式 `Local` 标记排除该行。peer、route、connector 与流量明细都有独立的输入资源上限和显示上限；发生截断时会保留观察总数、显示数与 `truncated`，UI 不会把截断后的数组长度误报为总数。

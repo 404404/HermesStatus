@@ -149,6 +149,7 @@ func (a *App) ingestDeviceUpdateAt(
 	node.Stats = stats
 	node.Extension = extensionSnapshotAt(extension, now)
 	node.CollectionDiagnostics = buildCollectionDiagnostics(extension, issues)
+	node.CollectionDiagnosticIssues = cloneCollectionDiagnosticIssues(issues)
 	node.HasUpdate = true
 	node.LastUpdate = now
 	node.LastSeen = now
@@ -318,7 +319,12 @@ func evaluateIdentity(
 }
 
 func usableSMARTAttributeFallback(disk PhysicalDiskStats) bool {
-	return smartAttributeFallbackObservation(disk) && disk.SMARTStatus == DiskSMARTPassed
+	// A native-status limitation is a non-fault only when it is itself the
+	// current collector error. A malformed secondary SMART value may coexist
+	// with usable attribute health, but must remain a business fault rather than
+	// being hidden by the fallback classification.
+	return smartAttributeFallbackObservation(disk) && disk.SMARTStatus == DiskSMARTPassed &&
+		disk.Error != nil && disk.Error.Code == "smart_return_status_unavailable"
 }
 
 func storageHasOnlyUsableSMARTAttributeFallback(storage *StorageStats) bool {
@@ -523,6 +529,7 @@ func (a *App) updateAgent(
 	node.Stats = update
 	node.Extension = extensionSnapshotAt(extension, now)
 	node.CollectionDiagnostics = buildCollectionDiagnostics(extension, nil)
+	node.CollectionDiagnosticIssues = nil
 	node.HasUpdate = true
 	node.LastUpdate = now
 	node.LastSeen = now

@@ -62,12 +62,15 @@ type EasyTierSTUNInfo struct {
 }
 
 type EasyTierPeerStats struct {
-	Total         int            `json:"total"`
-	Direct        int            `json:"direct"`
-	Relay         int            `json:"relay"`
-	UnknownPath   int            `json:"unknown_path"`
-	IPv6UDPDirect *bool          `json:"ipv6_udp_direct"`
-	Items         []EasyTierPeer `json:"items,omitempty"`
+	Total                int            `json:"total"`
+	DisplayedTotal       int            `json:"displayed_total,omitempty"`
+	Truncated            bool           `json:"truncated,omitempty"`
+	Direct               int            `json:"direct"`
+	Relay                int            `json:"relay"`
+	UnknownPath          int            `json:"unknown_path"`
+	IPv6UDPDirect        *bool          `json:"ipv6_udp_direct"`
+	Items                []EasyTierPeer `json:"items,omitempty"`
+	countMetadataPresent bool
 }
 
 type EasyTierPeer struct {
@@ -94,8 +97,11 @@ type EasyTierPeer struct {
 }
 
 type EasyTierRouteStats struct {
-	Total int             `json:"total"`
-	Items []EasyTierRoute `json:"items,omitempty"`
+	Total                int             `json:"total"`
+	Items                []EasyTierRoute `json:"items,omitempty"`
+	DisplayedTotal       int             `json:"displayed_total,omitempty"`
+	Truncated            bool            `json:"truncated,omitempty"`
+	countMetadataPresent bool
 }
 
 type EasyTierRoute struct {
@@ -114,9 +120,12 @@ type EasyTierRoute struct {
 type EasyTierConnectorStats struct {
 	Total                int                 `json:"total"`
 	TCPConfigured        bool                `json:"tcp_configured"`
+	DisplayedTotal       int                 `json:"displayed_total,omitempty"`
+	Truncated            bool                `json:"truncated,omitempty"`
 	TCPActive            bool                `json:"tcp_active"`
 	TCPListenerAvailable *bool               `json:"tcp_listener_available,omitempty"`
 	Items                []EasyTierConnector `json:"items,omitempty"`
+	countMetadataPresent bool
 }
 
 type EasyTierConnector struct {
@@ -130,15 +139,23 @@ type EasyTierConnector struct {
 }
 
 type EasyTierTrafficStats struct {
-	BytesRX        int64                     `json:"bytes_rx"`
-	BytesTX        int64                     `json:"bytes_tx"`
-	BytesForwarded int64                     `json:"bytes_forwarded"`
-	PacketsRX      int64                     `json:"packets_rx,omitempty"`
-	PacketsTX      int64                     `json:"packets_tx,omitempty"`
-	RXBPS          *float64                  `json:"rx_bps,omitempty"`
-	TXBPS          *float64                  `json:"tx_bps,omitempty"`
-	ByInstance     []EasyTierInstanceTraffic `json:"by_instance,omitempty"`
-	Samples        []EasyTierMetricSample    `json:"samples,omitempty"`
+	BytesRX                        int64                     `json:"bytes_rx"`
+	BytesTX                        int64                     `json:"bytes_tx"`
+	BytesForwarded                 int64                     `json:"bytes_forwarded"`
+	PacketsRX                      int64                     `json:"packets_rx,omitempty"`
+	PacketsTX                      int64                     `json:"packets_tx,omitempty"`
+	RXBPS                          *float64                  `json:"rx_bps,omitempty"`
+	TXBPS                          *float64                  `json:"tx_bps,omitempty"`
+	ByInstance                     []EasyTierInstanceTraffic `json:"by_instance,omitempty"`
+	Samples                        []EasyTierMetricSample    `json:"samples,omitempty"`
+	ByInstanceTotal                int                       `json:"by_instance_total,omitempty"`
+	ByInstanceDisplayed            int                       `json:"by_instance_displayed,omitempty"`
+	ByInstanceTruncated            bool                      `json:"by_instance_truncated,omitempty"`
+	SamplesTotal                   int                       `json:"samples_total,omitempty"`
+	SamplesDisplayed               int                       `json:"samples_displayed,omitempty"`
+	SamplesTruncated               bool                      `json:"samples_truncated,omitempty"`
+	byInstanceCountMetadataPresent bool
+	samplesCountMetadataPresent    bool
 }
 
 // EasyTierInstanceTraffic retains the label relationship supplied by the CLI;

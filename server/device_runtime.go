@@ -193,6 +193,11 @@ func copyNodeRuntime(target, source *NodeState, disconnect bool) {
 	target.Restored = source.Restored
 	target.IdentityError = source.IdentityError
 	target.Degraded = source.Degraded
+	// Decode evidence is runtime state for the same registered device. Copy
+	// the slice, rather than sharing it, so a later successful report or
+	// rebuild cannot mutate the previous node's diagnostic evidence.
+	target.CollectionDiagnostics = append([]CollectionDiagnostic(nil), source.CollectionDiagnostics...)
+	target.CollectionDiagnosticIssues = cloneCollectionDiagnosticIssues(source.CollectionDiagnosticIssues)
 	if disconnect {
 		return
 	}
